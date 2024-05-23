@@ -1,0 +1,7 @@
+# Stack configuration
+# https://docs.haskellstack.org/en/stable/yaml_configuration/
+
+resolver: lts-22.22
+
+packages:
+  - freest

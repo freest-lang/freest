@@ -1,0 +1,450 @@
+{
+module Parser.Parser where
+
+import Parser.Lexer (scan)
+import Parser.Token
+import Parser.LexerUtils
+import Parser.ParserUtils
+import Syntax.Base 
+import Syntax.Names
+import qualified Syntax.Expression as E 
+import qualified Syntax.Kind       as K 
+import qualified Syntax.Type       as T 
+import qualified Syntax.Module     as M
+
+import Control.Monad.Except
+import Debug.Trace
+
+}
+
+%name parseExp Exp
+%name parseModuleDecl ModuleDecl
+%name parseModule Module
+
+%tokentype { Token }
+%monad { Lexer }
+%lexer { lexer } { TkEOF _ }
+
+%errorhandlertype explist
+%error { parseError }
+
+%token
+  -- Layout
+  OPEN    { TkVOpen _ }
+  PIPE    { TkVPipe _ }
+  CLOSE   { TkVClose _ }
+  -- Keywords
+  'module' { TkModule _ }
+  'where'  { TkWhere _ }
+  'import' { TkImport _ }
+  'data'   { TkData _ }
+  'type'   { TkType _ }
+  'let'    { TkLet _ }
+  'in'     { TkIn _ }
+  'case'   { TkCase _ }
+  'of'     { TkOf _ }
+  'select' {TkSelect _ }
+  'if'     { TkIf _ }
+  'then'   { TkThen _ }
+  'else'   { TkElse _ }
+  'forall' { TkForall _ }
+  'rec'    { TkRec _ }
+  -- Punctuation
+  '.'     { TkDot _ }
+  '='     { TkEqual _ }
+  '{'     { TkOpen _ }
+  '}'     { TkClose _ }
+  '('     { TkLParen _ }
+  ')'     { TkRParen _ }
+  '['     { TkLSquare _ }
+  ']'     { TkRSquare _ }
+  '\\'    { TkBackslash _ }
+  '\\\\'  { TkBackslashBackslash _ }
+  '->'    { TkArrow _ }
+  '*->'   { TkUnArrow _ }
+  '1->'   { TkLinArrow _ }
+  '=>'    { TkDoubleArrow _ }
+  -- Operators
+  '|'     { TkPipe _ }
+  ':'     { TkColon _ }
+  '::'    { TkColonColon _ }
+  ';'     { TkSemi _ }
+  '@'     { TkAt _ }
+  ','     { TkComma _ }
+  '$'     { TkDollar _ }
+  '|>'    { TkPipeGT _ }
+  '||'    { TkPipePipe _ }
+  '&&'    { TkAmpAmp _ }
+  '+'     { TkPlus _ }
+  '++'    { TkPlusPlus _ }
+  '+.'    { TkPlusDot _ }
+  '-'     { TkMinus _ }
+  '-.'    { TkMinusDot _ }
+  '*'     { TkStar _ }
+  '**'    { TkStarStar _ }
+  '*.'    { TkStarDot _ }
+  '/'     { TkSlash _ }
+  '/.'    { TkSlashDot _ }
+  '^'     { TkCaret _ }
+  '^^'    { TkCaretCaret _ }
+  CMP     { TkCmp _ _ }
+  -- Types
+  'Int'   { TkIntType _ }
+  'Float' { TkFloatType _ }
+  'Char'  { TkCharType _ }
+  'String'{ TkStringType _ }
+  'Skip'  { TkSkipType _ }
+  'Close' { TkCloseType _ }
+  'Wait'  { TkWaitType _ }
+  'Dual'  { TkDualType _ }
+  '?'     { TkQuestion _ }
+  '!'     { TkBang _ }
+  '&'     { TkAmp _ }
+  -- Kinds
+  '1T'    { TkLinTopKind _ }
+  '*T'    { TkUnTopKind _ }
+  '1S'    { TkLinSessionKind _ }
+  '*S'    { TkUnSessionKind _ }
+  '1A'    { TkLinAbsorbKind _ }
+  '*A'    { TkUnAbsorbKind _ }
+
+  -- Expression literals
+  INT_LIT { TkIntLit _ _ }
+  FLOAT_LIT { TkFloatLit _ _ }
+  CHAR_LIT { TkCharLit _ _ }
+  STRING_LIT {TkStringLit _ _ }
+
+  -- Identifiers
+  UPPER_ID { TkUpperId _ _ }  
+  QUALIFIED_UPPER_ID { TkQualifiedUpperId _ _ }
+  WILDCARD { TkWildcard _ _ }
+  LOWER_ID { TkLowerId _ _ }
+
+%right    'in' 'else' 'case'
+%right    '.'
+%right    '=>' '->' '1->' '*->' ARROW
+%right    ';' SEMI
+%left     '@'
+%right    '$'
+%left     '|>'
+%left     '||'
+%left     '&&'
+%nonassoc CMP
+%right    '::' '++' '^^'
+%left     '+' '-' '+.' '-.'
+%left     '*' '/' '*.' '/.'
+%right    '^' '**'
+%left     NEG not
+%right    MSG
+
+%%
+
+Module :: { M.Module }
+  : 'module' ModuleName 'where' ImportModuleDeclBlock { M.setName (split '.' $ getText $2) $4 }
+  -- TODO: no module declaration. See notes in Lexer.
+  -- | ImportModuleDeclBlock { $1 }
+
+ModuleName :: { Token } : UPPER_ID { $1 } | QUALIFIED_UPPER_ID { $1 }
+
+ImportModuleDeclBlock :: { M.Module }
+  : OPEN ImportModuleDeclListPIPE Close { $2 }
+
+ImportModuleDeclListPIPE :: { M.Module }
+  : ImportDecl PIPE ImportModuleDeclListPIPE { $1 $3 }
+  | ModuleDecl PIPE ModuleDeclListPIPE       { $1 $3 }
+  | ImportDecl { $1 M.empty }
+  | ModuleDecl { $1 M.empty }
+  | {- empty -} { M.empty }
+
+ImportDecl :: { M.Module -> M.Module }
+  : 'import' QUALIFIED_UPPER_ID { M.insertImport (split '.' $ getText $2) }
+  | 'import' UPPER_ID           { M.insertImport [getText $2] }
+
+ModuleDeclListPIPE :: { M.Module }
+  : ModuleDecl PIPE ModuleDeclListPIPE { $1 $3 }
+  | ModuleDecl                         { $1 M.empty }
+  | {- empty -}                        { M.empty }
+
+ModuleDecl :: { M.Module -> M.Module }
+  : LetDecl                              { M.insertDef $1 }
+  | 'data' UPPER_ID LowerIdListWS '=' DataConsListPipe { M.insertDataDecl (mkVarTk $2) $3 $5 }
+  | 'type' UPPER_ID LowerIdListWS '=' Type             { M.insertTypeDecl (mkVarTk $2) $3 $5 }
+
+LetDecl
+  : Pat DefRHS { E.ValDecl $1 $2 Nothing }
+  | Pat DefRHS 'where' LetDeclBlock { E.ValDecl $1 $2 (Just $4) }
+  | LOWER_ID PatPrimaryListWS DefRHS                      { E.FnDecl (mkVarTk $1) $2 $3 Nothing }
+  | LOWER_ID PatPrimaryListWS DefRHS 'where' LetDeclBlock { E.FnDecl (mkVarTk $1) $2 $3 (Just $5) }
+  | LowerIdListComma ':' Type { E.SigDecl $1 $3 }
+
+DefRHS :: { Either E.Exp [(E.Exp,E.Exp)] }
+  : '=' Exp     { Left $2 }
+  | GuardedExps { Right $1 }
+
+GuardedExps :: { [(E.Exp, E.Exp)] }
+  : '|' Exp '=' Exp GuardedExps { ($2,$4) : $5 }
+  | '|' Exp '=' Exp             { [($2,$4)] }
+  -- otherwise is simply a variable defined as True
+
+LowerIdListWS :: { [Variable] }
+  : LOWER_ID LowerIdListWS { mkVarTk $1 : $2 }
+  | {- empty -}            { [] }
+
+LowerIdListComma :: { [Variable] }
+  : LOWER_ID ',' LowerIdListComma { mkVarTk $1 : $3 }
+  | LOWER_ID                  { [mkVarTk $1] }
+
+DataConsListPipe :: { [(Variable, [T.Type])] }
+  : DataCons '|' DataConsListPipe { $1 : $3 }
+  | DataCons                      { [$1] }
+
+DataCons :: { (Variable, [T.Type]) }
+  : UPPER_ID TypePrimaryListWS { (mkVarTk $1, $2) }
+
+TypePrimaryListWS :: { [T.Type] }
+  : TypePrimary TypePrimaryListWS { $1 : $2 }
+  | {- empty -}                   { [] }
+
+ProperKind :: { K.Kind }
+  : '1T' { K.Proper (getSpan $1) K.Lin K.Top }
+  | '*T' { K.Proper (getSpan $1) K.Un K.Top }
+  | '1S' { K.Proper (getSpan $1) K.Lin K.Session }
+  | '*S' { K.Proper (getSpan $1) K.Un K.Session }
+  | '1A' { K.Proper (getSpan $1) K.Lin K.Absorb }
+  | '*A' { K.Proper (getSpan $1) K.Un K.Absorb }
+
+TypePrimary :: { T.Type }
+  -- Builtins (necessary?)
+  : 'Int'    { T.Int (getSpan $1) }
+  | 'Float'  { T.Float (getSpan $1) }
+  | 'Char'   { T.Char (getSpan $1) }
+  | 'String' { T.String (getSpan $1) }
+  | 'Dual'   { T.Dual (getSpan $1) }
+  | 'Skip'   { T.Skip (getSpan $1) }
+  | 'Close'  { T.End (getSpan $1) T.Out }
+  | 'Wait'   { T.End (getSpan $1) T.In }
+  -- Unit, Tuples, Operators
+  | '(' ')'        { T.Tuple (spanFromTo $1 $2) [] }
+  | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }      -- with tuples in the Type AST
+                                -- { tupleAppType (spanFromTo $1 $5) ($2 : $4) } -- using tuple constructors (,+)
+  | '(' Commas ')' { T.Name (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) }
+  | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
+  -- | '(' Type Arrow ')' -- TODO: sections
+  -- | '(' Arrow Type ')' -- TODO: sections
+  | '(' Polarity ')'     {T.Message (spanFromTo $1 $3) K.Lin (snd $2)}
+  | '(' '*' Polarity ')' {T.Message (spanFromTo $1 $4) K.Un (snd $3)}
+  -- | '(' Type ';' ')' -- TODO: sections
+  -- | '(' ';' Type ')' -- TODO: sections
+  -- Choices
+  | View '{' LabelTypeListComma '}'     { T.Labelled (spanFromTo (fst $1) $4) (T.Choice K.Lin (snd $1)) $3 }
+  | '*' View '{' LabelTypeListComma '}' { T.Labelled (spanFromTo $1 $5) (T.Choice K.Un (snd $2)) $4 }
+  -- Variables and constructors
+  | UPPER_ID { T.Name (getSpan $1) (mkVarTk $1) }
+  | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
+  -- Lists
+  | '[' ']'      { T.Name (spanFromTo $1 $2) (Variable (spanFromTo $1 $2) "[]" (-1)) }
+  | '[' Type ']' { T.App (spanFromTo $1 $3) (T.Name (spanFromTo $1 $3) (Variable (spanFromTo $1 $3) "[]" (-1))) $2 }
+  -- Parenthesized type
+  | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
+
+Type :: { T.Type }
+  : Type Arrow Type %prec ARROW { infixApp $1 (T.Arrow (fst $2) (snd $2)) $3 }
+  | Type ';' Type               { infixApp $1 (T.Semi (getSpan $2)) $3 }
+  | Polarity Type %prec MSG     { T.App (spanFromTo (fst $1) $2) (T.Message (fst $1) K.Lin (snd $1)) $2 }
+  | '*' Polarity Type %prec MSG { T.App (spanFromTo $1 $3) (T.Message (fst $2) K.Un  (snd $2)) $3 }
+  | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) (T.Abs (spanFromTo (fst $2) $3) (fst $2) (snd $2) $3) }
+  | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) (T.Abs (spanFromTo (fst $2) $4) (fst $2) (snd $2) $4) }
+  | TypeApp                     { $1 }
+
+TypeApp :: { T.Type }
+  : TypeApp TypePrimary { T.App (spanFromTo $1 $2) $1 $2 }
+  | TypePrimary { $1 }
+
+TypeListComma :: { [T.Type] }
+  : Type ',' TypeListComma { $1 : $3 }
+  | Type                   { [$1] }
+
+Forall :: { T.Type }
+  : '.' Type { $2 }
+  | KindedVar Forall { T.App (spanFromTo (fst $1) $2) (T.Forall (getSpan (fst $1)) (snd $1)) (T.Abs (spanFromTo (fst $1) $2) (fst $1) (snd $1) $2)}
+
+Commas :: { Int }
+  : ',' { 1 }
+  | ',' Commas { succ $2 }
+
+Polarity :: { (Span, T.Polarity) }
+  : '!'  { (getSpan $1, T.Out) }
+  | '?'  { (getSpan $1, T.In) }
+
+View :: { (Span, T.Polarity) }
+  : '+' { (getSpan $1, T.Out) }
+  | '&' { (getSpan $1, T.In) }
+
+LabelTypeListComma :: { [(Variable, T.Type)] }
+  : UPPER_ID ':' Type ',' LabelTypeListComma { (mkVarTk $1, $3) : $5 }
+  | UPPER_ID ':' Type { [(mkVarTk $1, $3)] }
+
+KindedVarListWS :: { [(Variable, K.Kind)] }
+  : KindedVar { [$1] }
+  | KindedVar KindedVarListWS { $1 : $2 }
+
+KindedVar :: { (Variable, K.Kind) }
+  : LOWER_ID { (mkVarTk $1, kVarTODO $1) }
+  | LOWER_ID ':' ProperKind { (mkVarTk $1, $3) }
+
+ExpPrimary :: { E.Exp }
+  : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
+  | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
+  | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
+  | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
+  | LOWER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
+  | UPPER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
+  | '(' ')'     { E.Tuple  (spanFromTo $1 $2) [] }
+  | '(' Commas ')' { let s = spanFromTo $1 $3 in E.Var s (mkTupleCons $2 s) }
+  | '(' Exp ',' ExpListComma ')' {E.Tuple (spanFromTo $1 $5) ($2 : $4) }      -- with tuples in the Exp AST
+                              -- { tupleAppExp (spanFromTo $1 $5) ($2 : $4) } -- using tuple constructors (,+)
+  -- | TupleSection { ... }                                                   -- TODO: tuple sections
+  | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
+  | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
+  | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkNegate (spanFromTo $1 $3))}
+  -- | '(' Op Exp ')' { setSpan (spanFromTo $1 $4) (leftSection $2 $3) } -- TODO: waiting for type inference
+  | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp $3 $2) }
+  | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (mkMinus $3) $2) }
+  | '[' ']'     { let s = spanFromTo $1 $2 in E.Var s (mkNil s)}
+  | '[' ExpListComma ']' { consAppExp (spanFromTo $1 $3) $2 }
+
+Exp :: { E.Exp }
+  -- Keyword expressions
+  : 'let' LetDeclBlock 'in' Exp { E.Let (spanFromTo $1 $4) $2 $4 }
+  | '\\' PatTypeList Arrow Exp   { E.Abs (spanFromTo $1 $4) $2 (snd $3) $4 }
+  | '\\\\' KindedVarListWS '->' Exp   { E.TAbs (spanFromTo $1 $4) $2 $4 }
+  | 'if' Exp 'then' Exp 'else' Exp { E.If (spanFromTo $1 $6) $2 $4 $6 }
+  | 'case' Exp 'of' CaseBlock { E.Case (spanFromTo $1 (snd $ last $4)) $2 $4 }
+  -- Operators
+  -- TODO: handle operators more elegantly. They are responsible for most s/r conflicts.
+  -- * Allow programmers to define operators (x op y = e, (op) x y = e)
+  -- * Define precedences:
+  --   * à la Haskell (declared by programmer) 
+  --   * à la F# (depends on leading chars)
+  | Exp ';'  Exp { binOp $1 (mkSemi $2) $3 }
+  | Exp '$'  Exp { binOp $1 (mkDollar $2) $3 }
+  | Exp '|>' Exp { binOp $1 (mkRTriangle $2) $3 }
+  | Exp '||' Exp { binOp $1 (mkOr $2) $3 }
+  | Exp '&&' Exp { binOp $1 (mkAnd $2) $3 }
+  | Exp CMP  Exp { binOp $1 (mkCmp (getText $2) $2) $3 }
+  | Exp '+'  Exp { binOp $1 (mkPlus $2) $3 }
+  | Exp '+.' Exp { binOp $1 (mkPlusDot $2) $3 }
+  | Exp '-'  Exp { binOp $1 (mkMinus $2) $3 }
+  | Exp '-.' Exp { binOp $1 (mkMinusDot $2) $3 }
+  | Exp '*'  Exp { binOp $1 (mkTimes $2) $3 }
+  | Exp '*.' Exp { binOp $1 (mkTimesDot $2) $3 }
+  | Exp '/'  Exp { binOp $1 (mkDiv $2) $3 }
+  | Exp '/.' Exp { binOp $1 (mkDivDot $2) $3 }
+  | Exp '^'  Exp { binOp $1 (mkPower $2) $3 }
+  | Exp '**' Exp { binOp $1 (mkTimesTimes $2) $3 }
+  | Exp '++' Exp { binOp $1 (mkPlusPlus $2) $3 }
+  | Exp '^^' Exp { binOp $1 (mkCaretCaret $2) $3 }
+  | Exp '::' Exp { binOp $1 (mkCons $2) $3 }
+  -- Unary minus
+  -- Should we do something like GHC's NegativeLiterals or LexicalNegation instead?
+  -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/negative_literals.html
+  | '-' ExpApp %prec NEG { unOp (mkNegate $1) $2 }    
+  -- Application etc.  
+  | ExpApp               { $1 }
+
+ExpApp :: { E.Exp }
+  : ExpApp ExpPrimary { E.App (spanFromTo $1 $2) $1 $2 }
+  | 'select' UPPER_ID { E.App (spanFromTo $1 $2) 
+                              (E.Var (getSpan $1) (mkSelect (getSpan $1))) 
+                              (E.Var (getSpan $2) (mkVarTk $2))}
+  | ExpApp '@' TypePrimary { E.TApp (spanFromTo $1 $3) $1 $3 }
+  | ExpPrimary        { $1 }
+
+Op :: { Variable }
+   : CMP  { mkCmp (getText $1) $1 }
+   | '||' { mkOr $1 }
+   | '&&' { mkAnd $1 }
+   | '+'  { mkPlus $1 }
+   | '*'  { mkTimes $1 }
+   | '/'  { mkDiv $1 }
+   | '^'  { mkPower $1 }
+   | '+.' { mkPlusDot $1 }
+   | '*.' { mkTimesDot $1 }
+   | '/.' { mkDivDot $1 }
+   | '**' { mkTimesTimes $1 }
+   | '++' { mkPlusPlus $1 }
+   | '^^' { mkCaretCaret $1 }
+   | '|>' { mkRTriangle $1 }
+   | '$'  { mkDollar $1 }
+   | ';'  { mkSemi $1 }
+   | '::' { mkCons $1 }
+
+ExpListComma :: { [E.Exp] }
+  : Exp ',' ExpListComma { $1 : $3 }
+  | Exp                  { [$1] }
+
+Arrow :: { (Span, K.Multiplicity) }
+  : '->'  { (getSpan $1, K.Un ) }
+  | '*->' { (getSpan $1, K.Un ) }
+  | '1->' { (getSpan $1, K.Lin) }
+
+PatTypeList :: { [(E.Pat, T.Type)] } 
+  : PatPrimary ':' TypePrimary PatTypeList { ($1, $3) : $4 }
+  | PatPrimary ':' TypePrimary             { [($1, $3)] }
+
+CaseBlock :: { [(E.Pat, E.Exp)] }
+  : OPEN CaseListPIPE Close { $2 }
+
+CaseListPIPE :: { [(E.Pat, E.Exp)] }
+  : Case PIPE CaseListPIPE { $1 : $3 }
+  | Case                   { [$1] }
+
+Case :: { (E.Pat, E.Exp) }
+  : Pat '->' Exp { ($1, $3) }
+
+PatPrimary :: { E.Pat }
+  : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
+  | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
+  | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
+  | STRING_LIT       { E.StringPat (getSpan $1) (read (getText $1)) }
+  | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
+  | LOWER_ID         { E.VarPat    (getSpan $1) (mkVarTk $1) }
+  | DataConstructor  { E.ConsPat   (getSpan $1) $1 [] }
+  | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
+  | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
+
+Pat :: { E.Pat }
+  : DataConstructor PatPrimaryListWS { E.ConsPat (spanFromTo $1 (last $2)) $1 $2 }
+  | Pat '::' Pat { E.ConsPat (spanFromTo $1 $3) (mkCons $2) [$1, $3] }
+  | PatPrimary { $1 }
+
+DataConstructor :: { Variable }
+  : UPPER_ID { mkVarTk $1 }
+  | '(' Commas ')' { mkTupleCons $2 (spanFromTo $1 $3) }
+  | '[' ']' { mkNil (spanFromTo $1 $2) }
+
+PatPrimaryListWS :: { [E.Pat] } 
+  : PatPrimary PatPrimaryListWS { $1 : $2 }
+  | PatPrimary { [$1] }
+
+PatListComma :: { [E.Pat] }
+  : Pat { [$1] }
+  | Pat ',' PatListComma { $1 : $3 }
+
+LetDeclBlock :: { [E.LetDecl] }
+  : OPEN LetDeclListPIPE Close { $2 }
+
+LetDeclListPIPE :: { [E.LetDecl] }
+  : LetDecl PIPE LetDeclListPIPE { $1 : $3 }
+  | LetDecl                      { [$1] }
+  | {- empty -}                  { [] }
+
+Close
+  : CLOSE { () }
+  | error {% popLayout }
+
+{
+lexer cont = scan >>= cont
+
+parseError = throwError . show 
+}

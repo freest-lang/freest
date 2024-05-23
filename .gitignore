@@ -1,0 +1,56 @@
+# PDF
+*pdf
+
+# Haskell
+*.hi
+*.o
+*.html
+*.tix
+.hpc/
+.hspec-failures
+UnitSpec
+ProgSpec
+Parser.hs
+Lexer.hs
+Parser.hs
+Parser.info
+Lexer.hs
+*.cabal
+dist
+dist-*
+.stack-work/
+
+# Stack
+stack.yaml.lock
+
+#Latex
+*.aux
+*.log
+*.bbl
+*.blg
+*.dvi
+*.glo
+*.lof
+*.lot
+*.out
+*.synctex.gz
+*.toc
+*.dvi
+*.ps
+*.rel
+*.vtc
+*.nav
+*.snm
+*.vrb
+*.pag
+
+# AucTeX
+auto
+
+# mac
+.DS_Store
+
+# Emacs
+*#
+*~
+\#*\#
