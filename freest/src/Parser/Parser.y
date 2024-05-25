@@ -245,21 +245,21 @@ TypePrimary :: { T.Type }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
   -- Lists
   | '[' ']'      { T.Name (spanFromTo $1 $2) (Variable (spanFromTo $1 $2) "[]" (-1)) }
-  | '[' Type ']' { T.App (spanFromTo $1 $3) (T.Name (spanFromTo $1 $3) (Variable (spanFromTo $1 $3) "[]" (-1))) $2 }
+  | '[' Type ']' { T.App (spanFromTo $1 $3) (T.Name (spanFromTo $1 $3) (Variable (spanFromTo $1 $3) "[]" (-1))) [$2] }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { infixApp $1 (T.Arrow (fst $2) (snd $2)) $3 }
   | Type ';' Type               { infixApp $1 (T.Semi (getSpan $2)) $3 }
-  | Polarity Type %prec MSG     { T.App (spanFromTo (fst $1) $2) (T.Message (fst $1) K.Lin (snd $1)) $2 }
-  | '*' Polarity Type %prec MSG { T.App (spanFromTo $1 $3) (T.Message (fst $2) K.Un  (snd $2)) $3 }
-  | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) (T.Abs (spanFromTo (fst $2) $3) (fst $2) (snd $2) $3) }
-  | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) (T.Abs (spanFromTo (fst $2) $4) (fst $2) (snd $2) $4) }
+  | Polarity Type %prec MSG     { T.App (spanFromTo (fst $1) $2) (T.Message (fst $1) K.Lin (snd $1)) [$2] }
+  | '*' Polarity Type %prec MSG { T.App (spanFromTo $1 $3) (T.Message (fst $2) K.Un  (snd $2)) [$3] }
+  | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $3) [(fst $2, snd $2)] $3)] }
+  | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $4) [(fst $2, snd $2)] $4)] }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
-  : TypeApp TypePrimary { T.App (spanFromTo $1 $2) $1 $2 }
+  : TypeApp TypePrimary { addArgType $2 $1 }
   | TypePrimary { $1 }
 
 TypeListComma :: { [T.Type] }
@@ -268,7 +268,7 @@ TypeListComma :: { [T.Type] }
 
 Forall :: { T.Type }
   : '.' Type { $2 }
-  | KindedVar Forall { T.App (spanFromTo (fst $1) $2) (T.Forall (getSpan (fst $1)) (snd $1)) (T.Abs (spanFromTo (fst $1) $2) (fst $1) (snd $1) $2)}
+  | KindedVar Forall { T.App (spanFromTo (fst $1) $2) (T.Forall (getSpan (fst $1)) (snd $1)) [(T.Abs (spanFromTo (fst $1) $2) [(fst $1, snd $1)] $2)]}
 
 Commas :: { Int }
   : ',' { 1 }
@@ -355,11 +355,10 @@ Exp :: { E.Exp }
   | ExpApp               { $1 }
 
 ExpApp :: { E.Exp }
-  : ExpApp ExpPrimary { E.App (spanFromTo $1 $2) $1 $2 }
-  | 'select' UPPER_ID { E.App (spanFromTo $1 $2) 
-                              (E.Var (getSpan $1) (mkSelect (getSpan $1))) 
-                              (E.Var (getSpan $2) (mkVarTk $2))}
-  | ExpApp '@' TypePrimary { E.TApp (spanFromTo $1 $3) $1 $3 }
+  : ExpApp ExpPrimary { addArgExp (E.EArg $2) $1 }
+  | 'select' UPPER_ID { addArgExp (E.EArg (E.Var (getSpan $2) (mkVarTk $2)))
+                                  (E.Var (getSpan $1) (mkSelect $ getSpan $1)) }
+  | ExpApp '@' TypePrimary { addArgExp (E.TArg $3) $1 }
   | ExpPrimary        { $1 }
 
 Op :: { Variable }

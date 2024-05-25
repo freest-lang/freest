@@ -1,8 +1,9 @@
 {-# LANGUAGE InstanceSigs #-}
 module Syntax.Expression 
-  ( Exp(..)
-  , Pat(..)
+  ( Pat(..)
   , LetDecl(..)
+  , Arg(..)
+  , Exp(..)
   ) 
 where
 
@@ -12,6 +13,18 @@ import Syntax.Type (Type)
 
 import Data.List (intercalate)
 
+data Arg = EArg Exp | TArg Type
+
+instance Show Arg where
+  show (EArg  e) = show e
+  show (TArg t) = show t
+
+instance Located Arg where 
+  getSpan (EArg e) = getSpan e
+  getSpan (TArg t) = getSpan t
+  setSpan s (EArg e) = EArg (setSpan s e)
+  setSpan s (TArg t) = TArg (setSpan s t)
+
 data Exp
   = Int    Span Int
   | Float  Span Double
@@ -19,13 +32,12 @@ data Exp
   | String Span String
   | Tuple  Span [Exp]
   | Var    Span Variable
-  | App    Span Exp Exp
+  | App    Span Exp [Arg]
   | Abs    Span [(Pat, Type)] Multiplicity Exp
   | Let    Span [LetDecl] Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
   | TAbs   Span [(Variable, Kind)] Exp
-  | TApp   Span Exp Type
 
 instance Show Exp where 
   show :: Exp -> String
@@ -37,14 +49,13 @@ instance Show Exp where
   show (Tuple _ [e]) = error "Syntax.Expression.show: tuple with one element"
   show (Tuple _ (e:es)) = "("++show e++unwords (map (\e -> ", "++show e) es)++")"
   show (Var _ x) = show x  
-  show (App _ e1 e2) = "("++show e1++" "++show e2++")"
+  show (App _ f as) = foldl (\s a -> "("++s++" "++show a++")") (show f) as
   show (Abs _ ps m e) = "(\\"++unwords (map showPatType ps)++" "++show m++"-> "++show e++")"
     where showPatType (p,t) = "("++show p++":"++show t++")"
   show (Let _ ds e) = "(let ⦃"++intercalate " ❚ " (map show ds)++"⦄ in "++show e++")"
   show (Case _ e pes) = "(case "++show e++" of ⦃"++intercalate " ❚ " (map showCase pes)++"⦄)"
     where showCase (p, e) = show p ++ " -> " ++ show e 
   show (If _ e1 e2 e3) = "(if "++show e1++" then "++show e2++" else "++show e3++")"
-  show (TApp _ e t) = "("++show e++" @"++show t++")"
   show (TAbs _ aks e) = "(\\\\"++unwords (map (\(a,k)->show a++":"++show k) aks)++" -> "++show e++")"
 
 instance Located Exp where
@@ -60,7 +71,6 @@ instance Located Exp where
   getSpan (Let s _ _) = s
   getSpan (Case s _ _) = s
   getSpan (If s _ _ _) = s
-  getSpan (TApp s _ _) = s
   getSpan (TAbs s _ _) = s
 
   setSpan :: Span -> Exp -> Exp
@@ -70,12 +80,11 @@ instance Located Exp where
   setSpan s (String _ s') = String s s'
   setSpan s (Tuple _ es) = Tuple s es
   setSpan s (Var _ x) = Var s x
-  setSpan s (App _ e1 e2) = App s e1 e2
+  setSpan s (App _ e as) = App s e as
   setSpan s (Abs _ ps m e) = Abs s ps m e
   setSpan s (Let _ ds w) = Let s ds w
   setSpan s (Case _ e cs) = Case s e cs
   setSpan s (If _ e1 e2 e3) = If s e1 e2 e3
-  setSpan s (TApp _ e t) = TApp s e t
   setSpan s (TAbs _ as e) = TAbs s as e
 
 data Pat 

@@ -26,27 +26,28 @@ mkVarTk :: Token -> Variable
 mkVarTk t = mkVar t (getText t)
 
 infixApp :: T.Type -> T.Type -> T.Type -> T.Type
-infixApp t1 op t2 = T.App (spanFromTo t1 t2) (T.App (spanFromTo t1 op) op t1) t2
+infixApp t1 op t2 = T.App (spanFromTo t1 t2) op [t1, t2]
 
 tupleAppType :: Span -> [T.Type] -> T.Type
-tupleAppType s (t:ts) =
-  foldr (\t a -> T.App (spanFromTo a t) a t)
-        (T.App s (T.Name s (Variable s ("("++replicate (length ts) ',' ++")") (-1))) t)
-        ts
-tupleAppType _ _ = error "empty list"
+tupleAppType s ts =
+  T.App s (T.Name s (Variable s ("("++replicate (length ts) ',' ++")") (-1))) ts
 
 binOp :: E.Exp -> Variable -> E.Exp -> E.Exp
-binOp l op r = E.App (spanFromTo l r) (E.App (spanFromTo l op) (E.Var (getSpan op) op) l) r
+binOp l op r = E.App (spanFromTo l r) (E.Var (getSpan op) op) [E.EArg l, E.EArg r]
 
 unOp :: Variable -> E.Exp -> E.Exp
-unOp op x = E.App (spanFromTo op x) (E.Var (getSpan op) op) x
+unOp op x = E.App (spanFromTo op x) (E.Var (getSpan op) op) [E.EArg x]
 
 tupleAppExp :: Span -> [E.Exp] -> E.Exp
-tupleAppExp s (e:es) =
-  foldl (\a e -> E.App (spanFromTo a e) a e)
-        (E.App s (E.Var s (mkTupleCons (length es) s)) e)
-        es
-tupleAppExp _ _ = error "empty list"
+tupleAppExp s es = E.App s (E.Var s (mkTupleCons (length es) s)) (map E.EArg es)
 
 consAppExp :: Span -> [E.Exp] -> E.Exp
-consAppExp s = foldr (E.App s . E.App s (E.Var s (mkCons s))) (E.Var s (mkNil s))
+consAppExp s = foldr (\e l -> E.App s (E.Var s $ mkCons s) (map E.EArg [e,l])) (E.Var s (mkNil s))
+
+addArgExp :: E.Arg -> E.Exp -> E.Exp 
+addArgExp a (E.App s e as) = E.App s e (as++[a])
+addArgExp a e              = E.App (spanFromTo e a) e [a]
+
+addArgType :: T.Type -> T.Type -> T.Type
+addArgType a (T.App s t as) = T.App s t (as++[a])
+addArgType a t              = T.App (spanFromTo t a) t [a]

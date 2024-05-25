@@ -11,7 +11,7 @@ import Syntax.Kind (Kind, Multiplicity(..))
 
 import Data.List (intercalate)
 
-data Polarity = In | Out deriving Eq
+data Polarity = In | Out
 
 instance Show Polarity where
   show :: Polarity -> String
@@ -19,10 +19,9 @@ instance Show Polarity where
   show Out = "!"
 
 data Labelled 
-  = Record
-  | Variant
-  | Choice Multiplicity Polarity 
-  deriving Eq
+  = Variant
+  -- | Record 
+  | Choice Multiplicity Polarity
 
 instance Show Labelled where
   show :: Labelled -> String
@@ -49,8 +48,8 @@ data Type
   | Rec Span Kind 
   -- Lambda
   | Var Span Variable
-  | App Span Type Type
-  | Abs Span Variable Kind Type 
+  | App Span Type [Type]
+  | Abs Span [(Variable, Kind)] Type 
   -- Special cases
   | Name Span Variable 
   | Labelled Span Labelled [(Variable, Type)]
@@ -67,16 +66,18 @@ instance Show Type where
   show (Labelled  _ l lts) = show l++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
   show (Tuple _ []) = "()"
   show (Tuple _ (t:ts)) = "("++show t++(if null ts then "" else concatMap (\t -> ", "++show t) ts)++")"
-  show (Message _ m p) =  "("++(if m == Un then "*" else "") ++ show p++")"
-  show (End _ p) = if p == In then "Wait" else "Close"
+  show (Message _ Un p) =  "(*"++ show p++")"
+  show (Message _ _ p) = "("++show p++")"
+  show (End _ In ) = "Wait" 
+  show (End _ Out) = "Close"
   show (Skip _) = "Skip"
   show (Semi _) = "(;)"
   show (Dual _) = "Dual"
   show (Var _ a) = show a
   show (Forall _ k) = "forall_"++show k  
   show (Rec _ k) = "rec_"++show k
-  show (App _ t1 t2) = "("++show t1++" "++show t2++")"
-  show (Abs _ a k t) = "(\\"++show a++":"++show k++" -> "++show t++")"
+  show (App _ t as) = foldl (\s a -> "("++s++" "++show a++")") (show t) as
+  show (Abs _ aks t) = "(\\"++concatMap (\(a,k) -> show a++":"++show k) aks++" -> "++show t++")"
   show (Name _ n) = show n
 
 instance Located Type where 
@@ -97,7 +98,7 @@ instance Located Type where
   getSpan (Forall s _) = s
   getSpan (Rec s _) = s
   getSpan (App s _ _) = s
-  getSpan (Abs s _ _ _) = s
+  getSpan (Abs s _ _) = s
   getSpan (Name s _) = s
 
   setSpan :: Span -> Type -> Type
@@ -117,5 +118,5 @@ instance Located Type where
   setSpan s (Forall _ k) = Forall s k
   setSpan s (Rec _ k) = Rec s k
   setSpan s (App _ t1 t2) = App s t1 t2
-  setSpan s (Abs _ a k t) = Abs s a k t
+  setSpan s (Abs _ aks t) = Abs s aks t
   setSpan s (Name _ n) = Name s n
