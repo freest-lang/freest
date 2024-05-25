@@ -26,7 +26,7 @@ instance Located Span where
 data Variable = Variable { varSpan  :: Span
                          , external :: String
                          , internal :: Int
-                         }
+                         } deriving Eq 
 
 instance Show Variable where 
   show (Variable _ s _) = s

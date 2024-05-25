@@ -1,14 +1,20 @@
 module Parser.ParserUtils where
 
 import Parser.Token
+import Parser.LexerUtils
 import Syntax.Base
 import Syntax.Names
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import qualified Syntax.Type as T
 
-kVarTODO :: Located a => a -> K.Kind
-kVarTODO l = K.Proper (getSpan l) (K.VarM "φ") (K.VarPK "ψ")
+freshKVar :: Located a => a -> Lexer K.Kind
+freshKVar l = do
+  i1 <- incCounter
+  i2 <- incCounter
+  let s = getSpan l 
+  return $ K.Proper s (K.VarM  (Variable s ("φ"++show i1) i1)) 
+                      (K.VarPK (Variable s ("ψ"++show i2) i2))
 
 split :: Eq a => a -> [a] -> [[a]]
 split d str =

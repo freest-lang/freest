@@ -1,4 +1,6 @@
 {
+{-# LANGUAGE TupleSections #-}
+
 module Parser.Parser where
 
 import Parser.Lexer (scan)
@@ -289,7 +291,7 @@ KindedVarListWS :: { [(Variable, K.Kind)] }
   | KindedVar KindedVarListWS { $1 : $2 }
 
 KindedVar :: { (Variable, K.Kind) }
-  : LOWER_ID { (mkVarTk $1, kVarTODO $1) }
+  : LOWER_ID {% freshKVar $1 >>= return . (mkVarTk $1,) }
   | LOWER_ID ':' ProperKind { (mkVarTk $1, $3) }
 
 ExpPrimary :: { E.Exp }

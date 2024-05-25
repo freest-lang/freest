@@ -8,22 +8,22 @@ where
 
 import Syntax.Base
 
-data Multiplicity = Lin | Un | VarM String deriving Eq
+data Multiplicity = Lin | Un | VarM Variable deriving Eq
 
 instance Show Multiplicity where 
   show :: Multiplicity -> String
   show Lin = "1"
   show Un  = "*"
-  show (VarM m) = m
+  show (VarM φ) = external φ
 
-data Prekind = Top | Session | Absorb | VarPK String deriving Eq
+data Prekind = Top | Session | Absorb | VarPK Variable deriving Eq
 
 instance Show Prekind where 
   show :: Prekind -> String
   show Top = "T"
   show Session = "S"
   show Absorb = "A"
-  show (VarPK pk) = pk
+  show (VarPK ψ) = external ψ
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind deriving Eq
 

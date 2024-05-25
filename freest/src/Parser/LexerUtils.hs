@@ -58,6 +58,7 @@ data LexerState
   = LS { lexerInput      :: {-# UNPACK #-} !AlexInput
        , lexerStartCodes :: {-# UNPACK #-} !(NonEmpty Int)
        , lexerLayout     :: [Layout]
+       , counter         :: Int
        }
   deriving (Eq, Show)
 
@@ -92,10 +93,14 @@ popLayout = modify' $ \st ->
            [] -> []
      }
 
+incCounter :: Lexer Int 
+incCounter = modify' (\st -> st{counter = succ $ counter st}) >> gets counter
+
 initState :: FilePath -> String -> LexerState
 initState f s = LS { lexerInput      = Input 1 1 '\n' s f
                    , lexerStartCodes = 0 :| []
                    , lexerLayout     = []
+                   , counter         = 0
                    }
 
 emit :: (Span -> a -> Token) -> a -> Lexer Token
