@@ -10,13 +10,15 @@ import Syntax.Base
 
 data Multiplicity = Lin | Un | VarM Variable
 
+data Prekind = Top | Session | Absorb | VarPK Variable
+
+data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
+
 instance Show Multiplicity where 
   show :: Multiplicity -> String
   show Lin = "1"
   show Un  = "*"
   show (VarM φ) = external φ
-
-data Prekind = Top | Session | Absorb | VarPK Variable
 
 instance Show Prekind where 
   show :: Prekind -> String
@@ -24,8 +26,6 @@ instance Show Prekind where
   show Session = "S"
   show Absorb = "A"
   show (VarPK ψ) = external ψ
-
-data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
 
 instance Show Kind where 
   show :: Kind -> String

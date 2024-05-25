@@ -13,24 +13,10 @@ import Data.List (intercalate)
 
 data Polarity = In | Out
 
-instance Show Polarity where
-  show :: Polarity -> String
-  show In  = "?"
-  show Out = "!"
-
 data Labelled 
   = Variant
   -- | Record 
   | Choice Multiplicity Polarity
-
-instance Show Labelled where
-  show :: Labelled -> String
-  show Variant = "<>"
-  show (Choice Lin In) = "&"
-  show (Choice Lin Out) = "+"
-  show (Choice Un In) = "*&"
-  show (Choice Un Out) = "*+"
-  show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
 
 data Type
   -- Constants
@@ -55,6 +41,19 @@ data Type
   | Labelled Span Labelled [(Variable, Type)]
   | Tuple Span [Type]
 
+instance Show Polarity where
+  show :: Polarity -> String
+  show In  = "?"
+  show Out = "!"
+
+instance Show Labelled where
+  show :: Labelled -> String
+  show Variant = "<>"
+  show (Choice Lin In) = "&"
+  show (Choice Lin Out) = "+"
+  show (Choice Un In) = "*&"
+  show (Choice Un Out) = "*+"
+  show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
 
 instance Show Type where 
   show :: Type -> String

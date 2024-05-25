@@ -35,21 +35,6 @@ type Prog = [Module]
 -- 1. data & type
 -- 2. verificar que nomes estao definidos
 
-instance Show Module where
-  show :: Module -> String
-  show Module{name,imports,dataDecls,typeDecls,definitions} =
-    intercalate "\n\n"
-      [case name of Nothing -> "\n" ; Just n -> "\nmodule "++intercalate "." n++" where"
-      ,intercalate "\n" (map showImport imports)
-      ,intercalate "\n" (map showDataDecl dataDecls)
-      ,intercalate "\n" (map showTypeDecl typeDecls)
-      ,intercalate "\n" (map show definitions)
-      ]
-    where showImport ss = "import "++intercalate "." ss
-          showDataDecl (n, as, cs) = "data "++show n++" "++unwords (map show as)++" = "++intercalate " | " (map showCons cs)
-            where showCons (s,ts) = show s ++ unwords (map show ts)
-          showTypeDecl (n, as, t) = "type "++show n++" "++unwords (map show as)++" = "++show t
-
 setName :: [String] -> Module -> Module
 setName n m = m {name = Just n}
 
@@ -72,3 +57,18 @@ empty = Module{ name        = Nothing
               , typeDecls   = []
               , definitions = []
               }
+
+instance Show Module where
+  show :: Module -> String
+  show Module{name,imports,dataDecls,typeDecls,definitions} =
+    intercalate "\n\n"
+      [case name of Nothing -> "\n" ; Just n -> "\nmodule "++intercalate "." n++" where"
+      ,intercalate "\n" (map showImport imports)
+      ,intercalate "\n" (map showDataDecl dataDecls)
+      ,intercalate "\n" (map showTypeDecl typeDecls)
+      ,intercalate "\n" (map show definitions)
+      ]
+    where showImport ss = "import "++intercalate "." ss
+          showDataDecl (n, as, cs) = "data "++show n++" "++unwords (map show as)++" = "++intercalate " | " (map showCons cs)
+            where showCons (s,ts) = show s ++ unwords (map show ts)
+          showTypeDecl (n, as, t) = "type "++show n++" "++unwords (map show as)++" = "++show t

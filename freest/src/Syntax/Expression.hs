@@ -15,15 +15,20 @@ import Data.List (intercalate)
 
 data Arg = EArg Exp | TArg Type
 
-instance Show Arg where
-  show (EArg  e) = show e
-  show (TArg t) = show t
+data Pat 
+  = WildPat Span Variable
+  | VarPat Span Variable 
+  | ConsPat Span Variable [Pat]
+  | TuplePat Span [Pat]
+  | IntPat Span Int 
+  | FloatPat Span Float 
+  | CharPat Span Char 
+  | StringPat Span String 
 
-instance Located Arg where 
-  getSpan (EArg e) = getSpan e
-  getSpan (TArg t) = getSpan t
-  setSpan s (EArg e) = EArg (setSpan s e)
-  setSpan s (TArg t) = TArg (setSpan s t)
+data LetDecl
+  = ValDecl Pat            (Either Exp [(Exp,Exp)]) (Maybe [LetDecl]) -- TODO: data for RHS
+  | FnDecl  Variable [Pat] (Either Exp [(Exp,Exp)]) (Maybe [LetDecl])
+  | SigDecl [Variable] Type 
 
 data Exp
   = Int    Span Int
@@ -38,6 +43,61 @@ data Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
   | TAbs   Span [(Variable, Kind)] Exp
+
+instance Show Arg where
+  show (EArg  e) = show e
+  show (TArg t) = show t
+
+instance Located Arg where 
+  getSpan (EArg e) = getSpan e
+  getSpan (TArg t) = getSpan t
+  setSpan s (EArg e) = EArg (setSpan s e)
+  setSpan s (TArg t) = TArg (setSpan s t)
+
+instance Show Pat where 
+  show :: Pat -> String
+  show (WildPat _ x) = show x
+  show (VarPat _ x) = show x 
+  show (ConsPat _ c ps) = "("++show c++" "++unwords (map show ps)++")"
+  show (TuplePat _ []) = "()"
+  show (TuplePat _ [p]) = error "Syntax.Expression.show: tuple pattern with one element"
+  show (TuplePat _ (p:ps)) = "("++show p++unwords (map (\e -> ", "++show e) ps)++")"
+  show (IntPat _ i) = show i 
+  show (FloatPat _ f) = show f
+  show (CharPat _ c) = show c
+  show (StringPat _ s) = show s
+
+instance Located Pat where 
+  getSpan :: Pat -> Span
+  getSpan (WildPat s _) = s
+  getSpan (VarPat s _) = s 
+  getSpan (ConsPat s _ _) = s 
+  getSpan (TuplePat s _) = s
+  getSpan (IntPat s _) = s 
+  getSpan (FloatPat s _) = s
+  getSpan (CharPat s _) = s
+  getSpan (StringPat s _) = s
+
+  setSpan :: Span -> Pat -> Pat
+  setSpan s (WildPat _ x) = WildPat s x
+  setSpan s (VarPat _ x) = VarPat s x
+  setSpan s (ConsPat _ c ps) = ConsPat s c ps
+  setSpan s (TuplePat _ ps) = TuplePat s ps
+  setSpan s (IntPat _ i) = IntPat s i
+  setSpan s (FloatPat _ f) = FloatPat s f
+  setSpan s (CharPat _ c) = CharPat s c
+  setSpan s (StringPat _ s') = StringPat s s'
+
+instance Show LetDecl where 
+  show :: LetDecl -> String
+  show (ValDecl p e w) = show p++showRhs e
+    ++(case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
+  show (FnDecl x ps e w) = show x++" "++unwords (map show ps)++showRhs e 
+    ++ (case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
+  show (SigDecl xs t) = intercalate ", " (map show xs) ++" : "++show t 
+
+showRhs (Left e) = " = "++show e
+showRhs (Right ges) = concatMap (\(g,e) -> " | "++show g++" = "++show e) ges
 
 instance Show Exp where 
   show :: Exp -> String
@@ -86,63 +146,3 @@ instance Located Exp where
   setSpan s (Case _ e cs) = Case s e cs
   setSpan s (If _ e1 e2 e3) = If s e1 e2 e3
   setSpan s (TAbs _ as e) = TAbs s as e
-
-data Pat 
-  = WildPat Span Variable
-  | VarPat Span Variable 
-  | ConsPat Span Variable [Pat]
-  | TuplePat Span [Pat]
-  | IntPat Span Int 
-  | FloatPat Span Float 
-  | CharPat Span Char 
-  | StringPat Span String 
-
-instance Show Pat where 
-  show :: Pat -> String
-  show (WildPat _ x) = show x
-  show (VarPat _ x) = show x 
-  show (ConsPat _ c ps) = "("++show c++" "++unwords (map show ps)++")"
-  show (TuplePat _ []) = "()"
-  show (TuplePat _ [p]) = error "Syntax.Expression.show: tuple pattern with one element"
-  show (TuplePat _ (p:ps)) = "("++show p++unwords (map (\e -> ", "++show e) ps)++")"
-  show (IntPat _ i) = show i 
-  show (FloatPat _ f) = show f
-  show (CharPat _ c) = show c
-  show (StringPat _ s) = show s
-
-instance Located Pat where 
-  getSpan :: Pat -> Span
-  getSpan (WildPat s _) = s
-  getSpan (VarPat s _) = s 
-  getSpan (ConsPat s _ _) = s 
-  getSpan (TuplePat s _) = s
-  getSpan (IntPat s _) = s 
-  getSpan (FloatPat s _) = s
-  getSpan (CharPat s _) = s
-  getSpan (StringPat s _) = s
-
-  setSpan :: Span -> Pat -> Pat
-  setSpan s (WildPat _ x) = WildPat s x
-  setSpan s (VarPat _ x) = VarPat s x
-  setSpan s (ConsPat _ c ps) = ConsPat s c ps
-  setSpan s (TuplePat _ ps) = TuplePat s ps
-  setSpan s (IntPat _ i) = IntPat s i
-  setSpan s (FloatPat _ f) = FloatPat s f
-  setSpan s (CharPat _ c) = CharPat s c
-  setSpan s (StringPat _ s') = StringPat s s'
-
-data LetDecl
-  = ValDecl Pat            (Either Exp [(Exp,Exp)]) (Maybe [LetDecl]) -- TODO: data for RHS
-  | FnDecl  Variable [Pat] (Either Exp [(Exp,Exp)]) (Maybe [LetDecl])
-  | SigDecl [Variable] Type 
-
-instance Show LetDecl where 
-  show :: LetDecl -> String
-  show (ValDecl p e w) = show p++showRhs e
-    ++(case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
-  show (FnDecl x ps e w) = show x++" "++unwords (map show ps)++showRhs e 
-    ++ (case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
-  show (SigDecl xs t) = intercalate ", " (map show xs) ++" : "++show t 
-
-showRhs (Left e) = " = "++show e
-showRhs (Right ges) = concatMap (\(g,e) -> " | "++show g++" = "++show e) ges

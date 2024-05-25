@@ -35,6 +35,7 @@ library:
     - Syntax.Kind
     - Syntax.Module
     - Syntax.Names
+    - Syntax.Substitution
     - Syntax.Type
     - Typing.Typing
     - Utils.CmdLine

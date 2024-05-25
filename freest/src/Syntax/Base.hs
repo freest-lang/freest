@@ -8,10 +8,6 @@ data Span = Span { filepath   :: FilePath
                  , endPos     :: Pos
                  } deriving (Eq, Ord)
 
-instance Show Span where 
-  show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
-    where showPos (l,c) = show l++":"++show c
-
 class Located a where 
   getSpan :: a -> Span 
   setSpan :: Span -> a -> a 
@@ -28,12 +24,16 @@ data Variable = Variable { varSpan  :: Span
                          , internal :: Int
                          }
 
+mkVar :: Located a => a -> String -> Variable
+mkVar l str = Variable (getSpan l) str (-1)
+
+instance Show Span where 
+  show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
+    where showPos (l,c) = show l++":"++show c
+
 instance Show Variable where 
   show (Variable _ s _) = s
 
 instance Located Variable where 
   getSpan = varSpan
   setSpan s x = x{varSpan=s}
-
-mkVar :: Located a => a -> String -> Variable
-mkVar l str = Variable (getSpan l) str (-1)
