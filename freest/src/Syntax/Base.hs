@@ -24,6 +24,14 @@ data Variable = Variable { varSpan  :: Span
                          , internal :: Int
                          }
 
+-- Are these the (only) Ord/Eq instances we want for Variable?
+-- (We might want to order them by their position in the source code...)
+instance Ord Variable where
+  a <= b = internal a <= internal b
+
+instance Eq Variable where 
+  a == b = internal a == internal b
+
 mkVar :: Located a => a -> String -> Variable
 mkVar l str = Variable (getSpan l) str (-1)
 
@@ -32,7 +40,7 @@ instance Show Span where
     where showPos (l,c) = show l++":"++show c
 
 instance Show Variable where 
-  show (Variable _ s _) = s
+  show (Variable _ extl intl) = extl++"#"++show intl
 
 instance Located Variable where 
   getSpan = varSpan

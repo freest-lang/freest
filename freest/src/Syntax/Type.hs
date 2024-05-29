@@ -76,7 +76,7 @@ instance Show Type where
   show (Forall _ k) = "forall_"++show k  
   show (Rec _ k) = "rec_"++show k
   show (App _ t as) = foldl (\s a -> "("++s++" "++show a++")") (show t) as
-  show (Abs _ aks t) = "(\\"++concatMap (\(a,k) -> show a++":"++show k) aks++" -> "++show t++")"
+  show (Abs _ aks t) = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
   show (Name _ n) = show n
 
 instance Located Type where 

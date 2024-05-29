@@ -3,6 +3,7 @@ module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
+  , lt, ut, ls, us, la, ua
   )
 where 
 
@@ -13,6 +14,15 @@ data Multiplicity = Lin | Un | VarM Variable
 data Prekind = Top | Session | Absorb | VarPK Variable
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
+
+-- Abbreviations for the six proper kinds
+lt, ut, ls, us, la, ua :: Span -> Kind
+lt s = Proper s Lin Top 
+ut s = Proper s Un  Top 
+ls s = Proper s Lin Session 
+us s = Proper s Un  Session
+la s = Proper s Lin Absorb
+ua s = Proper s Un  Absorb
 
 instance Show Multiplicity where 
   show :: Multiplicity -> String

@@ -20,6 +20,7 @@ import Debug.Trace
 }
 
 %name parseExp Exp
+%name parseType Type
 %name parseModuleDecl ModuleDecl
 %name parseModule Module
 
