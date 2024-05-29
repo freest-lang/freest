@@ -35,16 +35,17 @@ allVars _ = Set.empty
 newInternal :: Variable -> Set.Set Variable -> Variable
 newInternal a as = a{internal=head ([0 ..] \\ map internal (Set.toList as))}
 
+
 subst :: Variable -> T.Type -> T.Type -> T.Type
-subst x s t = sub t
+subst x s t = sub t -- metavars for type vars are a, b, c; those for types are t, u, v
   where
     sub :: T.Type -> T.Type
     sub t@(T.Var _ v)
       | v == x = s
       | otherwise = t
-    sub t@(T.Abs span [] t') = T.Abs span [] (sub t')
-    sub t@(T.Abs span vks@((v,k):vks') t')
-      | v == x = T.Abs span vks t'
+    sub t@(T.Abs span [] t') = T.Abs span [] (sub t') -- t@ really needed?
+    sub t@(T.Abs span vks@((v,k):vks') t') -- map does not work?
+      | v == x = T.Abs span vks t' -- v == x = t ?
       | v `Set.member` fvs = 
         let v' = newInternal v (vs `Set.union` allVars t')
             T.Abs _ vks'' t'' = sub (subst v (T.Var (getSpan v') v') (T.Abs span vks' t'))
