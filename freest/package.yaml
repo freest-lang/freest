@@ -28,6 +28,7 @@ library:
     - happy
   exposed-modules:
     - FreeST
+    - Kinding.Kinding
     - Parser.Parser
     - Parser.LexerUtils
     - Syntax.Base
