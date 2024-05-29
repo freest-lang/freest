@@ -1,4 +1,12 @@
 {
+{- |
+Module      :  Parser.Lexer
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module implements a layout-sensitive lexer for FreeST, 
+inspired by [Amélia Liao's tutorial](https://amelia.how/posts/parsing-layout.html).
+-}
 module Parser.Lexer where
 
 import Parser.Token 

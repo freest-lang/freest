@@ -1,4 +1,12 @@
-{-# LANGUAGE InstanceSigs #-}
+{- |
+Module      :  Syntax.Expression
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module defines the Exp data type, which represents expressions in the
+external language. Expressions contain patterns and let declarations, which
+are also represented by the Pat and LetDecl data types also defined here.
+-}
 module Syntax.Expression 
   ( Pat(..)
   , LetDecl(..)
@@ -54,8 +62,7 @@ instance Located Arg where
   setSpan s (EArg e) = EArg (setSpan s e)
   setSpan s (TArg t) = TArg (setSpan s t)
 
-instance Show Pat where 
-  show :: Pat -> String
+instance Show Pat where
   show (WildPat _ x) = show x
   show (VarPat _ x) = show x 
   show (ConsPat _ c ps) = "("++show c++" "++unwords (map show ps)++")"
@@ -67,8 +74,7 @@ instance Show Pat where
   show (CharPat _ c) = show c
   show (StringPat _ s) = show s
 
-instance Located Pat where 
-  getSpan :: Pat -> Span
+instance Located Pat where
   getSpan (WildPat s _) = s
   getSpan (VarPat s _) = s 
   getSpan (ConsPat s _ _) = s 
@@ -77,8 +83,7 @@ instance Located Pat where
   getSpan (FloatPat s _) = s
   getSpan (CharPat s _) = s
   getSpan (StringPat s _) = s
-
-  setSpan :: Span -> Pat -> Pat
+  
   setSpan s (WildPat _ x) = WildPat s x
   setSpan s (VarPat _ x) = VarPat s x
   setSpan s (ConsPat _ c ps) = ConsPat s c ps
@@ -89,7 +94,6 @@ instance Located Pat where
   setSpan s (StringPat _ s') = StringPat s s'
 
 instance Show LetDecl where 
-  show :: LetDecl -> String
   show (ValDecl p e w) = show p++showRhs e
     ++(case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
   show (FnDecl x ps e w) = show x++" "++unwords (map show ps)++showRhs e 
@@ -99,8 +103,7 @@ instance Show LetDecl where
 showRhs (Left e) = " = "++show e
 showRhs (Right ges) = concatMap (\(g,e) -> " | "++show g++" = "++show e) ges
 
-instance Show Exp where 
-  show :: Exp -> String
+instance Show Exp where
   show (Int _ i) = show i 
   show (Float _ d) = show d
   show (Char _ c) = show c 
@@ -119,7 +122,6 @@ instance Show Exp where
   show (TAbs _ aks e) = "(\\\\"++unwords (map (\(a,k)->show a++":"++show k) aks)++" -> "++show e++")"
 
 instance Located Exp where
-  getSpan :: Exp -> Span
   getSpan (Int s _) = s
   getSpan (Float s _) = s
   getSpan (Char s _) = s
@@ -132,8 +134,7 @@ instance Located Exp where
   getSpan (Case s _ _) = s
   getSpan (If s _ _ _) = s
   getSpan (TAbs s _ _) = s
-
-  setSpan :: Span -> Exp -> Exp
+  
   setSpan s (Int _ i) = Int s i
   setSpan s (Float _ f) = Float s f
   setSpan s (Char _ c) = Char s c

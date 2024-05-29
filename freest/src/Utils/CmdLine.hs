@@ -1,3 +1,11 @@
+{- |
+Module      :  Utils.CmdLine
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module defines the command line options accepted by FreeST along with
+their parser.
+-}
 module Utils.CmdLine where
 
 import Options.Applicative

@@ -1,4 +1,11 @@
-{-# LANGUAGE InstanceSigs #-}
+{- |
+Module      :  Syntax.Type
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module defines the Type data type, which represents FreeST's higher-order
+polymorphic context-free session types.
+-}
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
@@ -42,12 +49,10 @@ data Type
   | Tuple Span [Type]
 
 instance Show Polarity where
-  show :: Polarity -> String
   show In  = "?"
   show Out = "!"
 
 instance Show Labelled where
-  show :: Labelled -> String
   show Variant = "<>"
   show (Choice Lin In) = "&"
   show (Choice Lin Out) = "+"
@@ -55,8 +60,7 @@ instance Show Labelled where
   show (Choice Un Out) = "*+"
   show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
 
-instance Show Type where 
-  show :: Type -> String
+instance Show Type where
   show (Int _) = "Int"
   show (Float _) = "Float"
   show (Char _) = "Char"
@@ -79,8 +83,7 @@ instance Show Type where
   show (Abs _ aks t) = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
   show (Name _ n) = show n
 
-instance Located Type where 
-  getSpan :: Type -> Span
+instance Located Type where
   getSpan (Int s) = s
   getSpan (Float s) = s
   getSpan (Char s) = s
@@ -99,8 +102,7 @@ instance Located Type where
   getSpan (App s _ _) = s
   getSpan (Abs s _ _) = s
   getSpan (Name s _) = s
-
-  setSpan :: Span -> Type -> Type
+  
   setSpan s (Int _) = Int s
   setSpan s (Float _) = Float s
   setSpan s (Char _) = Char s

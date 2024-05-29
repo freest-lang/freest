@@ -1,6 +1,15 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{- |
+Module      :  Parser.LexerUtils
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
+This module contains utilities for lexing. It defines the types and functions
+that handle the input, state, and actions of the lexer. Not all actions are 
+defined here: some depend on start codes names that are only in scope in the
+Lexer.x file.
+-}
 module Parser.LexerUtils where
 
 import Parser.Token 

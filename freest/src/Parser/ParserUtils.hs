@@ -1,3 +1,11 @@
+{- |
+Module      :  Parser.ParserUtils
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module contains utilities for parsing, namely for generating fresh variables
+and constructing types and expressions more succinctly.
+-}
 module Parser.ParserUtils where
 
 import Parser.Token

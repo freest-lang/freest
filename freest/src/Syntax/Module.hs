@@ -1,6 +1,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE InstanceSigs #-}
+{- |
+Module      :  Syntax.Module
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
+This module contains types and functions to represent and manipulate FreeST 
+modules.
+-}
 module Syntax.Module
   ( Module(..)
   , setName

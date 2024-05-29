@@ -1,3 +1,10 @@
+{- |
+Module      :  FreeST
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+The entry point of the FreeST compiler.
+-}
 module FreeST where
 
 import Parser.LexerUtils

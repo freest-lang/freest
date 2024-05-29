@@ -1,6 +1,12 @@
 {
 {-# LANGUAGE TupleSections #-}
+{- |
+Module      :  Parser.Parser
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
+This module implements a layout-sensitive parser for FreeST.
+-}
 module Parser.Parser where
 
 import Parser.Lexer (scan)

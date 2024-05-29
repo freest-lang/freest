@@ -1,4 +1,11 @@
 {-# LANGUAGE TupleSections #-}
+{- |
+Module      :  ProgSpecUtils
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Utilities for program tests.
+-}
 module ProgSpecUtils where
 
 import Control.Monad (forM_)

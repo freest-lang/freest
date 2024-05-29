@@ -1,4 +1,12 @@
 {-# LANGUAGE InstanceSigs #-}
+{- |
+Module      :  Parser.Token
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module contains the definition of the Token data type, which represents
+the tokens output by the lexer.
+-}
 module Parser.Token where 
 
 import Syntax.Base

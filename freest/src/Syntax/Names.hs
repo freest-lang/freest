@@ -1,4 +1,12 @@
+{- |
+Module      :  Syntax.Names
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module contains helper functions to generate variables with standard names.
+-}
 module Syntax.Names where
+
 import Syntax.Base
 
 mk :: Located a => String -> a -> Variable

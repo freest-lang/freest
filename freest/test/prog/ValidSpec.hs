@@ -1,7 +1,12 @@
-{-# LANGUAGE NamedFieldPuns
-           , ScopedTypeVariables 
-#-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{- |
+Module      :  ProgSpecUtils
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
+The module specifies how to conduct valid program tests.
+-}
 module ValidSpec where
 
 import Utils.CmdLine

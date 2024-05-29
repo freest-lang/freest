@@ -1,4 +1,12 @@
 {-# LANGUAGE FlexibleInstances #-}
+{- |
+Module      :  Syntax.Base
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module defines types and classes needed by the other Syntax modules to
+represent FreeST's external syntax.
+-}
 module Syntax.Base where
 
 type Pos = (Int, Int)

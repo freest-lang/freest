@@ -1,9 +1,13 @@
--- | This module implements capture-avoiding substitution, adapted from the
--- corrected version of Lennart Augustsson's naïve substitution found in 
--- the lambda-n-ways repository:
--- https://github.com/sweirich/lambda-n-ways/blob/main/lib/Lennart/Simple.hs.
--- To be replaced by a more efficient alternative.
+{- |
+Module      :  Syntax.Substitution
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
+This module implements capture-avoiding substitution for types, adapted from 
+the corrected version of Lennart Augustsson's naïve substitution found in 
+[lambda-n-ways repository](https://github.com/sweirich/lambda-n-ways/blob/main/lib/Lennart/Simple.hs).
+To be replaced by a more efficient alternative.
+-}
 module Syntax.Substitution
   (subs)
 where

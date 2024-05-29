@@ -1,3 +1,11 @@
+{- |
+Module      :  Kinding.Kinding
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module implements FreeST's bidirectional kinding algorithm.
+-}
+
 module Kinding.Kinding 
   ( synth
   , KindingCtx
