@@ -65,7 +65,6 @@ empty = Module{ name        = Nothing
               }
 
 instance Show Module where
-  show :: Module -> String
   show Module{name,imports,dataDecls,typeDecls,definitions} =
     intercalate "\n\n"
       [case name of Nothing -> "\n" ; Just n -> "\nmodule "++intercalate "." n++" where"
