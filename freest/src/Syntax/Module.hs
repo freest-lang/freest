@@ -18,7 +18,7 @@ module Syntax.Module
   )
 where
 
-import Syntax.Base (Variable)
+import Syntax.Base
 import Syntax.Expression (Exp, Pat, LetDecl)
 import Syntax.Kind (Kind)
 import Syntax.Type (Type)
@@ -75,5 +75,5 @@ instance Show Module where
       ]
     where showImport ss = "import "++intercalate "." ss
           showDataDecl (n, as, cs) = "data "++show n++" "++unwords (map show as)++" = "++intercalate " | " (map showCons cs)
-            where showCons (s,ts) = show s ++ unwords (map show ts)
+            where showCons (s,ts) = show s ++" "++ unwords (map show ts)
           showTypeDecl (n, as, t) = "type "++show n++" "++unwords (map show as)++" = "++show t

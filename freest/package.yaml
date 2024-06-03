@@ -31,6 +31,7 @@ library:
     - Kinding.Kinding
     - Parser.Parser
     - Parser.LexerUtils
+    - Parser.Scoping
     - Syntax.Base
     - Syntax.Expression
     - Syntax.Kind
@@ -40,6 +41,7 @@ library:
     - Syntax.Type
     - Typing.Typing
     - Utils.CmdLine
+    - Utils.Error
 
 executables:
   freest:

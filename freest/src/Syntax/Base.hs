@@ -27,6 +27,10 @@ instance Located Span where
   getSpan = id 
   setSpan = const 
 
+instance Show Span where 
+  show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
+    where showPos (l,c) = show l++":"++show c
+
 data Variable = Variable { varSpan  :: Span
                          , external :: String
                          , internal :: Int
@@ -40,16 +44,12 @@ instance Ord Variable where
 instance Eq Variable where 
   a == b = internal a == internal b
 
-mkVar :: Located a => a -> String -> Variable
-mkVar l str = Variable (getSpan l) str (-1)
-
-instance Show Span where 
-  show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
-    where showPos (l,c) = show l++":"++show c
-
 instance Show Variable where 
   show (Variable _ extl intl) = extl++"#"++show intl
 
 instance Located Variable where 
   getSpan = varSpan
   setSpan s x = x{varSpan=s}
+
+mkVar :: Located a => a -> String -> Variable
+mkVar l str = Variable (getSpan l) str (-1)

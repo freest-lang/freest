@@ -11,6 +11,8 @@ module Parser.Lexer where
 
 import Parser.Token 
 import Parser.LexerUtils
+import Syntax.Base
+import Utils.Error
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -200,8 +202,8 @@ scan = do
   startcode <- startCode
   case alexScan input startcode of
     AlexEOF -> handleEOF
-    AlexError (Input _ _ _ inp _) ->
-      throwError $ "Lexical error: " ++ show (head inp)
+    AlexError (Input l c _ inp f) -> throwError 
+      [LexicalError (Span{startPos=(l,c), endPos=(l,c), filepath=f}) (head inp)]
     AlexSkip input' _ -> do
       modify' $ \s -> s { lexerInput = input' }
       scan

@@ -19,6 +19,7 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Kind       as K 
 import qualified Syntax.Type       as T 
 import qualified Syntax.Module     as M
+import Utils.Error
 
 import Control.Monad.Except
 import Debug.Trace
@@ -454,5 +455,6 @@ Close
 {
 lexer cont = scan >>= cont
 
-parseError = throwError . show 
+parseError :: (Token, [String]) -> Lexer a
+parseError (tk,ss) = throwError [(ParseError (getSpan tk) (tk, ss))] 
 }

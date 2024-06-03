@@ -14,6 +14,7 @@ module Parser.LexerUtils where
 
 import Parser.Token 
 import Syntax.Base 
+import Utils.Error
 
 
 import Data.Word (Word8)
@@ -57,8 +58,8 @@ alexGetByte inp@Input{inpStream = str, inpFile = f} = advance <$> uncons str whe
             }
     )
 
-newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either String) a }
-  deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError String)
+newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either [Error]) a }
+  deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError [Error])
 
 data Layout = ExplicitLayout | LayoutColumn Int
   deriving (Eq, Show, Ord)
@@ -122,5 +123,5 @@ token t _ = do
   Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
   return (t Span{startPos=(l,c), endPos=(l,c), filepath=f})
 
-runLexer :: Lexer a -> FilePath -> String -> Either String a
+runLexer :: Lexer a -> FilePath -> String -> Either [Error] a
 runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s) 

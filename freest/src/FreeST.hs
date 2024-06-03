@@ -8,25 +8,31 @@ The entry point of the FreeST compiler.
 module FreeST where
 
 import Parser.LexerUtils
-import Parser.Lexer 
-import Parser.Token 
+import Parser.Lexer
+import Parser.Token
 import Debug.Trace (traceM)
 import Control.Monad.RWS
 import Utils.CmdLine
 import Options.Applicative
 import Parser.Parser
 import Syntax.Module
+import Control.Monad.State (runState)
+import Parser.Scoping (runScoping)
+import qualified Data.Map as Map
 
 main :: IO ()
-main = do 
-  execParser opts >>= freest 
+main = do
+  execParser opts >>= freest
 
 freest :: RunOpts -> IO ()
-freest RunOpts{file=f} = do 
-  ans <- runLexer parseModule f <$> readFile f
-  case ans of 
-    Left s -> error "parse error"
-    Right mod -> print mod
+freest RunOpts{file=f} = do
+  source <- readFile f
+  let r = runLexer parseModule f source
+          >>= runScoping
+  either (mapM_ print)
+         print
+         r
+
 
 lexAll :: Lexer ()
 lexAll = do
