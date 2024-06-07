@@ -8,7 +8,8 @@ This module contains types and functions to represent and manipulate FreeST
 modules.
 -}
 module Syntax.Module
-  ( Module(..)
+  ( DataDecl(..)
+  , Module(..)
   , setName
   , insertImport
   , insertDataDecl
@@ -27,10 +28,12 @@ import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map 
 
+type DataDecl = (Variable, [Variable], [(Variable, [Type])])
+
 data Module
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
-           , dataDecls   :: [(Variable, [Variable], [(Variable, [Type])])]
+           , dataDecls   :: [DataDecl]
            , typeDecls   :: [(Variable, [Variable], Type)]
            , definitions :: [LetDecl]
            }
@@ -66,7 +69,7 @@ empty = Module{ name        = Nothing
 
 instance Show Module where
   show Module{name,imports,dataDecls,typeDecls,definitions} =
-    intercalate "\n\n"
+    intercalate "\n"
       [case name of Nothing -> "\n" ; Just n -> "\nmodule "++intercalate "." n++" where"
       ,intercalate "\n" (map showImport imports)
       ,intercalate "\n" (map showDataDecl dataDecls)

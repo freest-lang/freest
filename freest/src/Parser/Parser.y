@@ -181,15 +181,15 @@ ModuleDecl :: { M.Module -> M.Module }
   | 'type' UPPER_ID LowerIdListWS '=' Type             { M.insertTypeDecl (mkVarTk $2) $3 $5 }
 
 LetDecl
-  : Pat DefRHS { E.ValDecl $1 $2 Nothing }
-  | Pat DefRHS 'where' LetDeclBlock { E.ValDecl $1 $2 (Just $4) }
-  | LOWER_ID PatPrimaryListWS DefRHS                      { E.FnDecl (mkVarTk $1) $2 $3 Nothing }
-  | LOWER_ID PatPrimaryListWS DefRHS 'where' LetDeclBlock { E.FnDecl (mkVarTk $1) $2 $3 (Just $5) }
+  : Pat DefRHS { E.ValDecl $1 ($2 Nothing) }
+  | Pat DefRHS 'where' LetDeclBlock { E.ValDecl $1 ($2 (Just $4)) }
+  | LOWER_ID PatPrimaryListWS DefRHS                      { E.FnDecl (mkVarTk $1) [($2, $3 Nothing)] }
+  | LOWER_ID PatPrimaryListWS DefRHS 'where' LetDeclBlock { E.FnDecl (mkVarTk $1) [($2, $3 (Just $5))] }
   | LowerIdListComma ':' Type { E.SigDecl $1 $3 }
 
-DefRHS :: { Either E.Exp [(E.Exp,E.Exp)] }
-  : '=' Exp     { Left $2 }
-  | GuardedExps { Right $1 }
+DefRHS :: { Maybe [E.LetDecl] -> E.RHS }
+  : '=' Exp     { E.UnguardedRHS $2 }
+  | GuardedExps { E.GuardedRHS $1 }
 
 GuardedExps :: { [(E.Exp, E.Exp)] }
   : '|' Exp '=' Exp GuardedExps { ($2,$4) : $5 }
@@ -421,6 +421,7 @@ PatPrimary :: { E.Pat }
   | DataConstructor  { E.ConsPat   (getSpan $1) $1 [] }
   | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
+  | LOWER_ID '@' PatPrimary { E.AsPat (spanFromTo $1 $3) (mkVarTk $1) $3 }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.ConsPat (spanFromTo $1 (last $2)) $1 $2 }

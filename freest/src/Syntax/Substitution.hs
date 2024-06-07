@@ -9,7 +9,9 @@ the corrected version of Lennart Augustsson's naïve substitution found in
 To be replaced by a more efficient alternative.
 -}
 module Syntax.Substitution
-  (subs)
+  (subs
+  ,freeVars
+  )
 where
 
 import Syntax.Base

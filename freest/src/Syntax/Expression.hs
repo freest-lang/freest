@@ -9,6 +9,7 @@ are also represented by the Pat and LetDecl data types also defined here.
 -}
 module Syntax.Expression 
   ( Pat(..)
+  , RHS(..)
   , LetDecl(..)
   , Arg(..)
   , Exp(..)
@@ -32,11 +33,16 @@ data Pat
   | FloatPat Span Float 
   | CharPat Span Char 
   | StringPat Span String 
+  | AsPat Span Variable Pat
 
 data LetDecl
-  = ValDecl Pat            (Either Exp [(Exp,Exp)]) (Maybe [LetDecl]) -- TODO: data for RHS
-  | FnDecl  Variable [Pat] (Either Exp [(Exp,Exp)]) (Maybe [LetDecl])
+  = ValDecl Pat      RHS
+  | FnDecl  Variable [([Pat], RHS)]
   | SigDecl [Variable] Type 
+
+data RHS 
+  = GuardedRHS [(Exp, Exp)] (Maybe [LetDecl])
+  | UnguardedRHS Exp (Maybe [LetDecl])
 
 data Exp
   = Int    Span Int
@@ -94,14 +100,18 @@ instance Located Pat where
   setSpan s (StringPat _ s') = StringPat s s'
 
 instance Show LetDecl where 
-  show (ValDecl p e w) = show p++showRhs e
-    ++(case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
-  show (FnDecl x ps e w) = show x++" "++unwords (map show ps)++showRhs e 
-    ++ (case w of Nothing -> "" ; Just ds -> " where ⦃"++intercalate " ❚ " (map show ds)++"⦄")
+  show (ValDecl p rhs) = show p++show rhs
+  show (FnDecl x psrhss) = intercalate "\n" $ map (\(ps,rhs) -> show x++" "++unwords (map show ps)++show rhs) psrhss
   show (SigDecl xs t) = intercalate ", " (map show xs) ++" : "++show t 
 
-showRhs (Left e) = " = "++show e
-showRhs (Right ges) = concatMap (\(g,e) -> " | "++show g++" = "++show e) ges
+instance Show RHS where
+  show (GuardedRHS ges w) = 
+    concatMap (\(g,e) -> " | "++show g++" = "++show e) ges++showWhere w
+  show (UnguardedRHS e w) =
+    " = "++show e++showWhere w
+
+showWhere Nothing   = ""
+showWhere (Just ds) = " where ⦃ "++intercalate " ⨾ " (map show ds)++" ⦄"
 
 instance Show Exp where
   show (Int _ i) = show i 
@@ -115,8 +125,8 @@ instance Show Exp where
   show (App _ f as) = foldl (\s a -> "("++s++" "++show a++")") (show f) as
   show (Abs _ ps m e) = "(\\"++unwords (map showPatType ps)++" "++show m++"-> "++show e++")"
     where showPatType (p,t) = "("++show p++":"++show t++")"
-  show (Let _ ds e) = "(let ⦃"++intercalate " ❚ " (map show ds)++"⦄ in "++show e++")"
-  show (Case _ e pes) = "(case "++show e++" of ⦃"++intercalate " ❚ " (map showCase pes)++"⦄)"
+  show (Let _ ds e) = "(let ⦃ "++intercalate " ⨾ " (map show ds)++" ⦄ in "++show e++")"
+  show (Case _ e pes) = "(case "++show e++" of ⦃ "++intercalate " ⨾ " (map showCase pes)++" ⦄)"
     where showCase (p, e) = show p ++ " -> " ++ show e 
   show (If _ e1 e2 e3) = "(if "++show e1++" then "++show e2++" else "++show e3++")"
   show (TAbs _ aks e) = "(\\\\"++unwords (map (\(a,k)->show a++":"++show k) aks)++" -> "++show e++")"

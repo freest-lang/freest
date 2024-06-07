@@ -19,6 +19,7 @@ import Syntax.Module
 import Control.Monad.State (runState)
 import Parser.Scoping (runScoping)
 import qualified Data.Map as Map
+import System.Exit (exitFailure, exitSuccess)
 
 main :: IO ()
 main = do
@@ -29,8 +30,8 @@ freest RunOpts{file=f} = do
   source <- readFile f
   let r = runLexer parseModule f source
           >>= runScoping
-  either (mapM_ print)
-         print
+  either (\es -> mapM_ print es >> exitFailure)
+         (\m -> print m >> exitSuccess)
          r
 
 

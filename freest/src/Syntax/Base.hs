@@ -21,7 +21,11 @@ class Located a where
   setSpan :: Span -> a -> a 
 
   spanFromTo :: Located b => a -> b -> Span
-  spanFromTo l1 l2 = (getSpan l1){endPos = endPos (getSpan l2)}
+  spanFromTo l1 l2 = 
+    let (s1,s2) = (getSpan l1, getSpan l2)
+    in s1{ startPos = min (startPos s1) (startPos s2)
+         , endPos = max (endPos s1) (endPos s2)
+         }
 
 instance Located Span where 
   getSpan = id 
