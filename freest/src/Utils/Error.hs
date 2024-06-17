@@ -21,19 +21,23 @@ data Error
   | ParseError Span (Token, [String])
   | OutOfScope Span Variable
   | ConflictingDef (Map.Map String [Span])
-  | MultipleDecls Span Variable
+  | MultipleVarDecls Span Variable
+  | MultipleConsDecls Span Identifier
+  | MultipleTypeDecls Span Identifier
 
 instance Located Error where
   getSpan (LexicalError s _) = s
   getSpan (ParseError s _) = s
   getSpan (OutOfScope s _) = s
-  getSpan (ConflictingDef vos) = foldr1 spanFromTo $ concat $ Map.elems vos
-  getSpan (MultipleDecls s _) = s
+  getSpan (ConflictingDef xss) = foldr1 spanFromTo $ concat $ Map.elems xss
+  getSpan (MultipleVarDecls s _) = s
+  getSpan (MultipleConsDecls s _) = s
+  getSpan (MultipleTypeDecls s _) = s
 
   setSpan = error "setSpan: span not settable"
 
 instance Show Error where
-  show e = show (getSpan e) ++ ": error:\n\t"++showError e
+  show e = show (getSpan e) ++ ": error:\n  "++showError e
     where 
       showError (LexicalError _ inp) = 
         "Lexical error on input "++show inp
@@ -41,13 +45,17 @@ instance Show Error where
         "Parse error, expected: "++intercalate ", " ss
       showError (OutOfScope _ x) = 
         "Variable not in scope: "++external x
-      showError (ConflictingDef vos) = 
-        "Conflicting definitions in pattern:"
+      showError (ConflictingDef xss) = 
+        "Conflicting definitions in patterns:"
         ++Map.foldrWithKey 
           (\x ss msg -> 
-            "\n\tVariable '"++x++"' bound at:"
-            ++foldr (\s msg' -> "\n\t\t"++show s++msg') "" ss
+            "\n    Variable '"++x++"' bound at:"
+            ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
             ++msg)
-          "" vos
-      showError (MultipleDecls _ c) =
-        "Multiple declarations of '"++external c++"'"
+          "" xss
+      showError (MultipleVarDecls _ c) =
+        "Multiple declarations of variable '"++show c++"'"
+      showError (MultipleConsDecls _ c) =
+        "Multiple declarations of constructor '"++show c++"'"
+      showError (MultipleTypeDecls _ c) =
+        "Multiple declarations of type '"++show c++"'"

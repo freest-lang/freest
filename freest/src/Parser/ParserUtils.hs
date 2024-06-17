@@ -6,6 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module contains utilities for parsing, namely for generating fresh variables
 and constructing types and expressions more succinctly.
 -}
+{-# LANGUAGE ViewPatterns #-}
 module Parser.ParserUtils where
 
 import Parser.Token
@@ -16,13 +17,9 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import qualified Syntax.Type as T
 
-freshKVar :: Located a => a -> Lexer K.Kind
-freshKVar l = do
-  i1 <- incCounter
-  i2 <- incCounter
-  let s = getSpan l 
-  return $ K.Proper s (K.VarM  (Variable s ("φ"++show i1) i1)) 
-                      (K.VarPK (Variable s ("ψ"++show i2) i2))
+dummyKindVar :: Located a => a -> K.Kind
+dummyKindVar (getSpan -> s) =
+  K.Proper s (K.VarM  (Variable s "φ" (-1))) (K.VarPK (Variable s "ψ" (-1)))
 
 split :: Eq a => a -> [a] -> [[a]]
 split d str =
@@ -31,26 +28,29 @@ split d str =
     (a, _)   -> [a]
 
 mkVarTk :: Token -> Variable
-mkVarTk t = mkVar t (getText t)
+mkVarTk t = mkVar (getText t) t
+
+mkIdTk :: Token -> Identifier
+mkIdTk t = mkId (getText t) t
 
 infixApp :: T.Type -> T.Type -> T.Type -> T.Type
 infixApp t1 op t2 = T.App (spanFromTo t1 t2) op [t1, t2]
 
 tupleAppType :: Span -> [T.Type] -> T.Type
 tupleAppType s ts =
-  T.App s (T.Name s (Variable s ("("++replicate (length ts) ',' ++")") (-1))) ts
+  T.App s (T.Name s (Identifier s ("("++replicate (length ts) ',' ++")"))) ts
 
-binOp :: E.Exp -> Variable -> E.Exp -> E.Exp
-binOp l op r = E.App (spanFromTo l r) (E.Var (getSpan op) op) [E.EArg l, E.EArg r]
+binOp :: E.Exp -> E.Exp -> E.Exp -> E.Exp
+binOp l op r = E.App (spanFromTo l r) op [E.EArg l, E.EArg r]
 
-unOp :: Variable -> E.Exp -> E.Exp
-unOp op x = E.App (spanFromTo op x) (E.Var (getSpan op) op) [E.EArg x]
+unOp :: E.Exp -> E.Exp -> E.Exp
+unOp op x = E.App (spanFromTo op x) op [E.EArg x]
 
 tupleAppExp :: Span -> [E.Exp] -> E.Exp
-tupleAppExp s es = E.App s (E.Var s (mkTupleCons (length es) s)) (map E.EArg es)
+tupleAppExp s es = E.App s (E.Cons s (mkTupleCons (length es) s)) (map E.EArg es)
 
 consAppExp :: Span -> [E.Exp] -> E.Exp
-consAppExp s = foldr (\e l -> E.App s (E.Var s $ mkCons s) (map E.EArg [e,l])) (E.Var s (mkNil s))
+consAppExp s = foldr (\e l -> E.App s (E.Cons s $ mkCons s) (map E.EArg [e,l])) (E.Cons s (mkNil s))
 
 addArgExp :: E.Arg -> E.Exp -> E.Exp 
 addArgExp a (E.App s e as) = E.App s e (as++[a])

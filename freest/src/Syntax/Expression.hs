@@ -27,7 +27,7 @@ data Arg = EArg Exp | TArg Type
 data Pat 
   = WildPat Span Variable
   | VarPat Span Variable 
-  | ConsPat Span Variable [Pat]
+  | ConsPat Span Identifier [Pat]
   | TuplePat Span [Pat]
   | IntPat Span Int 
   | FloatPat Span Float 
@@ -50,6 +50,7 @@ data Exp
   | Char   Span Char
   | String Span String
   | Tuple  Span [Exp]
+  | Cons   Span Identifier 
   | Var    Span Variable
   | App    Span Exp [Arg]
   | Abs    Span [(Pat, Type)] Multiplicity Exp
@@ -57,6 +58,7 @@ data Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
   | TAbs   Span [(Variable, Kind)] Exp
+  | Select Span Identifier
 
 instance Show Arg where
   show (EArg  e) = show e
@@ -121,6 +123,7 @@ instance Show Exp where
   show (Tuple _ []) = "()"
   show (Tuple _ [e]) = error "Syntax.Expression.show: tuple with one element"
   show (Tuple _ (e:es)) = "("++show e++unwords (map (\e -> ", "++show e) es)++")"
+  show (Cons _ i) = show i
   show (Var _ x) = show x  
   show (App _ f as) = foldl (\s a -> "("++s++" "++show a++")") (show f) as
   show (Abs _ ps m e) = "(\\"++unwords (map showPatType ps)++" "++show m++"-> "++show e++")"
@@ -130,6 +133,7 @@ instance Show Exp where
     where showCase (p, e) = show p ++ " -> " ++ show e 
   show (If _ e1 e2 e3) = "(if "++show e1++" then "++show e2++" else "++show e3++")"
   show (TAbs _ aks e) = "(\\\\"++unwords (map (\(a,k)->show a++":"++show k) aks)++" -> "++show e++")"
+  show (Select _ i) = "select "++show i
 
 instance Located Exp where
   getSpan (Int s _) = s

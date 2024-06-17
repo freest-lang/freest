@@ -190,10 +190,10 @@ doEOF s = do
     Nothing -> do
       popStartCode
       token TkEOF s
-    (Just (LayoutColumn _)) -> do -- ***
+    (Just (LayoutColumn _)) -> do
       popLayout
       token TkVClose s
-    -- (Just ExplicitLayout) -> do -- *** 
+    -- (Just ExplicitLayout) -> do -- removed from Liao's version
 
 
 scan :: Lexer Token
@@ -217,7 +217,7 @@ layoutKw t x = do
 
 openBrace s = do
   popStartCode
-  -- pushLayout ExplicitLayout -- ***
+  -- pushLayout ExplicitLayout -- removed from Liao's version
   token TkOpen s
 
 startLayout s = do

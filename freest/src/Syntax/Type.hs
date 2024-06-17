@@ -22,7 +22,6 @@ data Polarity = In | Out
 
 data Labelled 
   = Variant
-  -- | Record 
   | Choice Multiplicity Polarity
 
 data Type
@@ -44,8 +43,8 @@ data Type
   | App Span Type [Type]
   | Abs Span [(Variable, Kind)] Type 
   -- Special cases
-  | Name Span Variable 
-  | Labelled Span Labelled [(Variable, Type)]
+  | Name Span Identifier 
+  | Labelled Span Labelled [(Identifier, Type)]
   | Tuple Span [Type]
 
 instance Show Polarity where

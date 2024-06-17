@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {- |
-Module      :  ProgSpecUtils
+Module      :  ValidSpec
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
@@ -30,7 +30,7 @@ baseDir :: String
 baseDir = "/test/prog/valid/"
 
 spec :: Spec
-spec = specTest' "Valid program tests" baseDir test
+spec = specTest' "valid" baseDir test
 
 test :: FilePath -> (FilePath, String) -> Expectation
 test dir (testFile, exp) = 

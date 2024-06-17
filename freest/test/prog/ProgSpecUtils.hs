@@ -26,31 +26,30 @@ specTest' :: String -> FilePath -> (FilePath -> (FilePath,String) -> Expectation
 specTest' desc dir f = do
   baseDir <- runIO getCurrentDirectory
   testDirs <- runIO $ directoryContents (baseDir ++ dir)
-  
-  describe desc $ 
+  describe desc $
     forM_ testDirs $
       \group -> do
         describe group $ do
           test <- runIO $ directoryContents (baseDir ++ dir ++ group)
-          forM_ test $ 
+          forM_ test $
             \testDir -> let d = baseDir ++ dir ++ group ++ "/" ++ testDir in
-            before (beforeHandle d) $ 
-            it ((last $ splitDirectories testDir) -<.> "fst") $ f d
-                  
+            before (beforeHandle d) $
+            it (last (splitDirectories testDir) -<.> "fst") $ f d
+
 
 specTest :: String -> String -> (String -> String -> Spec) -> Spec
 specTest desc dir f = do
   baseDir <- runIO getCurrentDirectory
   testDirs <- runIO $ directoryContents (baseDir ++ dir)
   parallel $
-    describe desc $ 
+    describe desc $
       forM_ testDirs $
         \group -> do
           describe group $ do
              test <- runIO $ directoryContents (baseDir ++ dir ++ group)
              forM_ test $
-               \testingDir ->
-                  f baseDir (group ++ "/" ++ testingDir)
+               \testDir ->
+                  f baseDir (group ++ "/" ++ testDir)
 
 
 directoryContents :: FilePath -> IO [FilePath]

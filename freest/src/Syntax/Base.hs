@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {- |
 Module      :  Syntax.Base
 Copyright   :  © The FreeST Team
@@ -11,10 +12,12 @@ module Syntax.Base where
 
 type Pos = (Int, Int)
 
-data Span = Span { filepath   :: FilePath
-                 , startPos   :: Pos
-                 , endPos     :: Pos
-                 } deriving (Eq, Ord)
+data Span 
+  = Span { filepath   :: FilePath
+         , startPos   :: Pos
+         , endPos     :: Pos
+         } 
+  deriving (Eq, Ord)
 
 class Located a where 
   getSpan :: a -> Span 
@@ -35,10 +38,27 @@ instance Show Span where
   show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
     where showPos (l,c) = show l++":"++show c
 
-data Variable = Variable { varSpan  :: Span
-                         , external :: String
-                         , internal :: Int
-                         }
+-- For nominal entities, not subject to substitution.
+data Identifier = Identifier Span String
+
+instance Located Identifier where
+  getSpan (Identifier s _) = s
+  setSpan s (Identifier _ i) = Identifier s i
+
+instance Eq Identifier where
+  Identifier _ i1 == Identifier _ i2 = i1 == i2
+
+instance Ord Identifier where
+  Identifier _ i1 <= Identifier _ i2 = i1 <= i2
+
+instance Show Identifier where
+  show (Identifier _ s) = s
+
+data Variable 
+  = Variable { varSpan  :: Span
+             , external :: String
+             , internal :: Int
+             }
 
 -- Are these the (only) Ord/Eq instances we want for Variable?
 -- (We might want to order them by their position in the source code...)
@@ -55,5 +75,8 @@ instance Located Variable where
   getSpan = varSpan
   setSpan s x = x{varSpan=s}
 
-mkVar :: Located a => a -> String -> Variable
-mkVar l str = Variable (getSpan l) str (-1)
+mkVar :: Located a => String -> a -> Variable
+mkVar external l = Variable{varSpan=getSpan l, external, internal= -1}
+
+mkId :: Located a => String -> a -> Identifier
+mkId i l = Identifier (getSpan l) i
