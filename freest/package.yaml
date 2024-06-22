@@ -28,7 +28,6 @@ library:
     - happy
   exposed-modules:
     - FreeST
-    - Kinding.Kinding
     - Parser.Parser
     - Parser.LexerUtils
     - Parser.Scoping
@@ -40,8 +39,9 @@ library:
     - Syntax.Substitution
     - Syntax.Type
     - Typing.Typing
-    - Utils.CmdLine
-    - Utils.Error
+    - Typing.Kinding
+    - IO.CmdLine
+    - IO.Error
 
 executables:
   freest:

@@ -9,7 +9,7 @@ The module specifies how to conduct valid program tests.
 -}
 module ValidSpec where
 
-import Utils.CmdLine
+import IO.CmdLine
 import FreeST
 import ProgSpecUtils
 

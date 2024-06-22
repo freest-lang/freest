@@ -17,7 +17,7 @@ where
 
 import Syntax.Base
 
-data Multiplicity = Lin | Un | VarM Variable
+data Multiplicity = Lin | Un | VarM Variable deriving Eq
 
 data Prekind = Top | Session | Absorb | VarPK Variable
 

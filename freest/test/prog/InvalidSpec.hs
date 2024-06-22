@@ -12,7 +12,7 @@ module InvalidSpec where
 
 import FreeST
 import ProgSpecUtils
-import Utils.CmdLine
+import IO.CmdLine
 
 import Control.Exception
 import System.Exit (ExitCode(..))

@@ -14,7 +14,7 @@ module Parser.LexerUtils where
 
 import Parser.Token 
 import Syntax.Base 
-import Utils.Error
+import IO.Error
 
 
 import Data.Word (Word8)

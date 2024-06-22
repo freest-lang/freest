@@ -19,7 +19,7 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Kind       as K 
 import qualified Syntax.Type       as T 
 import qualified Syntax.Module     as M
-import Utils.Error
+import IO.Error
 
 import Control.Monad.Except
 import Debug.Trace

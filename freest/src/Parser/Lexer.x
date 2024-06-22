@@ -12,7 +12,7 @@ module Parser.Lexer where
 import Parser.Token 
 import Parser.LexerUtils
 import Syntax.Base
-import Utils.Error
+import IO.Error
 
 import Control.Monad.State
 import Control.Monad.Except

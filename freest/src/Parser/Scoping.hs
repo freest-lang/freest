@@ -24,7 +24,7 @@ import qualified Syntax.Kind as K
 import qualified Syntax.Module as M
 import Syntax.Substitution (freeVars)
 import qualified Syntax.Type as T
-import Utils.Error (Error(..))
+import IO.Error (Error(..))
 
 import Control.Monad (replicateM, forM, void, forM_, unless, foldM)
 import Control.Monad.State ( gets, modify, State, runState)

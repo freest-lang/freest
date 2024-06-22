@@ -52,7 +52,7 @@ tupleAppExp s es = E.App s (E.Cons s (mkTupleCons (length es) s)) (map E.EArg es
 consAppExp :: Span -> [E.Exp] -> E.Exp
 consAppExp s = foldr (\e l -> E.App s (E.Cons s $ mkCons s) (map E.EArg [e,l])) (E.Cons s (mkNil s))
 
-addArgExp :: E.Arg -> E.Exp -> E.Exp 
+addArgExp :: E.Arg E.Exp T.Type -> E.Exp -> E.Exp 
 addArgExp a (E.App s e as) = E.App s e (as++[a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 

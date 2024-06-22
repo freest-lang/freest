@@ -5,9 +5,11 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module contains helper functions to generate variables with standard names.
 -}
+{-# LANGUAGE ViewPatterns #-}
 module Syntax.Names where
 
 import Syntax.Base
+import qualified Syntax.Type as T
 
 ; mkOr, mkAnd,
   mkPlus, mkMinus, mkTimes, mkDiv, mkPower, mkNegate,
@@ -34,13 +36,16 @@ mkSemi = mkVar "(;)"
 mkPlusPlus = mkVar "(++)"
 mkCaretCaret = mkVar "(^^)"
 
-mkNil, mkCons :: Located a => a -> Identifier
-mkNil  = mkId "[]"
-mkCons = mkId "(::)"
-
 mkCmp :: Located a => String -> a -> Variable
 mkCmp s = mkVar $ "("++s++")"
+
+mkNil, mkCons, mkBool :: Located a => a -> Identifier
+mkNil  = mkId "[]"
+mkCons = mkId "(::)"
+mkBool = mkId "Bool"
 
 mkTupleCons :: Located a => Int -> a -> Identifier
 mkTupleCons n = mkId $ "("++replicate n ','++")"
 
+mkBoolType :: Located a => a -> T.Type
+mkBoolType (getSpan -> s) = T.Name s (mkBool s)

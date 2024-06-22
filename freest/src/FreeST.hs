@@ -12,7 +12,7 @@ import Parser.Lexer
 import Parser.Token
 import Debug.Trace (traceM)
 import Control.Monad.RWS
-import Utils.CmdLine
+import IO.CmdLine
 import Options.Applicative
 import Parser.Parser
 import Syntax.Module
