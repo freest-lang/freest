@@ -41,18 +41,18 @@ tupleAppType s ts =
   T.App s (T.Name s (Identifier s ("("++replicate (length ts) ',' ++")"))) ts
 
 binOp :: E.Exp -> E.Exp -> E.Exp -> E.Exp
-binOp l op r = E.App (spanFromTo l r) op [E.EArg l, E.EArg r]
+binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 
 unOp :: E.Exp -> E.Exp -> E.Exp
-unOp op x = E.App (spanFromTo op x) op [E.EArg x]
+unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
 tupleAppExp :: Span -> [E.Exp] -> E.Exp
-tupleAppExp s es = E.App s (E.Cons s (mkTupleCons (length es) s)) (map E.EArg es)
+tupleAppExp s es = E.App s (E.Cons s (mkTupleCons (length es) s)) (map ExpLevel es)
 
 consAppExp :: Span -> [E.Exp] -> E.Exp
-consAppExp s = foldr (\e l -> E.App s (E.Cons s $ mkCons s) (map E.EArg [e,l])) (E.Cons s (mkNil s))
+consAppExp s = foldr (\e l -> E.App s (E.Cons s $ mkCons s) (map ExpLevel [e,l])) (E.Cons s (mkNil s))
 
-addArgExp :: E.Arg E.Exp T.Type -> E.Exp -> E.Exp 
+addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp 
 addArgExp a (E.App s e as) = E.App s e (as++[a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 

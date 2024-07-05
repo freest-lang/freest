@@ -11,7 +11,6 @@ module Syntax.Expression
   ( Pat(..)
   , RHS(..)
   , LetDecl(..)
-  , Arg(..)
   , Exp(..)
   ) 
 where
@@ -21,8 +20,6 @@ import Syntax.Kind (Multiplicity, Kind)
 import Syntax.Type (Type)
 
 import Data.List (intercalate)
-
-data Arg a b = EArg a | TArg b
 
 data Pat 
   = WildPat Span Variable
@@ -52,23 +49,13 @@ data Exp
   | Tuple  Span [Exp]
   | Cons   Span Identifier 
   | Var    Span Variable
-  | App    Span Exp [Arg Exp Type]
+  | App    Span Exp [Level Exp Type]
   | Abs    Span [(Pat, Type)] Multiplicity Exp
   | Let    Span [LetDecl] Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
   | TAbs   Span [(Variable, Kind)] Exp
   | Select Span Identifier
-
-instance (Show a, Show b) => Show (Arg a b) where
-  show (EArg  e) = show e
-  show (TArg t) = show t
-
-instance (Located a, Located b) => Located (Arg a b) where 
-  getSpan (EArg e) = getSpan e
-  getSpan (TArg t) = getSpan t
-  setSpan s (EArg e) = EArg (setSpan s e)
-  setSpan s (TArg t) = TArg (setSpan s t)
 
 instance Show Pat where
   show (WildPat _ x) = show x

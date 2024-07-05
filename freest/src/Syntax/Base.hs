@@ -10,6 +10,18 @@ represent FreeST's external syntax.
 -}
 module Syntax.Base where
 
+data Level a b = ExpLevel a | TypeLevel b
+
+instance (Show a, Show b) => Show (Level a b) where
+  show (ExpLevel  x) = show x
+  show (TypeLevel x) = show x
+
+instance (Located a, Located b) => Located (Level a b) where 
+  getSpan (ExpLevel  x) = getSpan x
+  getSpan (TypeLevel x) = getSpan x
+  setSpan s (ExpLevel x) = ExpLevel (setSpan s x)
+  setSpan s (TypeLevel x) = TypeLevel (setSpan s x)
+
 type Pos = (Int, Int)
 
 data Span 

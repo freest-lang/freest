@@ -368,9 +368,9 @@ Exp :: { E.Exp }
   | ExpApp               { $1 }
 
 ExpApp :: { E.Exp }
-  : ExpApp ExpPrimary { addArgExp (E.EArg $2) $1 }
+  : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
-  | ExpApp '@' TypePrimary { addArgExp (E.TArg $3) $1 }
+  | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
 
 Op :: { Variable }

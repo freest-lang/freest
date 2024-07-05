@@ -208,8 +208,8 @@ scopeExp ctx e@(E.Var s x) =
 scopeExp ctx (E.App s e args) =
   E.App s
   <$> scopeExp ctx e
-  <*> mapM (\case E.EArg e -> E.EArg <$> scopeExp ctx e
-                  E.TArg t -> E.TArg <$> scopeType ctx t)
+  <*> mapM (\case ExpLevel  e -> ExpLevel  <$> scopeExp ctx e
+                  TypeLevel t -> TypeLevel <$> scopeType ctx t)
            args
 scopeExp ctx (E.Abs s (unzip -> (ps,ts)) m e) = do
   checkConflictingDefs ps
