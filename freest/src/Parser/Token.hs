@@ -37,8 +37,8 @@ data Token
   | TkOpen Span | TkPipe Span | TkClose Span
   | TkLParen Span | TkRParen Span | TkLSquare Span | TkRSquare Span
   | TkEqual Span | TkColon Span
-  | TkBackslash Span | TkBackslashBackslash Span
-  | TkArrow Span | TkUnArrow Span | TkLinArrow Span | TkDoubleArrow Span
+  | TkBackslash Span
+  | TkArrow Span | TkUnArrow Span | TkLinArrow Span
   | TkDot Span | TkAt Span | TkComma Span
 
   -- Operators
@@ -79,7 +79,7 @@ getText (TkFloatLit _ s) = s
 getText (TkCharLit _ s) = s
 getText (TkStringLit _ s) = s
 getText (TkCmp _ s) = s
-getText _ = error "Parser.Token.getText: no text"
+getText t = error "Parser.Token.getText: no text"
 
 instance Located Token where
   getSpan :: Token -> Span
@@ -120,11 +120,9 @@ instance Located Token where
   getSpan (TkEqual s) = s
   getSpan (TkColon s) = s
   getSpan (TkBackslash s) = s
-  getSpan (TkBackslashBackslash s) = s
   getSpan (TkArrow s) = s
   getSpan (TkUnArrow s) = s
   getSpan (TkLinArrow s) = s
-  getSpan (TkDoubleArrow s) = s
   getSpan (TkDot s) = s
   getSpan (TkAt s) = s
   getSpan (TkComma s) = s
@@ -211,11 +209,9 @@ instance Located Token where
   setSpan s (TkEqual _) = TkEqual s
   setSpan s (TkColon _) = TkColon s
   setSpan s (TkBackslash _) = TkBackslash s
-  setSpan s (TkBackslashBackslash _) = TkBackslashBackslash s
   setSpan s (TkArrow _) = TkArrow s
   setSpan s (TkUnArrow _) = TkUnArrow s
   setSpan s (TkLinArrow _) = TkLinArrow s
-  setSpan s (TkDoubleArrow _) = TkDoubleArrow s
   setSpan s (TkDot _) = TkDot s
   setSpan s (TkAt _) = TkAt s
   setSpan s (TkComma _) = TkComma s

@@ -5,6 +5,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 Errors. A work in progress.
 -}
+{-# LANGUAGE LambdaCase #-}
 module IO.Error 
   (Error(..))
 where 
@@ -22,7 +23,7 @@ data Error
   = LexicalError Span Char 
   | ParseError Span (Token, [String])
   | OutOfScope Span Variable
-  | ConflictingDef (Map.Map String [Span])
+  | ConflictingDefs (Map.Map (Level String String) [Span])
   | MultipleVarDecls Span Variable
   | MultipleConsDecls Span Identifier
   | MultipleTypeDecls Span Identifier
@@ -37,7 +38,7 @@ instance Located Error where
   getSpan (LexicalError s _) = s
   getSpan (ParseError s _) = s
   getSpan (OutOfScope s _) = s
-  getSpan (ConflictingDef xss) = foldr1 spanFromTo $ concat $ Map.elems xss
+  getSpan (ConflictingDefs xss) = foldr1 spanFromTo $ concat $ Map.elems xss
   getSpan (MultipleVarDecls s _) = s
   getSpan (MultipleConsDecls s _) = s
   getSpan (MultipleTypeDecls s _) = s
@@ -58,14 +59,18 @@ instance Show Error where
         "\n  Parse error, expected: "++intercalate ", " ss
       showError (OutOfScope _ x) = 
         "\n  Variable not in scope: "++external x
-      showError (ConflictingDef xss) = 
+      showError (ConflictingDefs vos) = 
         "\n  Conflicting definitions in patterns:"
         ++Map.foldrWithKey 
-          (\x ss msg -> 
-            "\n    Variable '"++x++"' bound at:"
-            ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
-            ++msg)
-          "" xss
+          (\case (ExpLevel x) -> \ss msg -> 
+                  "\n    Variable '"++x++"' bound at:"
+                  ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
+                  ++msg
+                 (TypeLevel a) -> \ss msg -> 
+                  "\n    Type variable '"++a++"' bound at:"
+                  ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
+                  ++msg)
+          "" vos
       showError (MultipleVarDecls _ c) =
         "\n  Multiple declarations of variable '"++show c++"'"
       showError (MultipleConsDecls _ c) =

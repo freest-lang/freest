@@ -153,7 +153,7 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
     scopeDefs' :: ScopingCtx -> ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
     scopeDefs' ctx _ [] = return (ctx, [])
     scopeDefs' ctx ictx (E.ValDecl p rhs : ds) = do
-      checkConflictingDefs [p]
+      checkConflictingDefs [ExpLevel p]
       (ictx', p') <- scopePat ctx ictx p
       rhs' <- scopeRHS ctx rhs
       let ctx'' = fromEVarList (Set.toList $ patVars p')
@@ -164,15 +164,22 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
         Nothing -> (ictx,) <$> freshInternal x
         Just internal -> pure (deleteEVar x ictx, x{internal})
       let ctx' = insertEVar x' ctx
-      psrhss' <- forM psrhss \(ps,rhs) -> do
-        checkConflictingDefs ps
-        ps' <- map snd <$> mapM (scopePat ctx Map.empty) ps
-        let pctx'' = fromEVarList $ Set.toList $ Set.unions $ map patVars ps'
-            ctx''  = pctx'' `Map.union` ctx'
-        (ps',) <$> scopeRHS ctx'' rhs
+      psrhss' <- forM psrhss \(pars, rhs) -> do
+        checkConflictingDefs (ExpLevel (E.VarPat (getSpan x') x') : pars)
+        (ctx'', pars') <- foldM scopeParam (ctx',[]) pars
+        (pars',) <$> scopeRHS ctx'' rhs
       second (E.FnDecl x' psrhss' :) <$> scopeDefs' ctx' ictx' ds
+      where 
+        scopeParam (ctx',pars') (ExpLevel  p) = do
+          (_, p') <- scopePat ctx' Map.empty p
+          let ctx'' = fromEVarList (Set.toList (patVars p')) `Map.union` ctx'
+          return (ctx'', pars'++[ExpLevel p'])
+        scopeParam (ctx',pars') (TypeLevel a) = do
+          a' <- freshInternal a
+          let ctx'' = insertTVar a' ctx'
+          return (ctx'', pars'++[TypeLevel a'])
     scopeDefs' ctx ictx (E.SigDecl xs t : ds) = do 
-      checkConflictingDefs $ map (\x -> E.VarPat (getSpan x) x) xs
+      checkConflictingDefs $ map (\x -> ExpLevel $ E.VarPat (getSpan x) x) xs
       (ictx', xs') <- foldM (\(ictx'',xs'') x -> 
           case lookupEVar x ictx'' of
             Nothing -> do 
@@ -197,7 +204,6 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
       (ctx',ds') <- scopeDefs ctx ds
       E.UnguardedRHS <$> scopeExp ctx' e <*> pure (Just ds')
 
-
 scopeExp :: ScopingCtx -> E.Exp -> Scoping E.Exp
 scopeExp ctx (E.Tuple s es) = E.Tuple s <$> mapM (scopeExp ctx) es
 scopeExp ctx e@(E.Var s x) =
@@ -211,13 +217,22 @@ scopeExp ctx (E.App s e args) =
   <*> mapM (\case ExpLevel  e -> ExpLevel  <$> scopeExp ctx e
                   TypeLevel t -> TypeLevel <$> scopeType ctx t)
            args
-scopeExp ctx (E.Abs s (unzip -> (ps,ts)) m e) = do
-  checkConflictingDefs ps
-  ps' <- mapM (fmap snd . scopePat ctx Map.empty) ps
-  ts' <- mapM (scopeType ctx) ts
-  let pvs = Set.toList $ Set.unions $ map patVars ps'
-  let ctx' = fromEVarList pvs `Map.union` ctx
-  E.Abs s (zip ps' ts') m <$> scopeExp ctx' e
+scopeExp ctx (E.Abs s pars m e) = do
+  checkConflictingDefs (map (bimap fst fst) pars)
+  let (ps, ts) = (bimap (map fst) (map fst) . partitionLevels) pars
+  (ctx',pars') <- foldM scopeTypedParam (ctx,[]) pars
+  E.Abs s pars' m <$> scopeExp ctx' e
+  where
+    scopeTypedParam (ctx',pars') (ExpLevel  (p,t)) = do
+      (_, p') <- scopePat ctx' Map.empty p
+      t' <- scopeType ctx' t
+      let ctx'' = fromEVarList (Set.toList (patVars p')) `Map.union` ctx'
+      return (ctx'', pars'++[ExpLevel (p',t')])
+    scopeTypedParam (ctx',pars') (TypeLevel (a,k)) = do
+      a' <- freshInternal a
+      k' <- scopeKind k
+      let ctx'' = insertTVar a' ctx'
+      return (ctx'', pars'++[TypeLevel (a',k')])
 scopeExp ctx (E.Let s ds e) = do
   (ctx', ds') <- scopeDefs ctx ds
   E.Let s ds' <$> scopeExp ctx' e
@@ -227,21 +242,23 @@ scopeExp ctx (E.Case s e pes) = do
   where
     scopePatExp :: (E.Pat, E.Exp) -> Scoping (E.Pat, E.Exp)
     scopePatExp (p,e) = do
-      checkConflictingDefs [p]
+      checkConflictingDefs [ExpLevel p]
       (_,p') <- scopePat ctx Map.empty p
       let pvs = Set.toList $ patVars p'
       let ctx' = fromEVarList pvs `Map.union` ctx
       (p',) <$> scopeExp ctx' e
 scopeExp ctx (E.If s e1 e2 e3) =
   E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
-scopeExp ctx (E.TAbs s (unzip -> (as,ks)) e) = do
-  checkConflictingDefs $ map (\a -> E.VarPat (getSpan a) a) as -- a little hacky
-  as' <- mapM freshInternal as 
-  let ctx' = fromTVarList as' `Map.union` ctx
-  E.TAbs s (zip as' ks) <$> scopeExp ctx' e
 scopeExp _ e = pure e
 
-scopePat :: ScopingCtx -> ScopingCtx -> E.Pat -> Scoping (ScopingCtx, E.Pat)
+-- | Scopes a pattern. This function takes two contexts: the first being the main
+-- lexical context, and the second being an auxilliary context for 'let' definitions,
+-- which is used to match signatures to definitions. It returns the modified
+-- auxilliary context (i.e., the lexical context must be modified separately!)
+scopePat :: ScopingCtx -- main context
+         -> ScopingCtx -- auxilliary context
+         -> E.Pat 
+         -> Scoping (ScopingCtx, E.Pat) -- returns the auxilliary context
 scopePat _ ictx (E.WildPat s w) = (ictx,) . E.WildPat s <$> freshInternal w
 scopePat _ ictx (E.VarPat s x) =
   case lookupEVar x ictx of
@@ -272,17 +289,21 @@ scopePat ctx ictx (E.AsPat s x p) =
     Just internal -> second (E.AsPat s x{internal}) <$> scopePat ctx (deleteEVar x ictx) p
 scopePat ctx ictx p = pure (ictx, p)
 
-checkConflictingDefs :: [E.Pat] -> Scoping ()
-checkConflictingDefs ps = do 
-  let vos = Map.filter ((>1) . length) $ Map.unionsWith (++) (map varOccs ps)
-  unless (Map.null vos) (insertError (ConflictingDef vos))
+checkConflictingDefs :: [Level E.Pat Variable] -> Scoping ()
+checkConflictingDefs (partitionLevels -> (ps, as)) = do
+  let evos = Map.unionsWith (++) (map patVarOccurs ps)
+      tvos = varOccurs as
+      vos = Map.filter ((>1) . length) (Map.union evos tvos)
+  unless (Map.null vos) (insertError (ConflictingDefs vos))
   where 
-    varOccs :: E.Pat -> Map.Map String [Span]
-    varOccs (E.VarPat s x)     = Map.singleton (external x) [getSpan x]
-    varOccs (E.ConsPat _ _ ps) = Map.unionsWith (++) (map varOccs ps)
-    varOccs (E.TuplePat _ ps)  = Map.unionsWith (++) (map varOccs ps)
-    varOccs (E.AsPat _ x p)    = Map.insertWith (++) (external x) [getSpan x] (varOccs p)
-    varOccs _                  = Map.empty
+    varOccurs :: [Variable] -> Map.Map (Level String String) [Span]
+    varOccurs = foldr (\a occs -> Map.insertWith (++) (TypeLevel $ external a) [getSpan a] occs) Map.empty
+    patVarOccurs :: E.Pat -> Map.Map (Level String String) [Span]
+    patVarOccurs (E.VarPat s x)     = Map.singleton (ExpLevel $ external x) [getSpan x]
+    patVarOccurs (E.ConsPat _ _ ps) = Map.unionsWith (++) (map patVarOccurs ps)
+    patVarOccurs (E.TuplePat _ ps)  = Map.unionsWith (++) (map patVarOccurs ps)
+    patVarOccurs (E.AsPat _ x p)    = Map.insertWith (++) (ExpLevel $ external x) [getSpan x] (patVarOccurs p)
+    patVarOccurs _                  = Map.empty
 
 patVars :: E.Pat -> Set.Set Variable
 patVars (E.WildPat _ _) = Set.empty

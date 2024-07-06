@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BlockArguments #-}
 {- |
 Module      :  Syntax.Base
 Copyright   :  © The FreeST Team
@@ -9,8 +11,10 @@ This module defines types and classes needed by the other Syntax modules to
 represent FreeST's external syntax.
 -}
 module Syntax.Base where
+import Data.Bifunctor
+import Data.Bifoldable
 
-data Level a b = ExpLevel a | TypeLevel b
+data Level a b = ExpLevel a | TypeLevel b deriving (Eq, Ord)
 
 instance (Show a, Show b) => Show (Level a b) where
   show (ExpLevel  x) = show x
@@ -21,6 +25,16 @@ instance (Located a, Located b) => Located (Level a b) where
   getSpan (TypeLevel x) = getSpan x
   setSpan s (ExpLevel x) = ExpLevel (setSpan s x)
   setSpan s (TypeLevel x) = TypeLevel (setSpan s x)
+
+instance Bifunctor Level where
+  bimap f _ (ExpLevel  e) = ExpLevel  $ f e
+  bimap _ g (TypeLevel t) = TypeLevel $ g t
+
+partitionLevels :: [Level a b] -> ([a],[b])
+partitionLevels = 
+  foldr \case (ExpLevel  e) -> first  (e:) 
+              (TypeLevel t) -> second (t:)
+        ([],[])
 
 type Pos = (Int, Int)
 

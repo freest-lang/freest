@@ -22,6 +22,7 @@ import qualified Syntax.Module     as M
 import IO.Error
 
 import Control.Monad.Except
+import Data.Bifunctor
 import Debug.Trace
 
 }
@@ -69,11 +70,9 @@ import Debug.Trace
   '['     { TkLSquare _ }
   ']'     { TkRSquare _ }
   '\\'    { TkBackslash _ }
-  '\\\\'  { TkBackslashBackslash _ }
   '->'    { TkArrow _ }
   '*->'   { TkUnArrow _ }
   '1->'   { TkLinArrow _ }
-  '=>'    { TkDoubleArrow _ }
   -- Operators
   '|'     { TkPipe _ }
   ':'     { TkColon _ }
@@ -183,8 +182,8 @@ ModuleDecl :: { M.Module -> M.Module }
 LetDecl
   : Pat DefRHS { E.ValDecl $1 ($2 Nothing) }
   | Pat DefRHS 'where' LetDeclBlock { E.ValDecl $1 ($2 (Just $4)) }
-  | LOWER_ID PatPrimaryListWS DefRHS                      { E.FnDecl (mkVarTk $1) [($2, $3 Nothing)] }
-  | LOWER_ID PatPrimaryListWS DefRHS 'where' LetDeclBlock { E.FnDecl (mkVarTk $1) [($2, $3 (Just $5))] }
+  | LOWER_ID PatPrimaryOrAtVarListWS DefRHS                      { E.FnDecl (mkVarTk $1) [($2, $3 Nothing)] }
+  | LOWER_ID PatPrimaryOrAtVarListWS DefRHS 'where' LetDeclBlock { E.FnDecl (mkVarTk $1) [($2, $3 (Just $5))] }
   | LowerIdListComma ':' Type { E.SigDecl $1 $3 }
 
 DefRHS :: { Maybe [E.LetDecl] -> E.RHS }
@@ -196,9 +195,9 @@ GuardedExps :: { [(E.Exp, E.Exp)] }
   | '|' Exp '=' Exp             { [($2,$4)] }
   -- otherwise is simply a variable defined as True
 
-LowerIdListWS :: { [Variable] }
-  : LOWER_ID LowerIdListWS { mkVarTk $1 : $2 }
-  | {- empty -}            { [] }
+-- LowerIdListWS :: { [Variable] }
+--   : LOWER_ID LowerIdListWS { mkVarTk $1 : $2 }
+--   | {- empty -}            { [] }
 
 LowerIdListComma :: { [Variable] }
   : LOWER_ID ',' LowerIdListComma { mkVarTk $1 : $3 }
@@ -294,9 +293,6 @@ LabelTypeListComma :: { [(Identifier, T.Type)] }
   : UPPER_ID ':' Type ',' LabelTypeListComma { (mkIdTk $1, $3) : $5 }
   | UPPER_ID ':' Type { [(mkIdTk $1, $3)] }
 
-KindedVarNEListWS :: { [(Variable, K.Kind)] }
-  : KindedVar KindedVarListWS { $1 : $2 }
-
 KindedVarListWS :: { [(Variable, K.Kind)] }
   : {- empty -} { [] }
   | KindedVar KindedVarListWS { $1 : $2 }
@@ -331,8 +327,7 @@ ExpPrimary :: { E.Exp }
 Exp :: { E.Exp }
   -- Keyword expressions
   : 'let' LetDeclBlock 'in' Exp { E.Let (spanFromTo $1 $4) $2 $4 }
-  | '\\' PatTypeList Arrow Exp   { E.Abs (spanFromTo $1 $4) $2 (snd $3) $4 }
-  | '\\\\' KindedVarNEListWS '->' Exp   { E.TAbs (spanFromTo $1 $4) $2 $4 }
+  | '\\' PatTypeOrKindedVarListArrow Exp   { E.Abs (spanFromTo $1 $3) (fst $2) (snd $2) $3 }
   | 'if' Exp 'then' Exp 'else' Exp { E.If (spanFromTo $1 $6) $2 $4 $6 }
   | 'case' Exp 'of' CaseBlock { E.Case (spanFromTo $1 (snd $ last $4)) $2 $4 }
   -- Operators
@@ -398,14 +393,22 @@ ExpListComma :: { [E.Exp] }
   : Exp ',' ExpListComma { $1 : $3 }
   | Exp                  { [$1] }
 
-Arrow :: { (Span, K.Multiplicity) }
+UnArrow :: { (Span, K.Multiplicity) }
   : '->'  { (getSpan $1, K.Un ) }
   | '*->' { (getSpan $1, K.Un ) }
-  | '1->' { (getSpan $1, K.Lin) }
 
-PatTypeList :: { [(E.Pat, T.Type)] } 
-  : PatPrimary ':' TypePrimary PatTypeList { ($1, $3) : $4 }
-  | PatPrimary ':' TypePrimary             { [($1, $3)] }
+LinArrow :: { (Span, K.Multiplicity) }
+  : '1->'  { (getSpan $1, K.Lin ) }
+
+Arrow :: { (Span, K.Multiplicity) }
+  : UnArrow  { $1 }
+  | LinArrow { $1 }
+
+PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.Type) (Variable, K.Kind)], K.Multiplicity) } 
+  : PatPrimary   ':' TypePrimary PatTypeOrKindedVarListArrow { first (ExpLevel  ($1        , $3) :) $4 }
+  | '@' KindedVar PatTypeOrKindedVarListArrow { first (TypeLevel $2 :) $3 }
+  | PatPrimary   ':' TypePrimary Arrow { ([ExpLevel  ($1, $3)], snd $4) }
+  | '@' KindedVar UnArrow { ([TypeLevel $2], snd $3) }
 
 CaseBlock :: { [(E.Pat, E.Exp)] }
   : OPEN CaseListPIPE Close { $2 }
@@ -427,7 +430,7 @@ PatPrimary :: { E.Pat }
   | DataConstructor  { E.ConsPat   (getSpan $1) $1 [] }
   | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
-  | LOWER_ID '@' PatPrimary { E.AsPat (spanFromTo $1 $3) (mkVarTk $1) $3 }
+  | LOWER_ID '&' PatPrimary { E.AsPat (spanFromTo $1 $3) (mkVarTk $1) $3 }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.ConsPat (spanFromTo $1 (last $2)) $1 $2 }
@@ -442,6 +445,12 @@ DataConstructor :: { Identifier }
 PatPrimaryListWS :: { [E.Pat] } 
   : PatPrimary PatPrimaryListWS { $1 : $2 }
   | PatPrimary { [$1] }
+
+PatPrimaryOrAtVarListWS :: { [Level E.Pat Variable] } 
+  : PatPrimary   PatPrimaryOrAtVarListWS { ExpLevel $1            : $2 }
+  | '@' LOWER_ID PatPrimaryOrAtVarListWS { TypeLevel (mkVarTk $2) : $3 }
+  | PatPrimary   { [ExpLevel  $1          ] }
+  | '@' LOWER_ID { [TypeLevel (mkVarTk $2)] }
 
 PatListComma :: { [E.Pat] }
   : Pat { [$1] }

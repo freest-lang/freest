@@ -34,7 +34,7 @@ data Pat
 
 data LetDecl
   = ValDecl Pat      RHS
-  | FnDecl  Variable [([Pat], RHS)]
+  | FnDecl  Variable [([Level Pat Variable], RHS)]
   | SigDecl [Variable] Type 
 
 data RHS 
@@ -50,11 +50,10 @@ data Exp
   | Cons   Span Identifier 
   | Var    Span Variable
   | App    Span Exp [Level Exp Type]
-  | Abs    Span [(Pat, Type)] Multiplicity Exp
+  | Abs    Span [Level (Pat,Type) (Variable,Kind)] Multiplicity Exp
   | Let    Span [LetDecl] Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
-  | TAbs   Span [(Variable, Kind)] Exp
   | Select Span Identifier
 
 instance Show Pat where
@@ -68,6 +67,7 @@ instance Show Pat where
   show (FloatPat _ f) = show f
   show (CharPat _ c) = show c
   show (StringPat _ s) = show s
+  show (AsPat _ x p) = show x++"&"++show p -- TODO: change to @
 
 instance Located Pat where
   getSpan (WildPat s _) = s
@@ -78,6 +78,7 @@ instance Located Pat where
   getSpan (FloatPat s _) = s
   getSpan (CharPat s _) = s
   getSpan (StringPat s _) = s
+  getSpan (AsPat s _ _) = s
   
   setSpan s (WildPat _ x) = WildPat s x
   setSpan s (VarPat _ x) = VarPat s x
@@ -87,6 +88,7 @@ instance Located Pat where
   setSpan s (FloatPat _ f) = FloatPat s f
   setSpan s (CharPat _ c) = CharPat s c
   setSpan s (StringPat _ s') = StringPat s s'
+  setSpan s (AsPat _ x p) = AsPat s x p
 
 instance Show LetDecl where 
   show (ValDecl p rhs) = show p++show rhs
@@ -113,13 +115,13 @@ instance Show Exp where
   show (Cons _ i) = show i
   show (Var _ x) = show x  
   show (App _ f as) = foldl (\s a -> "("++s++" "++show a++")") (show f) as
-  show (Abs _ ps m e) = "(\\"++unwords (map showPatType ps)++" "++show m++"-> "++show e++")"
-    where showPatType (p,t) = "("++show p++":"++show t++")"
+  show (Abs _ ps m e) = "(\\"++unwords (map showParam ps)++" "++show m++"-> "++show e++")"
+    where showParam (ExpLevel  (p,t)) = show p++":"++show t
+          showParam (TypeLevel (a,k)) = show a++":"++show k
   show (Let _ ds e) = "(let ⦃ "++intercalate " ⨾ " (map show ds)++" ⦄ in "++show e++")"
   show (Case _ e pes) = "(case "++show e++" of ⦃ "++intercalate " ⨾ " (map showCase pes)++" ⦄)"
     where showCase (p, e) = show p ++ " -> " ++ show e 
   show (If _ e1 e2 e3) = "(if "++show e1++" then "++show e2++" else "++show e3++")"
-  show (TAbs _ aks e) = "(\\\\"++unwords (map (\(a,k)->show a++":"++show k) aks)++" -> "++show e++")"
   show (Select _ i) = "select "++show i
 
 instance Located Exp where
@@ -134,7 +136,6 @@ instance Located Exp where
   getSpan (Let s _ _) = s
   getSpan (Case s _ _) = s
   getSpan (If s _ _ _) = s
-  getSpan (TAbs s _ _) = s
   
   setSpan s (Int _ i) = Int s i
   setSpan s (Float _ f) = Float s f
@@ -147,4 +148,3 @@ instance Located Exp where
   setSpan s (Let _ ds w) = Let s ds w
   setSpan s (Case _ e cs) = Case s e cs
   setSpan s (If _ e1 e2 e3) = If s e1 e2 e3
-  setSpan s (TAbs _ as e) = TAbs s as e

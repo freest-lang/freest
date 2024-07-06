@@ -65,7 +65,6 @@ $upper = [ A-Z ]
 <0> "select" { token TkSelect }
 
 -- Punctuation
-<0> "\\"   { token TkBackslashBackslash }
 <0> "\"    { token TkBackslash }
 <0> "->"   { token TkArrow }
 <0> "*->"  { token TkUnArrow }
