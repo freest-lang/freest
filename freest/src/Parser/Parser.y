@@ -261,8 +261,10 @@ Type :: { T.Type }
   | Type ';' Type               { infixApp $1 (T.Semi (getSpan $2)) $3 }
   | Polarity Type %prec MSG     { T.App (spanFromTo (fst $1) $2) (T.Message (fst $1) K.Lin (snd $1)) [$2] }
   | '*' Polarity Type %prec MSG { T.App (spanFromTo $1 $3) (T.Message (fst $2) K.Un  (snd $2)) [$3] }
-  | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $3) [(fst $2, snd $2)] $3)] }
-  | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $4) [(fst $2, snd $2)] $4)] }
+  -- If forall is just a constant, remove this rule and uncomment the one below and the declaration of Forall.
+  | 'forall' KindedVarListWS '.' Type   { T.Forall (spanFromTo $1 $4) $2 $4 }
+  -- | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $3) [(fst $2, snd $2)] $3)] }
+  -- | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $4) [(fst $2, snd $2)] $4)] }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
@@ -273,9 +275,9 @@ TypeListComma :: { [T.Type] }
   : Type ',' TypeListComma { $1 : $3 }
   | Type                   { [$1] }
 
-Forall :: { T.Type }
-  : '.' Type { $2 }
-  | KindedVar Forall { T.App (spanFromTo (fst $1) $2) (T.Forall (getSpan (fst $1)) (snd $1)) [(T.Abs (spanFromTo (fst $1) $2) [(fst $1, snd $1)] $2)]}
+-- Forall :: { T.Type }
+--   : '.' Type { $2 }
+--   | KindedVar Forall { T.App (spanFromTo (fst $1) $2) (T.Forall (getSpan (fst $1)) (snd $1)) [(T.Abs (spanFromTo (fst $1) $2) [(fst $1, snd $1)] $2)]}
 
 Commas :: { Int }
   : ',' { 1 }

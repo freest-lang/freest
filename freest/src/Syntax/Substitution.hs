@@ -25,6 +25,9 @@ import qualified Data.Set as Set
 import Debug.Trace (trace)
 
 freeVars :: T.Type -> Set.Set Variable
+-- If forall is just a constant, remove this equation
+-- (and make sure there is one for T.Abs)
+freeVars (T.Forall _ aks t)   = freeVars t Set.\\ Set.fromList (map fst aks)
 freeVars (T.Var _ a)          = Set.singleton a
 freeVars (T.Abs _ aks t)      = freeVars t Set.\\ Set.fromList (map fst aks)
 freeVars (T.App _ t ts)       = Set.unions (freeVars t : map freeVars ts)
@@ -33,6 +36,9 @@ freeVars (T.Tuple _ ts)       = Set.unions $ map freeVars ts
 freeVars _                    = Set.empty
 
 allVars :: T.Type -> Set.Set Variable
+-- If forall is just a constant, remove this equation
+-- (and make sure there is one for T.Abs)
+allVars (T.Forall _ aks t)   = allVars t
 allVars (T.Var _ a)          = Set.singleton a
 allVars (T.Abs _ aks t)      = allVars t
 allVars (T.App _ t ts)       = Set.unions (allVars t : map allVars ts)
@@ -47,6 +53,17 @@ subs :: Variable -> T.Type -> T.Type -> T.Type
 subs a u t = sub t
   where
     sub :: T.Type -> T.Type
+    -- If forall is just a constant, remove these equations
+    -- (and make sure there are some for T.Abs)
+    sub t@(T.Forall s ((b,k):bks) t') -- map does not work?
+      | b == a = t
+      | b `Set.member` fvu = 
+        let b' = newInternal b (afvu `Set.union` allVars t')
+            T.Forall _ bks' t'' = sub (subs b (T.Var (getSpan b') b') (T.Forall s bks t'))
+        in T.Forall s ((b',k):bks') t''
+      | otherwise = 
+        let T.Forall _ bks' t'' = sub (T.Forall s bks t')
+        in T.Forall s ((b,k):bks') t''
     sub t@(T.Var _ b)
       | b == a = u
       | otherwise = t

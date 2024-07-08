@@ -36,7 +36,8 @@ data Type
   | Skip Span
   | Semi Span
   | Dual Span
-  | Forall Span Kind  
+  | Forall Span [(Variable,Kind)] Type -- | Forall Span Kind  
+  
   | Rec Span Kind 
   -- Lambda
   | Var Span Variable
@@ -76,7 +77,7 @@ instance Show Type where
   show (Semi _) = "(;)"
   show (Dual _) = "Dual"
   show (Var _ a) = show a
-  show (Forall _ k) = "forall_"++show k  
+  show (Forall _ aks t) = "(forall "++concatMap (\(a,k) -> show a++":"++show k++" ") aks++". "++show t++")"
   show (Rec _ k) = "rec_"++show k
   show (App _ t as) = foldl (\s a -> "("++s++" "++show a++")") (show t) as
   show (Abs _ aks t) = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
@@ -96,7 +97,7 @@ instance Located Type where
   getSpan (Semi s) = s
   getSpan (Dual s) = s
   getSpan (Var s _) = s
-  getSpan (Forall s _) = s
+  getSpan (Forall s _ _) = s
   getSpan (Rec s _) = s
   getSpan (App s _ _) = s
   getSpan (Abs s _ _) = s
@@ -115,7 +116,7 @@ instance Located Type where
   setSpan s (Semi _) = Semi s
   setSpan s (Dual _) = Dual s
   setSpan s (Var _ a) = Var s a
-  setSpan s (Forall _ k) = Forall s k
+  setSpan s (Forall _ aks t) = Forall s aks t
   setSpan s (Rec _ k) = Rec s k
   setSpan s (App _ t1 t2) = App s t1 t2
   setSpan s (Abs _ aks t) = Abs s aks t

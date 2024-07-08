@@ -114,7 +114,9 @@ instance Show Exp where
   show (Tuple _ (e:es)) = "("++show e++unwords (map (\e -> ", "++show e) es)++")"
   show (Cons _ i) = show i
   show (Var _ x) = show x  
-  show (App _ f as) = foldl (\s a -> "("++s++" "++show a++")") (show f) as
+  show (App _ f as) = foldl (\s a -> "("++s++" "++showArg a++")") (show f) as
+    where showArg (ExpLevel  e) = show e
+          showArg (TypeLevel t) = "@"++show t
   show (Abs _ ps m e) = "(\\"++unwords (map showParam ps)++" "++show m++"-> "++show e++")"
     where showParam (ExpLevel  (p,t)) = show p++":"++show t
           showParam (TypeLevel (a,k)) = show a++":"++show k

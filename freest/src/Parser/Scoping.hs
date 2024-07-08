@@ -189,7 +189,7 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
               insertError (MultipleVarDecls (getSpan x) x) -- TODO: better error
               return (ictx'',xs''++[x])
         ) (ictx,[]) xs
-      t' <- quantifyScopeType ctx t
+      t' <- scopeTypeQ ctx t
       second (E.SigDecl xs' t':) <$> scopeDefs' ctx ictx' ds
     
     scopeRHS :: ScopingCtx -> E.RHS -> Scoping E.RHS
@@ -325,10 +325,17 @@ scopeType ctx (T.Labelled  s l lts) =
   in T.Labelled s l <$> lts'
 scopeType ctx (T.Tuple s ts) =
   T.Tuple s <$> mapM (scopeType ctx) ts
+-- if forall is a constant instead, just remove this equation 
+-- (and make sure there is one for T.Abs)
+scopeType ctx (T.Forall s (unzip -> (as,ks)) t) = do
+  as' <- mapM freshInternal as
+  ks' <- mapM scopeKind ks
+  let ctx' = fromTVarList as' `Map.union` ctx
+  T.Forall s (zip as' ks') <$> scopeType ctx' t
 scopeType ctx t@(T.Var s a) =
   case lookupTVar a ctx of
     Just i  -> return $ T.Var s a{internal=i}
-    Nothing -> return t -- leave this error for the typechecker
+    Nothing -> T.Var s <$> freshInternal a -- no error here; leave it for the typechecker
 scopeType ctx (T.App s t ts) =
   T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
 scopeType ctx (T.Abs s (unzip -> (as,ks)) t) = do
@@ -338,16 +345,12 @@ scopeType ctx (T.Abs s (unzip -> (as,ks)) t) = do
   T.Abs s (zip as' ks') <$> scopeType ctx' t
 scopeType ctx t = return t
 
-quantifyScopeType :: ScopingCtx -> T.Type -> Scoping T.Type
-quantifyScopeType ctx t = do
-  let fvt = Set.map (TVar . external) (freeVars t) `Set.difference` Map.keysSet ctx
-  fvt' <- mapM freshInternal $ List.sortBy (compare `on` getSpan) $ Set.toList $ freeVars t
-  t' <- foldrM quantify t fvt'
-  scopeType ctx t'
-  where
-    quantify a t' = do
-      k <- freshKVar a
-      return $ T.App (getSpan t') (T.Forall (getSpan t) k) [T.Abs (getSpan t') [(a, k)] t']
+scopeTypeQ :: ScopingCtx -> T.Type -> Scoping T.Type
+scopeTypeQ ctx t = do
+  t' <- scopeType ctx t 
+  let fvm = Map.fromList (map (\a -> (TVar $ external a, a)) $ Set.toList (freeVars t'))
+  aks <- mapM (\a -> (a,) <$> freshKVar a) $ List.sortBy (compare `on` getSpan) $ Map.elems fvm
+  T.Forall (getSpan t) aks <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
 
 scopeKind :: K.Kind -> Scoping K.Kind
 scopeKind (K.Proper s m pk) = K.Proper s <$> scopeMult m <*> scopePrekind pk
