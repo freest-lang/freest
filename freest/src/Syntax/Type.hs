@@ -6,6 +6,8 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module defines the Type data type, which represents FreeST's higher-order
 polymorphic context-free session types.
 -}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
@@ -14,15 +16,16 @@ module Syntax.Type
 where
 
 import Syntax.Base
-import Syntax.Kind (Kind, Multiplicity(..))
+import qualified Syntax.Kind as K
 
 import Data.List (intercalate)
+import Data.Bifunctor
 
 data Polarity = In | Out
 
-data Labelled 
+data Labelled
   = Variant
-  | Choice Multiplicity Polarity
+  | Choice K.Multiplicity Polarity
 
 data Type
   -- Constants
@@ -30,23 +33,30 @@ data Type
   | Float Span
   | Char Span
   | String Span
-  | Arrow Span Multiplicity
-  | Message Span Multiplicity Polarity
+  | Arrow Span K.Multiplicity
+  | Message Span K.Multiplicity Polarity
   | End Span Polarity
   | Skip Span
-  | Semi Span
-  | Dual Span
-  | Forall Span [(Variable,Kind)] Type -- | Forall Span Kind  
-  
-  | Rec Span Kind 
+  | Semi Span Type Type
+  | Dual Span Type
+  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind  
+  -- | Rec Span K.Kind 
   -- Lambda
   | Var Span Variable
   | App Span Type [Type]
-  | Abs Span [(Variable, Kind)] Type 
+  | Abs Span [(Variable, K.Kind)] Type
   -- Special cases
-  | Name Span Identifier 
+  | Name Span Identifier
   | Labelled Span Labelled [(Identifier, Type)]
   | Tuple Span [Type]
+  -- Hole
+  | Hole Span
+
+pattern FullArrow s1 m t u <- App s1 (Arrow s2 m) [t,u] where
+  FullArrow s m t u = App s (Arrow s m) [t,u]
+pattern FullMsg s1 m p t <- App s1 (Message s2 m p) [t] where
+  FullMsg s m p t = App s (Message s m p) [t]
+
 
 instance Show Polarity where
   show In  = "?"
@@ -54,70 +64,73 @@ instance Show Polarity where
 
 instance Show Labelled where
   show Variant = "<>"
-  show (Choice Lin In) = "&"
-  show (Choice Lin Out) = "+"
-  show (Choice Un In) = "*&"
-  show (Choice Un Out) = "*+"
+  show (Choice K.Lin In)  = "&"
+  show (Choice K.Lin Out) = "+"
+  show (Choice K.Un In)   = "*&"
+  show (Choice K.Un Out)  = "*+"
   show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
 
 instance Show Type where
-  show (Int _) = "Int"
-  show (Float _) = "Float"
-  show (Char _) = "Char"
-  show (String _) = "String" 
-  show (Arrow _ m) = "("++show m++"->)"
+  show (Int _)             = "Int"
+  show (Float _)           = "Float"
+  show (Char _)            = "Char"
+  show (String _)          = "String"
+  show (Arrow _ m)         = "("++show m++"->)"
   show (Labelled  _ l lts) = show l++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
-  show (Tuple _ []) = "()"
-  show (Tuple _ (t:ts)) = "("++show t++(if null ts then "" else concatMap (\t -> ", "++show t) ts)++")"
-  show (Message _ Un p) =  "(*"++ show p++")"
-  show (Message _ _ p) = "("++show p++")"
-  show (End _ In ) = "Wait" 
-  show (End _ Out) = "Close"
-  show (Skip _) = "Skip"
-  show (Semi _) = "(;)"
-  show (Dual _) = "Dual"
-  show (Var _ a) = show a
-  show (Forall _ aks t) = "(forall "++concatMap (\(a,k) -> show a++":"++show k++" ") aks++". "++show t++")"
-  show (Rec _ k) = "rec_"++show k
-  show (App _ t as) = foldl (\s a -> "("++s++" "++show a++")") (show t) as
-  show (Abs _ aks t) = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
-  show (Name _ n) = show n
+  show (Tuple _ [])        = "()"
+  show (Tuple _ (t:ts))    = "("++show t++(if null ts then "" else concatMap (\t -> ", "++show t) ts)++")"
+  show (Message _ K.Un p)  =  "(*"++ show p++")"
+  show (Message _ _ p)     = "("++show p++")"
+  show (End _ In )         = "Wait"
+  show (End _ Out)         = "Close"
+  show (Skip _)            = "Skip"
+  show (Semi _ t u)        = "("++show t++ ";" ++show u++")"
+  show (Dual _ t)          = "(Dual"++ show t++")"
+  show (Var _ a)           = show a
+  show (Forall _ aks t)    = "(forall "++concatMap (\(a,k) -> show a++":"++show k++" ") aks++". "++show t++")"
+  -- show (Rec _ k)           = "rec_"++show k
+  show (App _ t as)        = foldl (\s a -> "("++s++" "++show a++")") (show t) as
+  show (Abs _ aks t)       = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
+  show (Name _ n)          = show n
+  show (Hole s)            = "_"
 
 instance Located Type where
-  getSpan (Int s) = s
-  getSpan (Float s) = s
-  getSpan (Char s) = s
-  getSpan (String s) = s
-  getSpan (Arrow s _) = s
+  getSpan (Int s)           = s
+  getSpan (Float s)         = s
+  getSpan (Char s)          = s
+  getSpan (String s)        = s
+  getSpan (Arrow s _)       = s
   getSpan (Labelled  s _ _) = s
-  getSpan (Tuple s _) = s
-  getSpan (Message s _ _) = s
-  getSpan (End s _) = s
-  getSpan (Skip s) = s
-  getSpan (Semi s) = s
-  getSpan (Dual s) = s
-  getSpan (Var s _) = s
-  getSpan (Forall s _ _) = s
-  getSpan (Rec s _) = s
-  getSpan (App s _ _) = s
-  getSpan (Abs s _ _) = s
-  getSpan (Name s _) = s
-  
-  setSpan s (Int _) = Int s
-  setSpan s (Float _) = Float s
-  setSpan s (Char _) = Char s
-  setSpan s (String _) = String s
-  setSpan s (Arrow _ m) = Arrow s m
+  getSpan (Tuple s _)       = s
+  getSpan (Message s _ _)   = s
+  getSpan (End s _)         = s
+  getSpan (Skip s)          = s
+  getSpan (Semi s _ _)      = s
+  getSpan (Dual s _)        = s
+  getSpan (Var s _)         = s
+  getSpan (Forall s _ _)    = s
+  -- getSpan (Rec s _)         = s
+  getSpan (App s _ _)       = s
+  getSpan (Abs s _ _)       = s
+  getSpan (Name s _)        = s
+  getSpan (Hole s)          = s
+
+  setSpan s (Int _)             = Int s
+  setSpan s (Float _)           = Float s
+  setSpan s (Char _)            = Char s
+  setSpan s (String _)          = String s
+  setSpan s (Arrow _ m)         = Arrow s m
   setSpan s (Labelled  _ l lts) = Labelled s l lts
-  setSpan s (Tuple _ ts) = Tuple s ts
-  setSpan s (Message _ m p) = Message s m p
-  setSpan s (End _ p) = End s p
-  setSpan s (Skip _) = Skip s
-  setSpan s (Semi _) = Semi s
-  setSpan s (Dual _) = Dual s
-  setSpan s (Var _ a) = Var s a
-  setSpan s (Forall _ aks t) = Forall s aks t
-  setSpan s (Rec _ k) = Rec s k
-  setSpan s (App _ t1 t2) = App s t1 t2
-  setSpan s (Abs _ aks t) = Abs s aks t
-  setSpan s (Name _ n) = Name s n
+  setSpan s (Tuple _ ts)        = Tuple s ts
+  setSpan s (Message _ m p)     = Message s m p
+  setSpan s (End _ p)           = End s p
+  setSpan s (Skip _)            = Skip s
+  setSpan s (Semi _ t u)        = Semi s t u
+  setSpan s (Dual _ t)          = Dual s t
+  setSpan s (Var _ a)           = Var s a
+  setSpan s (Forall _ aks t)    = Forall s aks t
+  -- setSpan s (Rec _ k)           = Rec s k
+  setSpan s (App _ t1 t2)       = App s t1 t2
+  setSpan s (Abs _ aks t)       = Abs s aks t
+  setSpan s (Name _ n)          = Name s n
+  setSpan s (Hole _)            = Hole s

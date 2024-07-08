@@ -228,7 +228,6 @@ TypePrimary :: { T.Type }
   | 'Float'  { T.Float (getSpan $1) }
   | 'Char'   { T.Char (getSpan $1) }
   | 'String' { T.String (getSpan $1) }
-  | 'Dual'   { T.Dual (getSpan $1) }
   | 'Skip'   { T.Skip (getSpan $1) }
   | 'Close'  { T.End (getSpan $1) T.Out }
   | 'Wait'   { T.End (getSpan $1) T.In }
@@ -258,7 +257,7 @@ TypePrimary :: { T.Type }
 
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { infixApp $1 (T.Arrow (fst $2) (snd $2)) $3 }
-  | Type ';' Type               { infixApp $1 (T.Semi (getSpan $2)) $3 }
+  | Type ';' Type               { T.Semi (spanFromTo $1 $3) $1 $3 }
   | Polarity Type %prec MSG     { T.App (spanFromTo (fst $1) $2) (T.Message (fst $1) K.Lin (snd $1)) [$2] }
   | '*' Polarity Type %prec MSG { T.App (spanFromTo $1 $3) (T.Message (fst $2) K.Un  (snd $2)) [$3] }
   -- If forall is just a constant, remove this rule and uncomment the one below and the declaration of Forall.
@@ -269,6 +268,7 @@ Type :: { T.Type }
 
 TypeApp :: { T.Type }
   : TypeApp TypePrimary { addArgType $2 $1 }
+  | 'Dual' TypePrimary  { T.Dual (spanFromTo $1 $2) $2 }
   | TypePrimary { $1 }
 
 TypeListComma :: { [T.Type] }
