@@ -7,11 +7,10 @@ This module defines the Type data type, which represents FreeST's higher-order
 polymorphic context-free session types.
 -}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TupleSections #-}
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
-  , Type(..)
+  , Type(.., Arrow', Message')
   )
 where
 
@@ -52,10 +51,10 @@ data Type
   -- Hole
   | Hole Span
 
-pattern FullArrow s1 m t u <- App s1 (Arrow s2 m) [t,u] where
-  FullArrow s m t u = App s (Arrow s m) [t,u]
-pattern FullMsg s1 m p t <- App s1 (Message s2 m p) [t] where
-  FullMsg s m p t = App s (Message s m p) [t]
+pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
+  Arrow' s m t u = App s (Arrow s m) [t,u]
+pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
+  Message' s m p t = App s (Message s m p) [t]
 
 
 instance Show Polarity where
@@ -134,3 +133,4 @@ instance Located Type where
   setSpan s (Abs _ aks t)       = Abs s aks t
   setSpan s (Name _ n)          = Name s n
   setSpan s (Hole _)            = Hole s
+

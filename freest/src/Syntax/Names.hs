@@ -39,13 +39,12 @@ mkCaretCaret = mkVar "(^^)"
 mkCmp :: Located a => String -> a -> Variable
 mkCmp s = mkVar $ "("++s++")"
 
-mkNil, mkCons, mkBool :: Located a => a -> Identifier
+mkNil, mkCons :: Located a => a -> Identifier
 mkNil  = mkId "[]"
 mkCons = mkId "(::)"
-mkBool = mkId "Bool"
 
 mkTupleCons :: Located a => Int -> a -> Identifier
 mkTupleCons n = mkId $ "("++replicate n ','++")"
 
-mkBoolType :: Located a => a -> T.Type
-mkBoolType (getSpan -> s) = T.Name s (mkBool s)
+mkBool :: Located a => a -> T.Type
+mkBool (getSpan -> s) = T.Name s (mkId "Bool" s)
