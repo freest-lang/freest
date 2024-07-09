@@ -54,6 +54,7 @@ data Exp
   | Let    Span [LetDecl] Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
+  | Channel Span Type
   | Select Span Identifier
 
 instance Show Pat where
@@ -124,6 +125,7 @@ instance Show Exp where
   show (Case _ e pes) = "(case "++show e++" of ⦃ "++intercalate " ⨾ " (map showCase pes)++" ⦄)"
     where showCase (p, e) = show p ++ " -> " ++ show e 
   show (If _ e1 e2 e3) = "(if "++show e1++" then "++show e2++" else "++show e3++")"
+  show (Channel _ t) = "(channel @"++show t++")"
   show (Select _ i) = "select "++show i
 
 instance Located Exp where
@@ -138,6 +140,8 @@ instance Located Exp where
   getSpan (Let s _ _) = s
   getSpan (Case s _ _) = s
   getSpan (If s _ _ _) = s
+  getSpan (Channel s _) = s
+  getSpan (Select s _) = s
   
   setSpan s (Int _ i) = Int s i
   setSpan s (Float _ f) = Float s f
@@ -150,3 +154,5 @@ instance Located Exp where
   setSpan s (Let _ ds w) = Let s ds w
   setSpan s (Case _ e cs) = Case s e cs
   setSpan s (If _ e1 e2 e3) = If s e1 e2 e3
+  setSpan s (Channel _ t) = Channel s t
+  setSpan s (Select _ i) = Select s i

@@ -6,7 +6,7 @@ mkPair x y = (x, y)
 
 main : (Int, Bool)
 main =
-  let (r, w) = new @(Skip;Wait) () in
+  let (r, w) = channel @(Skip;Wait) in
   let (i, s) = mkPair @Int @(Skip;Wait) 4 r in
   fork (\_:() 1-> close w);
   fork (\_:() 1-> wait s);

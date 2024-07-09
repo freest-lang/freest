@@ -30,7 +30,8 @@ data Token
   | TkData Span | TkType Span
   | TkLet Span | TkIn Span
   | TkCase Span | TkOf Span
-  | TkIf Span | TkThen Span | TkElse Span | TkSelect Span
+  | TkIf Span | TkThen Span | TkElse Span 
+  | TkSelect Span | TkChannel Span
   | TkForall Span | TkRec Span
 
   -- Punctuation

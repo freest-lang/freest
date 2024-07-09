@@ -54,6 +54,7 @@ import Debug.Trace
   'in'     { TkIn _ }
   'case'   { TkCase _ }
   'of'     { TkOf _ }
+  'channel'{ TkChannel _ }
   'select' {TkSelect _ }
   'if'     { TkIf _ }
   'then'   { TkThen _ }
@@ -367,6 +368,7 @@ Exp :: { E.Exp }
 ExpApp :: { E.Exp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
+  | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
 

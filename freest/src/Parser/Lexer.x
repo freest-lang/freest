@@ -62,6 +62,7 @@ $upper = [ A-Z ]
 <0> "else"   { token TkElse }
 <0> "forall" { token TkForall }
 <0> "rec"    { token TkRec }
+<0> "channel"{ token TkChannel }
 <0> "select" { token TkSelect }
 
 -- Punctuation
