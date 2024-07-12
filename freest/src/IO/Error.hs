@@ -30,7 +30,7 @@ data Error
   | TooManyArgs Span E.Exp T.Type Int Int
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
-  | ExtractError Span String E.Exp T.Type
+  | ExtractError Span String (Either E.Pat E.Exp) T.Type
   | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
 
 
@@ -55,42 +55,45 @@ instance Show Error where
     where 
       showError :: Error -> String
       showError (LexicalError _ inp) = 
-        "\n  Lexical error on input `"++show inp++"`"
+          "\n  Lexical error on input `"++show inp++"`"
       showError (ParseError _ (_,ss)) = 
-        "\n  Parse error, expected: `"++intercalate "`, `" ss++"`"
+          "\n  Parse error, expected: `"++intercalate "`, `" ss++"`"
       showError (OutOfScope _ x) = 
-        "\n  Variable not in scope: `"++external x++"`"
+          "\n  Variable not in scope: `"++external x++"`"
       showError (ConflictingDefs vos) = 
-        "\n  Conflicting definitions in patterns:"
-        ++Map.foldrWithKey 
-          (\case (ExpLevel x) -> \ss msg -> 
+          "\n  Conflicting definitions in patterns:"
+          ++Map.foldrWithKey (\case 
+              ExpLevel x -> \ss msg -> 
                   "\n    Variable `"++x++"` bound at:"
                   ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
                   ++msg
-                 (TypeLevel a) -> \ss msg -> 
+              TypeLevel a -> \ss msg -> 
                   "\n    Type variable `"++a++"` bound at:"
                   ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
                   ++msg)
           "" vos
       showError (MultipleVarDecls _ c) =
-        "\n  Multiple declarations of variable `"++show c++"`"
+          "\n  Multiple declarations of variable `"++show c++"`"
       showError (MultipleConsDecls _ c) =
-        "\n  Multiple declarations of constructor `"++show c++"`"
+          "\n  Multiple declarations of constructor `"++show c++"`"
       showError (MultipleTypeDecls _ c) =
-        "\n  Multiple declarations of type `"++show c++"`"
+          "\n  Multiple declarations of type `"++show c++"`"
       showError (TooManyArgs _ f t expected actual) =
-        "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
+          "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
       showError (LinVarsConsumedInUnFun _ xs e) =
-        "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
-        "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
+          "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
+          "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
       showError (LinVarsCreatedInUnFun _ xs e) =
-        "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
-        "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
+          "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
+          "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
       showError (ExtractError _ s e t) = 
-        "\n  Expecting "++s++" type for expression `"++show e++"`, but got type `"++show t++"`"
+          "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
+        where 
+          showExpPat (Left  p) = "pattern `"++show p++"`"
+          showExpPat (Right e) = "expression `"++show e++"`"
       showError (UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f) = 
-        "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"` instead."++
-        "\n  In the "++show n {- TODO: use numerals-} ++"th argument of function `"++show f++"`."
+          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"` instead."++
+          "\n  In the "++show n {- TODO: use numerals-} ++"th argument of function `"++show f++"`."
       showError (UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f) = 
-        "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++"` instead."++
-        "\n  In the "++show n {- TODO: use numerals-} ++"th argument of function `"++show f++"`."
+          "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++"` instead."++
+          "\n  In the "++show n {- TODO: use numerals-} ++"th argument of function `"++show f++"`."
