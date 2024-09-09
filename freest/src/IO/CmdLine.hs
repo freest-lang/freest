@@ -19,6 +19,7 @@ freestOpts = RunOpts
     <> metavar "FILEPATH"
     )
 
+opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper)
      ( fullDesc
      <> progDesc "FreeST 5.0"

@@ -12,7 +12,6 @@ represent FreeST's external syntax.
 -}
 module Syntax.Base where
 import Data.Bifunctor
-import Data.Bifoldable
 
 data Level a b = ExpLevel a | TypeLevel b deriving (Eq, Ord)
 
