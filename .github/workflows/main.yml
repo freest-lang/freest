@@ -1,0 +1,13 @@
+name: Haskell Stack Project CI
+
+on:
+  pull_request:
+  push:
+    branches: main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: freckle/stack-action@v5
