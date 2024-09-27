@@ -21,6 +21,8 @@ import Parser.Scoping (runScoping)
 import qualified Data.Map as Map
 import System.Exit (exitFailure, exitSuccess)
 
+import Interpreter.Interpreter as I
+
 main :: IO ()
 main = do
   execParser opts >>= freest
@@ -29,7 +31,7 @@ freest :: RunOpts -> IO ()
 freest RunOpts{file=f} = do
   source <- readFile f
   let r = runLexer parseModule f source
-          >>= runScoping
+          >>= runScoping >>= I.interpret
   either (\es -> mapM_ print es >> exitFailure)
          (\m -> print m >> exitSuccess)
          r
