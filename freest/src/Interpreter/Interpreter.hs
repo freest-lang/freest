@@ -4,6 +4,8 @@ import Data.List ( find )
 -- for debuging don't forget to remove
 import Debug.Trace
 -- ends here
+-- remove when FloatPat Float is FloatPat Double
+import GHC.Float (float2Double)
 
 import qualified Syntax.Module as M
 import qualified Syntax.Expression as E
@@ -110,6 +112,7 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
   Nothing -> undefined
 -- consumeAllArgs (global, _) (VFun patExps) args = 
 
+-- TODO: refactor to use map and filter?
 doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (B.Variable, Value)]
 doPatternMatching [] [] = []
 doPatternMatching pats [] = []
@@ -120,10 +123,10 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.VarPat _ var -> Just (var, arg) : doPatternMatching pats args
   E.ConsPat _ _ _ -> undefined
   E.TuplePat _ _ -> undefined
-  E.IntPat _ n -> undefined 
-  E.FloatPat _ n -> undefined 
-  E.CharPat _ c -> undefined
-  E.StringPat _ str -> undefined
+  E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
+  E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
+  E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
+  E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.AsPat _ var pat -> undefined
 
 -- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
