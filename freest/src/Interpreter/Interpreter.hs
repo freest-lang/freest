@@ -97,13 +97,12 @@ filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
                                                         B.TypeLevel b -> False) 
 -- because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
--- TODO: context is a mess must check if it is correct
+-- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = let patternMatching = doPatternMatching pats args in
   if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
   else if length pats < length args then consumeAllArgs (global, patternMatching ++ local_ctx ++ local) (eval (global, patternMatching ++ local_ctx ++ local) exp) (drop (length pats) args)
-  -- necessary to construct another VClosure without the consumed patterns
-  else undefined
+  else VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
 
 -- TODO: change return type to Maybe, because it is necessary for pattern matching functions
 doPatternMatching :: [E.Pat] -> [Value] -> [(B.Variable, Value)]
