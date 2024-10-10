@@ -95,24 +95,29 @@ isTrue exp = undefined
 filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
 filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
                                                         B.TypeLevel b -> False) 
--- because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
+
+-- Here is where the function application is done.
+-- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
-consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = let patternMatching = doPatternMatching pats args in
-  if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
-  else if length pats < length args then consumeAllArgs (global, patternMatching ++ local_ctx ++ local) (eval (global, patternMatching ++ local_ctx ++ local) exp) (drop (length pats) args)
-  else VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
+consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
+  Just patternMatching ->
+    if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
+    else if length pats < length args then consumeAllArgs (global, patternMatching ++ local_ctx ++ local) (eval (global, patternMatching ++ local_ctx ++ local) exp) (drop (length pats) args)
+    else VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
+  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+  Nothing -> undefined
+-- consumeAllArgs (global, _) (VFun patExps) args = 
 
--- TODO: change return type to Maybe, because it is necessary for pattern matching functions
-doPatternMatching :: [E.Pat] -> [Value] -> [(B.Variable, Value)]
+doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (B.Variable, Value)]
 doPatternMatching [] [] = []
 doPatternMatching pats [] = []
 doPatternMatching [] args = []
 -- TODO: finish implementing the rest of the patterns
 doPatternMatching (pat:pats) (arg:args) = case pat of
   E.WildPat _ _ -> doPatternMatching pats args
-  E.VarPat _ var -> (var, arg) : doPatternMatching pats args
+  E.VarPat _ var -> Just (var, arg) : doPatternMatching pats args
   E.ConsPat _ _ _ -> undefined
   E.TuplePat _ _ -> undefined
   E.IntPat _ n -> undefined 
