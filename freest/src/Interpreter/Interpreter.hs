@@ -30,7 +30,7 @@ interpret m = case getMainFunction (trace (show m) m) of
   -- Assuming that the RHS of main is always in the form main = <exp>
   -- necessary to initialize the context with information from the module
   -- other modules, prelude, etc
-  Just (E.ValDecl _ (E.UnguardedRHS mainExp _)) -> Right $ eval ((initContext m), []) mainExp
+  Just (E.ValDecl _ (E.UnguardedRHS mainExp _)) -> Right $ eval (initContext m, []) mainExp
   -- Return unit when main function is not present
   Nothing -> Right VUnit
 
@@ -71,11 +71,11 @@ eval ctx (E.App _ exp levels) =
   consumeAllArgs ctx (eval ctx exp) args
 -- eval _ _ (E.Abs _ levels _ exp) = VFun (map (\(B.ExpLevel (pat, _)) -> (B.Level pat , E.UnguardedRHS exp Nothing)) (filterTypesFromLevels levels))  
 eval (_, local) (E.Abs _ levels _ exp) = VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
-eval _ (E.Let _ letDecl exp) = trace ("Let -> letDecl: " ++ (show letDecl) ++ " exp: " ++ (show exp)) undefined 
-eval _ (E.Case _ exp pats) = trace ("Case -> exp: " ++ (show exp) ++ " pats: " ++ (show pats)) undefined
-eval ctx (E.If _ ifExp thenExp elseExp) = if isTrue (eval ctx ifExp) then (eval ctx thenExp) else (eval ctx elseExp)
-eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ (show type')) undefined
-eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ (show iden)) undefined
+eval _ (E.Let _ letDecl exp) = trace ("Let -> letDecl: " ++ show letDecl ++ " exp: " ++ show exp) undefined 
+eval _ (E.Case _ exp pats) = trace ("Case -> exp: " ++ show exp ++ " pats: " ++ show pats) undefined
+eval ctx (E.If _ ifExp thenExp elseExp) = if isTrue (eval ctx ifExp) then eval ctx thenExp else eval ctx elseExp
+eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
+eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
 
 -- interpreter assumes that var fetches can't fail (checks were done before)
 -- Might need to change to identify partial applied functions
@@ -85,7 +85,7 @@ getVar (global, local) var = case find (\(var2, val) -> B.internal var == B.inte
   Just (var, val) -> val
   Nothing -> case find (\(var2, val) -> B.internal var == B.internal var2) local of
     Just (var, val) -> val
-    Nothing -> error ("Variable `" ++ (show var) ++ "`not found in the context. This should not happen. This is a bug in the compiler")
+    Nothing -> error ("Variable `" ++ show var ++ "`not found in the context. This should not happen. This is a bug in the compiler")
 
 -- check if expression is true (inside FreeST)
 isTrue :: Value -> Bool
@@ -100,8 +100,8 @@ filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
 -- TODO: context is a mess must check if it is correct
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = let patternMatching = doPatternMatching pats args in
-  if length pats == length args then eval (global, (patternMatching ++ local_ctx ++ local)) exp
-  else if length pats < length args then consumeAllArgs (global, (patternMatching ++ local_ctx ++ local)) (eval (global, (patternMatching ++ local_ctx ++ local)) exp) (drop (length pats) args)
+  if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
+  else if length pats < length args then consumeAllArgs (global, patternMatching ++ local_ctx ++ local) (eval (global, patternMatching ++ local_ctx ++ local) exp) (drop (length pats) args)
   -- necessary to construct another VClosure without the consumed patterns
   else undefined
 
