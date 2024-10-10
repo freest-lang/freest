@@ -27,7 +27,7 @@ data Pat
   | ConsPat Span Identifier [Pat]
   | TuplePat Span [Pat]
   | IntPat Span Int 
-  | FloatPat Span Float 
+  | FloatPat Span Double 
   | CharPat Span Char 
   | StringPat Span String 
   | AsPat Span Variable Pat
