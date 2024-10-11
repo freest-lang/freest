@@ -82,10 +82,11 @@ eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
 -- interpreter assumes that var fetches can't fail (checks were done before)
 -- Might need to change to identify partial applied functions
 -- Eww ungly, find better way of doing this (>>= but the opposite?)
+-- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
 getVar :: (Context, Context) -> B.Variable -> Value
-getVar (global, local) var = case find (\(var2, val) -> B.internal var == B.internal var2) local of
+getVar (global, local) var = case find (\(var2, val) -> B.external var == B.external var2) local of
   Just (var, val) -> val
-  Nothing -> case find (\(var2, val) -> B.internal var == B.internal var2) local of
+  Nothing -> case find (\(var2, val) -> B.external var == B.external var2) global of
     Just (var, val) -> val
     Nothing -> error ("Variable `" ++ show var ++ "`not found in the context. This should not happen. This is a bug in the compiler")
 
@@ -93,7 +94,7 @@ getVar (global, local) var = case find (\(var2, val) -> B.internal var == B.inte
 isTrue :: Value -> Bool
 isTrue exp = undefined
 
--- removes the @Int from arguments
+-- removes the type arguments (i.e. @Int) from arguments
 filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
 filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
                                                         B.TypeLevel b -> False) 
@@ -110,8 +111,16 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
     else VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
--- consumeAllArgs (global, _) (VFun patExps) args = 
-
+consumeAllArgs (global, _) (VFun patExps) args = case chooseRhs patExps args of
+  Just (rhs, matched) ->
+    if length matched == length args then case rhs of
+      -- TODO: add suport for where clauses
+      E.UnguardedRHS exp Nothing -> eval (global, matched) exp 
+    -- TODO: implement when matched > args and when matched < args
+    else undefined
+  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+  Nothing -> undefined
+ 
 -- TODO: refactor to use map and filter?
 doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (B.Variable, Value)]
 doPatternMatching [] [] = []
@@ -129,4 +138,8 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.AsPat _ var pat -> undefined
 
--- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
+chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(B.Variable, Value)])
+chooseRhs [] _ = Nothing
+chooseRhs ((pats, rhs):rest) args = case sequence $ doPatternMatching pats args of
+  Just matching -> Just (rhs, matching)
+  Nothing -> chooseRhs rest args
