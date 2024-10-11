@@ -103,6 +103,7 @@ filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
+-- TODO: add suport for where clauses on functions
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
   Just patternMatching ->
@@ -111,13 +112,15 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
     else VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
-consumeAllArgs (global, _) (VFun patExps) args = case chooseRhs patExps args of
-  Just (rhs, matched) ->
-    if length matched == length args then case rhs of
-      -- TODO: add suport for where clauses
+consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args of
+  Just (rhs, matched, pats) ->
+    if length pats == length args then case rhs of
       E.UnguardedRHS exp Nothing -> eval (global, matched) exp 
     -- TODO: implement when matched > args and when matched < args
-    else undefined
+    else if length pats < length args then case rhs of
+      E.UnguardedRHS exp Nothing -> consumeAllArgs (global, matched) (eval (global, matched) exp) (drop (length pats) args)
+    else case rhs of
+      E.UnguardedRHS exp Nothing -> VClosure (drop (length args) pats) exp matched
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
  
@@ -138,8 +141,8 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.AsPat _ var pat -> undefined
 
-chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(B.Variable, Value)])
+chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(B.Variable, Value)], [E.Pat])
 chooseRhs [] _ = Nothing
 chooseRhs ((pats, rhs):rest) args = case sequence $ doPatternMatching pats args of
-  Just matching -> Just (rhs, matching)
+  Just matching -> Just (rhs, matching, pats)
   Nothing -> chooseRhs rest args
