@@ -18,6 +18,7 @@ data Value = VInt Int
             | VUnit 
             | VChar Char
             | VString String
+            | VCons String
             | VTuple [Value]
             | VFun [([E.Pat], E.RHS)]
             -- do closures capture only the local ctx or also the global?
@@ -64,8 +65,8 @@ eval _ (E.Char _ c) = VChar c
 eval _ (E.String _ str) = VString str
 -- [Exp] -> [Value]
 eval ctx (E.Tuple _ tup) = VTuple (map (eval ctx) tup)
--- for now i return unit
-eval _ (E.Cons _ (B.Identifier _ str)) = trace ("E.Cons is " ++ show str) VUnit
+-- TODO: implement Constructors with arguments (e.i. data A = B Int | C Float)
+eval _ (E.Cons _ (B.Identifier _ str)) = VCons str
 eval ctx (E.Var _ var) = getVar ctx var
 eval ctx (E.App _ exp levels) = 
   -- trace ("App -> exp: " ++ (show exp) ++ " level: " ++ (show level) ++ " | Ctx: " ++ (show ctx))
@@ -90,9 +91,10 @@ getVar (global, local) var = case find (\(var2, val) -> B.external var == B.exte
     Just (var, val) -> val
     Nothing -> error ("Variable `" ++ show var ++ "`not found in the context. This should not happen. This is a bug in the compiler")
 
--- check if expression is true (inside FreeST)
+-- check if value is true (inside FreeST)
 isTrue :: Value -> Bool
-isTrue exp = undefined
+isTrue (VCons "True") = True
+isTrue (VCons "False") = False
 
 -- removes the type arguments (i.e. @Int) from arguments
 filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
@@ -129,11 +131,11 @@ doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (B.Variable, Value)]
 doPatternMatching [] [] = []
 doPatternMatching pats [] = []
 doPatternMatching [] args = []
--- TODO: finish implementing the rest of the patterns
+-- TODO: finish implementing the rest of the patterns (ConsPat is partially implemented)
 doPatternMatching (pat:pats) (arg:args) = case pat of
   E.WildPat _ _ -> doPatternMatching pats args
   E.VarPat _ var -> Just (var, arg) : doPatternMatching pats args
-  E.ConsPat _ _ _ -> undefined
+  E.ConsPat _ (B.Identifier _ str) pats -> if (\(VCons str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.TuplePat _ _ -> undefined
   E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
