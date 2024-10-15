@@ -114,7 +114,7 @@ eval ctx (E.App _ exp levels) =
   let args = map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels) in
   consumeAllArgs ctx (eval ctx exp) args
 eval (_, local) (E.Abs _ levels _ exp) = VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
-eval _ (E.Let _ letDecl exp) = trace ("Let -> letDecl: " ++ show letDecl ++ " exp: " ++ show exp) undefined 
+eval (global, local) (E.Let _ letDecls exp) = eval (global, (resolveLetDecls global (filterTypesFromLetDecls letDecls)) ++ local) exp
 eval (global, local) (E.Case _ exp pats) = case chooseCase pats (eval (global, local) exp) of
   Just (exp, matched) -> eval (global, matched ++ local) exp 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
@@ -137,6 +137,11 @@ getVar (global, local) var = case find (\(var2, val) -> B.external var == var2) 
 filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
 filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
                                                         B.TypeLevel b -> False) 
+
+filterTypesFromLetDecls :: [LetDecl] -> [LetDecl]
+filterTypesFromLetDecls = filter (\letDecl -> case letDecl of E.ValDecl _ _ -> True
+                                                              E.FnDecl _ _ -> True
+                                                              E.SigDecl _ _ -> False)
 
 -- Here is where the function application is done.
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
@@ -165,7 +170,17 @@ consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args
 consumeAllArgs ctx (VBuiltin builtin) [] = builtin VUnit
 consumeAllArgs ctx (VBuiltin builtin) [arg] = builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
- 
+
+-- TODO: think of a better name for this function
+-- TODO: implement for guarded rhs and where clause
+resolveLetDecls :: Context -> [LetDecl] -> [(String, Value)]
+resolveLetDecls _ [] = []
+resolveLetDecls global ((E.ValDecl pat (E.UnguardedRHS exp Nothing)):letDecls) = case sequence $ doPatternMatching [pat] [eval (global, []) exp] of
+  Just matched -> matched ++ resolveLetDecls global letDecls
+  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+  Nothing -> undefined
+resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) levelRhss)) : resolveLetDecls global letDecls
+
 -- TODO: refactor to use map and filter?
 doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (String, Value)]
 doPatternMatching [] [] = []
