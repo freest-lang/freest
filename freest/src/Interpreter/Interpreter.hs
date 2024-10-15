@@ -111,10 +111,8 @@ eval ctx (E.Tuple _ tup) = VTuple (map (eval ctx) tup)
 eval _ (E.Cons _ (B.Identifier _ str)) = VCons str
 eval ctx (E.Var _ var) = getVar ctx var
 eval ctx (E.App _ exp levels) = 
-  -- trace ("App -> exp: " ++ (show exp) ++ " level: " ++ (show level) ++ " | Ctx: " ++ (show ctx))
   let args = map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels) in
   consumeAllArgs ctx (eval ctx exp) args
--- eval _ _ (E.Abs _ levels _ exp) = VFun (map (\(B.ExpLevel (pat, _)) -> (B.Level pat , E.UnguardedRHS exp Nothing)) (filterTypesFromLevels levels))  
 eval (_, local) (E.Abs _ levels _ exp) = VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
 eval _ (E.Let _ letDecl exp) = trace ("Let -> letDecl: " ++ show letDecl ++ " exp: " ++ show exp) undefined 
 eval _ (E.Case _ exp pats) = trace ("Case -> exp: " ++ show exp ++ " pats: " ++ show pats) undefined
@@ -123,7 +121,6 @@ eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
 eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
 
 -- interpreter assumes that var fetches can't fail (checks were done before)
--- Might need to change to identify partial applied functions
 -- Eww ungly, find better way of doing this (>>= but the opposite?)
 -- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
 getVar :: (Context, Context) -> B.Variable -> Value
@@ -142,7 +139,7 @@ filterTypesFromLevels = filter (\level -> case level of B.ExpLevel a -> True
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
--- TODO: add suport for where clauses on functions
+-- TODO: add suport for where clauses on functions and functions with guards
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
   Just patternMatching ->
@@ -155,7 +152,6 @@ consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args
   Just (rhs, matched, pats) ->
     if length pats == length args then case rhs of
       E.UnguardedRHS exp Nothing -> eval (global, matched) exp 
-    -- TODO: implement when matched > args and when matched < args
     else if length pats < length args then case rhs of
       E.UnguardedRHS exp Nothing -> consumeAllArgs (global, matched) (eval (global, matched) exp) (drop (length pats) args)
     else case rhs of
