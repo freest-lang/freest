@@ -47,8 +47,8 @@ builtins = [
   ("negate", VBuiltin (\(VInt x) -> VInt (-x))),
   
   -- TODO: Eww, refactor this
-  ("(&&)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool ((fstToHsBool x) && (fstToHsBool y))))),
-  ("(||)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool ((fstToHsBool x) || (fstToHsBool y))))),
+  ("(&&)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x && fstToHsBool y)))),
+  ("(||)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x || fstToHsBool y)))),
 
   ("(==)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x == y)))),
   ("(/=)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x /= y)))),
@@ -115,7 +115,10 @@ eval ctx (E.App _ exp levels) =
   consumeAllArgs ctx (eval ctx exp) args
 eval (_, local) (E.Abs _ levels _ exp) = VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
 eval _ (E.Let _ letDecl exp) = trace ("Let -> letDecl: " ++ show letDecl ++ " exp: " ++ show exp) undefined 
-eval _ (E.Case _ exp pats) = trace ("Case -> exp: " ++ show exp ++ " pats: " ++ show pats) undefined
+eval (global, local) (E.Case _ exp pats) = case chooseCase pats (eval (global, local) exp) of
+  Just (exp, matched) -> eval (global, matched ++ local) exp 
+  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+  Nothing -> undefined
 eval ctx (E.If _ ifExp thenExp elseExp) = if fstToHsBool (eval ctx ifExp) then eval ctx thenExp else eval ctx elseExp
 eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
 eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
@@ -185,3 +188,10 @@ chooseRhs [] _ = Nothing
 chooseRhs ((pats, rhs):rest) args = case sequence $ doPatternMatching pats args of
   Just matching -> Just (rhs, matching, pats)
   Nothing -> chooseRhs rest args
+
+chooseCase :: [(E.Pat, E.Exp)] -> Value -> Maybe (E.Exp, [(String, Value)])
+chooseCase [] _ = Nothing
+chooseCase ((pat, exp):patsExps) val = case doPatternMatching [pat] [val] of
+  [] -> Just (exp, [])
+  [Just (var, val)] -> Just (exp, [(var, val)])
+  [Nothing] -> chooseCase patsExps val
