@@ -152,7 +152,7 @@ filterTypesFromLetDecls = filter (\letDecl -> case letDecl of E.ValDecl _ _ -> T
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
--- TODO: add suport for where clauses on functions and functions with guards
+-- TODO: add suport for functions with guards
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
   Just patternMatching ->
@@ -162,13 +162,12 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
 consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args of
-  Just (rhs, matched, pats) ->
-    if length pats == length args then case rhs of
-      E.UnguardedRHS exp Nothing -> eval (global, matched) exp 
-    else if length pats < length args then case rhs of
-      E.UnguardedRHS exp Nothing -> consumeAllArgs (global, matched) (eval (global, matched) exp) (drop (length pats) args)
-    else case rhs of
-      E.UnguardedRHS exp Nothing -> VClosure (drop (length args) pats) exp matched
+  Just (E.UnguardedRHS exp whereDecls, matched, pats) ->
+    let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+                                       Nothing -> []) in
+    if length pats == length args then eval (global, matched++whereCtx) exp 
+    else if length pats < length args then consumeAllArgs (global, matched++whereCtx) (eval (global, matched++whereCtx) exp) (drop (length pats) args)
+    else VClosure (drop (length args) pats) exp (matched++whereCtx)
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
 -- Is there builtins that take no arguments?
@@ -177,14 +176,18 @@ consumeAllArgs ctx (VBuiltin builtin) [arg] = builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
 
 -- TODO: think of a better name for this function
--- TODO: implement for guarded rhs and where clause
+-- TODO: implement for guarded rhs
 resolveLetDecls :: Context -> [LetDecl] -> [(String, Value)]
 resolveLetDecls _ [] = []
-resolveLetDecls global ((E.ValDecl pat (E.UnguardedRHS exp Nothing)):letDecls) = case sequence $ doPatternMatching [pat] [eval (global, []) exp] of
+resolveLetDecls global ((E.ValDecl pat (E.UnguardedRHS exp whereDecls)):letDecls) = case sequence $ doPatternMatching [pat] [eval (global, whereCtx) exp] of
   Just matched -> matched ++ resolveLetDecls global letDecls
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
+  where whereCtx = case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+                                      Nothing -> []
 resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) levelRhss)) : resolveLetDecls global letDecls
+
+-- TODO: create a resolveWhereDecls for more readable code (Contex -> Maybe [LetDecl] -> [(String, Value)])
 
 -- TODO: refactor to use map and filter?
 doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (String, Value)]
