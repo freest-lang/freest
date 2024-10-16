@@ -152,7 +152,6 @@ filterTypesFromLetDecls = filter (\letDecl -> case letDecl of E.ValDecl _ _ -> T
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
--- TODO: add suport for functions with guards
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
   Just patternMatching ->
@@ -162,7 +161,13 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
 consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args of
-  Just (E.UnguardedRHS exp whereDecls, matched, pats) ->
+  Just (rhs, matched, pats) ->
+    let (exp, whereDecls) =
+          (case rhs of E.UnguardedRHS exp whereDecls -> (exp, whereDecls)
+                       E.GuardedRHS predExps whereDecls ->
+                        (case chooseGuard (global, matched) predExps of Just exp -> exp
+            -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+                                                                        Nothing -> undefined, whereDecls)) in
     let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
                                        Nothing -> []) in
     if length pats == length args then eval (global, matched++whereCtx) exp 
@@ -176,14 +181,20 @@ consumeAllArgs ctx (VBuiltin builtin) [arg] = builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
 
 -- TODO: think of a better name for this function
--- TODO: implement for guarded rhs
 resolveLetDecls :: Context -> [LetDecl] -> [(String, Value)]
 resolveLetDecls _ [] = []
-resolveLetDecls global ((E.ValDecl pat (E.UnguardedRHS exp whereDecls)):letDecls) = case sequence $ doPatternMatching [pat] [eval (global, whereCtx) exp] of
+resolveLetDecls global ((E.ValDecl pat rhs):letDecls) = case sequence $ doPatternMatching [pat] [eval (global, whereCtx) exp] of
   Just matched -> matched ++ resolveLetDecls global letDecls
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
-  where whereCtx = case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+  where (exp, whereDecls) = 
+          case rhs of E.UnguardedRHS exp whereDecls -> (exp, whereDecls)
+                      E.GuardedRHS predExps whereDecls ->
+                        (case chooseGuard (global, []) predExps of Just exp -> exp
+            -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+                                                                   Nothing -> undefined, whereDecls)
+        whereCtx = case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+
                                       Nothing -> []
 resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) levelRhss)) : resolveLetDecls global letDecls
 
@@ -218,3 +229,7 @@ chooseCase ((pat, exp):patsExps) val = case doPatternMatching [pat] [val] of
   [] -> Just (exp, [])
   [Just (var, val)] -> Just (exp, [(var, val)])
   [Nothing] -> chooseCase patsExps val
+
+chooseGuard :: (Context, Context) -> [(E.Exp, E.Exp)] -> Maybe E.Exp
+chooseGuard _ [] = Nothing 
+chooseGuard ctx ((pred, exp):predExps) = if fstToHsBool (eval ctx pred) then Just exp else chooseGuard ctx predExps
