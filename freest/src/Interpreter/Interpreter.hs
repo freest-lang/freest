@@ -191,7 +191,7 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.WildPat _ _ -> doPatternMatching pats args
   E.VarPat _ var -> Just (B.external var, arg) : doPatternMatching pats args
   E.ConsPat _ (B.Identifier _ str) pats -> if (\(VCons str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.TuplePat _ _ -> undefined
+  E.TuplePat _ tupPats -> doPatternMatching tupPats ((\(VTuple tupVals) -> tupVals) arg) ++ doPatternMatching pats args
   E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
