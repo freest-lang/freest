@@ -32,9 +32,14 @@ instance Show Value where
   show (VChar c) = show c
   show (VString str) = show str
   show (VCons str) = show str
+  show (VTuple tups) = "(" ++ showTups tups ++ ")"
   show (VFun _) = "<fun>"
   show (VClosure _ _ _) = "closure>"
   show (VBuiltin _) = "<builtin>"
+
+showTups :: [Value] -> String
+showTups [val] = show val
+showTups (val:vals) = show val ++ ", " ++ showTups vals
 
 -- There must be a better way to do this
 builtins :: [(String , Value)]
@@ -196,7 +201,7 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.AsPat _ var pat -> undefined
+  E.AsPat _ var pat2 -> (Just (B.external var, arg)) : doPatternMatching [pat2] [arg] ++ doPatternMatching pats args
 
 chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(String, Value)], [E.Pat])
 chooseRhs [] _ = Nothing
