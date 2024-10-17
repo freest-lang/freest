@@ -21,7 +21,6 @@ data Value = VInt Int
             | VCons String [Value]
             | VTuple [Value]
             | VFun [([E.Pat], E.RHS)]
-            -- do closures capture only the local ctx or also the global?
             | VClosure [E.Pat] E.Exp Context
             | VBuiltin (Value -> Value)
 
@@ -41,7 +40,6 @@ showTups :: [Value] -> String
 showTups [val] = show val
 showTups (val:vals) = show val ++ ", " ++ showTups vals
 
--- There must be a better way to do this
 builtins :: [(String , Value)]
 builtins = [
   ("(+)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x + y)))),
@@ -51,7 +49,6 @@ builtins = [
   ("mod", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (mod x y)))),
   ("negate", VBuiltin (\(VInt x) -> VInt (-x))),
   
-  -- TODO: Eww, refactor this
   ("(&&)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x && fstToHsBool y)))),
   ("(||)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x || fstToHsBool y)))),
 
@@ -73,10 +70,11 @@ fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
 
 -- Using a simple context for now for simplicity
+-- TODO: change to a hashmap
 type Context = [(String, Value)]
 
 interpret :: M.Module -> Either [IOE.Error] Value
-interpret m = case getMainFunction (trace (show m) m) of
+interpret m = case getMainFunction m of
   -- Assuming that the RHS of main is always in the form main = <exp>
   -- necessary to initialize the context with information from the module
   -- other modules, prelude, etc
@@ -112,14 +110,13 @@ eval _ (E.Char _ c) = VChar c
 eval _ (E.String _ str) = VString str
 -- [Exp] -> [Value]
 eval ctx (E.Tuple _ tup) = VTuple (map (eval ctx) tup)
--- TODO: implement Constructors with arguments (e.i. data A = B Int | C Float)
 eval _ (E.Cons _ (B.Identifier _ str)) = VCons str []
 eval ctx (E.Var _ var) = getVar ctx var
 eval ctx (E.App _ exp levels) = 
   let args = map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels) in
   consumeAllArgs ctx (eval ctx exp) args
 eval (_, local) (E.Abs _ levels _ exp) = VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
-eval (global, local) (E.Let _ letDecls exp) = eval (global, (resolveLetDecls global (filterTypesFromLetDecls letDecls)) ++ local) exp
+eval (global, local) (E.Let _ letDecls exp) = eval (global, resolveLetDecls global (filterTypesFromLetDecls letDecls) ++ local) exp
 eval (global, local) (E.Case _ exp pats) = case chooseCase pats (eval (global, local) exp) of
   Just (exp, matched) -> eval (global, matched ++ local) exp 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
@@ -128,8 +125,6 @@ eval ctx (E.If _ ifExp thenExp elseExp) = if fstToHsBool (eval ctx ifExp) then e
 eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
 eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
 
--- interpreter assumes that var fetches can't fail (checks were done before)
--- Eww ungly, find better way of doing this (>>= but the opposite?)
 -- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
 getVar :: (Context, Context) -> B.Variable -> Value
 getVar (global, local) var = case find (\(var2, val) -> B.external var == var2) local of
@@ -197,7 +192,7 @@ resolveLetDecls global ((E.ValDecl pat rhs):letDecls) = case sequence $ doPatter
         whereCtx = case whereDecls of Just letDecls -> resolveLetDecls global letDecls
 
                                       Nothing -> []
-resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) levelRhss)) : resolveLetDecls global letDecls
+resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : resolveLetDecls global letDecls
 
 -- TODO: create a resolveWhereDecls for more readable code (Contex -> Maybe [LetDecl] -> [(String, Value)])
 
@@ -218,7 +213,7 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.AsPat _ var pat2 -> (Just (B.external var, arg)) : doPatternMatching [pat2] [arg] ++ doPatternMatching pats args
+  E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] ++ doPatternMatching pats args
 
 chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(String, Value)], [E.Pat])
 chooseRhs [] _ = Nothing
