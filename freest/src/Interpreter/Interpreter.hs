@@ -18,7 +18,7 @@ data Value = VInt Int
             | VUnit 
             | VChar Char
             | VString String
-            | VCons String
+            | VCons String [Value]
             | VTuple [Value]
             | VFun [([E.Pat], E.RHS)]
             -- do closures capture only the local ctx or also the global?
@@ -31,7 +31,7 @@ instance Show Value where
   show (VFloat n) = show n
   show (VChar c) = show c
   show (VString str) = show str
-  show (VCons str) = show str
+  show (VCons str vals) = str ++ " " ++ unwords (map show vals)
   show (VTuple tups) = "(" ++ showTups tups ++ ")"
   show (VFun _) = "<fun>"
   show (VClosure _ _ _) = "closure>"
@@ -64,13 +64,13 @@ builtins = [
 
 -- haskell bool to freest bool
 hsToFstBool :: Bool -> Value
-hsToFstBool True = VCons "True"
-hsToFstBool False = VCons "False"
+hsToFstBool True = VCons "True" []
+hsToFstBool False = VCons "False" []
 
 -- freeST bool to haskell bool 
 fstToHsBool :: Value -> Bool
-fstToHsBool (VCons "True") = True
-fstToHsBool (VCons "False") = False
+fstToHsBool (VCons "True" []) = True
+fstToHsBool (VCons "False" []) = False
 
 -- Using a simple context for now for simplicity
 type Context = [(String, Value)]
@@ -113,7 +113,7 @@ eval _ (E.String _ str) = VString str
 -- [Exp] -> [Value]
 eval ctx (E.Tuple _ tup) = VTuple (map (eval ctx) tup)
 -- TODO: implement Constructors with arguments (e.i. data A = B Int | C Float)
-eval _ (E.Cons _ (B.Identifier _ str)) = VCons str
+eval _ (E.Cons _ (B.Identifier _ str)) = VCons str []
 eval ctx (E.Var _ var) = getVar ctx var
 eval ctx (E.App _ exp levels) = 
   let args = map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels) in
@@ -179,6 +179,7 @@ consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args
 consumeAllArgs ctx (VBuiltin builtin) [] = builtin VUnit
 consumeAllArgs ctx (VBuiltin builtin) [arg] = builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
+consumeAllArgs ctx (VCons str vals) args = VCons str (vals++args) 
 
 -- TODO: think of a better name for this function
 resolveLetDecls :: Context -> [LetDecl] -> [(String, Value)]
@@ -201,6 +202,7 @@ resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VF
 -- TODO: create a resolveWhereDecls for more readable code (Contex -> Maybe [LetDecl] -> [(String, Value)])
 
 -- TODO: refactor to use map and filter?
+-- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
 doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (String, Value)]
 doPatternMatching [] [] = []
 doPatternMatching pats [] = []
@@ -209,7 +211,8 @@ doPatternMatching [] args = []
 doPatternMatching (pat:pats) (arg:args) = case pat of
   E.WildPat _ _ -> doPatternMatching pats args
   E.VarPat _ var -> Just (B.external var, arg) : doPatternMatching pats args
-  E.ConsPat _ (B.Identifier _ str) pats -> if (\(VCons str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
+  E.ConsPat _ (B.Identifier _ pStr) consPats -> let (str, vals) = (\(VCons str vals) -> (str, vals)) arg in
+    if str == pStr then doPatternMatching consPats vals ++ doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.TuplePat _ tupPats -> doPatternMatching tupPats ((\(VTuple tupVals) -> tupVals) arg) ++ doPatternMatching pats args
   E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
