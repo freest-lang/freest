@@ -1,11 +1,11 @@
 module Interpreter.Interpreter where
 
 import Data.List ( find )
+import Data.Char (chr, ord)
+import GHC.Float
 -- for debuging don't forget to remove
 import Debug.Trace
 -- ends here
--- remove when FloatPat Float is FloatPat Double
-import GHC.Float (float2Double)
 
 import qualified Syntax.Module as M
 import qualified Syntax.Expression as E
@@ -44,10 +44,56 @@ builtins :: [(String , Value)]
 builtins = [
   ("(+)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x + y)))),
   ("(-)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x - y)))),
+  ("subtract", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x - y)))),
   ("(*)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x * y)))),
   ("(/)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (div x y)))),
+  ("(^)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x ^ y)))),
+  ("abs", VBuiltin (\(VInt x) -> VInt (abs x))),
   ("mod", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (mod x y)))),
+  ("rem", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (rem x y)))),
   ("negate", VBuiltin (\(VInt x) -> VInt (-x))),
+  ("max", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (max x y)))),
+  ("min", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (min x y)))),
+  ("succ", VBuiltin (\(VInt x) -> VInt (succ x))),
+  ("pred", VBuiltin (\(VInt x) -> VInt (pred x))),
+  ("quot", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (quot x y)))),
+  ("even", VBuiltin (\(VInt x) -> hsToFstBool (even x))),
+  ("odd", VBuiltin (\(VInt x) -> hsToFstBool (odd x))),
+  ("gcd", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (gcd x y)))),
+  ("lcm", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (lcm x y)))),
+
+  ("(+.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x + y)))),
+  ("(-.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x - y)))),
+  ("(*.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x * y)))),
+  ("(/.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x / y)))),
+  ("negateF", VBuiltin (\(VFloat x) -> VFloat (negate x))),
+  ("maxF", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (max x y)))),
+  ("minF", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (min x y)))),
+  ("truncate", VBuiltin (\(VFloat x) -> VInt (truncate x))),
+  ("round", VBuiltin (\(VFloat x) -> VInt (round x))),
+  ("ceiling", VBuiltin (\(VFloat x) -> VInt (ceiling x))),
+  ("floor", VBuiltin (\(VFloat x) -> VInt (floor x))),
+  ("recip", VBuiltin (\(VFloat x) -> VFloat (recip x))),
+  ("pi", VFloat pi),
+  ("exp", VBuiltin (\(VFloat x) -> VFloat (exp x))),
+  ("log", VBuiltin (\(VFloat x) -> VFloat (log x))),
+  ("sqrt", VBuiltin (\(VFloat x) -> VFloat (sqrt x))),
+  ("(**)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x ** y)))),
+  ("logBase", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (logBase x y)))),
+  ("sin", VBuiltin (\(VFloat x) -> VFloat (sin x))),
+  ("cos", VBuiltin (\(VFloat x) -> VFloat (cos x))),
+  ("tan", VBuiltin (\(VFloat x) -> VFloat (tan x))),
+  ("asin", VBuiltin (\(VFloat x) -> VFloat (asin x))),
+  ("acos", VBuiltin (\(VFloat x) -> VFloat (acos x))),
+  ("atan", VBuiltin (\(VFloat x) -> VFloat (atan x))),
+  ("sinh", VBuiltin (\(VFloat x) -> VFloat (sinh x))),
+  ("cosh", VBuiltin (\(VFloat x) -> VFloat (cosh x))),
+  ("tanh", VBuiltin (\(VFloat x) -> VFloat (tanh x))),
+  ("expm1", VBuiltin (\(VFloat x) -> VFloat (expm1 x))),
+  ("log1p", VBuiltin (\(VFloat x) -> VFloat (log1p x))),
+  ("log1pexp", VBuiltin (\(VFloat x) -> VFloat (log1pexp x))),
+  ("log1mexp", VBuiltin (\(VFloat x) -> VFloat (log1mexp x))),
+  ("fromInteger", VBuiltin (\(VInt x) -> VFloat (fromInteger (toInteger x)))),
   
   ("(&&)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x && fstToHsBool y)))),
   ("(||)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x || fstToHsBool y)))),
@@ -57,7 +103,25 @@ builtins = [
   ("(>)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x > y)))),
   ("(>=)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x >= y)))),
   ("(<)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x < y)))),
-  ("(<=)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x <= y))))]
+  ("(<=)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x <= y)))),
+  ("(>.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x > y)))),
+  ("(>=.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x >= y)))),
+  ("(<.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x < y)))),
+  ("(<=.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x <= y)))),
+
+  ("chr", VBuiltin (\(VInt x) -> VChar (chr x))),
+  ("ord", VBuiltin (\(VChar c) -> VInt (ord c))),
+
+  ("(^^)", VBuiltin (\(VString str1) -> VBuiltin (\(VString str2) -> VString (str1++str2)))),
+
+  ("show", VBuiltin (VString . show)),
+  ("readBool", VBuiltin (\(VString str) -> hsToFstBool (read str))),
+  ("readInt", VBuiltin (\(VString x) -> VInt (read x))),
+  ("readInt", VBuiltin (\(VString c) -> VChar (read c))),
+  
+  ("id", VBuiltin id)]
+
+  
 
 -- haskell bool to freest bool
 hsToFstBool :: Bool -> Value
