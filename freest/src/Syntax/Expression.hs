@@ -134,6 +134,7 @@ instance Located Exp where
   getSpan (Char s _) = s
   getSpan (String s _) = s
   getSpan (Tuple s _) = s
+  getSpan (Cons s _) = s
   getSpan (Var s _) = s
   getSpan (App s _ _) = s
   getSpan (Abs s _ _ _) = s
@@ -148,6 +149,7 @@ instance Located Exp where
   setSpan s (Char _ c) = Char s c
   setSpan s (String _ s') = String s s'
   setSpan s (Tuple _ es) = Tuple s es
+  setSpan s (Cons _ i) = Cons s i
   setSpan s (Var _ x) = Var s x
   setSpan s (App _ e as) = App s e as
   setSpan s (Abs _ ps m e) = Abs s ps m e

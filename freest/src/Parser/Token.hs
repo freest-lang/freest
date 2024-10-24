@@ -110,6 +110,7 @@ instance Located Token where
   getSpan (TkSelect s) = s
   getSpan (TkForall s) = s
   getSpan (TkRec s) = s
+  getSpan (TkChannel s) = s
   -- Punctuation
   getSpan (TkOpen s) = s
   getSpan (TkPipe s) = s
@@ -199,6 +200,7 @@ instance Located Token where
   setSpan s (TkSelect _) = TkSelect s
   setSpan s (TkForall _) = TkForall s
   setSpan s (TkRec _) = TkRec s
+  setSpan s (TkChannel _) = TkChannel s
   -- Punctuation
   setSpan s (TkOpen _) = TkOpen s
   setSpan s (TkPipe _) = TkPipe s

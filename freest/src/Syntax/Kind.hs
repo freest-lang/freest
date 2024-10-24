@@ -7,19 +7,35 @@ This module contains data types to represent FreeST's higher-order kind system,
 which combines multiplicities (the number of times a resource may be used) with
 prekinds (the context in which a resource can be used).
 -}
+{-# LANGUAGE ViewPatterns #-}
 module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
   , lt, ut, ls, us, la, ua
+  , Subsort(..)
+  , lin
   )
 where 
 
 import Syntax.Base
 
+class Subsort a where
+  (<:) :: a -> a -> Bool
+
 data Multiplicity = Lin | Un | VarM Variable deriving Eq
 
+instance Subsort Multiplicity where
+  Lin <: Un = False
+  _   <: _  = True
+
 data Prekind = Top | Session | Absorb | VarPK Variable
+
+instance Subsort Prekind where
+  Top     <: Session = False
+  Top     <: Absorb  = False
+  Session <: Absorb  = False
+  _       <: _       = True
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
 
@@ -31,6 +47,10 @@ ls s = Proper s Lin Session
 us s = Proper s Un  Session
 la s = Proper s Lin Absorb
 ua s = Proper s Un  Absorb
+
+lin :: Kind -> Bool
+lin (Proper _ m _) | m <: Lin = True 
+lin _ = False
 
 instance Show Multiplicity where
   show Lin = "1"

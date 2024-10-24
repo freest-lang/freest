@@ -5,6 +5,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements FreeST's bidirectional kinding algorithm.
 -}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Typing.Kinding 
   ( synth
@@ -19,12 +20,14 @@ import Syntax.Type as Type
 import Typing.Base
 
 import Data.Map as Map
-
+import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.State
+import Control.Monad.State (MonadState)
 
 type KindingCtx = Map Variable Kind
 
-synth :: KindingCtx -> Type -> Typing Kind
+synth :: KindingCtx -> Type -> TypingExcept Kind
 synth = undefined
 
-check :: KindingCtx -> Type -> Kind -> Typing ()
+check :: MonadState TypingState m => KindingCtx -> Type -> Kind -> m ()
 check = undefined

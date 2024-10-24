@@ -20,6 +20,7 @@ dependencies:
   - filepath >= 1.4.2
   - optparse-applicative >= 0.16.1.0
   - extra >= 1.7.9
+  - transformers >= 0.5.6.2
 
 library:
   source-dirs: src
@@ -53,7 +54,11 @@ executables:
     build-tools:
       - alex
       - happy
-    ghc-options: -main-is FreeST -threaded -rtsopts -with-rtsopts=-N
+    ghc-options: 
+      - -main-is FreeST 
+      - -threaded 
+      - -rtsopts 
+      - -with-rtsopts=-N
 
 tests:
     prog:
@@ -65,5 +70,8 @@ tests:
         - hspec >= 2.7.1       
         - HUnit >= 1.6.0.0
         - silently >= 1.2.5.1
-      ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+      ghc-options: 
+        - -O2 -threaded 
+        - -rtsopts 
+        - -with-rtsopts=-N
 

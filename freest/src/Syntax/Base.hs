@@ -63,6 +63,12 @@ instance Show Span where
   show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
     where showPos (l,c) = show l++":"++show c
 
+instance (Located a, Located b) => Located (Either a b) where 
+  getSpan (Left x) = getSpan x
+  getSpan (Right x) = getSpan x
+  setSpan s (Left x) = Left (setSpan s x)
+  setSpan s (Right x) = Right (setSpan s x)
+
 -- For nominal entities, not subject to substitution.
 data Identifier = Identifier Span String
 

@@ -32,6 +32,7 @@ data Error
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
   | ExtractError Span String (Either E.Pat E.Exp) T.Type
   | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
+  | NonLinPat Span E.Pat T.Type
 
 
 instance Located Error where
@@ -47,8 +48,9 @@ instance Located Error where
   getSpan (LinVarsCreatedInUnFun s _ _) = s
   getSpan (ExtractError s _ _ _) = s
   getSpan (UnexpectedArg s _ _ _ _) = s
+  getSpan (NonLinPat s _ _) = s
 
-  setSpan = error "setSpan: span not settable"
+  setSpan = error "setSpan: Error span not settable"
 
 instance Show Error where
   show e = show (getSpan e) ++ ": error:"++showError e
@@ -97,3 +99,5 @@ instance Show Error where
       showError (UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f) = 
           "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++"` instead."++
           "\n  In the "++show n {- TODO: use numerals-} ++"th argument of function `"++show f++"`."
+      showError (NonLinPat s p t) =
+          "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error

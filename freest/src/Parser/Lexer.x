@@ -10,13 +10,11 @@ inspired by [Amélia Liao's tutorial](https://amelia.how/posts/parsing-layout.ht
 module Parser.Lexer where
 
 import Parser.Token 
-import Parser.LexerUtils
 import Syntax.Base
 import IO.Error
 
 import Control.Monad.State
 import Control.Monad.Except
-import Debug.Trace
 }
 
 %encoding "latin1"
