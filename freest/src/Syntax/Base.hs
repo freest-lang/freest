@@ -38,10 +38,11 @@ partitionLevels =
 type Pos = (Int, Int)
 
 data Span 
-  = Span { filepath   :: FilePath
-         , startPos   :: Pos
-         , endPos     :: Pos
-         } 
+  = Span 
+    { filepath   :: FilePath
+    , startPos   :: Pos
+    , endPos     :: Pos
+    } 
   deriving (Eq, Ord)
 
 class Located a where 
@@ -69,7 +70,6 @@ instance (Located a, Located b) => Located (Either a b) where
   setSpan s (Left x) = Left (setSpan s x)
   setSpan s (Right x) = Right (setSpan s x)
 
--- For nominal entities, not subject to substitution.
 data Identifier = Identifier Span String
 
 instance Located Identifier where
@@ -86,10 +86,11 @@ instance Show Identifier where
   show (Identifier _ s) = s
 
 data Variable 
-  = Variable { varSpan  :: Span
-             , external :: String
-             , internal :: Int
-             }
+  = Variable 
+    { varSpan  :: Span
+    , external :: String
+    , internal :: Int
+    }
 
 -- Are these the (only) Ord/Eq instances we want for Variable?
 -- (We might want to order them by their position in the source code...)

@@ -58,7 +58,7 @@ synth kctx tctx = \case
         checkArgs kctx tctx n t0 = \case
             -- regular cases first
             (TypeLevel t:as, T.Forall s' ((a,k):aks) u) -> do
-                catchE (Kinding.check kctx t k) putError
+                catchE (Kinding.check kctx t k) putError_
                 let u' = subs a t u  -- \x. (y, y)
                 checkArgs kctx tctx (n+1) t0
                   (as, if null aks then u' else T.Forall s' aks u')

@@ -7,13 +7,13 @@ This module contains data types to represent FreeST's higher-order kind system,
 which combines multiplicities (the number of times a resource may be used) with
 prekinds (the context in which a resource can be used).
 -}
-{-# LANGUAGE ViewPatterns #-}
 module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
-  , lt, ut, ls, us, la, ua
+  , lt, ut, ls, us, la, ua, bot
   , Subsort(..)
+  , Join(..)
   , lin
   )
 where 
@@ -23,11 +23,18 @@ import Syntax.Base
 class Subsort a where
   (<:) :: a -> a -> Bool
 
+class Join t where
+  join :: t -> t -> t
+
 data Multiplicity = Lin | Un | VarM Variable deriving Eq
 
 instance Subsort Multiplicity where
   Lin <: Un = False
   _   <: _  = True
+
+instance Join Multiplicity where
+  join Un Un = Un
+  join _  _  = Lin
 
 data Prekind = Top | Session | Absorb | VarPK Variable
 
@@ -37,7 +44,24 @@ instance Subsort Prekind where
   Session <: Absorb  = False
   _       <: _       = True
 
+instance Join Prekind where
+  join Absorb Absorb   = Absorb
+  join Session Session = Session
+  join Absorb Session  = Session
+  join Session Absorb  = Session  
+  join _         _     = Top
+
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
+
+instance Subsort Kind where
+  Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
+  Arrow _ k11 k12 <: Arrow _ k21 k22 = k21 <: k11 && k12 <: k22
+  _               <: _               = False
+
+instance Join Kind where
+  join (Proper s m1 pk1) (Proper _ m2 pk2) = 
+    Proper s (join m1 m2) (join pk1 pk2)
+  join _ _ = error "(Internal error) join of non-proper kinds."
 
 -- Abbreviations for the six proper kinds
 lt, ut, ls, us, la, ua :: Span -> Kind
@@ -47,6 +71,9 @@ ls s = Proper s Lin Session
 us s = Proper s Un  Session
 la s = Proper s Lin Absorb
 ua s = Proper s Un  Absorb
+-- Abbreviation for the bottom proper kind
+bot :: Span -> Kind
+bot = us -- (ua later)
 
 lin :: Kind -> Bool
 lin (Proper _ m _) | m <: Lin = True 

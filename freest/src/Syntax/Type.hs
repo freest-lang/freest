@@ -27,28 +27,29 @@ data Labelled
   | Choice K.Multiplicity Polarity
 
 data Type
-  -- Constants
+  -- Functional types
   = Int Span
   | Float Span
   | Char Span
   | String Span
   | Arrow Span K.Multiplicity
+  | Labelled Span Labelled [(Identifier, Type)]
+  | Tuple Span [Type]
+  -- Session types
   | Message Span K.Multiplicity Polarity
   | End Span Polarity
   | Skip Span
   | Semi Span Type Type
   | Dual Span Type
+  -- Polymorphism
   | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind  
-  -- | Rec Span K.Kind 
-  -- Lambda
+  -- Equations
+  | Name Span Identifier
+  -- Higher-order
   | Var Span Variable
   | App Span Type [Type]
   | Abs Span [(Variable, K.Kind)] Type
-  -- Special cases
-  | Name Span Identifier
-  | Labelled Span Labelled [(Identifier, Type)]
-  | Tuple Span [Type]
-  -- Hole
+  -- Hole?
   | Hole Span
 
 pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where

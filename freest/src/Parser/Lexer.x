@@ -9,6 +9,7 @@ inspired by [Amélia Liao's tutorial](https://amelia.how/posts/parsing-layout.ht
 -}
 module Parser.Lexer where
 
+import Parser.LexerUtils
 import Parser.Token 
 import Syntax.Base
 import IO.Error
