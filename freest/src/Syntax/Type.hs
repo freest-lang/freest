@@ -21,28 +21,30 @@ import Data.List (intercalate)
 import Data.Bifunctor
 
 data Polarity = In | Out
+  deriving Eq
 
 data Labelled
   = Variant
   | Choice K.Multiplicity Polarity
+  deriving Eq
 
 data Type
   -- Functional types
   = Int Span
   | Float Span
   | Char Span
-  | String Span
+  | String Span -- | Would List Char work?
   | Arrow Span K.Multiplicity
   | Labelled Span Labelled [(Identifier, Type)]
   | Tuple Span [Type]
   -- Session types
-  | Message Span K.Multiplicity Polarity
-  | End Span Polarity
   | Skip Span
+  | End Span Polarity
   | Semi Span Type Type
+  | Message Span K.Multiplicity Polarity
   | Dual Span Type
   -- Polymorphism
-  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind  
+  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind; explain why we need the Type
   -- Equations
   | Name Span Identifier
   -- Higher-order

@@ -37,6 +37,7 @@ instance Join Multiplicity where
   join _  _  = Lin
 
 data Prekind = Top | Session | Absorb | VarPK Variable
+  deriving Eq
 
 instance Subsort Prekind where
   Top     <: Session = False
