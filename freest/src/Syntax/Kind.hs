@@ -19,6 +19,7 @@ module Syntax.Kind
 where 
 
 import Syntax.Base
+import Utils
 
 class Subsort a where
   (<:) :: a -> a -> Bool
@@ -26,7 +27,8 @@ class Subsort a where
 class Join t where
   join :: t -> t -> t
 
-data Multiplicity = Lin | Un | VarM Variable deriving Eq
+data Multiplicity = Lin | Un | VarM Variable 
+  deriving (Eq, Ord)
 
 instance Subsort Multiplicity where
   Lin <: Un = False
@@ -37,6 +39,7 @@ instance Join Multiplicity where
   join _  _  = Lin
 
 data Prekind = Top | Session | Absorb | VarPK Variable
+  deriving (Eq, Ord)
 
 instance Subsort Prekind where
   Top     <: Session = False
@@ -52,6 +55,7 @@ instance Join Prekind where
   join _         _     = Top
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
+  deriving (Eq, Ord)
 
 instance Subsort Kind where
   Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
@@ -61,7 +65,7 @@ instance Subsort Kind where
 instance Join Kind where
   join (Proper s m1 pk1) (Proper _ m2 pk2) = 
     Proper s (join m1 m2) (join pk1 pk2)
-  join _ _ = error "(Internal error) join of non-proper kinds."
+  join _ _ = internalError "join of non-proper kinds."
 
 -- Abbreviations for the six proper kinds
 lt, ut, ls, us, la, ua :: Span -> Kind

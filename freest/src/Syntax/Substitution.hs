@@ -25,30 +25,30 @@ import qualified Data.Set as Set
 import Debug.Trace (trace)
 
 freeVars :: T.Type -> Set.Set Variable
-freeVars (T.Semi _ t u)       = freeVars t `Set.union` freeVars u
-freeVars (T.Dual _ t)         = freeVars t
--- If forall is just a constant, remove this equation
--- (and make sure there is one for T.Abs)
-freeVars (T.Forall _ aks t)   = freeVars t Set.\\ Set.fromList (map fst aks)
-freeVars (T.Var _ a)          = Set.singleton a
-freeVars (T.Abs _ aks t)      = freeVars t Set.\\ Set.fromList (map fst aks)
-freeVars (T.App _ t ts)       = Set.unions (freeVars t : map freeVars ts)
-freeVars (T.Labelled _ _ lts) = Set.unions $ map (freeVars . snd) lts
-freeVars (T.Tuple _ ts)       = Set.unions $ map freeVars ts
-freeVars _                    = Set.empty
+freeVars = \case 
+    T.Semi _ t u       -> freeVars t `Set.union` freeVars u
+    T.Dual _ t         -> freeVars t
+    -- If forall is just a constant, remove this equation
+    T.Forall _ aks t   -> freeVars t Set.\\ Set.fromList (map fst aks)
+    T.Var _ a          -> Set.singleton a
+    T.Abs _ aks t      -> freeVars t Set.\\ Set.fromList (map fst aks)
+    T.App _ t ts       -> Set.unions (freeVars t : map freeVars ts)
+    T.Labelled _ _ lts -> Set.unions $ map (freeVars . snd) lts
+    T.Tuple _ ts       -> Set.unions $ map freeVars ts
+    _                  -> Set.empty
 
 allVars :: T.Type -> Set.Set Variable
-allVars (T.Semi _ t u)       = allVars t `Set.union` allVars u
-allVars (T.Dual _ t)         = allVars t
--- If forall is just a constant, remove this equation
--- (and make sure there is one for T.Abs)
-allVars (T.Forall _ aks t)   = allVars t
-allVars (T.Var _ a)          = Set.singleton a
-allVars (T.Abs _ aks t)      = allVars t
-allVars (T.App _ t ts)       = Set.unions (allVars t : map allVars ts)
-allVars (T.Labelled _ _ lts) = Set.unions $ map (allVars . snd) lts
-allVars (T.Tuple _ ts)       = Set.unions $ map allVars ts
-allVars _                    = Set.empty
+allVars = \case 
+    T.Semi _ t u       -> allVars t `Set.union` allVars u
+    T.Dual _ t         -> allVars t
+    -- If forall is just a constant, remove this equation
+    T.Forall _ aks t   -> allVars t
+    T.Var _ a          -> Set.singleton a
+    T.Abs _ aks t      -> allVars t
+    T.App _ t ts       -> Set.unions (allVars t : map allVars ts)
+    T.Labelled _ _ lts -> Set.unions $ map (allVars . snd) lts
+    T.Tuple _ ts       -> Set.unions $ map allVars ts
+    _                  -> Set.empty
 
 newInternal :: Variable -> Set.Set Variable -> Variable
 newInternal a as = a{internal=head ([0..] \\ map internal (Set.toList as))}
@@ -59,12 +59,11 @@ subs a u t = sub t
     sub :: T.Type -> T.Type
     sub (T.Semi s t u) = T.Semi s (sub t) (sub u)
     sub (T.Dual s t) = T.Dual s (sub t)
-    -- If forall is just a constant, remove these equations
-    -- (and make sure there are some for T.Abs)
+    -- If forall is just a constant, remove this equation
     sub t@(T.Forall s ((b,k):bks) t') -- map does not work?
       | b == a = t
       | b `Set.member` fvu = 
-        let b' = newInternal b (afvu `Set.union` allVars t')
+        let b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
             T.Forall _ bks' t'' = sub (subs b (T.Var (getSpan b') b') (T.Forall s bks t'))
         in T.Forall s ((b',k):bks') t''
       | otherwise = 
@@ -77,7 +76,7 @@ subs a u t = sub t
     sub t@(T.Abs s ((b,k):bks) t') -- map does not work?
       | b == a = t
       | b `Set.member` fvu = 
-        let b' = newInternal b (afvu `Set.union` allVars t')
+        let b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
             T.Abs _ bks' t'' = sub (subs b (T.Var (getSpan b') b') (T.Abs s bks t'))
         in T.Abs s ((b',k):bks') t''
       | otherwise = 
@@ -89,4 +88,3 @@ subs a u t = sub t
     sub t = t
 
     fvu = freeVars u
-    afvu = Set.insert a fvu

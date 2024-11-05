@@ -6,11 +6,11 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module defines the Type data type, which represents FreeST's higher-order
 polymorphic context-free session types.
 -}
-{-# LANGUAGE PatternSynonyms #-}
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
   , Type(.., Arrow', Message')
+  , Dual(..)
   )
 where
 
@@ -20,11 +20,20 @@ import qualified Syntax.Kind as K
 import Data.List (intercalate)
 import Data.Bifunctor
 
-data Polarity = In | Out
+data Polarity = In | Out 
+  deriving (Eq, Ord)
+
+class Dual a where
+  dual :: a -> a
+
+instance Dual Polarity where
+  dual Out = In
+  dual In = Out
 
 data Labelled
   = Variant
   | Choice K.Multiplicity Polarity
+  deriving (Eq, Ord)
 
 data Type
   -- Functional types
@@ -51,12 +60,12 @@ data Type
   | Abs Span [(Variable, K.Kind)] Type
   -- Hole?
   | Hole Span
+  deriving (Eq, Ord)
 
 pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
   Arrow' s m t u = App s (Arrow s m) [t,u]
 pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
   Message' s m p t = App s (Message s m p) [t]
-
 
 instance Show Polarity where
   show In  = "?"

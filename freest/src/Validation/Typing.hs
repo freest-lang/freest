@@ -1,43 +1,42 @@
 {- |
-Module      :  Typing.Typing
+Module      :  Validation.Typing
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements FreeST's bidirectional type checking algorithm.
 -}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE FlexibleContexts #-}
-module Typing.Typing where
+module Validation.Typing where
 
-import IO.Error
+import UI.Error
 import Syntax.Base
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import Syntax.Names
 import qualified Syntax.Type as T
-import Typing.Base
-import qualified Typing.Extract as Extract
-import qualified Typing.Kinding as Kinding
-import Utils.Utils
+import Validation.Base
+import qualified Validation.Extract as Extract
+import qualified Validation.Kinding as Kinding
+import Utils
 
 import Control.Monad
 import Data.Bifunctor
 import Data.Functor
+import Data.List.Extra (snoc)
 import qualified Data.Map as Map
 import Syntax.Substitution (subs)
 import Control.Monad.State
 import Control.Applicative ()
 import Control.Monad.Trans.Except ( catchE, throwE )
 
+type TypeCtx = Map.Map Variable T.Type
+type KindCtx = Map.Map Variable K.Kind
 
-lookupEVar :: TypeCtx -> Variable -> TypingExcept (T.Type, TypeCtx)
+lookupEVar :: TypeCtx -> Variable -> Validation (T.Type, TypeCtx)
 lookupEVar = undefined
-lookupECons :: TypeCtx -> Identifier -> TypingExcept (T.Type, TypeCtx)
+lookupECons :: TypeCtx -> Identifier -> Validation (T.Type, TypeCtx)
 lookupECons = undefined
 
-synth :: KindCtx -> TypeCtx -> E.Exp -> TypingExcept (T.Type, TypeCtx)
+synth :: KindCtx -> TypeCtx -> E.Exp -> Validation (T.Type, TypeCtx)
 synth kctx tctx = \case
     E.Int s _       -> pure (T.Int s   , tctx)
     E.Float s _     -> pure (T.Float s , tctx)
@@ -46,7 +45,7 @@ synth kctx tctx = \case
     E.Tuple s es    ->
         first (T.Tuple s) <$> foldM synthElem ([], tctx) es
       where
-        synthElem (ts, tctx) e = first (ts |>) <$> synth kctx tctx e
+        synthElem (ts, tctx) e = first (snoc ts) <$> synth kctx tctx e
     E.Cons s i      -> lookupECons tctx i
     E.Var s x       -> lookupEVar  tctx x
     E.App s f as    -> do
@@ -54,7 +53,7 @@ synth kctx tctx = \case
         t' <- Extract.function f t
         checkArgs kctx tctx' 1 t' (as, t')
       where
-        checkArgs :: KindCtx -> TypeCtx -> Int -> T.Type -> ([Level E.Exp T.Type],T.Type) -> TypingExcept (T.Type, TypeCtx)
+        checkArgs :: KindCtx -> TypeCtx -> Int -> T.Type -> ([Level E.Exp T.Type],T.Type) -> Validation (T.Type, TypeCtx)
         checkArgs kctx tctx n t0 = \case
             -- regular cases first
             (TypeLevel t:as, T.Forall s' ((a,k):aks) u) -> do
@@ -85,7 +84,7 @@ synth kctx tctx = \case
                              TypeLevel (a,k) -> T.Forall s [(a,k)]) t ps
                ,tctx'')
       where
-        collectParams :: KindCtx -> [Level (E.Pat, T.Type) (Variable, K.Kind)] -> TypingExcept (KindCtx, TypeCtx)
+        collectParams :: KindCtx -> [Level (E.Pat, T.Type) (Variable, K.Kind)] -> Validation (KindCtx, TypeCtx)
         collectParams kctx = \case
             ExpLevel  (p,t) : ps -> do
                 Kinding.synth kctx t
@@ -102,10 +101,10 @@ synth kctx tctx = \case
         (t,) <$> check kctx tctx' e2 t
     E.Select s i    -> undefined
   where
-    checkEquivTCtxs :: MonadState TypingState m => E.Exp -> TypeCtx -> TypeCtx -> m ()
+    checkEquivTCtxs :: MonadState ValidationState m => E.Exp -> TypeCtx -> TypeCtx -> m ()
     checkEquivTCtxs = undefined
 
-    collectPat :: KindCtx -> T.Type -> E.Pat -> TypingExcept TypeCtx
+    collectPat :: KindCtx -> T.Type -> E.Pat -> Validation TypeCtx
     collectPat kctx t = \case
         E.IntPat    s _  -> checkEquiv kctx t (T.Int s)    >> pure Map.empty
         E.FloatPat  s _  -> checkEquiv kctx t (T.Float s)  >> pure Map.empty
@@ -127,8 +126,8 @@ synth kctx tctx = \case
 
 
 
-checkEquiv :: MonadState TypingState m => KindCtx -> T.Type -> T.Type -> m ()
+checkEquiv :: MonadState ValidationState m => KindCtx -> T.Type -> T.Type -> m ()
 checkEquiv = undefined
 
-check :: KindCtx -> TypeCtx -> E.Exp -> T.Type -> TypingExcept TypeCtx
+check :: KindCtx -> TypeCtx -> E.Exp -> T.Type -> Validation TypeCtx
 check = undefined

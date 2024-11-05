@@ -10,15 +10,19 @@ module FreeST where
 import Parser.LexerUtils
 import Parser.Lexer
 import Parser.Token
-import Debug.Trace (traceM)
 import Control.Monad.RWS
-import IO.CmdLine
-import Options.Applicative
+import UI.CLI
 import Parser.Parser
 import Syntax.Module
-import Control.Monad.State (runState)
 import Parser.Scoping (runScoping)
+import Validation.Kinding
+
+
+import Control.Monad.State (runState)
+import Data.Function ((&))
 import qualified Data.Map as Map
+import Debug.Trace (traceM)
+import Options.Applicative
 import System.Exit (exitFailure, exitSuccess)
 
 main :: IO ()
@@ -28,11 +32,12 @@ main = do
 freest :: RunOpts -> IO ()
 freest RunOpts{file=f} = do
   source <- readFile f
-  let r = runLexer parseModule f source
-          >>= runScoping
-  either (\es -> mapM_ print es >> exitFailure)
-         (\m -> print m >> exitSuccess)
-         r
+  runLexer parseModule f source 
+    >>= runScoping 
+    -- >>= runKinding
+    & \case 
+      Left es -> mapM_ print es >> exitFailure
+      Right m -> print m        >> exitSuccess
 
 
 lexAll :: Lexer ()

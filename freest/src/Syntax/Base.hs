@@ -92,8 +92,6 @@ data Variable
     , internal :: Int
     }
 
--- Are these the (only) Ord/Eq instances we want for Variable?
--- (We might want to order them by their position in the source code...)
 instance Ord Variable where
   a <= b = internal a <= internal b
 

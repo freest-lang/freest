@@ -1,12 +1,12 @@
 {- |
-Module      :  IO.CmdLine
+Module      :  UI.CLI
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module defines the command line options accepted by FreeST along with
 their parser.
 -}
-module IO.CmdLine where
+module UI.CLI where
 
 import Options.Applicative
 

@@ -1,39 +1,51 @@
 {- |
-Module      :  Typing.Kinding
+Module      :  Validation.Kinding
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements FreeST's bidirectional kinding algorithm.
 -}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE TupleSections #-}
 
-module Typing.Kinding
+module Validation.Kinding
   ( synth
   , check
   , KindingCtx
+  , runKinding
   )
 where
 
-import IO.Error
+import UI.Error
 import Syntax.Base
 import Syntax.Kind
+import qualified Syntax.Module as M
 import Syntax.Normalisation
 import qualified Syntax.Type as T
-import Typing.Base
+import Utils
+import Validation.Base
 
-import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.State
-import Control.Monad.State (MonadState, foldM, unless, void, forM_, when)
-import Control.Monad.Trans.Except
 import Data.Bifunctor (first)
+import Data.Functor ((<&>))
 import qualified Data.Map as Map
+import Control.Monad.Extra (unlessM, (&&^), allM)
+import Control.Monad.State (MonadState, foldM, unless, void, forM_, when, runState, StateT (runStateT), evalState)
+import Control.Monad.Trans.Except (throwE, runExceptT, ExceptT (ExceptT))
+import Control.Monad.Identity (Identity(..))
+
+runKinding :: M.Module -> Either [Error] M.Module
+runKinding m =
+  let s = ValidationState {errors = [], kindCtx = Map.empty, typeEqs = Map.empty} in 
+  let (x,ValidationState{errors}) = runState (runExceptT kindModule) s
+  in case x of 
+    Left e                -> Left (errors++[e])
+    Right _ | null errors -> Right m
+            | otherwise   -> Left errors 
+
+kindModule :: Validation ()
+kindModule = undefined
 
 type KindingCtx = Map.Map Variable Kind
 
-presynth :: KindingCtx -> T.Type -> TypingExcept Kind
+presynth :: KindingCtx -> T.Type -> Validation Kind
 presynth ctx = \case
   -- Functional types
   T.Int s    -> pure (ut s)
@@ -57,18 +69,18 @@ presynth ctx = \case
   T.Semi s t u -> do
     -- k1 <- catchE (check' ctx t (ls s)) (putError (us s))
     -- k2 <- catchE (check' ctx u (ls s)) (putError (us s))
-    k1 <- check' ctx t (ls s)
-    k2 <- check' ctx u (ls s)
+    k1 <- presynthCheck ctx t (ls s)
+    k2 <- presynthCheck ctx u (ls s)
     return (join k1 k2)
   T.Dual s t -> do
     -- catchE (check' ctx t (ls s)) (putError (us s))
-    check' ctx t (ls s)
+    presynthCheck ctx t (ls s)
   -- Polymorphism
   T.Forall s aks t -> do
-    check' (Map.union (Map.fromList aks) ctx) t (lt s)
+    presynthCheck (Map.union (Map.fromList aks) ctx) t (lt s)
     >>= \case Proper _ m _ -> pure (Proper s m Top)
   -- Equations
-  T.Name s i -> fst <$> lookupType i
+  T.Name s i -> lookupKind i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
@@ -83,13 +95,13 @@ presynth ctx = \case
       throwE (TooManyArgsK s t k (length ts) (length pks))
     checkArgs ts pks rk
     where
-      extractArrow (Arrow _ k1 k2) = 
+      extractArrow (Arrow _ k1 k2) =
         first (k1:) (extractArrow k2)
       extractArrow k = ([], k)
-      checkArgs [] ks rk = 
+      checkArgs [] ks rk =
         pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') rk ks)
-      checkArgs ts [] rk = 
-        error "(Internal error) too many args exception not thrown."
+      checkArgs ts [] rk =
+        internalError "too many args exception not thrown."
       checkArgs (t:ts) (k:ks) rk =
         check ctx t k >> checkArgs ts ks rk
   -- Hole?
@@ -97,26 +109,27 @@ presynth ctx = \case
   where
     joinMults m' t = do
       -- catchE (check' ctx t (lt s)) (putError (Proper s Un Top))
-      check' ctx t (lt s) >>= \case Proper _ m pk -> pure (join m m')
+      presynthCheck ctx t (lt s) >>= \case Proper _ m pk -> pure (join m m')
       where s = getSpan t
 
-synth :: KindingCtx -> T.Type -> TypingExcept Kind
+synth :: KindingCtx -> T.Type -> Validation Kind
 synth ctx t = do
   k <- presynth ctx t
-  unless (valid t) $
+  unlessM (valid t) $
     throwE (InvalidType (getSpan t) t)
   return k
   where
     valid   (T.Abs _ _ t)  = valid t
-    valid w@(T.App _ t us) = isNorm w && valid t && all valid us
-    valid   _ = True
+    valid w@(T.App _ t us) = normalises w &&^ valid t &&^ allM valid us
+    valid   _ = pure True
 
-check' :: KindingCtx -> T.Type -> Kind -> TypingExcept Kind
-check' ctx t k = do
+check :: KindingCtx -> T.Type -> Kind -> Validation ()
+check ctx t k = void (presynthCheck ctx t k)
+
+presynthCheck :: KindingCtx -> T.Type -> Kind -> Validation Kind
+presynthCheck ctx t k = do
   k' <- presynth ctx t
   unless (k' <: k) $
     throwE (KindMismatch (getSpan t) k t k')
   return k'
 
-check :: KindingCtx -> T.Type -> Kind -> TypingExcept ()
-check ctx t k = void (check ctx t k)

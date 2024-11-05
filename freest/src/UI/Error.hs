@@ -1,12 +1,12 @@
 {- |
-Module      :  IO.Error
+Module      :  UI.Error
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 Errors. A work in progress.
 -}
 {-# LANGUAGE LambdaCase #-}
-module IO.Error 
+module UI.Error 
   (Error(..))
 where 
 
@@ -15,6 +15,7 @@ import Syntax.Base
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import qualified Syntax.Type as T
+import Utils
 
 import Data.List (intercalate)
 import qualified Data.Map as Map
@@ -58,7 +59,7 @@ instance Located Error where
   getSpan (TooManyArgsK s _ _ _ _) = s
   getSpan (InvalidType s _) = s
 
-  setSpan = error "(Internal error): span not settable for Error type."
+  setSpan = internalError "span not settable for Error type."
 
 instance Show Error where
   show e = show (getSpan e) ++ ": error:"++showError e
