@@ -2,6 +2,8 @@ module Interpreter.Interpreter where
 
 import Data.List ( find )
 import Data.Char (chr, ord)
+import Data.Functor ( ($>), (<&>) )
+import System.IO ( Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose )
 import GHC.Float
 -- for debuging don't forget to remove
 import Debug.Trace
@@ -23,6 +25,8 @@ data Value = VInt Int
             | VFun [([E.Pat], E.RHS)]
             | VClosure [E.Pat] E.Exp Context
             | VBuiltin (Value -> Value)
+            | VIO (IO Value)
+            | VHandle Handle
 
 instance Show Value where
   show VUnit = "()"
@@ -35,6 +39,8 @@ instance Show Value where
   show (VFun _) = "<fun>"
   show (VClosure _ _ _) = "closure>"
   show (VBuiltin _) = "<builtin>"
+  show (VIO io) = "<IO>"
+  show (VHandle _) = "<handle>"
 
 showTups :: [Value] -> String
 showTups [val] = show val
@@ -118,10 +124,26 @@ builtins = [
   ("readBool", VBuiltin (\(VString str) -> hsToFstBool (read str))),
   ("readInt", VBuiltin (\(VString x) -> VInt (read x))),
   ("readInt", VBuiltin (\(VString c) -> VChar (read c))),
+
+  -- Parser/Lexer does not accept variables starting with __
+  ("putStrOut", VBuiltin (\val -> VIO $ putStr (show val) $> VUnit)),
+  ("putStrErr", VBuiltin (\val -> VIO $ hPutStr stderr (show val) $> VUnit)),
+  ("getChar", VIO $ getChar <&> VChar),
+  ("getLine", VIO $ getLine <&> VString),
+  ("getContents", VIO $ getContents <&> VString),
+
+  ("openFile", VBuiltin (\(VString path) -> VBuiltin (\(VCons mode []) -> VIO $ case mode of
+    "ReadMode" -> openFile path ReadMode <&> VCons "FileHandle" . (:[]) . VHandle
+    "WriteMode" -> openFile path WriteMode <&> VCons "FileHandle" . (:[]) . VHandle
+    "AppendMode" -> openFile path AppendMode <&> VCons "FileHandle" . (:[]) . VHandle
+    _ -> undefined))),
+  ("putFileStr", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VBuiltin (\(VString str) -> VIO $ hPutStr handle str $> VUnit))),
+  ("readFileChar", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hGetChar handle <&> VChar)),
+  ("readFileLine", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hGetLine handle <&> VString)),
+  ("isEOF", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hIsEOF handle <&> hsToFstBool)),
+  ("closeFile", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hClose handle $> VUnit)),
   
   ("id", VBuiltin id)]
-
-  
 
 -- haskell bool to freest bool
 hsToFstBool :: Bool -> Value
@@ -137,14 +159,15 @@ fstToHsBool (VCons "False" []) = False
 -- TODO: change to a hashmap
 type Context = [(String, Value)]
 
-interpret :: M.Module -> Either [IOE.Error] Value
+interpret :: M.Module -> Either [IOE.Error] (IO Value)
 interpret m = case getMainFunction m of
   -- Assuming that the RHS of main is always in the form main = <exp>
   -- necessary to initialize the context with information from the module
   -- other modules, prelude, etc
-  Just (E.ValDecl _ (E.UnguardedRHS mainExp _)) -> Right $ eval (initContext m ++ builtins, []) mainExp
+  Just (E.ValDecl _ (E.UnguardedRHS mainExp _)) -> Right $ do initial_ctx <- initContext m
+                                                              eval (initial_ctx ++ builtins, []) mainExp
   -- Return unit when main function is not present
-  Nothing -> Right VUnit
+  Nothing -> Right $ do return VUnit
 
 getMainFunction :: M.Module -> Maybe LetDecl 
 getMainFunction m = find foo (M.definitions m)
@@ -153,12 +176,13 @@ getMainFunction m = find foo (M.definitions m)
                                     _ -> False
 
 -- For now add only definitions to the context.  
-initContext :: M.Module -> Context
+initContext :: M.Module -> IO Context
 initContext m =
   -- is VarPat the only valid pattern in a valDecl??
   -- the same for the rhs UnguardedRHS
-  map (\def -> case def of E.ValDecl (E.VarPat _ var) (E.UnguardedRHS exp _) -> (B.external var, eval (builtins, []) exp)
-                           E.FnDecl var fun -> (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) fun))
+  sequence $ map (\def -> case def of E.ValDecl (E.VarPat _ var) (E.UnguardedRHS exp _) -> do initial_ctx <- eval (builtins, []) exp
+                                                                                              return (B.external var,  initial_ctx)
+                                      E.FnDecl var fun -> do return $ (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) fun))
   -- do not add main to the context
   ) (filter (\def -> case def of E.ValDecl (E.VarPat _ var) _ -> B.external var /= "main" 
                                  E.SigDecl _ _ -> False
@@ -167,27 +191,42 @@ initContext m =
 
 -- TODO: eval can failed (pattern matching so the return value should be Either [IOE.Error] Value)
 -- Global and local context
-eval :: (Context, Context) -> E.Exp -> Value
-eval _ (E.Int _ n) = VInt n 
-eval _ (E.Float _ n) = VFloat n
-eval _ (E.Char _ c) = VChar c
-eval _ (E.String _ str) = VString str
+eval :: (Context, Context) -> E.Exp -> IO Value
+eval _ (E.Int _ n) = return $ VInt n 
+eval _ (E.Float _ n) = return $ VFloat n
+eval _ (E.Char _ c) = return $ VChar c
+eval _ (E.String _ str) = return $ VString str
 -- [Exp] -> [Value]
-eval ctx (E.Tuple _ tup) = VTuple (map (eval ctx) tup)
-eval _ (E.Cons _ (B.Identifier _ str)) = VCons str []
-eval ctx (E.Var _ var) = getVar ctx var
-eval ctx (E.App _ exp levels) = 
-  let args = map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels) in
-  consumeAllArgs ctx (eval ctx exp) args
-eval (_, local) (E.Abs _ levels _ exp) = VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
-eval (global, local) (E.Let _ letDecls exp) = eval (global, resolveLetDecls global (filterTypesFromLetDecls letDecls) ++ local) exp
-eval (global, local) (E.Case _ exp pats) = case chooseCase pats (eval (global, local) exp) of
-  Just (exp, matched) -> eval (global, matched ++ local) exp 
+eval ctx (E.Tuple _ tup) = do
+  vals <- sequence $ map (eval ctx) tup
+  return $ VTuple vals 
+eval _ (E.Cons _ (B.Identifier _ str)) = return $ VCons str []
+eval ctx (E.Var _ var) = case getVar ctx var of VIO io -> io
+                                                val -> return val
+eval ctx (E.App _ exp levels) = do
+  args <- sequence $ map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels)
+  left <- (eval ctx exp)
+  res <- consumeAllArgs ctx  left args
+  case res of
+    VIO io -> io
+    _ -> return res
+eval (_, local) (E.Abs _ levels _ exp) = return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
+eval (global, local) (E.Let _ letDecls exp) = do
+  letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
+  eval (global, letDeclsCtx ++ local) exp
+eval (global, local) (E.Case _ exp pats) = do
+  val <- (eval (global, local) exp)
+  case chooseCase pats val of
+    Just (exp, matched) -> eval (global, matched ++ local) exp 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
-  Nothing -> undefined
-eval ctx (E.If _ ifExp thenExp elseExp) = if fstToHsBool (eval ctx ifExp) then eval ctx thenExp else eval ctx elseExp
-eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
-eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
+    Nothing -> undefined
+eval ctx (E.If _ ifExp thenExp elseExp) = do
+  ifVal <- (eval ctx ifExp)
+  thenVal <- eval ctx thenExp
+  elseVal <- eval ctx elseExp
+  if fstToHsBool ifVal then return thenVal else return elseVal
+-- eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
+-- eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
 
 -- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
 getVar :: (Context, Context) -> B.Variable -> Value
@@ -211,54 +250,57 @@ filterTypesFromLetDecls = filter (\letDecl -> case letDecl of E.ValDecl _ _ -> T
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
-consumeAllArgs :: (Context, Context) -> Value -> [Value] -> Value
+consumeAllArgs :: (Context, Context) -> Value -> [Value] -> IO Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
   Just patternMatching ->
     if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
-    else if length pats < length args then consumeAllArgs (global, patternMatching ++ local_ctx ++ local) (eval (global, patternMatching ++ local_ctx ++ local) exp) (drop (length pats) args)
-    else VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
+    else if length pats < length args then do val <- (eval (global, patternMatching ++ local_ctx ++ local) exp)
+                                              consumeAllArgs (global, patternMatching ++ local_ctx ++ local) val (drop (length pats) args)
+    else return $ VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
 consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args of
   Just (rhs, matched, pats) ->
-    let (exp, whereDecls) =
-          (case rhs of E.UnguardedRHS exp whereDecls -> (exp, whereDecls)
-                       E.GuardedRHS predExps whereDecls ->
-                        (case chooseGuard (global, matched) predExps of Just exp -> exp
-            -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
-                                                                        Nothing -> undefined, whereDecls)) in
-    let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
-                                       Nothing -> []) in
-    if length pats == length args then eval (global, matched++whereCtx) exp 
-    else if length pats < length args then consumeAllArgs (global, matched++whereCtx) (eval (global, matched++whereCtx) exp) (drop (length pats) args)
-    else VClosure (drop (length args) pats) exp (matched++whereCtx)
+    do (exp, whereDecls) <- (case rhs of E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
+                                         E.GuardedRHS predExps whereDecls -> do guardsCtx <- chooseGuard (global, matched) predExps
+                                                                                return (guardsCtx, whereDecls))
+       let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+                                          Nothing -> return [])
+       whereCtx2 <- whereCtx
+       if length pats == length args then eval (global, matched++whereCtx2) exp 
+       else if length pats < length args then do val <- (eval (global, matched++whereCtx2) exp)
+                                                 consumeAllArgs (global, matched++whereCtx2) val (drop (length pats) args)
+       else return $ VClosure (drop (length args) pats) exp (matched++whereCtx2)
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
 -- Is there builtins that take no arguments?
-consumeAllArgs ctx (VBuiltin builtin) [] = builtin VUnit
-consumeAllArgs ctx (VBuiltin builtin) [arg] = builtin arg
+consumeAllArgs ctx (VBuiltin builtin) [] = return $ builtin VUnit
+consumeAllArgs ctx (VBuiltin builtin) [arg] = return $ builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
-consumeAllArgs ctx (VCons str vals) args = VCons str (vals++args) 
+
+consumeAllArgs ctx (VCons str vals) args = return $ VCons str (vals++args) 
 
 -- TODO: think of a better name for this function
-resolveLetDecls :: Context -> [LetDecl] -> [(String, Value)]
-resolveLetDecls _ [] = []
-resolveLetDecls global ((E.ValDecl pat rhs):letDecls) = case sequence $ doPatternMatching [pat] [eval (global, whereCtx) exp] of
-  Just matched -> matched ++ resolveLetDecls global letDecls
+resolveLetDecls :: Context -> [LetDecl] -> IO [(String, Value)]
+resolveLetDecls _ [] = return []
+resolveLetDecls global ((E.ValDecl pat rhs):letDecls) = do
+  (exp, whereDecls) <- case rhs of E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
+                                   E.GuardedRHS predExps whereDecls -> do guardsCtx <- chooseGuard (global, []) predExps
+                                                                          return (guardsCtx, whereDecls)
+  whereCtx2 <- (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+                                   Nothing -> return [])
+  val <- eval (global, whereCtx2) exp
+  letDeclsCtx <- resolveLetDecls global letDecls
+  return $ case sequence $ doPatternMatching [pat] [val] of
+    Just matched -> matched ++ letDeclsCtx
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
-  Nothing -> undefined
-  where (exp, whereDecls) = 
-          case rhs of E.UnguardedRHS exp whereDecls -> (exp, whereDecls)
-                      E.GuardedRHS predExps whereDecls ->
-                        (case chooseGuard (global, []) predExps of Just exp -> exp
-            -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
-                                                                   Nothing -> undefined, whereDecls)
-        whereCtx = case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+    Nothing -> undefined
 
-                                      Nothing -> []
-resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : resolveLetDecls global letDecls
+resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = do
+  letDeclsCtx <- resolveLetDecls global letDecls 
+  return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : letDeclsCtx
 
--- TODO: create a resolveWhereDecls for more readable code (Contex -> Maybe [LetDecl] -> [(String, Value)])
+-- TODO: create a resolveWhereDecls for more readable code (Context -> Maybe [LetDecl] -> [(String, Value)])
 
 -- TODO: refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
@@ -266,7 +308,6 @@ doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (String, Value)]
 doPatternMatching [] [] = []
 doPatternMatching pats [] = []
 doPatternMatching [] args = []
--- TODO: finish implementing the rest of the patterns (ConsPat is partially implemented)
 doPatternMatching (pat:pats) (arg:args) = case pat of
   E.WildPat _ _ -> doPatternMatching pats args
   E.VarPat _ var -> Just (B.external var, arg) : doPatternMatching pats args
@@ -274,7 +315,7 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
     if str == pStr then doPatternMatching consPats vals ++ doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.TuplePat _ tupPats -> doPatternMatching tupPats ((\(VTuple tupVals) -> tupVals) arg) ++ doPatternMatching pats args
   E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
-  E.FloatPat _ n -> if (\(VFloat n) -> n) arg == float2Double n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
+  E.FloatPat _ n -> if (\(VFloat n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] ++ doPatternMatching pats args
@@ -292,6 +333,9 @@ chooseCase ((pat, exp):patsExps) val = case doPatternMatching [pat] [val] of
   [Just (var, val)] -> Just (exp, [(var, val)])
   [Nothing] -> chooseCase patsExps val
 
-chooseGuard :: (Context, Context) -> [(E.Exp, E.Exp)] -> Maybe E.Exp
-chooseGuard _ [] = Nothing 
-chooseGuard ctx ((pred, exp):predExps) = if fstToHsBool (eval ctx pred) then Just exp else chooseGuard ctx predExps
+chooseGuard :: (Context, Context) -> [(E.Exp, E.Exp)] -> IO E.Exp
+-- TODO: error for no exaustive guards
+chooseGuard _ [] = undefined 
+chooseGuard ctx ((pred, exp):predExps) = do
+  val <- eval ctx pred
+  if fstToHsBool val then return exp else chooseGuard ctx predExps

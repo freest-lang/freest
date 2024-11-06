@@ -33,7 +33,8 @@ freest RunOpts{file=f} = do
   let r = runLexer parseModule f source
           >>= runScoping >>= I.interpret
   either (\es -> mapM_ print es >> exitFailure)
-         (\m -> print m >> exitSuccess)
+         (\m -> do res <- m
+                   print res >> exitSuccess)
          r
 
 
