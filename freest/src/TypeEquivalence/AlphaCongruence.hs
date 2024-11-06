@@ -40,7 +40,9 @@ congruent m (T.Semi _ t1 u1) (T.Semi _ t2 u2) = congruent m t1 t2 && congruent m
 congruent _ (T.Message _ m1 p1) (T.Message _ m2 p2) = m1 == m2 && p1 == p2
 congruent m (T.Dual _ t1) (T.Dual _ t2) = congruent m t1 t2
 -- Polymorphism
-congruent m (T.Forall _ a t) (T.Forall _ b u) = a == b && congruent m t u
+congruent m (T.Forall _ [] t) (T.Forall _ [] u) = congruent m t u
+congruent m (T.Forall s1 ((v1, k1):vs1) t) (T.Forall s2 ((v2, k2):vs2) u) =
+  k1 == k2 && congruent (M.insert v1 v2 m) (T.Forall s1 vs1 t) (T.Forall s2 vs2 u)
 -- Equations
 congruent _ (T.Name _ id1) (T.Name _ id2) = id1 == id2
 -- Higher-order
@@ -48,7 +50,9 @@ congruent m (T.Var _ v1) (T.Var _ v2) =
   v1 == v2 ||              -- free variables
   Just v2 == M.lookup v1 m -- bound variables
 congruent m (T.App _ t ts) (T.App _ u us) = congruent m t u && congruentLists m ts us
-congruent m (T.Abs _ a t) (T.Abs _ b u) = a == b && congruent m t u
+congruent m (T.Abs _ [] t) (T.Abs _ [] u) = congruent m t u
+congruent m (T.Abs s1 ((v1, k1):vs1) t) (T.Abs s2 ((v2, k2):vs2) u) =
+  k1 == k2 && congruent (M.insert v1 v2 m) (T.Abs s1 vs1 t) (T.Abs s2 vs2 u)
 congruent _ _ _ = False
 
 congruentLists :: VarMap -> [T.Type] -> [T.Type] -> Bool

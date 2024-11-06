@@ -51,7 +51,7 @@ data Type
   | Message Span K.Multiplicity Polarity
   | Dual Span Type
   -- Polymorphism
-  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind; explain why we need the Type
+  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind; explain why we need the Variable and the Type (why are we not using Abs for the effect)
   -- Equations
   | Name Span Identifier
   -- Higher-order
