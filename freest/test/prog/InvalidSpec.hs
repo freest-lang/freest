@@ -12,7 +12,7 @@ module InvalidSpec where
 
 import FreeST
 import ProgSpecUtils
-import IO.CmdLine
+import UI.CLI
 
 import Control.Exception
 import System.Exit (ExitCode(..))
@@ -54,7 +54,7 @@ testInvalid test file = do
     >> return (Just errorExpected)
     )
     [ Handler (\(e :: ExitCode) -> return $ exitProgram e)
-    , Handler (\(e :: SomeException) -> return $ Just $ "(Internal error) "++show e)
+    , Handler (\(e :: SomeException) -> return $ Just $ show e)
     ]
   assert b
  where

@@ -12,14 +12,14 @@ module TypeEquivalence.TypeEquivalence
   )
 where
 
-import qualified Syntax.Type                 as T
+import qualified Syntax.Type                       as T
 import           TypeEquivalence.AlphaCongruence
 -- import           SimpleGrammar.TypeToGrammar ( convertToGrammar )
 -- import qualified BisimulationTACAS.Bisimulation   as G ( bisimilar )
 -- import qualified Bisimulation.Bisimulation   as G ( bisimilar )
 
 equivalent :: T.Type -> T.Type -> Bool
-equivalent t u = t == u -- || bisimilar t u
+equivalent t u = t `alphaCongruent` u -- || bisimilar t u
 
 -- bisimilar :: T.Type -> T.Type -> Bool
 -- bisimilar t u = G.bisimilar (convertToGrammar [t, u])

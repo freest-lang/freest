@@ -8,8 +8,19 @@ maintainer: The FreeST Team
 homepage:   https://freest-lang.github.io/
 category:   Session types
 
+default-extensions: 
+  - LambdaCase
+  - TupleSections
+  - ViewPatterns
+  - MultiWayIf
+  - PatternSynonyms
+  - BlockArguments
+  - FlexibleContexts
+  - NamedFieldPuns
+
+
 extra-source-files:
- - README.md
+  - README.md
 
 dependencies:
   - base >= 4.7 && < 5
@@ -29,8 +40,8 @@ library:
     - happy
   exposed-modules:
     - FreeST
-    - IO.CmdLine
-    - IO.Error
+    - UI.CLI
+    - UI.Error
     - Parser.Parser
     - Parser.LexerUtils
     - Parser.Scoping
@@ -42,10 +53,10 @@ library:
     - Syntax.Normalisation
     - Syntax.Substitution
     - Syntax.Type
-    - Typing.Extract
-    - Typing.Kinding
-    - Typing.Typing
-    - Utils.Utils
+    - Validation.Extract
+    - Validation.Kinding
+    - Validation.Typing
+    - Utils
 
 executables:
   freest:
