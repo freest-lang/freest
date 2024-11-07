@@ -15,7 +15,7 @@ import           Syntax.Base
 import qualified Syntax.Type                   as T
 import qualified Syntax.Kind                   as K
 import qualified Data.Map.Strict               as M
-import           Data.List
+import           Data.List                     ( sort )
 
 alphaCongruent :: T.Type -> T.Type -> Bool
 alphaCongruent = congruent M.empty
