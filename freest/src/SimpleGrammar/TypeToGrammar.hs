@@ -11,10 +11,11 @@ module SimpleGrammar.TypeToGrammar
   )
 where
 
--- import           Syntax.Base
+import           Syntax.Base
 import qualified Syntax.Type                   as T
 import           Syntax.Module
-import           SimpleGrammar.SimpleGrammar
+import           SimpleGrammar.SimpleGrammar   as G
+import           Prelude                       hiding ( Word, words )
 -- import           Elaboration.Replace ( changePos )
 -- import           Typing.Normalisation ( normalise )
 -- import qualified Typing.Substitution as Substitution ( subsAll )
@@ -26,13 +27,53 @@ import           SimpleGrammar.SimpleGrammar
 
 -- import           Control.Monad.State
 -- import           Data.Functor
-import qualified Data.Map.Strict as M
--- import qualified Data.Set as Set
--- import           Prelude hiding ( Word ) -- redefined in module Bisimulation.Grammar
+import qualified Data.Map.Strict               as M
+-- import qualified Data.Set                      as S
 -- import           Debug.Trace (trace)
 
 toGrammar :: Module -> [T.Type] -> Grammar
-toGrammar _ _ = Grammar [] M.empty
+toGrammar _ _ = G.Grammar [] M.empty
+
+type Visited = M.Map Identifier Word
+
+word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
+  -- Session types first for Skip and End are special constants
+word (T.Skip _) p n = (p, n, [])
+word t@T.End{} p n = (G.insertProduction y (show t) ["⊥"] p, n + 1, [y])
+  where y = fromInt n
+-- constants of any sort
+word t p n | T.isConstant t = (G.insertProduction y (show t) [] p, n + 1, [y])
+  where y = fromInt n
+word (T.Semi _ t u) p n = (p2, n2, w1 ++ w2)
+  where (p1, n1, w1) = word t p n
+        (p2, n2, w2) = word u p1 n1        
+word (T.Message' _ m pol t) p n = (p3, n1, [y])
+  where (p1, n1, w) = word t p n
+        y = fromInt n
+        p2 = G.insertProduction y (show m ++ show p ++ "1") (w ++ ["⊥"]) p1
+        p3 = G.insertProduction y (show m ++ show p ++ "2") [] p2
+-- Functional types
+word (T.Tuple _ ts) p n = undefined
+word (T.App _ a@T.Var{} ts) p n = (p3, n1, [y])
+  where y = fromInt n
+        p1 = G.insertProduction y (show a ++ "0") [] p
+        (p2, n1, ws) = words ts p1 n
+        nonterms = map (\n -> show a ++ show n) [1..]
+        terms = map (++ ["⊥"]) ws
+        p3 = G.insertProductions (zip3 (repeat y) nonterms terms) p2
+  -- Equations
+word (T.Name _ id) _ _ = undefined
+
+words :: [T.Type] -> G.Productions -> Int -> (G.Productions, Int, [Word])
+words [] p n = (p, n, [])
+words (t:ts) p n = (p2, n2, w:ws)
+  where (p1, n1, w) = word t p n
+        (p2, n2, ws) = words ts p n
+
+-- A fresh non-terminal symbol (if n was not used before)
+fromInt :: Int -> NonTerminal
+fromInt n = 'X' : show n
+
 {-
 
 toGrammar ts = {- trace (show ts ++ "\n" ++ show grammar) -} grammar

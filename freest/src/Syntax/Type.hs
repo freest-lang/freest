@@ -11,6 +11,7 @@ module Syntax.Type
   , Labelled(..)
   , Type(.., Arrow', Message')
   , Dual(..)
+  , isConstant
   )
 where
 
@@ -42,8 +43,9 @@ data Type
   | Char Span
   | String Span -- | Would List Char work?
   | Arrow Span K.Multiplicity
-  | Labelled Span Labelled [(Identifier, Type)]
   | Tuple Span [Type]
+  -- Functional or session
+  | Labelled Span Labelled [(Identifier, Type)]
   -- Session types
   | Skip Span
   | End Span Polarity
@@ -68,6 +70,22 @@ pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
   Arrow' s m t u = App s (Arrow s m) [t,u]
 pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
   Message' s m p t = App s (Message s m p) [t]
+
+isConstant :: Type -> Bool
+  -- Functional types
+isConstant t@Int{} = True
+isConstant t@Float{} = True
+isConstant t@Char{} = True
+isConstant t@String{} = True
+isConstant t@Arrow{} = True
+-- isConstant t@Tuple{} = True -- Soon
+  -- Session types
+isConstant t@Skip{} = True
+isConstant t@End{} = True
+-- isConstant t@Semi{} = True -- Soon
+isConstant t@Message{} = True
+-- isConstant t@Dual{} = True -- Soon
+isTypeConstant _ = False
 
 instance Show Polarity where
   show In  = "?"

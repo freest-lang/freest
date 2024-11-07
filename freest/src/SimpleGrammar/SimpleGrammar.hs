@@ -24,6 +24,7 @@ module SimpleGrammar.SimpleGrammar
   , Grammar(..)
   , transitions
   , insertProduction
+  , insertProductions
 --, trans
   )
 where
@@ -36,8 +37,8 @@ import           Prelude                 hiding ( Word )
 -- Terminal symbols in the grammar
 type Terminal = String
 
--- Non-terminal symbols are type variable identifiers
-type NonTerminal = Identifier
+-- Non-terminal symbols in the grammar
+type NonTerminal = String
 
 -- Words are strings of non-terminal symbols
 type Word = [NonTerminal]
@@ -65,11 +66,14 @@ instance TransitionsFrom Word where
   transitions []       _ = M.empty
   transitions (x : xs) p = M.map (++ xs) (transitions x p)
 
--- Add a production from a non-terminal; the productions may already
--- contain transitions for the given nonterminal (hence the insertWith
--- and union)
-insertProduction :: Productions -> NonTerminal -> Terminal -> Word -> Productions
-insertProduction p x l w = M.insertWith M.union x (M.singleton l w) p
+-- Add a production X -> aw; the productions may already contain transitions for
+-- the given nonterminal (hence the insertWith and union)
+insertProduction :: NonTerminal -> Terminal -> Word -> Productions -> Productions
+insertProduction x a w = M.insertWith M.union x (M.singleton a w)
+
+insertProductions :: [(NonTerminal, Terminal, Word)]-> Productions -> Productions
+insertProductions xs p =
+  foldr (\(x, a, w) p -> insertProduction x a w p) p xs
 
 -- The transitions from a word
 -- trans :: Productions -> Word -> [Word]
