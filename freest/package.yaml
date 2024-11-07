@@ -8,7 +8,8 @@ maintainer: The FreeST Team
 homepage:   https://freest-lang.github.io/
 category:   Session types
 
-default-extensions: 
+default-extensions:
+  - FlexibleInstances
   - LambdaCase
   - TupleSections
   - ViewPatterns
