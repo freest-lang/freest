@@ -15,7 +15,6 @@ where
 import qualified Syntax.Type                       as T
 import           TypeEquivalence.AlphaCongruence
 -- import           SimpleGrammar.TypeToGrammar ( convertToGrammar )
--- import qualified BisimulationTACAS.Bisimulation   as G ( bisimilar )
 -- import qualified Bisimulation.Bisimulation   as G ( bisimilar )
 
 equivalent :: T.Type -> T.Type -> Bool
