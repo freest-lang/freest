@@ -73,17 +73,17 @@ pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
 
 isConstant :: Type -> Bool
   -- Functional types
-isConstant t@Int{} = True
-isConstant t@Float{} = True
-isConstant t@Char{} = True
-isConstant t@String{} = True
-isConstant t@Arrow{} = True
+isConstant Int{} = True
+isConstant Float{} = True
+isConstant Char{} = True
+isConstant String{} = True
+isConstant Arrow{} = True
 -- isConstant t@Tuple{} = True -- Soon
   -- Session types
-isConstant t@Skip{} = True
-isConstant t@End{} = True
+isConstant Skip{} = True
+isConstant End{} = True
 -- isConstant t@Semi{} = True -- Soon
-isConstant t@Message{} = True
+isConstant Message{} = True
 -- isConstant t@Dual{} = True -- Soon
 isTypeConstant _ = False
 
