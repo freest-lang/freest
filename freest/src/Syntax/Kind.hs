@@ -55,7 +55,11 @@ instance Join Prekind where
   join _         _     = Top
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
-  deriving (Eq, Ord)
+  deriving (Ord)
+
+instance Eq Kind where
+  (Proper _ m1 pk1) == (Proper _ m2 pk2) = m1 == m2 && pk1 == pk2
+  (Arrow _ k11 k12) == (Arrow _ k21 k22) = k11 == k21 && k12 == k22
 
 instance Subsort Kind where
   Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2

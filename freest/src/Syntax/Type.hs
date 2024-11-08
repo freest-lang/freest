@@ -11,6 +11,7 @@ module Syntax.Type
   , Labelled(..)
   , Type(.., Arrow', Message')
   , Dual(..)
+  , isConstant
   )
 where
 
@@ -40,18 +41,19 @@ data Type
   = Int Span
   | Float Span
   | Char Span
-  | String Span
+  | String Span -- | Would List Char work?
   | Arrow Span K.Multiplicity
-  | Labelled Span Labelled [(Identifier, Type)]
   | Tuple Span [Type]
+  -- Functional or session
+  | Labelled Span Labelled [(Identifier, Type)]
   -- Session types
-  | Message Span K.Multiplicity Polarity
-  | End Span Polarity
   | Skip Span
+  | End Span Polarity
   | Semi Span Type Type
+  | Message Span K.Multiplicity Polarity
   | Dual Span Type
   -- Polymorphism
-  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind  
+  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind; explain why we need the Variable and the Type (why are we not using Abs for the effect)
   -- Equations
   | Name Span Identifier
   -- Higher-order
@@ -62,10 +64,28 @@ data Type
   | Hole Span
   deriving (Eq, Ord)
 
+-- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
+-- Why not bidirectional?
 pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
   Arrow' s m t u = App s (Arrow s m) [t,u]
 pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
   Message' s m p t = App s (Message s m p) [t]
+
+isConstant :: Type -> Bool
+  -- Functional types
+isConstant Int{} = True
+isConstant Float{} = True
+isConstant Char{} = True
+isConstant String{} = True
+isConstant Arrow{} = True
+-- isConstant t@Tuple{} = True -- Soon
+  -- Session types
+isConstant Skip{} = True
+isConstant End{} = True
+-- isConstant t@Semi{} = True -- Soon
+isConstant Message{} = True
+-- isConstant t@Dual{} = True -- Soon
+isTypeConstant _ = False
 
 instance Show Polarity where
   show In  = "?"
