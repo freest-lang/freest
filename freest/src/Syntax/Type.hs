@@ -41,9 +41,9 @@ data Type
   = Int Span
   | Float Span
   | Char Span
-  | String Span -- | Would List Char work?
+  | String Span  -- | Would List Char work?
   | Arrow Span K.Multiplicity
-  | Tuple Span [Type]
+  | Tuple Span [Type]  -- TODO: delete the [Type]
   -- Functional or session
   | Labelled Span Labelled [(Identifier, Type)]
   -- Session types
@@ -51,15 +51,15 @@ data Type
   | End Span Polarity
   | Semi Span Type Type
   | Message Span K.Multiplicity Polarity
-  | Dual Span Type
+  | Dual Span Type  -- TODO: delete the Type
   -- Polymorphism
-  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind; explain why we need the Variable and the Type (why are we not using Abs for the effect)
+  | Forall Span [(Variable, K.Kind)] Type
   -- Equations
   | Name Span Identifier
   -- Higher-order
   | Var Span Variable
   | App Span Type [Type]
-  | Abs Span [(Variable, K.Kind)] Type
+  | Abs Span [(Variable, K.Kind)] Type  -- TODO: delete this constructor
   -- Hole?
   | Hole Span
   deriving (Eq, Ord)
@@ -72,20 +72,13 @@ pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
   Message' s m p t = App s (Message s m p) [t]
 
 isConstant :: Type -> Bool
-  -- Functional types
-isConstant Int{} = True
-isConstant Float{} = True
-isConstant Char{} = True
-isConstant String{} = True
-isConstant Arrow{} = True
--- isConstant t@Tuple{} = True -- Soon
-  -- Session types
-isConstant Skip{} = True
-isConstant End{} = True
--- isConstant t@Semi{} = True -- Soon
-isConstant Message{} = True
--- isConstant t@Dual{} = True -- Soon
-isTypeConstant _ = False
+isConstant Labelled{} = False
+isConstant Forall{} = False
+isConstant Name{} = False
+isConstant Var{} = False
+isConstant App{} = False
+isConstant Hole{} = False
+isConstant _ = True
 
 instance Show Polarity where
   show In  = "?"
