@@ -55,21 +55,40 @@ word t = wasVisited t >>= \case
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
-wordWhnf T.Skip{} = pure []
+wordWhnf T.Skip{} =
+  pure []
 wordWhnf t@T.End{} = do
   y <- nextNonTerminal
   putProduction y (show t) [bottom]
-  pure [y]
+  putVisited t [y]
 wordWhnf t | T.isConstant t = do
   y <- nextNonTerminal
   putProduction y (show t) []
-  pure [y]
-wordWhnf (T.Message' _ mult pol t) =  do
+  putVisited t [y]
+wordWhnf t@(T.Message' _ mult pol u) = do
   y <- nextNonTerminal
-  w <- word t
+  w <- word u
   putProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
   putProduction y (show mult ++ show pol ++ "2") []
-  pure [y]
+  putVisited t [y]
+wordWhnf t@(T.AppSemi _ u1 u2) = do
+  w1 <- word u1
+  w2 <- word u2
+  putVisited t $ w1 ++ w2
+wordWhnf t@(T.App _ (T.Var _ α) ts) = do
+  y <- nextNonTerminal
+  putProduction y (show α ++ "0") []
+  ws <- mapM word ts
+  let words = map (++ [bottom]) ws
+  let terms = map (\n -> show α ++ show n) [1..]
+  mapM_ (\(a, w) -> putProduction y a w) (zip terms words)
+  putVisited t [y]
+
+    -- p1 = G.insertProduction y (show a ++ "0") [] p
+    --     (p2, n1, ws) = words ts p1 n
+    --     nonterms = map (\n -> show a ++ show n) [1..]
+    --     terms = map (++ [bottom]) ws
+    --     p3 = G.insertProductions (zip3 (repeat y) nonterms terms) p2
 
 -- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
 --   -- Session types first for Skip and End are special constants
@@ -82,7 +101,7 @@ wordWhnf (T.Message' _ mult pol t) =  do
 -- word (T.Semi _ t u) p n = (p2, n2, w1 ++ w2)
 --   where (p1, n1, w1) = word t p n
 --         (p2, n2, w2) = word u p1 n1        
--- word (T.Message' _ m pol t) p n = (p3, n1, [y])
+-- word (T.Message' _ m pol t) p n = (p3, n1, [y])`
 --   where (p1, n1, w) = word t p n
 --         y = n
 --         p2 = G.insertProduction y (show m ++ show p ++ "1") (w ++ [bottom]) p1
@@ -134,6 +153,11 @@ wasVisited :: T.Type -> TransState (Maybe Word)
 wasVisited t = do
   v <- gets visited
   return $ v M.!? t
+
+putVisited :: T.Type -> Word -> TransState Word
+putVisited t w = do
+    modify $ \s -> s {visited = M.insert t w (visited s)}
+    pure w
 
 putProduction :: NonTerminal -> Terminal -> Word -> TransState ()
 putProduction x a w =

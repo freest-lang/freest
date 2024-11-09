@@ -9,7 +9,7 @@ polymorphic context-free session types.
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
-  , Type(.., Arrow', Message')
+  , Type(.., Arrow', Message', AppSemi)
   , Dual(..)
   , isConstant
   )
@@ -70,6 +70,7 @@ pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
   Arrow' s m t u = App s (Arrow s m) [t,u]
 pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
   Message' s m p t = App s (Message s m p) [t]
+pattern AppSemi s t u = Semi s t u
 
 isConstant :: Type -> Bool
 isConstant Labelled{} = False
