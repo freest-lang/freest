@@ -1,5 +1,5 @@
 {- |
-Module      :  TypeEquivalence.AlphaCongruence
+Module      :  SimpleGrammar.FromType
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
@@ -15,7 +15,10 @@ import           Syntax.Base
 import qualified Syntax.Type                   as T
 import           Syntax.Module
 import           SimpleGrammar.Grammar         as G
+import           SimpleGrammar.Normalisation
+
 import           Prelude                       hiding ( Word, words )
+
 -- import           Elaboration.Replace ( changePos )
 -- import           Typing.Normalisation ( normalise )
 -- import qualified Typing.Substitution as Substitution ( subsAll )
@@ -34,7 +37,7 @@ fromType :: Module -> [T.Type] -> Grammar
 fromType m ts = G.Grammar w (productions s)
   where (w, s) = runState (mapM (word m) ts) initial
 
-type Visited = M.Map Identifier NonTerminal
+type Visited = M.Map T.Type Word
 
 data TState = TState {
     productions :: Productions
@@ -45,7 +48,15 @@ data TState = TState {
 type TransState = State TState
 
 word :: Module -> T.Type -> TransState Word
-word m t = undefined
+word m t = do
+  b <- wasVisited t
+  case b of
+    Just w -> pure w
+    Nothing -> wordWhnf m $ normalise t
+
+-- Requires whnf t
+wordWhnf :: Module -> T.Type -> TransState Word
+wordWhnf _ T.Skip{} = pure []
 
 -- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
 --   -- Session types first for Skip and End are special constants
@@ -105,7 +116,7 @@ getTransitions x = do
   ps <- getProductions
   return $ ps M.! x
 
-wasVisited :: Identifier -> TransState (Maybe NonTerminal)
+wasVisited :: T.Type -> TransState (Maybe Word)
 wasVisited t = do
   v <- gets visited
   return $ v M.!? t

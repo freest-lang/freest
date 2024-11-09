@@ -82,7 +82,7 @@ insertProductions xs p =
 
 -- "⊥" - A nonterminal without transitions (up to clients to keep the invariant)
 bottom :: NonTerminal
-bottom = -1
+bottom = 0
 
 -- Showing a grammar
 
@@ -102,5 +102,6 @@ showProductions = M.foldrWithKey showTransitions ""
     showTransition x l xs s =
       s ++ "\n" ++ show x ++ " -> " ++ l ++ " " ++ show xs
 
-showNonTerminal (-1) = "⊥"
+-- Cannot be a flexible instance for there is an instance Show Int in the Prelude
+showNonTerminal 0 = "⊥"
 showNonTerminal n = 'X' : show n
