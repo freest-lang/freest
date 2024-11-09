@@ -25,6 +25,7 @@ module SimpleGrammar.Grammar
   , transitions
   , insertProduction
   , insertProductions
+  , bottom
 --, trans
   )
 where
@@ -38,7 +39,7 @@ import           Prelude                 hiding ( Word )
 type Terminal = String
 
 -- Non-terminal symbols in the grammar
-type NonTerminal = String
+type NonTerminal = Int
 
 -- Words are strings of non-terminal symbols
 type Word = [NonTerminal]
@@ -79,6 +80,10 @@ insertProductions xs p =
 -- trans :: Productions -> Word -> [Word]
 -- trans p xs = M.elems (transitions xs p)
 
+-- "⊥" - A nonterminal without transitions (up to clients to keep the invariant)
+bottom :: NonTerminal
+bottom = -1
+
 -- Showing a grammar
 
 instance Show Grammar where
@@ -96,3 +101,6 @@ showProductions = M.foldrWithKey showTransitions ""
     showTransition :: NonTerminal -> Terminal -> Word -> String -> String
     showTransition x l xs s =
       s ++ "\n" ++ show x ++ " -> " ++ l ++ " " ++ show xs
+
+showNonTerminal (-1) = "⊥"
+showNonTerminal n = 'X' : show n

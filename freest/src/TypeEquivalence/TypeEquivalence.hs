@@ -15,7 +15,7 @@ where
 import qualified Syntax.Type                       as T
 import           Syntax.Module
 import           TypeEquivalence.AlphaCongruence
-import           SimpleGrammar.TypeToGrammar       ( toGrammar )
+import           SimpleGrammar.FromType            ( fromType )
 -- import qualified Bisimulation.Bisimulation   as G ( bisimilar )
 
 equivalent :: Module -> T.Type -> T.Type -> Bool
@@ -23,5 +23,5 @@ equivalent m t u = t `alphaCongruent` u || bisimilar m t u
 
 bisimilar :: Module -> T.Type -> T.Type -> Bool
 bisimilar m t u = True
-  where _ = toGrammar m [t, u]
+  where _ = fromType m [t, u]
 -- bisimilar t u = G.bisimilar (convertToGrammar [t, u])

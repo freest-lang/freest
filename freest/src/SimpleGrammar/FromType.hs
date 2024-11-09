@@ -7,7 +7,7 @@ This module converts a list of session types into a simple grammar
 -}
 
 module SimpleGrammar.FromType
-  ( toGrammar
+  ( fromType
   )
 where
 
@@ -24,55 +24,96 @@ import           Prelude                       hiding ( Word, words )
 -- import           Util.Error ( internalError )
 -- import           Util.State ( tMapM, tMapM_ )
 -- import           SimpleGrammar.Minimal
-
--- import           Control.Monad.State
+import           Control.Monad.State
 -- import           Data.Functor
 import qualified Data.Map.Strict               as M
 -- import qualified Data.Set                      as S
 -- import           Debug.Trace (trace)
 
-toGrammar :: Module -> [T.Type] -> Grammar
-toGrammar _ _ = G.Grammar [] M.empty
+fromType :: Module -> [T.Type] -> Grammar
+fromType m ts = G.Grammar w (productions s)
+  where (w, s) = runState (mapM (word m) ts) initial
 
-type Visited = M.Map Identifier Word
+type Visited = M.Map Identifier NonTerminal
 
-word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
-  -- Session types first for Skip and End are special constants
-word (T.Skip _) p n = (p, n, [])
-word t@T.End{} p n = (G.insertProduction y (show t) ["⊥"] p, n + 1, [y])
-  where y = fromInt n
--- constants of any sort
-word t p n | T.isConstant t = (G.insertProduction y (show t) [] p, n + 1, [y])
-  where y = fromInt n
-word (T.Semi _ t u) p n = (p2, n2, w1 ++ w2)
-  where (p1, n1, w1) = word t p n
-        (p2, n2, w2) = word u p1 n1        
-word (T.Message' _ m pol t) p n = (p3, n1, [y])
-  where (p1, n1, w) = word t p n
-        y = fromInt n
-        p2 = G.insertProduction y (show m ++ show p ++ "1") (w ++ ["⊥"]) p1
-        p3 = G.insertProduction y (show m ++ show p ++ "2") [] p2
--- Functional types
-word (T.Tuple _ ts) p n = undefined
-word (T.App _ a@T.Var{} ts) p n = (p3, n1, [y])
-  where y = fromInt n
-        p1 = G.insertProduction y (show a ++ "0") [] p
-        (p2, n1, ws) = words ts p1 n
-        nonterms = map (\n -> show a ++ show n) [1..]
-        terms = map (++ ["⊥"]) ws
-        p3 = G.insertProductions (zip3 (repeat y) nonterms terms) p2
-  -- Equations
-word (T.Name _ id) _ _ = undefined
+data TState = TState {
+    productions :: Productions
+  , nextIndex :: Int
+  , visited :: Visited
+  }
 
-words :: [T.Type] -> G.Productions -> Int -> (G.Productions, Int, [Word])
-words [] p n = (p, n, [])
-words (t:ts) p n = (p2, n2, w:ws)
-  where (p1, n1, w) = word t p n
-        (p2, n2, ws) = words ts p n
+type TransState = State TState
 
--- A fresh non-terminal symbol (if n was not used before)
-fromInt :: Int -> NonTerminal
-fromInt n = 'X' : show n
+word :: Module -> T.Type -> TransState Word
+word m t = undefined
+
+-- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
+--   -- Session types first for Skip and End are special constants
+-- word (T.Skip _) p n = (p, n, [])
+-- word t@T.End{} p n = (G.insertProduction y (show t) [bottom] p, n + 1, [y])
+--   where y = n
+-- -- constants of any sort
+-- word t p n | T.isConstant t = (G.insertProduction y (show t) [] p, n + 1, [y])
+--   where y = n
+-- word (T.Semi _ t u) p n = (p2, n2, w1 ++ w2)
+--   where (p1, n1, w1) = word t p n
+--         (p2, n2, w2) = word u p1 n1        
+-- word (T.Message' _ m pol t) p n = (p3, n1, [y])
+--   where (p1, n1, w) = word t p n
+--         y = n
+--         p2 = G.insertProduction y (show m ++ show p ++ "1") (w ++ [bottom]) p1
+--         p3 = G.insertProduction y (show m ++ show p ++ "2") [] p2
+-- -- Functional types
+-- word (T.Tuple _ ts) p n = undefined
+-- word (T.App _ a@T.Var{} ts) p n = (p3, n1, [y])
+--   where y = n
+--         p1 = G.insertProduction y (show a ++ "0") [] p
+--         (p2, n1, ws) = words ts p1 n
+--         nonterms = map (\n -> show a ++ show n) [1..]
+--         terms = map (++ [bottom]) ws
+--         p3 = G.insertProductions (zip3 (repeat y) nonterms terms) p2
+--   -- Equations
+-- word (T.Name _ id) _ _ = undefined
+
+-- words :: [T.Type] -> G.Productions -> Int -> (G.Productions, Int, [Word])
+-- words [] p n = (p, n, [])
+-- words (t:ts) p n = (p2, n2, w:ws)
+--   where (p1, n1, w) = word t p n
+--         (p2, n2, ws) = words ts p n
+
+-- The state of the translation to grammar procedure
+
+initial :: TState
+initial = TState {
+    productions = M.empty
+  , nextIndex = 1
+  , visited = M.empty
+  }
+
+nextNonTerminal :: TransState NonTerminal
+nextNonTerminal = do
+  s <- get
+  let n = nextIndex s
+  modify $ \s -> s { nextIndex = n + 1 }
+  return n
+
+getProductions :: TransState Productions
+getProductions = gets productions
+
+getTransitions :: NonTerminal -> TransState Transitions
+getTransitions x = do
+  ps <- getProductions
+  return $ ps M.! x
+
+wasVisited :: Identifier -> TransState (Maybe NonTerminal)
+wasVisited t = do
+  v <- gets visited
+  return $ v M.!? t
+
+putProductions :: NonTerminal -> Transitions -> TransState ()
+putProductions x m =
+  modify $ \s -> s { productions = M.insert x m (productions s) }
+
 
 {-
 
