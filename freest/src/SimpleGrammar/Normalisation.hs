@@ -12,6 +12,7 @@ module SimpleGrammar.Normalisation
 where
 
 import qualified Syntax.Type                   as T
+import           Syntax.Module
 
-normalise :: T.Type -> T.Type
-normalise = id
+normalise :: Module -> T.Type -> T.Type
+normalise _ t = t

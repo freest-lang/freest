@@ -51,7 +51,9 @@ type TransState = State TState
 word :: T.Type -> TransState Word
 word t = wasVisited t >>= \case
   Just w -> pure w
-  Nothing -> wordWhnf (normalise t)
+  Nothing -> do
+    m <- gets module_
+    wordWhnf (normalise m t)
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
@@ -80,15 +82,10 @@ wordWhnf t@(T.App _ (T.Var _ α) ts) = do
   putProduction y (show α ++ "0") []
   ws <- mapM word ts
   let words = map (++ [bottom]) ws
-  let terms = map (\n -> show α ++ show n) [1..]
-  mapM_ (\(a, w) -> putProduction y a w) (zip terms words)
+  let terminals = map (\n -> show α ++ show n) [1..]
+  mapM_ (\(a, w) -> putProduction y a w) (zip terminals words)
   putVisited t [y]
-
-    -- p1 = G.insertProduction y (show a ++ "0") [] p
-    --     (p2, n1, ws) = words ts p1 n
-    --     nonterms = map (\n -> show a ++ show n) [1..]
-    --     terms = map (++ [bottom]) ws
-    --     p3 = G.insertProductions (zip3 (repeat y) nonterms terms) p2
+-- wordWhnf t@(T.Name _ id) = 
 
 -- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
 --   -- Session types first for Skip and End are special constants
