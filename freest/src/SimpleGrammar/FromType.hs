@@ -35,7 +35,7 @@ import qualified Data.Map.Strict               as M
 
 fromType :: Module -> [T.Type] -> Grammar
 fromType m ts = G.Grammar w (productions s)
-  where (w, s) = runState (mapM (word m) ts) initial
+  where (w, s) = runState (mapM word ts) (initial m)
 
 type Visited = M.Map T.Type Word
 
@@ -43,20 +43,33 @@ data TState = TState {
     productions :: Productions
   , nextIndex :: Int
   , visited :: Visited
+  , module_ :: Module
   }
 
 type TransState = State TState
 
-word :: Module -> T.Type -> TransState Word
-word m t = do
-  b <- wasVisited t
-  case b of
-    Just w -> pure w
-    Nothing -> wordWhnf m $ normalise t
+word :: T.Type -> TransState Word
+word t = wasVisited t >>= \case
+  Just w -> pure w
+  Nothing -> wordWhnf (normalise t)
 
 -- Requires whnf t
-wordWhnf :: Module -> T.Type -> TransState Word
-wordWhnf _ T.Skip{} = pure []
+wordWhnf :: T.Type -> TransState Word
+wordWhnf T.Skip{} = pure []
+wordWhnf t@T.End{} = do
+  y <- nextNonTerminal
+  putProduction y (show t) [bottom]
+  pure [y]
+wordWhnf t | T.isConstant t = do
+  y <- nextNonTerminal
+  putProduction y (show t) []
+  pure [y]
+wordWhnf (T.Message' _ mult pol t) =  do
+  y <- nextNonTerminal
+  w <- word t
+  putProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
+  putProduction y (show mult ++ show pol ++ "2") []
+  pure [y]
 
 -- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
 --   -- Session types first for Skip and End are special constants
@@ -94,11 +107,12 @@ wordWhnf _ T.Skip{} = pure []
 
 -- The state of the translation to grammar procedure
 
-initial :: TState
-initial = TState {
+initial :: Module -> TState
+initial m = TState {
     productions = M.empty
   , nextIndex = 1
   , visited = M.empty
+  , module_ = m
   }
 
 nextNonTerminal :: TransState NonTerminal
@@ -120,6 +134,10 @@ wasVisited :: T.Type -> TransState (Maybe Word)
 wasVisited t = do
   v <- gets visited
   return $ v M.!? t
+
+putProduction :: NonTerminal -> Terminal -> Word -> TransState ()
+putProduction x a w =
+  modify $ \s -> s { productions = G.insertProduction x a w (productions s) }
 
 putProductions :: NonTerminal -> Transitions -> TransState ()
 putProductions x m =
