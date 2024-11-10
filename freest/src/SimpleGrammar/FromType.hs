@@ -70,9 +70,7 @@ unfold t@(T.Name _ id) = do
 unfold _ = pure ()
 
 lookupTypeDecl :: Identifier -> [TypeDecl] -> Maybe T.Type
-lookupTypeDecl _ [] = Nothing
-lookupTypeDecl id ((id', _, t):_) | id == id' = Just t
-lookupTypeDecl id (_:ds) = lookupTypeDecl id ds
+lookupTypeDecl id tds = lookup id $ map (\(id, _, t) -> (id, t)) tds
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
