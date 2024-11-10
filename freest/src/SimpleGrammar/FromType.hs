@@ -60,10 +60,10 @@ unfold :: T.Type -> TransState ()
 unfold t@(T.Name _ id) = do
     m <- gets module_
     case lookupTypeDecl id (typeDecls m) of
-      Nothing -> pure () -- t is a datatype T.Name
-      Just u -> wasVisited u >>= \case -- t is a type T.Name
-        Just _ -> pure () -- We have unfold t before
-        Nothing -> do
+      Nothing -> pure () -- t is a datatype
+      Just u -> wasVisited u >>= \case -- t is a type
+        Just _ -> pure () -- We have unfolded t before
+        Nothing -> do -- This is the first time we encounter type t
           w <- word u
           addVisited t w
           pure ()
@@ -98,6 +98,12 @@ wordWhnf t@(T.AppSemi _ u1 u2) = do
   w1 <- word u1
   w2 <- word u2
   addVisited t $ w1 ++ w2
+wordWhnf t@(T.Labelled _ lab its) = do
+  y <- nextNonTerminal
+  ws <- mapM (word . snd) its
+  let termNonterms = zipWith (\(id, _) ws -> (show lab ++ show id, ws)) its ws
+  mapM_ (\(a, w) -> addProduction y a w) termNonterms
+  addVisited t [y]
 wordWhnf t@(T.App _ (T.Var _ α) ts) = do
   y <- nextNonTerminal
   addProduction y (show α ++ "0") []

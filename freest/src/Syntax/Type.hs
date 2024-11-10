@@ -32,7 +32,7 @@ instance Dual Polarity where
   dual Out = In
   dual In = Out
 
-data Labelled
+data Labelled -- TODO: use a name, not an adjective. Label?
   = Variant
   | Choice K.Multiplicity Polarity
   deriving (Eq, Ord)
@@ -42,7 +42,7 @@ data Type
   = Int Span
   | Float Span
   | Char Span
-  | String Span  -- | Would List Char work?
+  | String Span  -- | TODO: Would List Char work?
   | Arrow Span K.Multiplicity
   | Tuple Span [Type]  -- TODO: delete the [Type]
   -- Functional or session
@@ -60,16 +60,16 @@ data Type
   -- Higher-order
   | Var Span Variable
   | App Span Type [Type]
-  | Abs Span [(Variable, K.Kind)] Type  -- TODO: delete this constructor
+  | Abs Span [(Variable, K.Kind)] Type  -- TODO: delete this constructor, or at least comment
   -- Hole?
   | Hole Span
   deriving (Eq, Ord)
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- Why not bidirectional?
-pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
+pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where -- TODO: name it AppArrow instead
   Arrow' s m t u = App s (Arrow s m) [t,u]
-pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
+pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where -- TODO: name it AppMessage instead
   Message' s m p t = App s (Message s m p) [t]
 pattern AppSemi s t u = Semi s t u
 
