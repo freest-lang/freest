@@ -16,21 +16,11 @@ import qualified Syntax.Type                   as T
 import           Syntax.Module
 import           SimpleGrammar.Grammar         as G
 import           SimpleGrammar.Normalisation
-
-import           Prelude                       hiding ( Word, words )
-
--- import           Elaboration.Replace ( changePos )
--- import           Typing.Normalisation ( normalise )
--- import qualified Typing.Substitution as Substitution ( subsAll )
--- import           Kinding.Terminated ( terminated )
--- import           Parse.Unparser ( showArrow )
--- import           Util.Error ( internalError )
--- import           Util.State ( tMapM, tMapM_ )
--- import           SimpleGrammar.Minimal
 import           Control.Monad.State
--- import           Data.Functor
+import           Prelude                       hiding ( Word, words )
 import qualified Data.Map.Strict               as M
 -- import qualified Data.Set                      as S
+-- import           Data.Functor
 -- import           Debug.Trace (trace)
 
 fromType :: Module -> [T.Type] -> Grammar
@@ -111,64 +101,21 @@ wordWhnf t@(T.App _ (T.Var _ α) ts) = do
   mapM_ (\(a, w) -> addProduction y a w) (zip terminals words)
   addVisited t [y]
 
--- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
---   -- Session types first for Skip and End are special constants
--- word (T.Skip _) p n = (p, n, [])
--- word t@T.End{} p n = (G.insertProduction y (show t) [bottom] p, n + 1, [y])
---   where y = n
--- -- constants of any sort
--- word t p n | T.isConstant t = (G.insertProduction y (show t) [] p, n + 1, [y])
---   where y = n
--- word (T.Semi _ t u) p n = (p2, n2, w1 ++ w2)
---   where (p1, n1, w1) = word t p n
---         (p2, n2, w2) = word u p1 n1        
--- word (T.Message' _ m pol t) p n = (p3, n1, [y])`
---   where (p1, n1, w) = word t p n
---         y = n
---         p2 = G.insertProduction y (show m ++ show p ++ "1") (w ++ [bottom]) p1
---         p3 = G.insertProduction y (show m ++ show p ++ "2") [] p2
--- -- Functional types
--- word (T.Tuple _ ts) p n = undefined
--- word (T.App _ a@T.Var{} ts) p n = (p3, n1, [y])
---   where y = n
---         p1 = G.insertProduction y (show a ++ "0") [] p
---         (p2, n1, ws) = words ts p1 n
---         nonterms = map (\n -> show a ++ show n) [1..]
---         terms = map (++ [bottom]) ws
---         p3 = G.insertProductions (zip3 (repeat y) nonterms terms) p2
---   -- Equations
--- word (T.Name _ id) _ _ = undefined
-
--- words :: [T.Type] -> G.Productions -> Int -> (G.Productions, Int, [Word])
--- words [] p n = (p, n, [])
--- words (t:ts) p n = (p2, n2, w:ws)
---   where (p1, n1, w) = word t p n
---         (p2, n2, ws) = words ts p n
-
 -- The state of the translation to grammar procedure
 
 initial :: Module -> TState
 initial m = TState {
     productions = M.empty
-  , nextIndex = 1
+  , nextIndex = 1 -- 0 is for bottom
   , visited = M.empty
   , module_ = m
   }
 
 nextNonTerminal :: TransState NonTerminal
 nextNonTerminal = do
-  s <- get
-  let n = nextIndex s
+  n <- gets nextIndex
   modify $ \s -> s { nextIndex = n + 1 }
   return n
-
-getProductions :: TransState Productions
-getProductions = gets productions
-
-getTransitions :: NonTerminal -> TransState Transitions
-getTransitions x = do
-  ps <- getProductions
-  return $ ps M.! x
 
 wasVisited :: T.Type -> TransState (Maybe Word)
 wasVisited t = do
@@ -184,10 +131,17 @@ addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
 addProduction x a w =
   modify $ \s -> s { productions = G.insertProduction x a w (productions s) }
 
-addProductions :: NonTerminal -> Transitions -> TransState ()
-addProductions x m =
-  modify $ \s -> s { productions = M.insert x m (productions s) }
+-- addProductions :: NonTerminal -> Transitions -> TransState ()
+-- addProductions x m =
+--   modify $ \s -> s { productions = M.insert x m (productions s) }
 
+-- getProductions :: TransState Productions
+-- getProductions = gets productions
+
+-- getTransitions :: NonTerminal -> TransState Transitions
+-- getTransitions x = do
+--   ps <- getProductions
+--   return $ ps M.! x
 
 {-
 
