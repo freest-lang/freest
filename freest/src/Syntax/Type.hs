@@ -12,6 +12,7 @@ module Syntax.Type
   , Type(.., Arrow', Message', AppSemi)
   , Dual(..)
   , isConstant
+  , isName
   )
 where
 
@@ -80,6 +81,10 @@ isConstant Var{} = False
 isConstant App{} = False
 isConstant Hole{} = False
 isConstant _ = True
+
+isName :: Type -> Bool
+isName Name{} = True
+isName _ = False
 
 instance Show Polarity where
   show In  = "?"

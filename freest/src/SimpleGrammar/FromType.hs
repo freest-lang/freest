@@ -52,8 +52,27 @@ word :: T.Type -> TransState Word
 word t = wasVisited t >>= \case
   Just w -> pure w
   Nothing -> do
+    unfold t
     m <- gets module_
     wordWhnf (normalise m t)
+
+unfold :: T.Type -> TransState ()
+unfold t@(T.Name _ id) = do
+    m <- gets module_
+    case lookupTypeDecl id (typeDecls m) of
+      Nothing -> pure () -- t is a datatype T.Name
+      Just u -> wasVisited u >>= \case -- t is a type T.Name
+        Just _ -> pure () -- We have unfold t before
+        Nothing -> do
+          w <- word u
+          addVisited t w
+          pure ()
+unfold _ = pure ()
+
+lookupTypeDecl :: Identifier -> [TypeDecl] -> Maybe T.Type
+lookupTypeDecl _ [] = Nothing
+lookupTypeDecl id ((id', _, t):_) | id == id' = Just t
+lookupTypeDecl id (_:ds) = lookupTypeDecl id ds
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
@@ -61,31 +80,32 @@ wordWhnf T.Skip{} =
   pure []
 wordWhnf t@T.End{} = do
   y <- nextNonTerminal
-  putProduction y (show t) [bottom]
-  putVisited t [y]
-wordWhnf t | T.isConstant t = do
+  addProduction y (show t) [bottom]
+  addVisited t [y]
+-- At this point Name must refer to a datatype for types where unfolded in
+-- function word
+wordWhnf t | T.isConstant t || T.isName t = do
   y <- nextNonTerminal
-  putProduction y (show t) []
-  putVisited t [y]
+  addProduction y (show t) []
+  addVisited t [y]
 wordWhnf t@(T.Message' _ mult pol u) = do
   y <- nextNonTerminal
   w <- word u
-  putProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
-  putProduction y (show mult ++ show pol ++ "2") []
-  putVisited t [y]
+  addProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
+  addProduction y (show mult ++ show pol ++ "2") []
+  addVisited t [y]
 wordWhnf t@(T.AppSemi _ u1 u2) = do
   w1 <- word u1
   w2 <- word u2
-  putVisited t $ w1 ++ w2
+  addVisited t $ w1 ++ w2
 wordWhnf t@(T.App _ (T.Var _ α) ts) = do
   y <- nextNonTerminal
-  putProduction y (show α ++ "0") []
+  addProduction y (show α ++ "0") []
   ws <- mapM word ts
   let words = map (++ [bottom]) ws
   let terminals = map (\n -> show α ++ show n) [1..]
-  mapM_ (\(a, w) -> putProduction y a w) (zip terminals words)
-  putVisited t [y]
--- wordWhnf t@(T.Name _ id) = 
+  mapM_ (\(a, w) -> addProduction y a w) (zip terminals words)
+  addVisited t [y]
 
 -- word :: T.Type -> G.Productions -> Int -> (G.Productions, Int, Word)
 --   -- Session types first for Skip and End are special constants
@@ -151,17 +171,17 @@ wasVisited t = do
   v <- gets visited
   return $ v M.!? t
 
-putVisited :: T.Type -> Word -> TransState Word
-putVisited t w = do
+addVisited :: T.Type -> Word -> TransState Word
+addVisited t w = do
     modify $ \s -> s {visited = M.insert t w (visited s)}
     pure w
 
-putProduction :: NonTerminal -> Terminal -> Word -> TransState ()
-putProduction x a w =
+addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
+addProduction x a w =
   modify $ \s -> s { productions = G.insertProduction x a w (productions s) }
 
-putProductions :: NonTerminal -> Transitions -> TransState ()
-putProductions x m =
+addProductions :: NonTerminal -> Transitions -> TransState ()
+addProductions x m =
   modify $ \s -> s { productions = M.insert x m (productions s) }
 
 
