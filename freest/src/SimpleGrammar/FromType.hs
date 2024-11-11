@@ -40,27 +40,19 @@ type TransState = State TState
 
 word :: T.Type -> TransState Word
 word t = wasVisited t >>= \case
-  Just w -> pure w
+  Just w -> pure w -- We have seen t before
   Nothing -> do
-    unfold t
     m <- gets module_
-    wordWhnf (normalise m t)
-
-unfold :: T.Type -> TransState ()
-unfold t@(T.Name _ id) = do
-    m <- gets module_
-    case lookupTypeDecl id (typeDecls m) of
-      Nothing -> pure () -- t is a datatype
-      Just u -> wasVisited u >>= \case -- t is a type
-        Just _ -> pure () -- We have unfolded t before
-        Nothing -> do -- This is the first time we encounter type t
-          w <- word u
-          addVisited t w
-          pure ()
-unfold _ = pure ()
-
-lookupTypeDecl :: Identifier -> [TypeDecl] -> Maybe T.Type
-lookupTypeDecl id tds = lookup id $ map (\(id, _, t) -> (id, t)) tds
+    let u = normalise m t
+    case u of
+      T.Skip{} -> pure []
+      otherwise -> do
+        y <- nextNonTerminal
+        addVisited t [y]
+        ~(z:δ) <- wordWhnf u
+        γ <- getTransitions z
+        addProductions y (M.map (++ δ) γ)
+        pure [y]
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
@@ -76,6 +68,7 @@ wordWhnf t | T.isConstant t || T.isName t = do
   y <- nextNonTerminal
   addProduction y (show t) []
   addVisited t [y]
+wordWhnf t@(T.Forall _ mult pol u) = do
 wordWhnf t@(T.Message' _ mult pol u) = do
   y <- nextNonTerminal
   w <- word u
@@ -124,24 +117,24 @@ wasVisited t = do
 
 addVisited :: T.Type -> Word -> TransState Word
 addVisited t w = do
-    modify $ \s -> s {visited = M.insert t w (visited s)}
+    modify $ \s -> s { visited = M.insert t w (visited s) }
     pure w
 
 addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
 addProduction x a w =
   modify $ \s -> s { productions = G.insertProduction x a w (productions s) }
 
--- addProductions :: NonTerminal -> Transitions -> TransState ()
--- addProductions x m =
---   modify $ \s -> s { productions = M.insert x m (productions s) }
+addProductions :: NonTerminal -> Transitions -> TransState ()
+addProductions x m =
+  modify $ \s -> s { productions = M.insert x m (productions s) }
 
 -- getProductions :: TransState Productions
 -- getProductions = gets productions
 
--- getTransitions :: NonTerminal -> TransState Transitions
--- getTransitions x = do
---   ps <- getProductions
---   return $ ps M.! x
+getTransitions :: NonTerminal -> TransState Transitions
+getTransitions x = do
+  ps <- gets productions
+  pure $ ps M.! x
 
 {-
 
