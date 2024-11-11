@@ -2,8 +2,10 @@ module Interpreter.Interpreter where
 
 import Data.List ( find )
 import Data.Char (chr, ord)
-import Data.Functor ( ($>), (<&>) )
+import Data.Functor ( ($>), (<&>), void )
 import System.IO ( Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose )
+import Control.Concurrent ( forkIO )
+import Control.Concurrent.Chan as C
 import GHC.Float
 -- for debuging don't forget to remove
 import Debug.Trace
@@ -14,6 +16,8 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 import Syntax.Expression ( LetDecl )
 import IO.Error as IOE
+
+type ChannelEnd = (C.Chan Value, C.Chan Value)
 
 data Value = VInt Int
             | VFloat Double
@@ -27,6 +31,9 @@ data Value = VInt Int
             | VBuiltin (Value -> Value)
             | VIO (IO Value)
             | VHandle Handle
+            | VLabel String
+            | VFork
+            | VChan ChannelEnd
 
 instance Show Value where
   show VUnit = "()"
@@ -41,13 +48,48 @@ instance Show Value where
   show (VBuiltin _) = "<builtin>"
   show (VIO io) = "<IO>"
   show (VHandle _) = "<handle>"
+  show (VLabel str) = "<label> string"
+  show (VChan _) = "<chan>"
 
 showTups :: [Value] -> String
 showTups [val] = show val
 showTups (val:vals) = show val ++ ", " ++ showTups vals
 
+tupToList :: (a,a) -> [a]
+tupToList (x, y) = [x, y]
+
+chan :: IO (ChannelEnd, ChannelEnd)
+chan = do
+  c1 <- C.newChan
+  c2 <- C.newChan
+  return ((c1, c2), (c2, c1))
+
+receive :: ChannelEnd -> IO (Value, ChannelEnd)
+receive c = do
+  v <- C.readChan (fst c)
+  return (v, c)
+
+send :: Value -> ChannelEnd -> IO ChannelEnd
+send v c = do
+  C.writeChan (snd c) v
+  return c
+
+wait :: Value -> Value
+wait (VChan c) =
+  VIO $ C.readChan (fst c)
+
+close :: Value -> IO Value
+close (VChan c) = do
+  C.writeChan (snd c) VUnit
+  return VUnit
+
 builtins :: [(String , Value)]
 builtins = [
+  ("receive", VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VTuple [val, VChan c])),
+  ("send", VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c))),
+  ("wait", VBuiltin wait),
+  ("close", VBuiltin (VIO . close)),
+
   ("(+)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x + y)))),
   ("(-)", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x - y)))),
   ("subtract", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x - y)))),
@@ -203,13 +245,15 @@ eval ctx (E.Tuple _ tup) = do
 eval _ (E.Cons _ (B.Identifier _ str)) = return $ VCons str []
 eval ctx (E.Var _ var) = case getVar ctx var of VIO io -> io
                                                 val -> return val
-eval ctx (E.App _ exp levels) = do
-  args <- sequence $ map (\(B.ExpLevel exp) -> eval ctx exp) (filterTypesFromLevels levels)
-  left <- (eval ctx exp)
-  res <- consumeAllArgs ctx  left args
-  case res of
-    VIO io -> io
-    _ -> return res
+eval (global, local) (E.App _ exp levels) = do
+  args <- sequence $ map (\(B.ExpLevel exp) -> eval (global, local) exp) (filterTypesFromLevels levels)
+  left <- (eval (global, local) exp)
+  case left of
+    VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
+    _ -> do res <- consumeAllArgs (global, local) left args
+            case res of
+              VIO io -> io
+              _ -> return res
 eval (_, local) (E.Abs _ levels _ exp) = return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) (filterTypesFromLevels levels)) exp local
 eval (global, local) (E.Let _ letDecls exp) = do
   letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
@@ -225,11 +269,14 @@ eval ctx (E.If _ ifExp thenExp elseExp) = do
   thenVal <- eval ctx thenExp
   elseVal <- eval ctx elseExp
   if fstToHsBool ifVal then return thenVal else return elseVal
--- eval _ (E.Channel _ type') = trace ("Channel -> type: " ++ show type') undefined
--- eval _ (E.Select _ iden) = trace ("Select -> iden: " ++ show iden) undefined
+eval _ (E.Channel _ _) = do
+  (chanL, chanR) <- chan
+  return $ VTuple [VChan chanL, VChan chanR]
+-- eval _ (E.Select _ iden) = 
 
 -- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
 getVar :: (Context, Context) -> B.Variable -> Value
+getVar _ (B.Variable {B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 getVar (global, local) var = case find (\(var2, val) -> B.external var == var2) local of
   Just (var, val) -> val
   Nothing -> case find (\(var2, val) -> B.external var == var2) global of
