@@ -68,7 +68,7 @@ wordWhnf t | T.isConstant t || T.isName t = do
   y <- nextNonTerminal
   addProduction y (show t) []
   addVisited t [y]
-wordWhnf t@(T.Forall _ mult pol u) = do
+-- wordWhnf t@(T.Forall` _ mult pol u) = do
 wordWhnf t@(T.Message' _ mult pol u) = do
   y <- nextNonTerminal
   w <- word u
@@ -85,7 +85,7 @@ wordWhnf t@(T.Labelled _ lab its) = do
   let termNonterms = zipWith (\(id, _) ws -> (show lab ++ show id, ws)) its ws
   mapM_ (\(a, w) -> addProduction y a w) termNonterms
   addVisited t [y]
-wordWhnf t@(T.App _ (T.Var _ α) ts) = do
+wordWhnf t@(T.App _ (T.Var _ α) ts) = do -- α T1...Tm
   y <- nextNonTerminal
   addProduction y (show α ++ "0") []
   ws <- mapM word ts
@@ -93,6 +93,16 @@ wordWhnf t@(T.App _ (T.Var _ α) ts) = do
   let terminals = map (\n -> show α ++ show n) [1..]
   mapM_ (\(a, w) -> addProduction y a w) (zip terminals words)
   addVisited t [y]
+wordWhnf t@(T.Dual _ u@(T.App _ (T.Var _ α) ts)) = do -- Dual(α T1...Tm)
+  w <- word u
+  y <- nextNonTerminal
+  label <- show $ T.Dual defaultSpan []
+  addProduction y label ++ "1" [y] --
+  addProduction y label ++ "2" []
+  addVisited t [y]
+
+defaultSpan :: Span
+defaultSpan = Span "<>" 0 0
 
 -- The state of the translation to grammar procedure
 

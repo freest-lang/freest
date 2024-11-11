@@ -72,6 +72,7 @@ pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where -- TODO: name it AppA
 pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where -- TODO: name it AppMessage instead
   Message' s m p t = App s (Message s m p) [t]
 pattern AppSemi s t u = Semi s t u
+pattern AppDual s t = Dual s t
 
 isConstant :: Type -> Bool
 isConstant Labelled{} = False
