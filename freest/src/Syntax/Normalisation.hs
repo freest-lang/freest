@@ -1,3 +1,10 @@
+{- |
+Module      :  Syntax.Normalisation
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Checking whether types normalise; obtaining the weak head normal form of a type.
+-}
 module Syntax.Normalisation
   ( normalise
   , normalises
@@ -18,6 +25,11 @@ import Data.Functor ((<&>))
 normalises :: T.Type -> Validation Bool
 normalises = fmap isJust . normalise
 
+-- Reduction by rules
+-- B (R-β),
+-- S, Semicolon (R-Seq-1, R-Seq2 and R-Assoc)
+-- D, Dual (R-D;, R-DSkip, R-DEnd, R-D?, R-D!, R-D&, R-D+, R-DCtx, R-DDVar) and
+-- Application (R-TAppL)
 reduceBSD :: T.Type -> Maybe T.Type
 reduceBSD = \case
   T.Semi _ T.Skip{} t  -> Just t                                -- R-Seq1
