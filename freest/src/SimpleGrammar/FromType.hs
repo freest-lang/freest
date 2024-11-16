@@ -11,17 +11,20 @@ module SimpleGrammar.FromType
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Type                   as T
-import           Syntax.Module
-import           SimpleGrammar.Grammar         as G
-import           SimpleGrammar.Normalisation
+import SimpleGrammar.Grammar as G
+import SimpleGrammar.Normalisation
+import Syntax.Base
+import Syntax.Module
+import qualified Syntax.Type as T
+
 import           Control.Monad.State
-import           Prelude                       hiding ( Word, words )
-import qualified Data.Map.Strict               as M
--- import qualified Data.Set                      as S
--- import           Data.Functor
--- import           Debug.Trace (trace)
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Map.Strict as M
+import           Prelude hiding ( Word, words )
+
+-- import qualified Data.Set as S
+-- import Data.Functor
+-- import Debug.Trace (trace)
 
 fromType :: Module -> [T.Type] -> Grammar
 fromType m ts = G.Grammar w (productions s)
@@ -69,7 +72,7 @@ wordWhnf t | T.isConstant t || T.isName t = do
   addProduction y (show t) []
   addVisited t [y]
 -- wordWhnf t@(T.Forall` _ mult pol u) = do
-wordWhnf t@(T.Message' _ mult pol u) = do
+wordWhnf t@(T.AppMessage _ mult pol u) = do
   y <- nextNonTerminal
   w <- word u
   addProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
@@ -83,26 +86,23 @@ wordWhnf t@(T.Labelled _ lab its) = do
   y <- nextNonTerminal
   ws <- mapM (word . snd) its
   let termNonterms = zipWith (\(id, _) ws -> (show lab ++ show id, ws)) its ws
-  mapM_ (\(a, w) -> addProduction y a w) termNonterms
+  mapM_ (uncurry (addProduction y)) termNonterms
   addVisited t [y]
 wordWhnf t@(T.App _ (T.Var _ α) ts) = do -- α T1...Tm
   y <- nextNonTerminal
   addProduction y (show α ++ "0") []
-  ws <- mapM word ts
+  ws <- mapM word (NE.toList ts)
   let words = map (++ [bottom]) ws
   let terminals = map (\n -> show α ++ show n) [1..]
-  mapM_ (\(a, w) -> addProduction y a w) (zip terminals words)
+  mapM_ (uncurry (addProduction y)) (zip terminals words)
   addVisited t [y]
-wordWhnf t@(T.Dual _ u@(T.App _ (T.Var _ α) ts)) = do -- Dual(α T1...Tm)
+wordWhnf t@(T.AppDual s u@(T.App _ (T.Var _ α) ts)) = do -- Dual(α T1...Tm)
   w <- word u
   y <- nextNonTerminal
-  label <- show $ T.Dual defaultSpan []
-  addProduction y label ++ "1" [y] --
-  addProduction y label ++ "2" []
+  let label = show $ T.Dual s
+  addProduction y (label ++ "1") [y] --
+  addProduction y (label ++ "2") []
   addVisited t [y]
-
-defaultSpan :: Span
-defaultSpan = Span "<>" 0 0
 
 -- The state of the translation to grammar procedure
 

@@ -20,71 +20,43 @@ import qualified Syntax.Kind as K
 
 import Data.Bifunctor (first, second)
 import Data.List (intersperse, union, (\\))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Debug.Trace (trace)
 
 freeVars :: T.Type -> Set.Set Variable
-freeVars = \case 
-    T.Semi _ t u       -> freeVars t `Set.union` freeVars u
-    T.Dual _ t         -> freeVars t
-    -- If forall is just a constant, remove this equation
-    T.Forall _ aks t   -> freeVars t Set.\\ Set.fromList (map fst aks)
+freeVars = \case
+    T.Forall _ a k t   -> Set.delete a $ freeVars t
     T.Var _ a          -> Set.singleton a
-    T.Abs _ aks t      -> freeVars t Set.\\ Set.fromList (map fst aks)
-    T.App _ t ts       -> Set.unions (freeVars t : map freeVars ts)
+    T.App _ t ts       -> Set.unions (freeVars t NE.<| fmap freeVars ts)
     T.Labelled _ _ lts -> Set.unions $ map (freeVars . snd) lts
-    T.Tuple _ ts       -> Set.unions $ map freeVars ts
     _                  -> Set.empty
 
 allVars :: T.Type -> Set.Set Variable
 allVars = \case 
-    T.Semi _ t u       -> allVars t `Set.union` allVars u
-    T.Dual _ t         -> allVars t
-    -- If forall is just a constant, remove this equation
-    T.Forall _ aks t   -> allVars t
+    T.Forall _ _ _ t   -> allVars t
     T.Var _ a          -> Set.singleton a
-    T.Abs _ aks t      -> allVars t
-    T.App _ t ts       -> Set.unions (allVars t : map allVars ts)
+    T.App _ t ts       -> Set.unions (allVars t NE.<| fmap allVars ts)
     T.Labelled _ _ lts -> Set.unions $ map (allVars . snd) lts
-    T.Tuple _ ts       -> Set.unions $ map allVars ts
     _                  -> Set.empty
 
 newInternal :: Variable -> Set.Set Variable -> Variable
 newInternal a as = a{internal=head ([0..] \\ map internal (Set.toList as))}
 
 subs :: Variable -> T.Type -> T.Type -> T.Type
-subs a u t = sub t
-  where
-    sub :: T.Type -> T.Type
-    sub (T.Semi s t u) = T.Semi s (sub t) (sub u)
-    sub (T.Dual s t) = T.Dual s (sub t)
-    -- If forall is just a constant, remove this equation
-    sub t@(T.Forall s ((b,k):bks) t') -- map does not work?
-      | b == a = t
-      | b `Set.member` fvu = 
-        let b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
-            T.Forall _ bks' t'' = sub (subs b (T.Var (getSpan b') b') (T.Forall s bks t'))
-        in T.Forall s ((b',k):bks') t''
-      | otherwise = 
-        let T.Forall _ bks' t'' = sub (T.Forall s bks t')
-        in T.Forall s ((b,k):bks') t''
-    sub t@(T.Var _ b)
-      | b == a = u
-      | otherwise = t
-    sub   (T.Abs s []          t') = T.Abs s [] (sub t')
-    sub t@(T.Abs s ((b,k):bks) t') -- map does not work?
-      | b == a = t
-      | b `Set.member` fvu = 
-        let b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
-            T.Abs _ bks' t'' = sub (subs b (T.Var (getSpan b') b') (T.Abs s bks t'))
-        in T.Abs s ((b',k):bks') t''
-      | otherwise = 
-        let T.Abs _ bks' t'' = sub (T.Abs s bks t')
-        in T.Abs s ((b,k):bks') t''
-    sub (T.App s f as) = T.App s (sub f) (map sub as)
-    sub (T.Labelled s l lts) = T.Labelled s l (map (second sub) lts)
-    sub (T.Tuple s ts) = T.Tuple s (map sub ts)
-    sub t = t
-
-    fvu = freeVars u
+subs a u = \case 
+  t@(T.Forall s b k t')
+    | b == a -> t
+    | b `Set.member` fvu ->
+      T.Forall s b' k (subs b (T.Var (getSpan b') b') t')
+    | otherwise -> T.Forall s b k (subs a u t')
+    where 
+      b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
+      fvu = freeVars u
+  t@(T.Var _ b)
+    | b == a    -> u
+    | otherwise -> t
+  T.App s f as -> T.App s (subs a u f) (fmap (subs a u) as)
+  T.Labelled s l lts -> T.Labelled s l (map (second (subs a u)) lts)
+  t -> t

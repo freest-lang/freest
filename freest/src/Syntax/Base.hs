@@ -44,6 +44,9 @@ data Span
     } 
   deriving (Eq, Ord)
 
+nullSpan :: Span
+nullSpan = Span "" (0,0) (0,0)
+
 class Located a where 
   getSpan :: a -> Span 
   setSpan :: Span -> a -> a 

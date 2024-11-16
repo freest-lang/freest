@@ -28,13 +28,14 @@ import UI.Error (Error(..))
 
 import Control.Monad (replicateM, forM, void, forM_, unless, foldM)
 import Control.Monad.State ( gets, modify, State, runState)
-import qualified Data.List as List
-import qualified Data.Map as Map
-import qualified Data.Set as Set
 import Data.Bifunctor (first, second, bimap)
 import Data.Bitraversable (bisequence, bimapM)
 import Data.Foldable (foldrM)
 import Data.Function (on)
+import qualified Data.List as List
+import qualified Data.List.NonEmpty as NE
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Debug.Trace (trace)
 
 data ScopingKey 
@@ -323,34 +324,30 @@ scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeType ctx (T.Labelled  s l lts) =
   let lts' = mapM (\(l,t) -> (l,) <$> scopeType ctx t) lts
   in T.Labelled s l <$> lts'
-scopeType ctx (T.Tuple s ts) =
-  T.Tuple s <$> mapM (scopeType ctx) ts
 -- if forall is a constant instead, just remove this equation 
 -- (and make sure there is one for T.Abs)
-scopeType ctx (T.Forall s (unzip -> (as,ks)) t) = do
-  as' <- mapM freshInternal as
-  ks' <- mapM scopeKind ks
-  let ctx' = fromTVarList as' `Map.union` ctx
-  T.Forall s (zip as' ks') <$> scopeType ctx' t
+scopeType ctx (T.Forall s a k t) = do
+  a' <- freshInternal a
+  k' <- scopeKind k
+  let ctx' = insertTVar a' ctx
+  T.Forall s a' k' <$> scopeType ctx' t
 scopeType ctx t@(T.Var s a) =
   case lookupTVar a ctx of
     Just i  -> return $ T.Var s a{internal=i}
     Nothing -> T.Var s <$> freshInternal a -- no error here; leave it for the typechecker
 scopeType ctx (T.App s t ts) =
   T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
-scopeType ctx (T.Abs s (unzip -> (as,ks)) t) = do
-  as' <- mapM freshInternal as
-  ks' <- mapM scopeKind ks
-  let ctx' = fromTVarList as' `Map.union` ctx
-  T.Abs s (zip as' ks') <$> scopeType ctx' t
 scopeType ctx t = return t
 
 scopeTypeQ :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeTypeQ ctx t = do
   t' <- scopeType ctx t 
   let fvm = Map.fromList (map (\a -> (TVar $ external a, a)) $ Set.toList (freeVars t'))
-  aks <- mapM (\a -> (a,) <$> freshKVar a) $ List.sortBy (compare `on` getSpan) $ Map.elems fvm
-  T.Forall (getSpan t) aks <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
+  if Map.null fvm 
+    then scopeType ctx t
+    else do
+      aks <- mapM (\a -> (a,) <$> freshKVar a) $ List.sortBy (compare `on` getSpan) $ Map.elems fvm
+      T.variadicForall (getSpan t) (NE.fromList aks) <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
 
 scopeKind :: K.Kind -> Scoping K.Kind
 scopeKind (K.Proper s m pk) = K.Proper s <$> scopeMult m <*> scopePrekind pk

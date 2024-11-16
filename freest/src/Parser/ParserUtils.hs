@@ -17,6 +17,8 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import qualified Syntax.Type as T
 
+import qualified Data.List.NonEmpty as NE
+
 dummyKindVar :: Located a => a -> K.Kind
 dummyKindVar (getSpan -> s) =
   K.Proper s (K.VarM  (Variable s "φ" (-1))) (K.VarPK (Variable s "ψ" (-1)))
@@ -34,9 +36,9 @@ mkIdTk :: Token -> Identifier
 mkIdTk t = mkId (getText t) t
 
 infixApp :: T.Type -> T.Type -> T.Type -> T.Type
-infixApp t1 op t2 = T.App (spanFromTo t1 t2) op [t1, t2]
+infixApp t1 op t2 = T.App (spanFromTo t1 t2) op (NE.fromList [t1, t2])
 
-tupleAppType :: Span -> [T.Type] -> T.Type
+tupleAppType :: Span -> NE.NonEmpty T.Type -> T.Type
 tupleAppType s ts =
   T.App s (T.Name s (Identifier s ("("++replicate (length ts) ',' ++")"))) ts
 
@@ -57,5 +59,5 @@ addArgExp a (E.App s e as) = E.App s e (as++[a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 
 addArgType :: T.Type -> T.Type -> T.Type
-addArgType a (T.App s t as) = T.App s t (as++[a])
-addArgType a t              = T.App (spanFromTo t a) t [a]
+addArgType t (T.App s u us) = T.App s u (us `NE.appendList` [t])
+addArgType t u              = T.App (spanFromTo u t) u (NE.singleton t)

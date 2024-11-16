@@ -58,7 +58,7 @@ data Token
   | TkEOF Span
 
   -- Types
-  | TkIntType Span | TkFloatType Span | TkCharType Span | TkStringType Span
+  | TkIntType Span | TkFloatType Span | TkCharType Span
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
 
@@ -157,7 +157,6 @@ instance Located Token where
   getSpan (TkIntType s) = s
   getSpan (TkFloatType s) = s
   getSpan (TkCharType s) = s
-  getSpan (TkStringType s) = s
   getSpan (TkBang s) = s
   getSpan (TkQuestion s) = s
   getSpan (TkAmp s) = s
@@ -247,7 +246,6 @@ instance Located Token where
   setSpan s (TkIntType _) = TkIntType s
   setSpan s (TkFloatType _) = TkFloatType s
   setSpan s (TkCharType _) = TkCharType s
-  setSpan s (TkStringType _) = TkStringType s
   setSpan s (TkBang _) = TkBang s
   setSpan s (TkQuestion _) = TkQuestion s
   setSpan s (TkAmp _) = TkAmp s

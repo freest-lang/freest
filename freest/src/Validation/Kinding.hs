@@ -26,10 +26,12 @@ import Validation.Base
 import Data.Bifunctor (first)
 import Data.Functor ((<&>))
 import qualified Data.Map as Map
-import Control.Monad.Extra (unlessM, (&&^), allM)
+import Control.Monad.Extra (unlessM, (&&^))
+import Data.Foldable.Extra (allM)
 import Control.Monad.State (MonadState, foldM, unless, void, forM_, when, runState, StateT (runStateT), evalState)
 import Control.Monad.Trans.Except (throwE, runExceptT, ExceptT (ExceptT))
 import Control.Monad.Identity (Identity(..))
+import qualified Data.List.NonEmpty as NE
 
 runKinding :: M.Module -> Either [Error] M.Module
 runKinding m =
@@ -51,13 +53,9 @@ presynth ctx = \case
   T.Int s    -> pure (ut s)
   T.Float s  -> pure (ut s)
   T.Char s   -> pure (ut s)
-  T.String s -> pure (ut s)
   T.Arrow s m -> pure (Arrow s (lt s) (lt s))
-  T.Labelled s T.Variant lts -> do
+  T.Labelled s l lts | l == T.Record || l == T.Variant -> do
     m  <- foldM joinMults Un (map snd lts)
-    return (Proper s m Top)
-  T.Tuple s ts -> do
-    m  <- foldM joinMults Un ts
     return (Proper s m Top)
   -- Session types
   T.Message s m _ -> pure (Arrow s (lt s) (Proper s m Session))
@@ -66,18 +64,18 @@ presynth ctx = \case
     pure (Proper s m Session)
   T.End s _ -> pure (ls s)
   T.Skip s -> pure (us s)
-  T.Semi s t u -> do
+  T.AppSemi s t u -> do
     -- k1 <- catchE (check' ctx t (ls s)) (putError (us s))
     -- k2 <- catchE (check' ctx u (ls s)) (putError (us s))
     k1 <- presynthCheck ctx t (ls s)
     k2 <- presynthCheck ctx u (ls s)
     return (join k1 k2)
-  T.Dual s t -> do
+  T.AppDual s t -> do
     -- catchE (check' ctx t (ls s)) (putError (us s))
     presynthCheck ctx t (ls s)
   -- Polymorphism
-  T.Forall s aks t -> do
-    presynthCheck (Map.union (Map.fromList aks) ctx) t (lt s)
+  T.Forall s a k t -> do
+    presynthCheck (Map.insert a k ctx) t (lt s)
     >>= \case Proper _ m _ -> pure (Proper s m Top)
   -- Equations
   T.Name s i -> lookupKind i
@@ -85,27 +83,20 @@ presynth ctx = \case
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
     Nothing -> putError (bot s) (OutOfScope s a)
-  T.Abs s aks t ->
-    foldr (fmap . Arrow s . snd)
-      (presynth (Map.union (Map.fromList aks) ctx) t) aks
   T.App s t ts -> do
     k <- presynth ctx t
-    let (pks,rk) = extractArrow k
-    when (length ts > length pks) $
-      throwE (TooManyArgsK s t k (length ts) (length pks))
-    checkArgs ts pks rk
+    let (ks,kn) = extractArrow k
+        checkArgs [] ks' =
+          pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
+        checkArgs _ [] =
+          throwE (TooManyArgsK s t k (length ts) (length ks))
+        checkArgs (t' : ts') (k':ks') =
+          check ctx t' k' >> checkArgs ts' ks'
+    checkArgs (NE.toList ts) ks
     where
       extractArrow (Arrow _ k1 k2) =
         first (k1:) (extractArrow k2)
       extractArrow k = ([], k)
-      checkArgs [] ks rk =
-        pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') rk ks)
-      checkArgs ts [] rk =
-        internalError "too many args exception not thrown."
-      checkArgs (t:ts) (k:ks) rk =
-        check ctx t k >> checkArgs ts ks rk
-  -- Hole?
-  T.Hole s -> pure (bot s)
   where
     joinMults m' t = do
       -- catchE (check' ctx t (lt s)) (putError (Proper s Un Top))
@@ -119,7 +110,7 @@ synth ctx t = do
     throwE (InvalidType (getSpan t) t)
   return k
   where
-    valid   (T.Abs _ _ t)  = valid t
+    -- valid   (T.Abs _ _ t)  = valid t -- TODO: Equations
     valid w@(T.App _ t us) = normalises w &&^ valid t &&^ allM valid us
     valid   _ = pure True
 

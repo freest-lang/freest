@@ -111,7 +111,6 @@ $upper = [ A-Z ]
 <0> "Int"   { token TkIntType }
 <0> "Float" { token TkFloatType }
 <0> "Char"  { token TkCharType }
-<0> "String"{ token TkStringType }
 <0> "Dual"  { token TkDualType }
 <0> "Skip"  { token TkSkipType }
 <0> "Close" { token TkCloseType }
@@ -132,7 +131,7 @@ $upper = [ A-Z ]
 <0> @intLit    { emit TkIntLit }
 <0> @floatLit  { emit TkFloatLit }
 <0> @charLit   { emit TkCharLit }
-<0> @stringLit { emit TkStringLit }
+-- <0> @stringLit { emit TkStringLit }
 
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }

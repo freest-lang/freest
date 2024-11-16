@@ -15,7 +15,7 @@ import Control.Monad.Trans.Except
 
 function :: E.Exp -> T.Type -> Validation T.Type
 function e t = normalise t >>= \case
-    Just t'@T.Arrow'{} -> pure t'
+    Just t'@T.AppArrow{} -> pure t'
     Just t'@T.Forall{} -> pure t'
     _ -> throwE (ExtractError (getSpan e) "a function" (Right e) t)
 
@@ -29,9 +29,4 @@ function e t = normalise t >>= \case
 --     T.Forall _ aks t              -> (map ((,K.Un). TypeLevel . snd) aks, t)
 --     t                             -> error ("arrowList: type "++show t++" is not an arrow")
 
-tuple :: Either E.Pat E.Exp -> T.Type -> Int -> Validation [T.Type]
-tuple ep t n =
-    normalise t >>= \case 
-      Just (T.Tuple _ ts) | length ts == n -> pure ts
-      _ -> throwE (ExtractError (getSpan ep) ("a tuple of "++show n++" elements") ep t)
                

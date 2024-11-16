@@ -23,8 +23,8 @@ import UI.Error
 
 import Control.Monad.Except
 import Data.Bifunctor
+import qualified Data.List.NonEmpty as NE
 import Debug.Trace
-
 }
 
 %name parseExp Exp
@@ -102,7 +102,6 @@ import Debug.Trace
   'Int'   { TkIntType _ }
   'Float' { TkFloatType _ }
   'Char'  { TkCharType _ }
-  'String'{ TkStringType _ }
   'Skip'  { TkSkipType _ }
   'Close' { TkCloseType _ }
   'Wait'  { TkWaitType _ }
@@ -122,7 +121,7 @@ import Debug.Trace
   INT_LIT { TkIntLit _ _ }
   FLOAT_LIT { TkFloatLit _ _ }
   CHAR_LIT { TkCharLit _ _ }
-  STRING_LIT {TkStringLit _ _ }
+  -- STRING_LIT {TkStringLit _ _ }
 
   -- Identifiers
   UPPER_ID { TkUpperId _ _ }  
@@ -228,14 +227,15 @@ TypePrimary :: { T.Type }
   : 'Int'    { T.Int (getSpan $1) }
   | 'Float'  { T.Float (getSpan $1) }
   | 'Char'   { T.Char (getSpan $1) }
-  | 'String' { T.String (getSpan $1) }
   | 'Skip'   { T.Skip (getSpan $1) }
   | 'Close'  { T.End (getSpan $1) T.Out }
   | 'Wait'   { T.End (getSpan $1) T.In }
   -- Unit, Tuples, Operators
-  | '(' ')'        { T.Tuple (spanFromTo $1 $2) [] }
-  | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }      -- with tuples in the Type AST
-                                -- { tupleAppType (spanFromTo $1 $5) ($2 : $4) } -- using tuple constructors (,+)
+  | '(' ')'        { T.Labelled (spanFromTo $1 $2) T.Record [] }
+  | '(' Type ',' TypeListComma ')' 
+      { T.Labelled (spanFromTo $1 $5) 
+                   T.Record
+                   (map (\(i, t) -> (Identifier (getSpan t) (show i),t)) (zip [0..] ($2 : $4))) }
   | '(' Commas ')' { T.Name (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) }
   | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
   -- | '(' Type Arrow ')' -- TODO: sections
@@ -252,24 +252,24 @@ TypePrimary :: { T.Type }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
   -- Lists
   | '[' ']'      { T.Name (spanFromTo $1 $2) (mkNil (spanFromTo $1 $2)) }
-  | '[' Type ']' { T.App (spanFromTo $1 $3) (T.Name (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3))) [$2] }
+  | '[' Type ']' { T.App (spanFromTo $1 $3) (T.Name (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3))) (NE.singleton $2) }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 
 Type :: { T.Type }
-  : Type Arrow Type %prec ARROW { infixApp $1 (T.Arrow (fst $2) (snd $2)) $3 }
-  | Type ';' Type               { T.Semi (spanFromTo $1 $3) $1 $3 }
-  | Polarity Type %prec MSG     { T.App (spanFromTo (fst $1) $2) (T.Message (fst $1) K.Lin (snd $1)) [$2] }
-  | '*' Polarity Type %prec MSG { T.App (spanFromTo $1 $3) (T.Message (fst $2) K.Un  (snd $2)) [$3] }
+  : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
+  | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
+  | Polarity Type %prec MSG     { T.AppMessage (spanFromTo (fst $1) $2) K.Lin (snd $1) $2 }
+  | '*' Polarity Type %prec MSG { T.AppMessage (spanFromTo $1 $3) K.Un  (snd $2) $3 }
   -- If forall is just a constant, remove this rule and uncomment the one below and the declaration of Forall.
-  | 'forall' KindedVarListWS '.' Type   { T.Forall (spanFromTo $1 $4) $2 $4 }
+  | 'forall' KindedVar KindedVarListWS '.' Type   { T.variadicForall (spanFromTo $1 $5) ($2 NE.:| $3) $5 }
   -- | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $3) [(fst $2, snd $2)] $3)] }
   -- | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $4) [(fst $2, snd $2)] $4)] }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
   : TypeApp TypePrimary { addArgType $2 $1 }
-  | 'Dual' TypePrimary  { T.Dual (spanFromTo $1 $2) $2 }
+  | 'Dual' TypePrimary  { T.AppDual (spanFromTo $1 $2) $2 }
   | TypePrimary { $1 }
 
 TypeListComma :: { [T.Type] }
@@ -308,7 +308,7 @@ ExpPrimary :: { E.Exp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
-  | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
+  -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
   | LOWER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
   | UPPER_ID    { E.Cons   (getSpan $1) (mkIdTk $1) }
   | '(' ')'     { E.Tuple  (spanFromTo $1 $2) [] }
@@ -428,7 +428,7 @@ PatPrimary :: { E.Pat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
-  | STRING_LIT       { E.StringPat (getSpan $1) (read (getText $1)) }
+  -- | STRING_LIT       { E.StringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | LOWER_ID         { E.VarPat    (getSpan $1) (mkVarTk $1) }
   | DataConstructor  { E.ConsPat   (getSpan $1) $1 [] }

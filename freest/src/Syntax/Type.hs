@@ -9,7 +9,8 @@ polymorphic context-free session types.
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
-  , Type(.., Arrow', Message', AppSemi)
+  , Type(.., AppArrow, AppMessage, AppSemi, AppDual)
+  , variadicForall
   , Dual(..)
   , isConstant
   , isName
@@ -20,6 +21,7 @@ import Syntax.Base
 import qualified Syntax.Kind as K
 
 import Data.List (intercalate)
+import qualified Data.List.NonEmpty as NE
 import Data.Bifunctor
 
 data Polarity = In | Out 
@@ -34,6 +36,7 @@ instance Dual Polarity where
 
 data Labelled -- TODO: use a name, not an adjective. Label?
   = Variant
+  | Record 
   | Choice K.Multiplicity Polarity
   deriving (Eq, Ord)
 
@@ -42,37 +45,48 @@ data Type
   = Int Span
   | Float Span
   | Char Span
-  | String Span  -- | TODO: Would List Char work?
   | Arrow Span K.Multiplicity
-  | Tuple Span [Type]  -- TODO: delete the [Type]
   -- Functional or session
   | Labelled Span Labelled [(Identifier, Type)]
   -- Session types
   | Skip Span
   | End Span Polarity
-  | Semi Span Type Type
+  | Semi Span
   | Message Span K.Multiplicity Polarity
-  | Dual Span Type  -- TODO: delete the Type
+  | Dual Span
   -- Polymorphism
-  | Forall Span [(Variable, K.Kind)] Type
+  | Forall Span Variable K.Kind Type
   -- Equations
   | Name Span Identifier
   -- Higher-order
   | Var Span Variable
-  | App Span Type [Type]
-  | Abs Span [(Variable, K.Kind)] Type  -- TODO: delete this constructor, or at least comment
-  -- Hole?
-  | Hole Span
+  | App Span Type (NE.NonEmpty Type)
   deriving (Eq, Ord)
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
--- Why not bidirectional?
-pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where -- TODO: name it AppArrow instead
-  Arrow' s m t u = App s (Arrow s m) [t,u]
-pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where -- TODO: name it AppMessage instead
-  Message' s m p t = App s (Message s m p) [t]
-pattern AppSemi s t u = Semi s t u
-pattern AppDual s t = Dual s t
+-- (also, consider OverloadedLists:
+-- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
+pattern AppArrow :: Span -> K.Multiplicity -> Type -> Type -> Type
+pattern AppArrow s1 m t u <- App s1 (Arrow s2 m) (NE.toList -> [t,u]) where
+  AppArrow s m t u = App s (Arrow s m) (NE.fromList [t,u])
+
+pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
+pattern AppMessage s1 m p t <- App s1 (Message s2 m p) (NE.toList -> [t]) where
+  AppMessage s m p t = App s (Message s m p) (NE.singleton t)
+
+pattern AppSemi :: Span -> Type -> Type -> Type
+pattern AppSemi s t u <- App s (Semi _) (NE.toList -> [t,u]) where
+  AppSemi s t u = App s (Semi s) (NE.fromList [t,u])
+
+pattern AppDual :: Span -> Type -> Type
+pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) where
+  AppDual s t = App s (Dual s) (NE.singleton t)
+
+variadicForall :: Span -> NE.NonEmpty (Variable, K.Kind) -> Type -> Type
+variadicForall s ((a,k) NE.:| []) t = 
+  Forall s a k t
+variadicForall s ((a,k) NE.:| (NE.fromList -> aks)) t =
+  Forall s a k $ variadicForall s aks t
 
 isConstant :: Type -> Bool
 isConstant Labelled{} = False
@@ -80,7 +94,6 @@ isConstant Forall{} = False
 isConstant Name{} = False
 isConstant Var{} = False
 isConstant App{} = False
-isConstant Hole{} = False
 isConstant _ = True
 
 isName :: Type -> Bool
@@ -92,7 +105,8 @@ instance Show Polarity where
   show Out = "!"
 
 instance Show Labelled where
-  show Variant = "<>"
+  show Record = "×"  -- temporary, just for show
+  show Variant = "⊕" -- temporary, just for show
   show (Choice K.Lin In)  = "&"
   show (Choice K.Lin Out) = "+"
   show (Choice K.Un In)   = "*&"
@@ -103,64 +117,48 @@ instance Show Type where
   show (Int _)             = "Int"
   show (Float _)           = "Float"
   show (Char _)            = "Char"
-  show (String _)          = "String"
   show (Arrow _ m)         = "("++show m++"->)"
   show (Labelled  _ l lts) = show l++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
-  show (Tuple _ [])        = "()"
-  show (Tuple _ (t:ts))    = "("++show t++(if null ts then "" else concatMap (\t -> ", "++show t) ts)++")"
   show (Message _ K.Un p)  =  "(*"++ show p++")"
   show (Message _ _ p)     = "("++show p++")"
   show (End _ In )         = "Wait"
   show (End _ Out)         = "Close"
   show (Skip _)            = "Skip"
-  show (Semi _ t u)        = "("++show t++ ";" ++show u++")"
-  show (Dual _ t)          = "(Dual"++ show t++")"
+  show (Semi _)            = "(;)"
+  show (Dual _)            = "Dual"
   show (Var _ a)           = show a
-  show (Forall _ aks t)    = "(forall "++concatMap (\(a,k) -> show a++":"++show k++" ") aks++". "++show t++")"
-  -- show (Rec _ k)           = "rec_"++show k
+  show (Forall _ a k t)    = "(forall "++show a++":"++show k++". "++show t++")"
   show (App _ t as)        = foldl (\s a -> "("++s++" "++show a++")") (show t) as
-  show (Abs _ aks t)       = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
   show (Name _ n)          = show n
-  show (Hole s)            = "_"
 
 instance Located Type where
   getSpan (Int s)           = s
   getSpan (Float s)         = s
   getSpan (Char s)          = s
-  getSpan (String s)        = s
   getSpan (Arrow s _)       = s
   getSpan (Labelled  s _ _) = s
-  getSpan (Tuple s _)       = s
   getSpan (Message s _ _)   = s
   getSpan (End s _)         = s
   getSpan (Skip s)          = s
-  getSpan (Semi s _ _)      = s
-  getSpan (Dual s _)        = s
+  getSpan (Semi s)          = s
+  getSpan (Dual s)          = s
   getSpan (Var s _)         = s
-  getSpan (Forall s _ _)    = s
-  -- getSpan (Rec s _)         = s
+  getSpan (Forall s _ _ _)  = s
   getSpan (App s _ _)       = s
-  getSpan (Abs s _ _)       = s
   getSpan (Name s _)        = s
-  getSpan (Hole s)          = s
 
   setSpan s (Int _)             = Int s
   setSpan s (Float _)           = Float s
   setSpan s (Char _)            = Char s
-  setSpan s (String _)          = String s
   setSpan s (Arrow _ m)         = Arrow s m
   setSpan s (Labelled  _ l lts) = Labelled s l lts
-  setSpan s (Tuple _ ts)        = Tuple s ts
   setSpan s (Message _ m p)     = Message s m p
   setSpan s (End _ p)           = End s p
   setSpan s (Skip _)            = Skip s
-  setSpan s (Semi _ t u)        = Semi s t u
-  setSpan s (Dual _ t)          = Dual s t
+  setSpan s (Semi _)            = Semi s
+  setSpan s (Dual _)            = Dual s
   setSpan s (Var _ a)           = Var s a
-  setSpan s (Forall _ aks t)    = Forall s aks t
-  -- setSpan s (Rec _ k)           = Rec s k
+  setSpan s (Forall _ a k t)    = Forall s a k t
   setSpan s (App _ t1 t2)       = App s t1 t2
-  setSpan s (Abs _ aks t)       = Abs s aks t
   setSpan s (Name _ n)          = Name s n
-  setSpan s (Hole _)            = Hole s
 
