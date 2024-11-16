@@ -17,12 +17,13 @@ module Syntax.Type
   )
 where
 
-import Syntax.Base
-import qualified Syntax.Kind as K
+import           Syntax.Base
+import qualified Syntax.Kind                  as K
 
-import Data.List (intercalate)
-import qualified Data.List.NonEmpty as NE
-import Data.Bifunctor
+import           Data.List (intercalate, sort)
+import           Data.Bifunctor
+import qualified Data.List.NonEmpty            as NE
+import qualified Data.Map.Strict               as M
 
 data Polarity = In | Out 
   deriving (Eq, Ord)
@@ -61,7 +62,7 @@ data Type
   -- Higher-order
   | Var Span Variable
   | App Span Type (NE.NonEmpty Type)
-  deriving (Eq, Ord)
+  deriving Ord
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
@@ -130,6 +131,49 @@ instance Show Type where
   show (Forall _ a k t)    = "(forall "++show a++":"++show k++". "++show t++")"
   show (App _ t as)        = foldl (\s a -> "("++s++" "++show a++")") (show t) as
   show (Name _ n)          = show n
+
+class Congruence t where
+  congruent :: M.Map Variable Variable -> t -> t -> Bool
+
+instance Eq Type where
+  (==) = congruent M.empty
+  
+instance Congruence Type where
+  -- Functional types
+  congruent _ Int{} Int{} = True
+  congruent _ Float{} Float{} = True
+  congruent _ Char{} Char{} = True
+  congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
+  congruent m (Labelled _ l1 m1) (Labelled _ l2 m2) = l1 == l2 && congruent m m1 m2
+  -- Session types
+  congruent _ Skip{} Skip{} = True
+  congruent _ (End _ p1) (End _ p2) = p1 == p2
+  congruent m Semi{} Semi{} = True
+  congruent _ (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
+  congruent m Dual{} Dual{} = True
+  -- Polymorphism
+  congruent m (Forall _ a k1 t) (Forall _ b k2 u) = a == b && k1 == k2 && congruent m t u
+  -- Equations
+  congruent _ (Name _ id1) (Name _ id2) = id1 == id2
+  -- Higher-order
+  congruent m (Var _ v1) (Var _ v2) =
+    v1 == v2 ||              -- free variables
+    Just v2 == M.lookup v1 m -- bound variables
+  congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
+  congruent _ _ _ = False
+
+instance Congruence [Type] where
+  congruent m ts us =
+    length ts == length us &&
+    all (uncurry (congruent m)) (zip ts us)
+
+instance Congruence (NE.NonEmpty Type) where
+  congruent m ts us = congruent m (NE.toList ts) (NE.toList us)
+
+instance Congruence [(Identifier, Type)] where
+  congruent m m1 m2 =
+    length m1 == length m2 &&
+    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2) (zip (sort m1) (sort m2))
 
 instance Located Type where
   getSpan (Int s)           = s

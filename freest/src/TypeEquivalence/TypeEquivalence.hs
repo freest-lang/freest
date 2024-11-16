@@ -14,12 +14,11 @@ where
 
 import qualified Syntax.Type                       as T
 import           Syntax.Module
-import           TypeEquivalence.AlphaCongruence
 import           SimpleGrammar.FromType            ( fromType )
 -- import qualified Bisimulation.Bisimulation   as G ( bisimilar )
 
 equivalent :: Module -> T.Type -> T.Type -> Bool
-equivalent m t u = t `alphaCongruent` u || bisimilar m t u
+equivalent m t u = t == u || bisimilar m t u
 
 bisimilar :: Module -> T.Type -> T.Type -> Bool
 bisimilar m t u = True
