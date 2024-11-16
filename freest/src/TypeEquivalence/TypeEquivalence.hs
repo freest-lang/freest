@@ -24,3 +24,5 @@ bisimilar :: Module -> T.Type -> T.Type -> Bool
 bisimilar m t u = True
   where _ = fromType m [t, u]
 -- bisimilar t u = G.bisimilar (convertToGrammar [t, u])
+
+-- TODO: Move this code to module Bisimulation.Bisimulation

@@ -14,6 +14,10 @@ module Syntax.Type
   , Dual(..)
   , isConstant
   , isName
+  , isSkip
+  , isSemi
+  , isAppSemi
+  , isDual
   )
 where
 
@@ -92,7 +96,7 @@ variadicForall s ((a,k) NE.:| (NE.fromList -> aks)) t =
 isConstant :: Type -> Bool
 isConstant Labelled{} = False
 isConstant Forall{} = False
-isConstant Name{} = False
+isConstant Name{} = False -- TODO: type names are not constants (possibly)
 isConstant Var{} = False
 isConstant App{} = False
 isConstant _ = True
@@ -100,6 +104,26 @@ isConstant _ = True
 isName :: Type -> Bool
 isName Name{} = True
 isName _ = False
+
+isSkip :: Type -> Bool
+isSkip Skip{} = True
+isSkip _ = False
+
+isEnd :: Type -> Bool
+isEnd End{} = True
+isEnd _ = False
+
+isSemi :: Type -> Bool
+isSemi Semi{} = True
+isSemi _ = False
+
+isAppSemi :: Type -> Bool
+isAppSemi AppSemi{} = True
+isAppSemi _ = False
+
+isDual :: Type -> Bool
+isDual Dual{} = True
+isDual _ = False
 
 instance Show Polarity where
   show In  = "?"
