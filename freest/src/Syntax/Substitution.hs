@@ -21,7 +21,7 @@ import qualified Syntax.Kind as K
 import Data.Bifunctor (first, second)
 import Data.List (intersperse, union, (\\))
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Debug.Trace (trace)
 

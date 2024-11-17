@@ -21,15 +21,14 @@ module Syntax.Module
   )
 where
 
-import Syntax.Base
-import Syntax.Expression (Exp, Pat, LetDecl)
-import Syntax.Kind (Kind)
-import Syntax.Type (Type)
+import           Syntax.Base
+import           Syntax.Expression (Exp, Pat, LetDecl)
+import           Syntax.Kind (Kind)
+import           Syntax.Type (Type)
 
-import Data.List (intercalate)
-import Data.Maybe (fromMaybe)
-import qualified Data.Map as Map 
-import Debug.Trace (trace)
+import           Data.List (intercalate)
+import           Data.Maybe (fromMaybe)
+import           Debug.Trace (trace)
 
 type ConsDecl = (Identifier, [Type])
 type DataDecl = (Identifier, [(Variable, Kind)], [ConsDecl])

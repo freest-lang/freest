@@ -25,7 +25,7 @@ import Validation.Base
 
 import Data.Bifunctor (first)
 import Data.Functor ((<&>))
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Control.Monad.Extra (unlessM, (&&^))
 import Data.Foldable.Extra (allM)
 import Control.Monad.State (MonadState, foldM, unless, void, forM_, when, runState, StateT (runStateT), evalState)

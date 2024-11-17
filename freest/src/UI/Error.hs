@@ -18,7 +18,7 @@ import qualified Syntax.Type as T
 import Utils
 
 import Data.List (intercalate)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 data Error 
   = LexicalError Span Char 

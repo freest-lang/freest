@@ -10,7 +10,7 @@ import qualified Syntax.Type as T
 import UI.Error
 
 import Control.Monad.State (State, MonadState, modify, gets)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Control.Arrow ((>>>))

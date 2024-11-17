@@ -22,7 +22,7 @@ import Control.Monad
 import Data.Bifunctor
 import Data.Functor
 import Data.List.Extra (snoc)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import Syntax.Substitution (subs)
 import Control.Monad.State
 import Control.Applicative ()
