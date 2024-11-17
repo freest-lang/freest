@@ -67,6 +67,7 @@ reduce td (T.Name _ id) = t -- R-μ
 reduce td (T.AppName _ id ts) = rBeta (map fst vks) ts u -- R-μ
   where (vks, u) = td M.! id
         rBeta :: [Variable] -> NE.NonEmpty T.Type -> T.Type -> T.Type
+        -- TODO: assuming vs and ts of the same length
         rBeta vs ts u = foldr (uncurry subs) u (zip vs (NE.toList ts))
 -- R-β _ No such thing
 reduce td (T.App s t ts) = T.App s (reduce td t) ts -- R-TAppL
