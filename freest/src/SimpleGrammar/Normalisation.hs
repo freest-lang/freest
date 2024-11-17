@@ -14,11 +14,12 @@ where
 import           Syntax.Base
 import           Syntax.Kind (Kind)
 import qualified Syntax.Type                   as T
+import           Syntax.Substitution
 
 import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map.Strict               as M
 
-type Lambda t = ([(Variable, Kind)] , t)
+type Lambda t = ([(Variable, Kind)], t)
 type TypeDecl = M.Map Identifier (Lambda T.Type)
 type ConsDecl = M.Map Identifier [T.Type]
 type DataDecl = M.Map Identifier (Lambda [ConsDecl])
@@ -61,8 +62,13 @@ reduce td (T.AppSemi s t u) | not (T.isAppSemi t) = -- R.Seq2
   T.AppSemi s (reduce td t) u
 reduce _ (T.AppSemi s1 (T.AppSemi s2 t1 t2) t3) = -- R-Assoc
   T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
--- reduce td (T.Name _ id) = reduce td (td M.! id) -- R-μ
--- R-β _ TODO
+reduce td (T.Name _ id) = t -- R-μ
+  where ([], t) = td M.! id
+reduce td (T.AppName _ id ts) = rBeta (map fst vks) ts u -- R-μ
+  where (vks, u) = td M.! id
+        rBeta :: [Variable] -> NE.NonEmpty T.Type -> T.Type -> T.Type
+        rBeta vs ts u = foldr (uncurry subs) u (zip vs (NE.toList ts))
+-- R-β _ No such thing
 reduce td (T.App s t ts) = T.App s (reduce td t) ts -- R-TAppL
 reduce _ (T.AppDual s1 (T.AppSemi s2 t1 t2)) =  -- R-D;
   T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
@@ -74,3 +80,4 @@ reduce _ (T.AppDual s (T.Labelled _ (T.Choice m p) idts)) = -- R-D&, – R-D⊕
   T.Labelled s (T.Choice m (T.dual p)) idts
 reduce _ (T.AppDual _ (T.AppDual _ t@T.Var{})) = t -- R-DDVar
 reduce td (T.AppDual s t) = T.AppDual s (reduce td t) -- R-DCtx
+

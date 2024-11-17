@@ -9,7 +9,7 @@ polymorphic context-free session types.
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
-  , Type(.., AppArrow, AppMessage, AppSemi, AppDual)
+  , Type(.., AppArrow, AppMessage, AppSemi, AppDual, AppName)
   , variadicForall
   , Dual(..)
   , isConstant
@@ -86,6 +86,10 @@ pattern AppSemi s t u <- App s (Semi _) (NE.toList -> [t,u]) where
 pattern AppDual :: Span -> Type -> Type
 pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) where
   AppDual s t = App s (Dual s) (NE.singleton t)
+
+pattern AppName :: Span -> Identifier -> NE.NonEmpty Type -> Type
+pattern AppName s id ts <- App s (Name _ id) ts where
+  AppName s id ts = App s (Name s id) ts
 
 variadicForall :: Span -> NE.NonEmpty (Variable, K.Kind) -> Type -> Type
 variadicForall s ((a,k) NE.:| []) t = 
