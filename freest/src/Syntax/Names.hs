@@ -39,7 +39,8 @@ mkCaretCaret = mkVar "(^^)"
 mkCmp :: Located a => String -> a -> Variable
 mkCmp s = mkVar $ "("++s++")"
 
-mkNil, mkCons :: Located a => a -> Identifier
+mkUnit, mkNil, mkCons :: Located a => a -> Identifier
+mkUnit = mkId "()"
 mkNil  = mkId "[]"
 mkCons = mkId "(::)"
 

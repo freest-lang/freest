@@ -83,10 +83,11 @@ wordWhnf t@(T.AppSemi _ u1 u2) = do
   w1 <- word u1
   w2 <- word u2
   addVisited t $ w1 ++ w2
-wordWhnf t@(T.Labelled _ lab its) = do
+wordWhnf t@(T.Choice _ m p its) = do
   y <- nextNonTerminal
   ws <- mapM (word . snd) its
-  let termNonterms = zipWith (\(id, _) ws -> (show lab ++ show id, ws)) its ws
+  let termNonterms = zipWith (\(id, _) ws -> (show m ++ showView p ++ show id, ws)) its ws
+        where showView T.In = "&"; showView T.Out = "+"
   mapM_ (uncurry (addProduction y)) termNonterms
   addVisited t [y]
 wordWhnf t@(T.App _ (T.Var _ α) ts) = do -- α T1...Tm

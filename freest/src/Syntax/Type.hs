@@ -8,7 +8,6 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
-  , Labelled(..)
   , Type(.., AppArrow, AppMessage, AppSemi, AppDual)
   , sApp
   , variadicForall
@@ -40,25 +39,18 @@ instance Dual Polarity where
   dual Out = In
   dual In = Out
 
-data Labelled -- TODO: use a name, not an adjective. Label?
-  = Variant
-  | Record 
-  | Choice K.Multiplicity Polarity
-  deriving (Eq, Ord)
-
 data Type
   -- Functional types
   = Int Span
   | Float Span
   | Char Span
   | Arrow Span K.Multiplicity
-  -- Functional or session
-  | Labelled Span Labelled [(Identifier, Type)]
   -- Session types
   | Skip Span
   | End Span Polarity
   | Semi Span
   | Message Span K.Multiplicity Polarity
+  | Choice Span K.Multiplicity Polarity [(Identifier, Type)]
   | Dual Span
   -- Polymorphism
   | Forall Span Variable K.Kind Type
@@ -103,7 +95,7 @@ sApp s t              us = App s t us
 
 
 isConstant :: Type -> Bool
-isConstant Labelled{} = False
+isConstant Choice{} = False
 isConstant Forall{} = False
 isConstant TName{} = False -- TODO: type names are not constants (possibly)
 isConstant Var{} = False
@@ -138,23 +130,18 @@ instance Show Polarity where
   show In  = "?"
   show Out = "!"
 
-instance Show Labelled where
-  show Record = "×"  -- temporary, just for show
-  show Variant = "⊕" -- temporary, just for show
-  show (Choice K.Lin In)  = "&"
-  show (Choice K.Lin Out) = "+"
-  show (Choice K.Un In)   = "*&"
-  show (Choice K.Un Out)  = "*+"
-  show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
-
 instance Show Type where
   show (Int _)             = "Int"
   show (Float _)           = "Float"
   show (Char _)            = "Char"
   show (Arrow _ m)         = "("++show m++"->)"
-  show (Labelled  _ l lts) = show l++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
   show (Message _ K.Un p)  =  "(*"++ show p++")"
   show (Message _ _ p)     = "("++show p++")"
+  show (Choice  _ m p lts)   = showMult m++showView p++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
+    where showMult K.Lin   = ""
+          showMult K.Un    = "*"
+          showView In      = "&"
+          showView Out     = "+"
   show (End _ In )         = "Wait"
   show (End _ Out)         = "Close"
   show (Skip _)            = "Skip"
@@ -178,12 +165,12 @@ instance Congruence Type where
   congruent _ Float{} Float{} = True
   congruent _ Char{} Char{} = True
   congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
-  congruent m (Labelled _ l1 m1) (Labelled _ l2 m2) = l1 == l2 && congruent m m1 m2
   -- Session types
   congruent _ Skip{} Skip{} = True
   congruent _ (End _ p1) (End _ p2) = p1 == p2
   congruent m Semi{} Semi{} = True
   congruent _ (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
+  congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) = m1 == m2 && p1 == p2 && congruent m lts1 lts2
   congruent m Dual{} Dual{} = True
   -- Polymorphism
   congruent m (Forall _ a k1 t) (Forall _ b k2 u) = a == b && k1 == k2 && congruent m t u
@@ -215,8 +202,8 @@ instance Located Type where
   getSpan (Float s)         = s
   getSpan (Char s)          = s
   getSpan (Arrow s _)       = s
-  getSpan (Labelled  s _ _) = s
   getSpan (Message s _ _)   = s
+  getSpan (Choice  s _ _ _) = s
   getSpan (End s _)         = s
   getSpan (Skip s)          = s
   getSpan (Semi s)          = s
@@ -231,8 +218,8 @@ instance Located Type where
   setSpan s (Float _)           = Float s
   setSpan s (Char _)            = Char s
   setSpan s (Arrow _ m)         = Arrow s m
-  setSpan s (Labelled  _ l lts) = Labelled s l lts
   setSpan s (Message _ m p)     = Message s m p
+  setSpan s (Choice  _ m p lts) = Choice s m p lts
   setSpan s (End _ p)           = End s p
   setSpan s (Skip _)            = Skip s
   setSpan s (Semi _)            = Semi s

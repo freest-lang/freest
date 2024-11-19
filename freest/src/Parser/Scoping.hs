@@ -321,9 +321,9 @@ freshKVar l = do
   return $ K.Proper (getSpan l) (K.VarM phi) (K.VarPK psi)
 
 scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
-scopeType ctx (T.Labelled  s l lts) =
+scopeType ctx (T.Choice  s m p lts) =
   let lts' = mapM (\(l,t) -> (l,) <$> scopeType ctx t) lts
-  in T.Labelled s l <$> lts'
+  in T.Choice s m p <$> lts'
 -- if forall is a constant instead, just remove this equation 
 -- (and make sure there is one for T.Abs)
 scopeType ctx (T.Forall s a k t) = do

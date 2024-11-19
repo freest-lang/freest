@@ -54,12 +54,9 @@ presynth ctx = \case
   T.Float s  -> pure (ut s)
   T.Char s   -> pure (ut s)
   T.Arrow s m -> pure (Arrow s (lt s) (lt s))
-  T.Labelled s l lts | l == T.Record || l == T.Variant -> do
-    m  <- foldM joinMults Un (map snd lts)
-    return (Proper s m Top)
   -- Session types
   T.Message s m _ -> pure (Arrow s (lt s) (Proper s m Session))
-  T.Labelled s (T.Choice m p) lts -> do
+  T.Choice s m p lts -> do
     forM_ lts \(_,t) -> check ctx t (Proper s m Session)
     pure (Proper s m Session)
   T.End s _ -> pure (ls s)
@@ -98,11 +95,6 @@ presynth ctx = \case
       extractArrow (Arrow _ k1 k2) =
         first (k1:) (extractArrow k2)
       extractArrow k = ([], k)
-  where
-    joinMults m' t = do
-      -- catchE (check' ctx t (lt s)) (putError (Proper s Un Top))
-      presynthCheck ctx t (lt s) >>= \case Proper _ m pk -> pure (join m m')
-      where s = getSpan t
 
 synth :: KindingCtx -> T.Type -> Validation Kind
 synth ctx t = do

@@ -47,8 +47,8 @@ reduceBSD = \case
   T.AppDual _ (T.AppDual _ w@(T.App _ (T.Var _ _) _)) -> Just w
   -- R-β _ No such thing
   -- R-D⊙
-  T.AppDual s1 (T.Labelled s2 (T.Choice m p) lts) ->
-    Just (T.Labelled s2 (T.Choice m (T.dual p)) (map (second (T.AppDual s1)) lts))
+  T.AppDual s1 (T.Choice s2 m p lts) ->
+    Just (T.Choice s2 m (T.dual p) (map (second (T.AppDual s1)) lts))
   -- R-Assoc
   T.AppSemi s1 (T.AppSemi s2 t u) v ->
     Just (T.AppSemi (spanFromTo t v) t (T.AppSemi (spanFromTo u v) u v))

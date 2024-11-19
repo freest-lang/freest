@@ -59,7 +59,7 @@ isWhnf = \case
         T.End{}      -> False
         T.Message{}  -> False
         T.AppSemi{}  -> False
-        T.Labelled{} -> False
+        T.Choice{} -> False
       -- (T.AppDual _ T.Dual{} (T.Var{} NE.:| _)) -> False
         _            -> True
   _ -> False
@@ -96,8 +96,8 @@ reduce td = \case
   T.AppDual s (T.App _ (T.Message a m p) ts) ->
     T.App s (T.Message a m (T.dual p)) ts
   -- R-D&, – R-D⊕
-  T.AppDual s (T.Labelled _ (T.Choice m p) idts) ->
-    T.Labelled s (T.Choice m (T.dual p)) idts
+  T.AppDual s (T.Choice _ m p lts) ->
+    T.Choice s m (T.dual p) lts
   -- R-DDVar
   T.AppDual _ (T.AppDual _ t@T.Var{}) -> t
   -- R-DCtx
