@@ -7,7 +7,7 @@ Normalising types
 -}
 
 module SimpleGrammar.Normalisation
-  ( whnf
+  ( whReduction
   )
 where
 
@@ -26,9 +26,9 @@ type DataDecl = M.Map Identifier (Lambda [ConsDecl])
 
 -- | The weak head normal form of a type. This function is guaranteed to
 -- converge only for well-formed types
-whnf :: TypeDecl -> T.Type -> T.Type
-whnf td t | isWhnf t = t
-          | otherwise = whnf td (reduce td t)
+whReduction :: TypeDecl -> T.Type -> T.Type
+whReduction td t | isWhnf t = t
+                 | otherwise = whReduction td (reduce td t)
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
@@ -37,31 +37,20 @@ isWhnf = \case
   t | T.isConstant t -> True
   -- W-Const1
   T.App _ t _
-    |  T.isConstant   t 
+    | T.isConstant t 
     && not (T.isSemi  t) 
-    && not (T.isTName t) -- TODO: t must not be a type reference (datatype name OK)
     && not (T.isDual  t) -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
   T.AppSemi _ t _ | not (T.isSkip t) && not (T.isSemi t) -> True
-  -- W-Var
+  -- W-Var (i)
   T.Var{} -> True
-  -- W-Var
+  -- W-Var (ii)
   T.App _ T.Var{} _ -> True
-  -- W-Abs
+  -- W-Abs - we do not have abstractions, but we have forall
   T.Forall{} -> True
-  -- W-Dual
-  T.AppDual _ t -> isWhnf t && isDualArgWhnf t
-    where
-      isDualArgWhnf :: T.Type -> Bool
-      isDualArgWhnf = \case 
-        T.Skip{}     -> False
-        T.End{}      -> False
-        T.Message{}  -> False
-        T.AppSemi{}  -> False
-        T.Choice{} -> False
-      -- (T.AppDual _ T.Dual{} (T.Var{} NE.:| _)) -> False
-        _            -> True
+  -- W-Dual - I think this is the only case for well formed Dual types
+  T.AppDual _ T.Var{} -> True
   _ -> False
 
 -- | One step type reduction
@@ -82,19 +71,19 @@ reduce td = \case
       rBeta :: [Variable] -> [T.Type] -> T.Type -> T.Type
       -- TODO: assuming vs and ts of the same length
       rBeta vs ts u = foldr (uncurry subs) u (zip vs ts)
-  -- R-β _ No such thing
+  -- R-β - No such thing
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   -- R-D;
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
     T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
-  -- R-Skip
+  -- R-DSkip
   T.AppDual s T.Skip{} -> T.Skip s
-  -- R-End
-  T.AppDual s (T.End _ p) ->  T.End s (T.dual p)
+  -- R-DEnd
+  T.AppDual s (T.End _ p) -> T.End s (T.dual p)
   -- R-D?, R-D!
-  T.AppDual s (T.App _ (T.Message a m p) ts) ->
-    T.App s (T.Message a m (T.dual p)) ts
+  T.AppDual s (T.AppMessage _ m p t) ->
+    T.AppMessage s m (T.dual p) t
   -- R-D&, – R-D⊕
   T.AppDual s (T.Choice _ m p lts) ->
     T.Choice s m (T.dual p) lts

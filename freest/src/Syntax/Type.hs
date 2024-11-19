@@ -13,7 +13,6 @@ module Syntax.Type
   , variadicForall
   , Dual(..)
   , isConstant
-  , isTName
   , isSkip
   , isSemi
   , isAppSemi
@@ -93,26 +92,18 @@ sApp s (TName _ i ts) us = TName s i (ts ++ NE.toList us)
 sApp s (DName _ i ts) us = DName s i (ts ++ NE.toList us)
 sApp s t              us = App s t us
 
-
 isConstant :: Type -> Bool
 isConstant Choice{} = False
 isConstant Forall{} = False
-isConstant TName{} = False -- TODO: type names are not constants (possibly)
 isConstant Var{} = False
 isConstant App{} = False
+isConstant TName{} = False
+isConstant (DName _ _ []) = True -- Non applied datatypes
 isConstant _ = True
-
-isTName :: Type -> Bool
-isTName TName{} = True
-isTName _ = False
 
 isSkip :: Type -> Bool
 isSkip Skip{} = True
 isSkip _ = False
-
-isEnd :: Type -> Bool
-isEnd End{} = True
-isEnd _ = False
 
 isSemi :: Type -> Bool
 isSemi Semi{} = True
