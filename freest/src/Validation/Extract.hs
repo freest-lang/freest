@@ -13,7 +13,7 @@ import Data.Bifunctor
 import Control.Applicative
 import Control.Monad.Trans.Except
 
-function :: E.Exp -> T.Type -> Validation T.Type
+function :: E.Exp -> T.Type -> Validation T.Type -- Suggestion: call the function arrow, so that we have Expose.arrow
 function e t = normalise t >>= \case
     Just t'@T.AppArrow{} -> pure t'
     Just t'@T.Forall{} -> pure t'
