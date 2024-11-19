@@ -54,7 +54,7 @@ library:
     - Syntax.Normalisation
     - Syntax.Substitution
     - Syntax.Type
-    - Validation.Extract
+    - Validation.Expose
     - Validation.Kinding
     - Validation.Typing
     - Utils

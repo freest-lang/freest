@@ -32,7 +32,7 @@ data Error
   | TooManyArgs Span E.Exp T.Type Int Int
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
-  | ExtractError Span String (Either E.Pat E.Exp) T.Type
+  | ExposeError Span String (Either E.Pat E.Exp) T.Type
   | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
@@ -52,7 +52,7 @@ instance Located Error where
   getSpan (TooManyArgs s _ _ _ _) = s
   getSpan (LinVarsConsumedInUnFun s _ _) = s
   getSpan (LinVarsCreatedInUnFun s _ _) = s
-  getSpan (ExtractError s _ _ _) = s
+  getSpan (ExposeError s _ _ _) = s
   getSpan (UnexpectedArg s _ _ _ _) = s
   getSpan (NonLinPat s _ _) = s
   getSpan (KindMismatch s _ _ _) = s
@@ -100,7 +100,7 @@ instance Show Error where
         LinVarsCreatedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
-        ExtractError _ s e t -> 
+        ExposeError _ s e t -> 
           "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
             where showExpPat (Left  p) = "pattern `"++show p++"`"
                   showExpPat (Right e) = "expression `"++show e++"`"

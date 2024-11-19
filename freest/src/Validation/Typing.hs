@@ -14,7 +14,7 @@ import qualified Syntax.Kind as K
 import Syntax.Names
 import qualified Syntax.Type as T
 import Validation.Base
-import qualified Validation.Extract as Extract
+import qualified Validation.Expose as Expose
 import qualified Validation.Kinding as Kinding
 import Utils
 
@@ -45,7 +45,7 @@ synth kctx tctx = \case
     E.Var s x       -> lookupEVar  tctx x
     E.App s f as    -> do
         (t, tctx') <- synth kctx tctx f
-        t' <- Extract.function f t
+        t' <- Expose.function f t
         checkArgs kctx tctx' 1 t' (as, t')
       where
         checkArgs :: KindCtx -> TypeCtx -> Int -> T.Type -> ([Level E.Exp T.Type],T.Type) -> Validation (T.Type, TypeCtx)
@@ -65,7 +65,7 @@ synth kctx tctx = \case
                 throwE (UnexpectedArg (getSpan e) (TypeLevel k) (ExpLevel e) n f)
             -- no more arguments, return type
             ([], t) -> return (t, tctx)
-            -- too many arguments (alternately, we can skip extraction and throw an ExtractError here)
+            -- too many arguments (alternately, we can skip exposure and throw an ExposeError here)
             (as, t) -> do
                 throwE (TooManyArgs (spanFromTo (head as) (last as)) f t0 n (n+length as))
     E.Abs s ps m e  -> do
@@ -108,7 +108,7 @@ synth kctx tctx = \case
             when (K.lin k) (throwE (NonLinPat s p t)) >> pure Map.empty
         p@(E.TuplePat s ps) -> do
             -- let n = length ps
-            -- ts <- Extract.tuple (Left p) t n
+            -- ts <- Expose.tuple (Left p) t n
             -- foldM (\tctx (t,p) -> Map.union tctx <$> collectPat kctx t p)
             --       Map.empty (zip ts ps)
             undefined

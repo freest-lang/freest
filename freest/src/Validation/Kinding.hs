@@ -83,7 +83,7 @@ presynth ctx = \case
     Nothing -> putError (bot s) (OutOfScope s a)
   T.App s t ts -> do
     k <- presynth ctx t
-    let (ks,kn) = extractArrow k
+    let (ks,kn) = exposeArrow k
         checkArgs [] ks' =
           pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
         checkArgs _ [] =
@@ -92,9 +92,9 @@ presynth ctx = \case
           check ctx t' k' >> checkArgs ts' ks'
     checkArgs (NE.toList ts) ks
     where
-      extractArrow (Arrow _ k1 k2) =
-        first (k1:) (extractArrow k2)
-      extractArrow k = ([], k)
+      exposeArrow (Arrow _ k1 k2) =
+        first (k1:) (exposeArrow k2)
+      exposeArrow k = ([], k)
 
 synth :: KindingCtx -> T.Type -> Validation Kind
 synth ctx t = do
