@@ -37,11 +37,13 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Debug.Trace (trace)
+import Control.Monad.Extra (ifM)
 
 data ScopingKey 
   = TVar String 
   | EVar String 
   | TId String 
+  | DId String
   | CId String 
   deriving (Eq,Ord,Show)
 
@@ -51,9 +53,10 @@ lookupTVar, lookupEVar :: Variable -> ScopingCtx -> Maybe Int
 lookupTVar a = Map.lookup $ TVar $ external a
 lookupEVar x = Map.lookup $ EVar $ external x
 
-memberCId, memberTId :: Identifier -> ScopingCtx -> Bool
+memberCId, memberTId, memberDId :: Identifier -> ScopingCtx -> Bool
 memberCId ci ctx = CId (show ci) `Map.member` ctx
 memberTId ti ctx = TId (show ti) `Map.member` ctx
+memberDId di ctx = DId (show di) `Map.member` ctx
 
 fromTVarList, fromEVarList :: [Variable] -> ScopingCtx
 fromTVarList = Map.fromList . map (\a -> (TVar $ external a, internal a))
@@ -65,9 +68,10 @@ insertEVar x = Map.insert (EVar $ external x) (internal x)
 deleteTVar a = Map.delete (TVar $ external a)
 deleteEVar x = Map.delete (EVar $ external x)
 
-insertCId, insertTId :: Identifier -> ScopingCtx -> ScopingCtx
+insertCId, insertTId, insertDId :: Identifier -> ScopingCtx -> ScopingCtx
 insertCId ci = Map.insert (CId $ show ci) (-1)
 insertTId ti = Map.insert (TId $ show ti) (-1)
+insertDId di = Map.insert (DId $ show di) (-1)
 
 type Scoping = State ScopingState
 
@@ -105,7 +109,7 @@ scopeDataDecls ctx =
   foldM scopeDataDecl (ctx, [])
   where
     scopeDataDecl (ctx',dds') dd@(ti, unzip -> (as,ks), cds) =
-      if memberTId ti ctx'
+      if memberTId ti ctx' || memberDId ti ctx'
         then do 
           insertError (MultipleTypeDecls (getSpan ti) ti)
           return (ctx', dd:dds')
@@ -114,7 +118,7 @@ scopeDataDecls ctx =
           ks' <- mapM scopeKind ks
           let ctx'' = Map.union (fromTVarList as') ctx'
           (ctx''',cds') <- scopeConsDecls ctx'' cds
-          return (insertTId ti ctx''', (ti, zip as' ks', cds') : dds')
+          return (insertDId ti ctx''', (ti, zip as' ks', cds') : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])   
       where 
         scopeConsDecl (ctx',cds') (ci,ts) =
@@ -131,7 +135,7 @@ scopeTypeDecls :: ScopingCtx -> [M.TypeDecl] -> Scoping (ScopingCtx, [M.TypeDecl
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
   where
     scopeTypeDecl (ctx', tds') td@(ti, unzip -> (as,ks), t) =
-      if ti `memberTId` ctx'
+      if ti `memberTId` ctx' || ti `memberDId` ctx'
         then do
           insertError (MultipleTypeDecls (getSpan ti) ti)
           return (ctx',td:tds')
@@ -300,19 +304,21 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
     varOccurs :: [Variable] -> Map.Map (Level String String) [Span]
     varOccurs = foldr (\a occs -> Map.insertWith (++) (TypeLevel $ external a) [getSpan a] occs) Map.empty
     patVarOccurs :: E.Pat -> Map.Map (Level String String) [Span]
-    patVarOccurs (E.VarPat s x)     = Map.singleton (ExpLevel $ external x) [getSpan x]
-    patVarOccurs (E.ConsPat _ _ ps) = Map.unionsWith (++) (map patVarOccurs ps)
-    patVarOccurs (E.TuplePat _ ps)  = Map.unionsWith (++) (map patVarOccurs ps)
-    patVarOccurs (E.AsPat _ x p)    = Map.insertWith (++) (ExpLevel $ external x) [getSpan x] (patVarOccurs p)
-    patVarOccurs _                  = Map.empty
+    patVarOccurs = \case
+      E.VarPat s x     -> Map.singleton (ExpLevel $ external x) [getSpan x]
+      E.ConsPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
+      E.TuplePat _ ps  -> Map.unionsWith (++) (map patVarOccurs ps)
+      E.AsPat _ x p    -> Map.insertWith (++) (ExpLevel $ external x) [getSpan x] (patVarOccurs p)
+      _                -> Map.empty
 
 patVars :: E.Pat -> Set.Set Variable
-patVars (E.WildPat _ _) = Set.empty
-patVars (E.VarPat _ x) = Set.singleton x
-patVars (E.ConsPat s _ ps) = Set.unions (map patVars ps)
-patVars (E.TuplePat s ps) = Set.unions (map patVars ps)
-patVars (E.AsPat _ x p) = Set.insert x (patVars p)
-patVars _ = Set.empty
+patVars = \case 
+  E.WildPat _ _    -> Set.empty
+  E.VarPat _ x     -> Set.singleton x
+  E.ConsPat s _ ps -> Set.unions (map patVars ps)
+  E.TuplePat s ps  -> Set.unions (map patVars ps)
+  E.AsPat _ x p    -> Set.insert x (patVars p)
+  _                -> Set.empty
 
 freshKVar :: Located a => a -> Scoping K.Kind
 freshKVar l = do
@@ -321,23 +327,24 @@ freshKVar l = do
   return $ K.Proper (getSpan l) (K.VarM phi) (K.VarPK psi)
 
 scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
-scopeType ctx (T.Choice  s m p lts) =
-  let lts' = mapM (\(l,t) -> (l,) <$> scopeType ctx t) lts
-  in T.Choice s m p <$> lts'
--- if forall is a constant instead, just remove this equation 
--- (and make sure there is one for T.Abs)
-scopeType ctx (T.Forall s a k t) = do
-  a' <- freshInternal a
-  k' <- scopeKind k
-  let ctx' = insertTVar a' ctx
-  T.Forall s a' k' <$> scopeType ctx' t
-scopeType ctx t@(T.Var s a) =
-  case lookupTVar a ctx of
-    Just i  -> return $ T.Var s a{internal=i}
-    Nothing -> T.Var s <$> freshInternal a -- no error here; leave it for the typechecker
-scopeType ctx (T.App s t ts) =
-  T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
-scopeType ctx t = return t
+scopeType ctx = \case
+  T.Choice  s m p lts ->
+    let lts' = mapM (\(l,t) -> (l,) <$> scopeType ctx t) lts
+    in T.Choice s m p <$> lts'
+  T.Forall s a k t -> do
+    a' <- freshInternal a
+    k' <- scopeKind k
+    let ctx' = insertTVar a' ctx
+    T.Forall s a' k' <$> scopeType ctx' t
+  t@(T.Var s a) ->
+    case lookupTVar a ctx of
+      Just i  -> return $ T.Var s a{internal=i}
+      Nothing -> T.Var s <$> freshInternal a -- no error here; leave it for the typechecker
+  T.App s t ts ->
+    T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
+  T.TName s i ts | memberDId i ctx -> pure $ T.DName s i ts
+  T.DName s i ts -> T.DName s i <$> mapM (scopeType ctx) ts
+  t -> pure t
 
 scopeTypeQ :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeTypeQ ctx t = do
@@ -350,7 +357,9 @@ scopeTypeQ ctx t = do
       T.variadicForall (getSpan t) (NE.fromList aks) <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
 
 scopeKind :: K.Kind -> Scoping K.Kind
-scopeKind (K.Proper s m pk) = K.Proper s <$> scopeMult m <*> scopePrekind pk
+scopeKind = \case 
+  K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind k1 <*> scopeKind k2
+  K.Proper s m pk -> K.Proper s <$> scopeMult m  <*> scopePrekind pk
   where
     scopeMult (K.VarM phi) = do
       phi' <- freshInternal phi
