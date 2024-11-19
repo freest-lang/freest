@@ -68,7 +68,7 @@ wordWhnf t@T.End{} = do
   addVisited t [y]
 -- At this point Name must refer to a datatype, for types were unfolded in
 -- function word
-wordWhnf t | T.isConstant t || T.isName t = do
+wordWhnf t | T.isConstant t || T.isTName t = do
   y <- nextNonTerminal
   addProduction y (show t) []
   addVisited t [y]

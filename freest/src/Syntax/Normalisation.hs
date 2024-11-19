@@ -33,32 +33,36 @@ normalises = fmap isJust . normalise
 -- Application (R-TAppL)
 reduceBSD :: T.Type -> Maybe T.Type
 reduceBSD = \case
-  T.AppSemi _ T.Skip{} t  -> Just t                                -- R-Seq1
-  T.AppDual _ t@T.Skip{}  -> Just t                                -- R-DSkip
-  T.AppDual _ (T.End s p) -> Just (T.End s (T.dual p))             -- R-DEnd
-  T.AppDual _ (T.App s1 (T.Message s2 m p) t) ->                   -- R-D♯
+  -- R-Seq1
+  T.AppSemi _ T.Skip{} t  -> Just t
+  -- R-DSkip
+  T.AppDual _ t@T.Skip{}  -> Just t
+  -- R-DEnd
+  T.AppDual _ (T.End s p) -> Just (T.End s (T.dual p))
+  -- R-D♯
+  T.AppDual _ (T.App s1 (T.Message s2 m p) t) ->
     Just (T.App s1 (T.Message s2 m (T.dual p)) t)
   -- T.Dual _ (T.Quantifier _ p aks t) -> ...
-  T.AppDual _ (T.AppDual _ w@(T.App _ (T.Var _ _) _)) -> Just w    -- R-DDVar
-  -- T.App  s1 (T.Abs s2 aks t) us                                 -- R-β+
-  --   | n == m    -> Just t'
-  --   | n <  m    -> Just (T.App s1 t' (drop n us))
-  --   | otherwise -> Just (T.Abs s2 (drop m aks) t')
-  --   where
-  --     n  = length aks
-  --     m  = length us
-  --     t' = foldr (uncurry subs) t (zip (map fst (take m aks)) us)
-  T.AppDual s1 (T.Labelled s2 (T.Choice m p) lts) ->               -- R-D⊙
+  -- R-DDVar
+  T.AppDual _ (T.AppDual _ w@(T.App _ (T.Var _ _) _)) -> Just w
+  -- R-β _ No such thing
+  -- R-D⊙
+  T.AppDual s1 (T.Labelled s2 (T.Choice m p) lts) ->
     Just (T.Labelled s2 (T.Choice m (T.dual p)) (map (second (T.AppDual s1)) lts))
-  T.AppSemi s1 (T.AppSemi s2 t u) v ->                             -- R-Assoc
+  -- R-Assoc
+  T.AppSemi s1 (T.AppSemi s2 t u) v ->
     Just (T.AppSemi (spanFromTo t v) t (T.AppSemi (spanFromTo u v) u v))
-  T.AppSemi s t u ->                                               -- R-Seq2
+  -- R-Seq2
+  T.AppSemi s t u ->
     reduceBSD t >>= Just . flip (T.AppSemi s) u
-  T.AppDual _ (T.AppSemi s t u) ->                                 -- R-D;
+  -- R-D;
+  T.AppDual _ (T.AppSemi s t u) ->
     Just (T.AppSemi s (T.AppDual (getSpan t) t) (T.AppDual (getSpan u) u))
-  T.AppDual s t ->                                                 -- R-DCtx
+  -- R-DCtx
+  T.AppDual s t ->
     reduceBSD t >>= Just . T.AppDual s
-  T.App s t v ->                                                   -- R-TAppL
+  -- R-TAppL
+  T.App s t v ->
     reduceBSD t >>= Just . flip (T.App s) v
   _ -> Nothing
 
@@ -68,23 +72,16 @@ normalise = normalise' Set.empty
     normalise' is = \case
       (reduceBSD -> Just t) -> 
         normalise' is t
-      T.Name _ i -> 
-        visit is i []
-      t@(T.App  _ (T.Name _ i) _) -> visit is i []
-      T.AppSemi s (T.Name _ i) u ->
-        visit is i [] -- <&> fmap (\t' -> T.AppSemi s t' u)
-      T.AppSemi s (T.App _ (T.Name _ i) ts) u ->
-        visit is i (NE.toList ts) -- <&> fmap (\t' ->T.AppSemi s t' u)
-      T.AppDual s (T.Name _ i) ->
-        visit is i [] -- <&> fmap (T.AppDual s)
-      T.AppDual s (T.App _ (T.Name _ i) ts) ->
-        visit is i (NE.toList ts) -- <&> fmap (T.AppDual s)
-      T.AppSemi s1 (T.AppDual s2 (T.Name _ i)) u -> do
-        visit is i [] -- <&> fmap (\t' -> T.AppSemi s1 (T.AppDual s2 t') u)
-      T.AppSemi s1 (T.AppDual s2 t@(T.App _ (T.Name _ i) ts)) u ->
-        visit is i (NE.toList ts) -- <&> fmap (\t' -> T.AppSemi s1 (T.AppDual s2 t') u)
+      T.TName _ i ts -> 
+        visit is i ts
+      T.AppSemi s (T.TName _ i ts) u ->
+        visit is i ts -- <&> fmap (\t' -> T.AppSemi s t' u)
+      T.AppDual s (T.TName _ i ts) ->
+        visit is i ts -- <&> fmap (T.AppDual s)
+      T.AppSemi s1 (T.AppDual s2 (T.TName _ i ts)) u ->
+        visit is i ts -- <&> fmap (\t' -> T.AppSemi s1 (T.AppDual s2 t') u)
       t -> return  (Just t)
     visit :: Set.Set (Identifier, [T.Type]) -> Identifier -> [T.Type] -> Validation (Maybe T.Type)
     visit is i ts
       | Set.member (i, ts) is = pure Nothing
-      | otherwise = lookupType i ts >>= normalise' (Set.insert (i, ts) is)
+      | otherwise = lookupTName i ts >>= normalise' (Set.insert (i, ts) is)

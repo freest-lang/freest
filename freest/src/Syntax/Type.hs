@@ -9,11 +9,12 @@ polymorphic context-free session types.
 module Syntax.Type
   ( Polarity(..)
   , Labelled(..)
-  , Type(.., AppArrow, AppMessage, AppSemi, AppDual, AppName)
+  , Type(.., AppArrow, AppMessage, AppSemi, AppDual)
+  , sApp
   , variadicForall
   , Dual(..)
   , isConstant
-  , isName
+  , isTName
   , isSkip
   , isSemi
   , isAppSemi
@@ -62,7 +63,8 @@ data Type
   -- Polymorphism
   | Forall Span Variable K.Kind Type
   -- Equations
-  | Name Span Identifier
+  | TName Span Identifier [Type]
+  | DName Span Identifier [Type]
   -- Higher-order
   | Var Span Variable
   | App Span Type (NE.NonEmpty Type)
@@ -87,27 +89,30 @@ pattern AppDual :: Span -> Type -> Type
 pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) where
   AppDual s t = App s (Dual s) (NE.singleton t)
 
-pattern AppName :: Span -> Identifier -> NE.NonEmpty Type -> Type
-pattern AppName s id ts <- App s (Name _ id) ts where
-  AppName s id ts = App s (Name s id) ts
-
 variadicForall :: Span -> NE.NonEmpty (Variable, K.Kind) -> Type -> Type
 variadicForall s ((a,k) NE.:| []) t = 
   Forall s a k t
 variadicForall s ((a,k) NE.:| (NE.fromList -> aks)) t =
   Forall s a k $ variadicForall s aks t
 
+sApp :: Span -> Type -> NE.NonEmpty Type -> Type
+sApp s (App _ t ts)   us = App s t (ts `NE.append` us)
+sApp s (TName _ i ts) us = TName s i (ts ++ NE.toList us)
+sApp s (DName _ i ts) us = DName s i (ts ++ NE.toList us)
+sApp s t              us = App s t us
+
+
 isConstant :: Type -> Bool
 isConstant Labelled{} = False
 isConstant Forall{} = False
-isConstant Name{} = False -- TODO: type names are not constants (possibly)
+isConstant TName{} = False -- TODO: type names are not constants (possibly)
 isConstant Var{} = False
 isConstant App{} = False
 isConstant _ = True
 
-isName :: Type -> Bool
-isName Name{} = True
-isName _ = False
+isTName :: Type -> Bool
+isTName TName{} = True
+isTName _ = False
 
 isSkip :: Type -> Bool
 isSkip Skip{} = True
@@ -157,8 +162,9 @@ instance Show Type where
   show (Dual _)            = "Dual"
   show (Var _ a)           = show a
   show (Forall _ a k t)    = "(forall "++show a++":"++show k++". "++show t++")"
-  show (App _ t as)        = foldl (\s a -> "("++s++" "++show a++")") (show t) as
-  show (Name _ n)          = show n
+  show (App _ t ts)        = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+  show (TName _ t ts)      = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+  show (DName _ t ts)      = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -182,7 +188,8 @@ instance Congruence Type where
   -- Polymorphism
   congruent m (Forall _ a k1 t) (Forall _ b k2 u) = a == b && k1 == k2 && congruent m t u
   -- Equations
-  congruent _ (Name _ id1) (Name _ id2) = id1 == id2
+  congruent m (TName _ id1 ts) (TName _ id2 us) = id1 == id2 && congruent m ts us
+  congruent m (DName _ id1 ts) (DName _ id2 us) = id1 == id2 && congruent m ts us
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
     v1 == v2 ||              -- free variables
@@ -217,7 +224,8 @@ instance Located Type where
   getSpan (Var s _)         = s
   getSpan (Forall s _ _ _)  = s
   getSpan (App s _ _)       = s
-  getSpan (Name s _)        = s
+  getSpan (TName s _ _)     = s
+  getSpan (DName s _ _)     = s
 
   setSpan s (Int _)             = Int s
   setSpan s (Float _)           = Float s
@@ -232,5 +240,5 @@ instance Located Type where
   setSpan s (Var _ a)           = Var s a
   setSpan s (Forall _ a k t)    = Forall s a k t
   setSpan s (App _ t1 t2)       = App s t1 t2
-  setSpan s (Name _ n)          = Name s n
-
+  setSpan s (TName _ n ts)      = TName s n ts
+  setSpan s (DName _ n ts)      = DName s n ts

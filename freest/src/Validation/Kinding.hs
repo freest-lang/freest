@@ -78,7 +78,8 @@ presynth ctx = \case
     presynthCheck (Map.insert a k ctx) t (lt s)
     >>= \case Proper _ m _ -> pure (Proper s m Top)
   -- Equations
-  T.Name s i -> lookupKind i
+  T.TName s i ts -> lookupTName i ts >>= presynth ctx
+  T.DName s i ts -> lookupDKind i ts
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
