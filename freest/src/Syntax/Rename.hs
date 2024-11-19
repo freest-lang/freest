@@ -11,8 +11,8 @@ import qualified Data.Set as Set
 
 rename :: Set.Set Variable  -> T.Type -> T.Type
 rename as = \case
-  T.Labelled s o (unzip -> (ls,ts)) -> 
-    T.Labelled s o (zip ls (snd $ renames as ts))
+  T.Choice s m p (unzip -> (ls,ts)) -> 
+    T.Choice s m p (zip ls (snd $ renames as ts))
   where 
     renames as [] = (as, [])
     renames as (t:ts) = 

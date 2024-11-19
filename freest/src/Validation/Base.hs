@@ -34,19 +34,17 @@ putError x e = do
 putError_ :: MonadState ValidationState m => Error -> m ()
 putError_ = putError ()
 
-lookupKind :: Identifier -> Validation K.Kind
-lookupKind i =
-  gets (Map.lookup i . kindCtx)
-  >>= maybe (throwE (TypeOutOfScope (getSpan i) i)) pure
+lookupDKind :: Identifier -> [T.Type] -> Validation K.Kind
+lookupDKind i ts = undefined
 
-lookupType :: Identifier -> [T.Type] -> Validation T.Type
-lookupType i ts =
+lookupTName :: Identifier -> [T.Type] -> Validation T.Type
+lookupTName i ts =
   gets (Map.lookup i . typeEqs) >>= \case 
     Nothing    -> throwE (TypeOutOfScope (getSpan i) i)
     Just (aks, t) 
-      | n >  m -> pure $ T.App s (T.Name (getSpan i) i) (NE.fromList ts)
+      | n >  m -> pure $ T.TName (getSpan i) i ts
       | n == m -> pure t'
-      | n <  m -> pure $ T.App s t' (NE.fromList $ drop n ts)
+      | n <  m -> pure $ T.sApp s t' (NE.fromList $ drop n ts)
       where n  = length aks
             m  = length ts
             t' = foldr (uncurry subs) t (zip (map fst (take m aks)) ts)

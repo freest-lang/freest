@@ -231,12 +231,10 @@ TypePrimary :: { T.Type }
   | 'Close'  { T.End (getSpan $1) T.Out }
   | 'Wait'   { T.End (getSpan $1) T.In }
   -- Unit, Tuples, Operators
-  | '(' ')'        { T.Labelled (spanFromTo $1 $2) T.Record [] }
+  | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnit (spanFromTo $1 $2)) [] }
   | '(' Type ',' TypeListComma ')' 
-      { T.Labelled (spanFromTo $1 $5) 
-                   T.Record
-                   (map (\(i, t) -> (Identifier (getSpan t) (show i),t)) (zip [0..] ($2 : $4))) }
-  | '(' Commas ')' { T.Name (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) }
+      { T.DName (spanFromTo $1 $5) (mkTupleCons (length $4) (spanFromTo $1 $5)) ($2 : $4) }
+  | '(' Commas ')' { T.TName (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) [] }
   | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
   -- | '(' Type Arrow ')' -- TODO: sections
   -- | '(' Arrow Type ')' -- TODO: sections
@@ -245,14 +243,14 @@ TypePrimary :: { T.Type }
   -- | '(' Type ';' ')' -- TODO: sections
   -- | '(' ';' Type ')' -- TODO: sections
   -- Choices
-  | View '{' LabelTypeListComma '}'     { T.Labelled (spanFromTo (fst $1) $4) (T.Choice K.Lin (snd $1)) $3 }
-  | '*' View '{' LabelTypeListComma '}' { T.Labelled (spanFromTo $1 $5) (T.Choice K.Un (snd $2)) $4 }
+  | View '{' LabelTypeListComma '}'     { T.Choice (spanFromTo (fst $1) $4) K.Lin (snd $1) $3 }
+  | '*' View '{' LabelTypeListComma '}' { T.Choice (spanFromTo $1 $5)       K.Un  (snd $2) $4 }
   -- Variables and constructors
-  | UPPER_ID { T.Name (getSpan $1) (mkIdTk $1) }
+  | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) [] }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
   -- Lists
-  | '[' ']'      { T.Name (spanFromTo $1 $2) (mkNil (spanFromTo $1 $2)) }
-  | '[' Type ']' { T.App (spanFromTo $1 $3) (T.Name (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3))) (NE.singleton $2) }
+  | '[' ']'      { T.DName (spanFromTo $1 $2) (mkNil (spanFromTo $1 $2)) []   }
+  | '[' Type ']' { T.DName (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3)) [$2] }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 

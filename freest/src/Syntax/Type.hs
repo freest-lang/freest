@@ -8,12 +8,11 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
-  , Labelled(..)
-  , Type(.., AppArrow, AppMessage, AppSemi, AppDual, AppName)
+  , Type(.., AppArrow, AppMessage, AppSemi, AppDual)
+  , sApp
   , variadicForall
   , Dual(..)
   , isConstant
-  , isName
   , isSkip
   , isSemi
   , isAppSemi
@@ -39,30 +38,24 @@ instance Dual Polarity where
   dual Out = In
   dual In = Out
 
-data Labelled -- TODO: use a name, not an adjective. Label?
-  = Variant
-  | Record 
-  | Choice K.Multiplicity Polarity
-  deriving (Eq, Ord)
-
 data Type
   -- Functional types
   = Int Span
   | Float Span
   | Char Span
   | Arrow Span K.Multiplicity
-  -- Functional or session
-  | Labelled Span Labelled [(Identifier, Type)]
   -- Session types
   | Skip Span
   | End Span Polarity
   | Semi Span
   | Message Span K.Multiplicity Polarity
+  | Choice Span K.Multiplicity Polarity [(Identifier, Type)]
   | Dual Span
   -- Polymorphism
   | Forall Span Variable K.Kind Type
   -- Equations
-  | Name Span Identifier
+  | TName Span Identifier [Type]
+  | DName Span Identifier [Type]
   -- Higher-order
   | Var Span Variable
   | App Span Type (NE.NonEmpty Type)
@@ -87,35 +80,30 @@ pattern AppDual :: Span -> Type -> Type
 pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) where
   AppDual s t = App s (Dual s) (NE.singleton t)
 
-pattern AppName :: Span -> Identifier -> NE.NonEmpty Type -> Type
-pattern AppName s id ts <- App s (Name _ id) ts where
-  AppName s id ts = App s (Name s id) ts
-
 variadicForall :: Span -> NE.NonEmpty (Variable, K.Kind) -> Type -> Type
 variadicForall s ((a,k) NE.:| []) t = 
   Forall s a k t
 variadicForall s ((a,k) NE.:| (NE.fromList -> aks)) t =
   Forall s a k $ variadicForall s aks t
 
+sApp :: Span -> Type -> NE.NonEmpty Type -> Type
+sApp s (App _ t ts)   us = App s t (ts `NE.append` us)
+sApp s (TName _ i ts) us = TName s i (ts ++ NE.toList us)
+sApp s (DName _ i ts) us = DName s i (ts ++ NE.toList us)
+sApp s t              us = App s t us
+
 isConstant :: Type -> Bool
-isConstant Labelled{} = False
+isConstant Choice{} = False
 isConstant Forall{} = False
-isConstant Name{} = False -- TODO: type names are not constants (possibly)
 isConstant Var{} = False
 isConstant App{} = False
+isConstant TName{} = False
+isConstant (DName _ _ []) = True -- Non applied datatypes
 isConstant _ = True
-
-isName :: Type -> Bool
-isName Name{} = True
-isName _ = False
 
 isSkip :: Type -> Bool
 isSkip Skip{} = True
 isSkip _ = False
-
-isEnd :: Type -> Bool
-isEnd End{} = True
-isEnd _ = False
 
 isSemi :: Type -> Bool
 isSemi Semi{} = True
@@ -133,23 +121,18 @@ instance Show Polarity where
   show In  = "?"
   show Out = "!"
 
-instance Show Labelled where
-  show Record = "×"  -- temporary, just for show
-  show Variant = "⊕" -- temporary, just for show
-  show (Choice K.Lin In)  = "&"
-  show (Choice K.Lin Out) = "+"
-  show (Choice K.Un In)   = "*&"
-  show (Choice K.Un Out)  = "*+"
-  show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
-
 instance Show Type where
   show (Int _)             = "Int"
   show (Float _)           = "Float"
   show (Char _)            = "Char"
   show (Arrow _ m)         = "("++show m++"->)"
-  show (Labelled  _ l lts) = show l++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
   show (Message _ K.Un p)  =  "(*"++ show p++")"
   show (Message _ _ p)     = "("++show p++")"
+  show (Choice  _ m p lts)   = showMult m++showView p++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
+    where showMult K.Lin   = ""
+          showMult K.Un    = "*"
+          showView In      = "&"
+          showView Out     = "+"
   show (End _ In )         = "Wait"
   show (End _ Out)         = "Close"
   show (Skip _)            = "Skip"
@@ -157,8 +140,9 @@ instance Show Type where
   show (Dual _)            = "Dual"
   show (Var _ a)           = show a
   show (Forall _ a k t)    = "(forall "++show a++":"++show k++". "++show t++")"
-  show (App _ t as)        = foldl (\s a -> "("++s++" "++show a++")") (show t) as
-  show (Name _ n)          = show n
+  show (App _ t ts)        = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+  show (TName _ t ts)      = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+  show (DName _ t ts)      = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -172,17 +156,18 @@ instance Congruence Type where
   congruent _ Float{} Float{} = True
   congruent _ Char{} Char{} = True
   congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
-  congruent m (Labelled _ l1 m1) (Labelled _ l2 m2) = l1 == l2 && congruent m m1 m2
   -- Session types
   congruent _ Skip{} Skip{} = True
   congruent _ (End _ p1) (End _ p2) = p1 == p2
   congruent m Semi{} Semi{} = True
   congruent _ (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
+  congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) = m1 == m2 && p1 == p2 && congruent m lts1 lts2
   congruent m Dual{} Dual{} = True
   -- Polymorphism
   congruent m (Forall _ a k1 t) (Forall _ b k2 u) = a == b && k1 == k2 && congruent m t u
   -- Equations
-  congruent _ (Name _ id1) (Name _ id2) = id1 == id2
+  congruent m (TName _ id1 ts) (TName _ id2 us) = id1 == id2 && congruent m ts us
+  congruent m (DName _ id1 ts) (DName _ id2 us) = id1 == id2 && congruent m ts us
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
     v1 == v2 ||              -- free variables
@@ -208,8 +193,8 @@ instance Located Type where
   getSpan (Float s)         = s
   getSpan (Char s)          = s
   getSpan (Arrow s _)       = s
-  getSpan (Labelled  s _ _) = s
   getSpan (Message s _ _)   = s
+  getSpan (Choice  s _ _ _) = s
   getSpan (End s _)         = s
   getSpan (Skip s)          = s
   getSpan (Semi s)          = s
@@ -217,14 +202,15 @@ instance Located Type where
   getSpan (Var s _)         = s
   getSpan (Forall s _ _ _)  = s
   getSpan (App s _ _)       = s
-  getSpan (Name s _)        = s
+  getSpan (TName s _ _)     = s
+  getSpan (DName s _ _)     = s
 
   setSpan s (Int _)             = Int s
   setSpan s (Float _)           = Float s
   setSpan s (Char _)            = Char s
   setSpan s (Arrow _ m)         = Arrow s m
-  setSpan s (Labelled  _ l lts) = Labelled s l lts
   setSpan s (Message _ m p)     = Message s m p
+  setSpan s (Choice  _ m p lts) = Choice s m p lts
   setSpan s (End _ p)           = End s p
   setSpan s (Skip _)            = Skip s
   setSpan s (Semi _)            = Semi s
@@ -232,5 +218,5 @@ instance Located Type where
   setSpan s (Var _ a)           = Var s a
   setSpan s (Forall _ a k t)    = Forall s a k t
   setSpan s (App _ t1 t2)       = App s t1 t2
-  setSpan s (Name _ n)          = Name s n
-
+  setSpan s (TName _ n ts)      = TName s n ts
+  setSpan s (DName _ n ts)      = DName s n ts

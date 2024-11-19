@@ -54,12 +54,9 @@ presynth ctx = \case
   T.Float s  -> pure (ut s)
   T.Char s   -> pure (ut s)
   T.Arrow s m -> pure (Arrow s (lt s) (lt s))
-  T.Labelled s l lts | l == T.Record || l == T.Variant -> do
-    m  <- foldM joinMults Un (map snd lts)
-    return (Proper s m Top)
   -- Session types
   T.Message s m _ -> pure (Arrow s (lt s) (Proper s m Session))
-  T.Labelled s (T.Choice m p) lts -> do
+  T.Choice s m p lts -> do
     forM_ lts \(_,t) -> check ctx t (Proper s m Session)
     pure (Proper s m Session)
   T.End s _ -> pure (ls s)
@@ -78,14 +75,15 @@ presynth ctx = \case
     presynthCheck (Map.insert a k ctx) t (lt s)
     >>= \case Proper _ m _ -> pure (Proper s m Top)
   -- Equations
-  T.Name s i -> lookupKind i
+  T.TName s i ts -> lookupTName i ts >>= presynth ctx
+  T.DName s i ts -> lookupDKind i ts
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
     Nothing -> putError (bot s) (OutOfScope s a)
   T.App s t ts -> do
     k <- presynth ctx t
-    let (ks,kn) = extractArrow k
+    let (ks,kn) = exposeArrow k
         checkArgs [] ks' =
           pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
         checkArgs _ [] =
@@ -94,14 +92,9 @@ presynth ctx = \case
           check ctx t' k' >> checkArgs ts' ks'
     checkArgs (NE.toList ts) ks
     where
-      extractArrow (Arrow _ k1 k2) =
-        first (k1:) (extractArrow k2)
-      extractArrow k = ([], k)
-  where
-    joinMults m' t = do
-      -- catchE (check' ctx t (lt s)) (putError (Proper s Un Top))
-      presynthCheck ctx t (lt s) >>= \case Proper _ m pk -> pure (join m m')
-      where s = getSpan t
+      exposeArrow (Arrow _ k1 k2) =
+        first (k1:) (exposeArrow k2)
+      exposeArrow k = ([], k)
 
 synth :: KindingCtx -> T.Type -> Validation Kind
 synth ctx t = do
