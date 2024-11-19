@@ -46,7 +46,7 @@ word t = wasVisited t >>= \case
   Just w -> pure w -- We have seen t before
   Nothing -> do
     m <- gets module_
-    let u = whnf M.empty t
+    let u = whReduction M.empty t
     -- let u = whnf m t
     case u of
       T.Skip{} -> pure []
@@ -66,9 +66,7 @@ wordWhnf t@T.End{} = do
   y <- nextNonTerminal
   addProduction y (show t) [bottom]
   addVisited t [y]
--- At this point Name must refer to a datatype, for types were unfolded in
--- function word
-wordWhnf t | T.isConstant t || T.isTName t = do
+wordWhnf t | T.isConstant t = do
   y <- nextNonTerminal
   addProduction y (show t) []
   addVisited t [y]
