@@ -22,7 +22,7 @@ import qualified Data.Map.Strict               as M
 type Lambda t = ([(Variable, Kind)], t)
 type TypeDecl = M.Map Identifier (Lambda T.Type)
 type ConsDecl = M.Map Identifier [T.Type]
-type DataDecl = M.Map Identifier (Lambda [ConsDecl])
+type DataDecl = M.Map Identifier (Lambda ConsDecl)
 
 -- | The weak head normal form of a type. This function is guaranteed to
 -- converge only for well-formed types
