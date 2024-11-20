@@ -9,11 +9,6 @@ This consists mainly of renaming the variables internally according to their
 scope (which, in turn, requires grouping function equations, detecting 
 duplicate variable declarations, etc.).
 -}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE BlockArguments #-}
 module Parser.Scoping
   (runScoping)
 where
@@ -104,50 +99,46 @@ scopeModule ctx m = do
                    , M.definitions = definitions'
                    })
 
-scopeDataDecls :: ScopingCtx -> M.DataDecls -> Scoping (ScopingCtx, M.DataDecls)
-scopeDataDecls ctx dds =
-  foldM scopeDataDecl (ctx, Map.empty) (Map.assocs dds)
+scopeDataDecls :: ScopingCtx -> M.DataDeclList -> Scoping (ScopingCtx, M.DataDeclList)
+scopeDataDecls ctx =
+  foldM scopeDataDecl (ctx, [])
   where
-    scopeDataDecl :: (ScopingCtx, M.DataDecls) -> (Identifier, M.Lambda M.ConsDecls) -> Scoping (ScopingCtx, M.DataDecls)
-    scopeDataDecl (ctx',dds') (ti, dd@(unzip -> (as,ks), cds)) =
+    scopeDataDecl (ctx',dds') dd@(ti, unzip -> (as,ks), cds) =
       if memberTId ti ctx' || memberDId ti ctx'
         then do 
           insertError (MultipleTypeDecls (getSpan ti) ti)
-          return (ctx', Map.insert ti dd dds')
+          return (ctx', dd:dds')
         else do 
           as' <- mapM freshInternal as
           ks' <- mapM scopeKind ks
           let ctx'' = Map.union (fromTVarList as') ctx'
           (ctx''',cds') <- scopeConsDecls ctx'' cds
-          return (insertDId ti ctx''', Map.insert ti (zip as' ks', cds') dds')
-    scopeConsDecls :: ScopingCtx -> M.ConsDecls -> Scoping (ScopingCtx, M.ConsDecls)
-    scopeConsDecls ctx cds = foldM scopeConsDecl (ctx, Map.empty) (Map.assocs cds)
-      where
-        scopeConsDecl :: (ScopingCtx, M.ConsDecls) -> (Identifier, [T.Type]) -> Scoping (ScopingCtx, M.ConsDecls)
+          return (insertDId ti ctx''', (ti, zip as' ks', cds') : dds')
+    scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])   
+      where 
         scopeConsDecl (ctx',cds') (ci,ts) =
           if memberCId ci ctx'
             then do 
               insertError (MultipleConsDecls (getSpan ci) ci)
-              return (ctx', Map.insert ci ts cds')
+              return (ctx', (ci, ts) : cds')
             else do
               ts' <- mapM (scopeType ctx') ts
               let ctx'' = insertCId ci ctx'
-              return (ctx'', Map.insert ci ts' cds')
+              return (ctx'', (ci, ts') : cds')
 
-scopeTypeDecls :: ScopingCtx -> M.TypeDecls -> Scoping (ScopingCtx, M.TypeDecls)
-scopeTypeDecls ctx tds = foldM scopeTypeDecl (ctx, Map.empty) (Map.assocs tds)
+scopeTypeDecls :: ScopingCtx -> M.TypeDeclList -> Scoping (ScopingCtx, M.TypeDeclList)
+scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
   where
-    scopeTypeDecl :: (ScopingCtx, M.TypeDecls) -> (Identifier, M.Lambda T.Type) -> Scoping (ScopingCtx, M.TypeDecls)
-    scopeTypeDecl (ctx', tds') (ti, td@(unzip -> (as,ks), t)) =
+    scopeTypeDecl (ctx', tds') td@(ti, unzip -> (as,ks), t) =
       if ti `memberTId` ctx' || ti `memberDId` ctx'
         then do
           insertError (MultipleTypeDecls (getSpan ti) ti)
-          return (ctx',Map.insert ti td tds')
+          return (ctx',td:tds')
         else do 
           as' <- mapM freshInternal as
           ks' <- mapM scopeKind ks
           t'  <- scopeType (fromTVarList as') t
-          return (insertTId ti ctx', Map.insert ti (zip as' ks', t') tds')
+          return (insertTId ti ctx', (ti, zip as' ks', t') : tds')
 
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
 scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations

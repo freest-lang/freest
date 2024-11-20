@@ -8,10 +8,9 @@ This module contains types and functions to represent and manipulate FreeST
 modules.
 -}
 module Syntax.Module
-  ( DataDecls
-  , ConsDecls
-  , TypeDecls
-  , Lambda
+  ( DataDeclList
+  , ConsDeclList
+  , TypeDeclList
   , Module(..)
   , setName
   , insertImport
@@ -24,24 +23,22 @@ where
 
 import           Syntax.Base
 import           Syntax.Expression (Exp, Pat, LetDecl)
-import qualified Syntax.Kind as K (Kind)
-import qualified Syntax.Type as T (Type)
+import           Syntax.Kind (Kind)
+import           Syntax.Type (Type)
 
 import           Data.List (intercalate)
 import           Data.Maybe (fromMaybe)
-import qualified Data.Map.Strict as Map 
 import           Debug.Trace (trace)
 
-type Lambda t = ([(Variable, K.Kind)], t)
-type TypeDecls = Map.Map Identifier (Lambda T.Type)
-type ConsDecls = Map.Map Identifier [T.Type]
-type DataDecls = Map.Map Identifier (Lambda ConsDecls)
+type ConsDeclList = [(Identifier, [Type])]
+type DataDeclList = [(Identifier, [(Variable, Kind)], ConsDeclList)]
+type TypeDeclList = [(Identifier, [(Variable, Kind)], Type)]
 
 data Module
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
-           , dataDecls   :: DataDecls
-           , typeDecls   :: TypeDecls
+           , dataDecls   :: DataDeclList
+           , typeDecls   :: TypeDeclList
            , definitions :: [LetDecl]
            }
 
@@ -57,11 +54,11 @@ setName n m = m {name = Just n}
 insertImport :: [String] -> Module -> Module
 insertImport i m = m{imports = i : imports m}
 
-insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> [(Identifier, [T.Type])] -> Module -> Module
-insertDataDecl n aks b m = m{dataDecls = Map.insert n (aks, Map.fromList b) (dataDecls m)}
+insertDataDecl ::  Identifier -> [(Variable, Kind)] -> ConsDeclList -> Module -> Module
+insertDataDecl n aks b m = m{dataDecls = (n, aks, b) : dataDecls m}
 
-insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type -> Module -> Module
-insertTypeDecl n aks t m = m{typeDecls = Map.insert n (aks, t) (typeDecls m)}
+insertTypeDecl :: Identifier -> [(Variable, Kind)] -> Type -> Module -> Module
+insertTypeDecl n aks t m = m{typeDecls = (n, aks, t) : typeDecls m}
 
 insertDef :: LetDecl -> Module -> Module
 insertDef d m = m{definitions = d : definitions m}
@@ -69,8 +66,8 @@ insertDef d m = m{definitions = d : definitions m}
 empty :: Module
 empty = Module{ name        = Nothing
               , imports     = []
-              , dataDecls   = Map.empty
-              , typeDecls   = Map.empty
+              , dataDecls   = []
+              , typeDecls   = []
               , definitions = []
               }
 
@@ -81,15 +78,15 @@ instance Show Module where
       ,"-- imports"
       ,intercalate "\n" (map showImport imports)
       ,"-- type declarations"
-      ,intercalate "\n" (map showTypeDecl (Map.assocs typeDecls))
+      ,intercalate "\n" (map showTypeDecl typeDecls)
       ,"-- data declarations"
-      ,intercalate "\n" (map showDataDecl (Map.assocs dataDecls))
+      ,intercalate "\n" (map showDataDecl dataDecls)
       ,"-- definitions"
       ,intercalate "\n" (map show definitions)
       ]
     where showImport ss = "import "++intercalate "." ss
-          showDataDecl (i,(as,cds)) =
-            "data "++show i++" "++unwords (map showKindedVar as)++" = "++intercalate " | " (map showConsDecl (Map.assocs cds))
+          showDataDecl (tn,as,cds) =
+            "data "++show tn++" "++unwords (map showKindedVar as)++" = "++intercalate " | " (map showConsDecl cds)
             where showConsDecl (cn,ts) = show cn ++" "++ unwords (map show ts)
-          showTypeDecl (i, (aks, t)) = "type "++show i++" "++unwords (map showKindedVar aks)++" = "++show t
+          showTypeDecl (tn,as, t) = "type "++show tn++" "++unwords (map showKindedVar as)++" = "++show t
           showKindedVar (a,k) = show a++":"++show k

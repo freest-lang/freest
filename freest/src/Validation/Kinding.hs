@@ -35,8 +35,14 @@ import qualified Data.List.NonEmpty as NE
 
 runKinding :: M.Module -> Either [Error] M.Module
 runKinding m =
-  let s = ValidationState {errors = [], kindCtx = Map.empty, typeEqs = Map.empty} in 
-  let (x,ValidationState{errors}) = runState (runExceptT kindModule) s
+  let s = ValidationState 
+        { errors    = []
+        , kindCtx   = Map.empty
+        , typeDecls = Map.empty
+        , dataDecls = Map.empty
+        , consDecls = Map.empty
+        }
+      (x,ValidationState{errors}) = runState (runExceptT kindModule) s
   in case x of 
     Left e                -> Left (errors++[e])
     Right _ | null errors -> Right m

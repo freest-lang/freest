@@ -17,11 +17,18 @@ import Control.Arrow ((>>>))
 import Syntax.Substitution (subs)
 import qualified Data.List.NonEmpty as NE
 
+type Lambda t = ([(Variable, K.Kind)], t)
+type TypeDeclMap = Map.Map Identifier (Lambda T.Type)
+type ConsDeclMap = Map.Map Identifier [T.Type]
+type DataDeclMap = Map.Map Identifier (Lambda ConsDeclMap)
+
 data ValidationState
   = ValidationState
-    { errors       :: [Error]
-    , kindCtx      :: Map.Map Identifier K.Kind
-    , typeEqs      :: Map.Map Identifier ([(Variable, K.Kind)], T.Type)
+    { errors    :: [Error]
+    , kindCtx   :: Map.Map Identifier K.Kind
+    , typeDecls :: TypeDeclMap
+    , dataDecls :: DataDeclMap
+    , consDecls :: ConsDeclMap
     }
 
 type Validation = ExceptT Error (State ValidationState)
@@ -39,7 +46,7 @@ lookupDKind i ts = undefined
 
 lookupTName :: Identifier -> [T.Type] -> Validation T.Type
 lookupTName i ts =
-  gets (Map.lookup i . typeEqs) >>= \case 
+  gets (Map.lookup i . typeDecls) >>= \case 
     Nothing    -> throwE (TypeOutOfScope (getSpan i) i)
     Just (aks, t) 
       | n >  m -> pure $ T.TName (getSpan i) i ts
