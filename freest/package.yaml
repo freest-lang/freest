@@ -54,6 +54,7 @@ library:
     - Syntax.Normalisation
     - Syntax.Substitution
     - Syntax.Type
+    - TypeEquivalence.TypeEquivalence
     - Validation.Expose
     - Validation.Kinding
     - Validation.Typing
@@ -86,4 +87,13 @@ tests:
         - -O2 -threaded 
         - -rtsopts 
         - -with-rtsopts=-N
-
+    unit:
+      main: UnitSpec.hs
+      source-dirs:
+        - test/unit
+      dependencies:
+        - freest
+        - hspec >= 2.7.1
+        - hspec-expectations >= 0.8.2
+        - hspec-discover >= 2.7.1
+        - split >= 0.2.3.3

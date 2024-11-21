@@ -31,6 +31,8 @@ import Debug.Trace
 %name parseType Type
 %name parseModuleDecl ModuleDecl
 %name parseModule Module
+%name parseTypeCmpTests TypeCmpTests
+%name parseTypeCmpTest TypeCmpTest
 
 %tokentype { Token }
 %monad { Lexer }
@@ -175,9 +177,15 @@ ModuleDeclListPIPE :: { M.Module }
   | {- empty -}                        { M.empty }
 
 ModuleDecl :: { M.Module -> M.Module }
-  : LetDecl                              { M.insertDef $1 }
-  | 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
-  | 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
+  : LetDecl  { M.insertDef $1 }
+  | DataDecl { $1 }
+  | TypeDecl { $1 }
+
+DataDecl :: { M.Module -> M.Module }
+  : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
+
+TypeDecl :: { M.Module -> M.Module }
+  : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
 LetDecl
   : Pat DefRHS { E.ValDecl $1 ($2 Nothing) }
@@ -469,6 +477,23 @@ LetDeclListPIPE :: { [E.LetDecl] }
 Close
   : CLOSE { () }
   | error {% popLayout }
+
+TypeCmpTests :: { [(T.Type, T.Type, M.Module)] }
+  : {- empty -} { [] }
+  | TypeCmpTest TypeCmpTests { $1 : $2 }
+
+TypeCmpTest :: { (T.Type, T.Type, M.Module) }
+  : 'let' TypeCmpTestBlock 'in' '(' Type ',' Type ')' { ($5, $7, $2) }
+  | '(' Type ',' Type ')' { ($2, $4, M.empty) }
+
+TypeCmpTestBlock :: { M.Module }
+  : OPEN TypeDataDeclListPIPE Close { $2 }
+
+TypeDataDeclListPIPE :: { M.Module }
+  : TypeDecl PIPE TypeDataDeclListPIPE { $1 $3 }
+  | DataDecl PIPE TypeDataDeclListPIPE { $1 $3 }
+  | TypeDecl { $1 M.empty }
+  | DataDecl { $1 M.empty }
 
 {
 lexer cont = scan >>= cont

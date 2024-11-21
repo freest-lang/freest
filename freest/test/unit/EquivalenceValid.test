@@ -1,0 +1,7 @@
+(Foo, Bar)
+
+let
+  type Foo = (Bar, Bar)
+  type Bar = Int
+in 
+  (Foo, (Bar,Bar))
