@@ -1,7 +1,93 @@
-(Foo, Bar)
+-- Simple types
+
+(Int, Int)
+
+(Char, Char)
+
+(Float, Float)
+
+(Int, Int)
+
+((), ())
+
+-- Session types
+
+(!Int, !Int)
+
+(?Char, ?Char)
+
+(!Int, !Int)
+
+(?(), ?())
+
+(Skip, Skip)
+
+(!Int, Skip;!Int)
+
+(!Int, !Int;Skip)
+
+(!Int, Skip;!Int;Skip)
+
+(!Int, Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip)
+
+(!Int;Skip;?Int, !Int;?Int)
+
+(Skip;!Int, !Int;Skip)
+
+(!Int;Skip, Skip;!Int)
+
+(Skip, Skip;Skip)
+
+-- Close 
+
+(Close, Close)
+
+(Close, Close;!Int)
+
+(Close;!Int, Close;?Int)
+
+(Close;!Int, Close;?Int)
+
+(!Char;Close;!Int, !Char;Close;?Int)
+
+((!Int;Close;!Int);?Int, !Int;Close;!Int)
 
 let
-  type Foo = (Bar, Bar)
-  type Bar = Int
+  type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U = +{A: !Int;U, B: Close;U}
+in
+  (T;!Int, U)
+
+let
+  type T = T'
+  type T' = +{A: !Int;T', B:Close;T}
+  type U = U'
+  type U' = +{A: !Int;U', B:Close;U'}
+in
+  (T, U)
+
+let
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U = &{N:!Int;!Int;U, L:Skip};Close
+in
+  (T, U)
+
+let
+  type T = !(T';!Int);?(T;!(Close);Close;?Int)
+  type T' = +{A: !Int;T', B: Skip;Close;Skip}
+  type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
+  type U' = +{A: !Int;U', B: Close;U'}
+in
+  (T, U)
+
+(!(!Int;Close), !(!Int;Skip;Close;?Int))
+
+(forall a:1S. Close;a;!Int, forall b:1S. (Close;b);Skip)
+
+let
+  type T  a:1S = !(T' a;!Int);?(T a;!(Close);Close)
+  type T' a:1S = +{A: !a;T' a, B: a;Close;a}
+  type U  b:1S = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
+  type U' b:1S = +{A: !b;U' b, B: b;Close;!(U' b)}
 in 
-  (Foo, (Bar,Bar))
+  (forall a:1S. T a, forall b: 1S . U b)

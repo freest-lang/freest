@@ -14,7 +14,7 @@ import Control.Monad.RWS
 import UI.CLI
 import Parser.Parser
 import Syntax.Module
-import Parser.Scoping (runScoping)
+import Parser.Scoping (runScoping, scopeModule_)
 import Validation.Kinding
 
 
@@ -33,7 +33,7 @@ freest :: RunOpts -> IO ()
 freest RunOpts{file=f} = do
   source <- readFile f
   runLexer parseModule f source 
-    >>= runScoping 
+    >>= runScoping scopeModule_
     -- >>= runKinding
     & \case 
       Left es -> mapM_ print es >> exitFailure
