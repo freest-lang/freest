@@ -17,6 +17,7 @@ module Syntax.Type
   , isSemi
   , isAppSemi
   , isDual
+  , isRec
   )
 where
 
@@ -116,6 +117,10 @@ isAppSemi _ = False
 isDual :: Type -> Bool
 isDual Dual{} = True
 isDual _ = False
+
+isRec :: Type -> Bool
+isRec TName{} = True
+isRec _ = False
 
 instance Show Polarity where
   show In  = "?"
