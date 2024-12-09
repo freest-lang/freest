@@ -16,7 +16,7 @@ where
 import           Syntax.Base
 import           Syntax.Kind (Kind)
 import qualified Syntax.Type                   as T
-import           Syntax.Substitution           ( subs )
+import           Syntax.Substitution           ( subsAll )
 import           Validation.Base               ( TypeDeclMap )
 
 import qualified Data.List.NonEmpty            as NE
@@ -31,10 +31,7 @@ normalise td = norm S.empty
     norm :: S.Set T.Type -> T.Type -> T.Type
     norm visited t@(T.TName s id ts)
       | t `S.member` visited = T.Skip s
-      | otherwise = norm (t `S.insert` visited) v
-      where
-        (aks, u) = td M.! id
-        v = foldr (uncurry subs) u (zip (map fst aks) ts)
+      | otherwise = norm (t `S.insert` visited) (reduce td t)
     norm visited t | isWhnf t = t
                    | otherwise = norm visited (reduce td t)
 
@@ -71,12 +68,9 @@ reduce td = \case
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 ->
     T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
   -- R-μ
-  T.TName _ id ts -> rBeta (map fst vks) ts u
+  T.TName _ id ts -> subsAll as ts u
     where
-      (vks, u) = td M.! id
-      rBeta :: [Variable] -> [T.Type] -> T.Type -> T.Type
-      -- TODO: assuming vs and ts of the same length
-      rBeta vs ts u = foldr (uncurry subs) u (zip vs ts)
+      (as, u) = td M.! id
   -- R-β - No such thing
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts

@@ -46,7 +46,7 @@ word t = wasVisited t >>= \case
   Just w -> pure w -- We have seen t before
   Nothing -> do
     m <- gets module_
-    let u = whReduction M.empty t
+    let u = normalise M.empty t
     -- let u = whnf m t
     case u of
       T.Skip{} -> pure []

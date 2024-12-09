@@ -9,8 +9,9 @@ the corrected version of Lennart Augustsson's naïve substitution found in
 To be replaced by a more efficient alternative.
 -}
 module Syntax.Substitution
-  (subs
-  ,freeVars
+  ( subs
+  , subsAll
+  , freeVars
   )
 where
 
@@ -66,3 +67,6 @@ subs a u = \case
   T.TName s i ts -> T.TName s i (map (subs a u) ts)
   T.DName s i ts -> T.DName s i (map (subs a u) ts)
   t -> t
+
+subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
+subsAll as ts u = foldr (uncurry subs) u (zip as ts)
