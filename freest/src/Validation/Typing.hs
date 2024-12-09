@@ -67,7 +67,7 @@ synth kctx tctx = \case
             ([], t) -> return (t, tctx)
             -- too many arguments (alternately, we can skip exposure and throw an ExposeError here)
             (as, t) -> do
-                throwE (TooManyArgs (spanFromTo (head as) (last as)) f t0 n (n+length as))
+                throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) f t0 n (n+length as))
     E.Abs s ps m e  -> do
         (pkctx, ptctx) <- collectParams kctx ps
         (t, tctx') <- synth (pkctx `Map.union` kctx) (ptctx `Map.union` tctx) e

@@ -53,29 +53,41 @@
 ((!Int;Close;!Int);?Int, !Int;Close;!Int)
 
 let
+  type T : 1S
   type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U : 1S
   type U = +{A: !Int;U, B: Close;U}
 in
   (T;!Int, U)
 
 let
+  type T : 1S
   type T = T'
+  type T' : 1S
   type T' = +{A: !Int;T', B:Close;T}
+  type U : 1S
   type U = U'
+  type U' : 1S
   type U' = +{A: !Int;U', B:Close;U'}
 in
   (T, U)
 
 let
+  type T : 1S
   type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1S
   type U = &{N:!Int;!Int;U, L:Skip};Close
 in
   (T, U)
 
 let
+  type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
+  type T' : 1S
   type T' = +{A: !Int;T', B: Skip;Close;Skip}
+  type U : 1S
   type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
+  type U' : 1S
   type U' = +{A: !Int;U', B: Close;U'}
 in
   (T, U)
@@ -85,9 +97,13 @@ in
 (forall a:1S. Close;a;!Int, forall b:1S. (Close;b);Skip)
 
 let
-  type T  a:1S = !(T' a;!Int);?(T a;!(Close);Close)
-  type T' a:1S = +{A: !a;T' a, B: a;Close;a}
-  type U  b:1S = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
-  type U' b:1S = +{A: !b;U' b, B: b;Close;!(U' b)}
+  type T : 1S -> 1S
+  type T a = !(T' a;!Int);?(T a;!(Close);Close)
+  type T' : 1S -> 1S
+  type T' a = +{A: !a;T' a, B: a;Close;a}
+  type U : 1S -> 1S
+  type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
+  type U' : 1S -> 1S
+  type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 in 
   (forall a:1S. T a, forall b: 1S . U b)

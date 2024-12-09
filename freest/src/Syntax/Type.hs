@@ -65,20 +65,20 @@ data Type
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
 pattern AppArrow :: Span -> K.Multiplicity -> Type -> Type -> Type
-pattern AppArrow s1 m t u <- App s1 (Arrow s2 m) (NE.toList -> [t,u]) where
-  AppArrow s m t u = App s (Arrow s m) (NE.fromList [t,u])
+pattern AppArrow s1 m t u <- App s1 (Arrow s2 m) (NE.toList -> [t,u]) 
+  where AppArrow s m t u = App s (Arrow s m) (NE.fromList [t,u])
 
 pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
-pattern AppMessage s1 m p t <- App s1 (Message s2 m p) (NE.toList -> [t]) where
-  AppMessage s m p t = App s (Message s m p) (NE.singleton t)
+pattern AppMessage s1 m p t <- App s1 (Message s2 m p) (NE.toList -> [t]) 
+  where AppMessage s m p t = App s (Message s m p) (NE.singleton t)
 
 pattern AppSemi :: Span -> Type -> Type -> Type
-pattern AppSemi s t u <- App s (Semi _) (NE.toList -> [t,u]) where
-  AppSemi s t u = App s (Semi s) (NE.fromList [t,u])
+pattern AppSemi s t u <- App s (Semi _) (NE.toList -> [t,u]) 
+  where AppSemi s t u = App s (Semi s) (NE.fromList [t,u])
 
 pattern AppDual :: Span -> Type -> Type
-pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) where
-  AppDual s t = App s (Dual s) (NE.singleton t)
+pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) 
+  where AppDual s t = App s (Dual s) (NE.singleton t)
 
 variadicForall :: Span -> NE.NonEmpty (Variable, K.Kind) -> Type -> Type
 variadicForall s ((a,k) NE.:| []) t = 

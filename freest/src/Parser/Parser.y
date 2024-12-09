@@ -180,12 +180,16 @@ ModuleDecl :: { M.Module -> M.Module }
   : LetDecl  { M.insertDef $1 }
   | DataDecl { $1 }
   | TypeDecl { $1 }
+  | KindSig  { $1 }
 
 DataDecl :: { M.Module -> M.Module }
-  : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
+  : 'data' UPPER_ID VarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
 
 TypeDecl :: { M.Module -> M.Module }
-  : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
+  : 'type' UPPER_ID VarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
+
+KindSig :: { M.Module -> M.Module }
+  : 'type' UPPER_ID ':' Kind { M.insertKindSig (mkIdTk $2) $4 }
 
 LetDecl
   : Pat DefRHS { E.ValDecl $1 ($2 Nothing) }
@@ -222,6 +226,11 @@ TypePrimaryListWS :: { [T.Type] }
   : TypePrimary TypePrimaryListWS { $1 : $2 }
   | {- empty -}                   { [] }
 
+Kind :: { K.Kind }
+  : Kind '->' Kind %prec ARROW { K.Arrow (spanFromTo $1 $3) $1 $3 }
+  | '(' Kind ')'                { $2 }
+  | ProperKind                  { $1 }
+
 ProperKind :: { K.Kind }
   : '1T' { K.Proper (getSpan $1) K.Lin K.Top }
   | '*T' { K.Proper (getSpan $1) K.Un K.Top }
@@ -250,6 +259,9 @@ TypePrimary :: { T.Type }
   | '(' '*' Polarity ')' {T.Message (spanFromTo $1 $4) K.Un (snd $3)}
   -- | '(' Type ';' ')' -- TODO: sections
   -- | '(' ';' Type ')' -- TODO: sections
+  -- Messages
+  | Polarity TypePrimary %prec MSG     { T.AppMessage (spanFromTo (fst $1) $2) K.Lin (snd $1) $2 }
+  | '*' Polarity TypePrimary %prec MSG { T.AppMessage (spanFromTo $1 $3) K.Un  (snd $2) $3 }
   -- Choices
   | View '{' LabelTypeListComma '}'     { T.Choice (spanFromTo (fst $1) $4) K.Lin (snd $1) $3 }
   | '*' View '{' LabelTypeListComma '}' { T.Choice (spanFromTo $1 $5)       K.Un  (snd $2) $4 }
@@ -265,8 +277,6 @@ TypePrimary :: { T.Type }
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Polarity Type %prec MSG     { T.AppMessage (spanFromTo (fst $1) $2) K.Lin (snd $1) $2 }
-  | '*' Polarity Type %prec MSG { T.AppMessage (spanFromTo $1 $3) K.Un  (snd $2) $3 }
   -- If forall is just a constant, remove this rule and uncomment the one below and the declaration of Forall.
   | 'forall' KindedVar KindedVarListWS '.' Type   { T.variadicForall (spanFromTo $1 $5) ($2 NE.:| $3) $5 }
   -- | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $3) [(fst $2, snd $2)] $3)] }
@@ -302,13 +312,17 @@ LabelTypeListComma :: { [(Identifier, T.Type)] }
   : UPPER_ID ':' Type ',' LabelTypeListComma { (mkIdTk $1, $3) : $5 }
   | UPPER_ID ':' Type { [(mkIdTk $1, $3)] }
 
+VarListWS :: { [Variable] }
+  : {- empty -} { [] }
+  | LOWER_ID VarListWS { mkVarTk $1 : $2 }
+
 KindedVarListWS :: { [(Variable, K.Kind)] }
   : {- empty -} { [] }
   | KindedVar KindedVarListWS { $1 : $2 }
 
 KindedVar :: { (Variable, K.Kind) }
   : LOWER_ID { (mkVarTk $1, dummyKindVar $1) }
-  | LOWER_ID ':' ProperKind { (mkVarTk $1, $3) }
+  | LOWER_ID ':' Kind { (mkVarTk $1, $3) }
 
 ExpPrimary :: { E.Exp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
@@ -487,13 +501,16 @@ TypeCmpTest :: { (T.Type, T.Type, M.Module) }
   | '(' Type ',' Type ')' { ($2, $4, M.empty) }
 
 TypeCmpTestBlock :: { M.Module }
-  : OPEN TypeDataDeclListPIPE Close { $2 }
+  : OPEN TypeCmpDeclListPIPE Close { $2 }
 
-TypeDataDeclListPIPE :: { M.Module }
-  : TypeDecl PIPE TypeDataDeclListPIPE { $1 $3 }
-  | DataDecl PIPE TypeDataDeclListPIPE { $1 $3 }
-  | TypeDecl { $1 M.empty }
-  | DataDecl { $1 M.empty }
+TypeCmpDeclListPIPE :: { M.Module }
+  : TypeCmpDecl PIPE TypeCmpDeclListPIPE { $1 $3 }
+  | TypeCmpDecl { $1 M.empty }
+
+TypeCmpDecl :: { M.Module -> M.Module }
+  : KindSig  { $1 }
+  | TypeDecl { $1 }
+  | DataDecl { $1 }
 
 {
 lexer cont = scan >>= cont

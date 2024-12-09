@@ -10,6 +10,7 @@ process.
 
 -}
 
+type Process : *T
 type Process = Int -> (Int, Process)
 
 -- Here is a process that, at each step, returns the sum of all the

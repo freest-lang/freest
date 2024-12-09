@@ -31,6 +31,8 @@ freeVars = \case
     T.Var _ a          -> Set.singleton a
     T.App _ t ts       -> Set.unions (freeVars t NE.<| fmap freeVars ts)
     T.Choice _ _ _ lts -> Set.unions $ map (freeVars . snd) lts
+    T.TName _ _ ts     -> Set.unions (map freeVars ts)
+    T.DName _ _ ts     -> Set.unions (map freeVars ts)
     _                  -> Set.empty
 
 allVars :: T.Type -> Set.Set Variable
@@ -39,6 +41,8 @@ allVars = \case
     T.Var _ a          -> Set.singleton a
     T.App _ t ts       -> Set.unions (allVars t NE.<| fmap allVars ts)
     T.Choice _ _ _ lts -> Set.unions $ map (allVars . snd) lts
+    T.TName _ _ ts     -> Set.unions (map allVars ts)
+    T.DName _ _ ts     -> Set.unions (map allVars ts)
     _                  -> Set.empty
 
 newInternal :: Variable -> Set.Set Variable -> Variable
@@ -57,6 +61,8 @@ subs a u = \case
   t@(T.Var _ b)
     | b == a    -> u
     | otherwise -> t
-  T.App s f as -> T.App s (subs a u f) (fmap (subs a u) as)
+  T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)
   T.Choice s m p lts -> T.Choice s m p (map (second (subs a u)) lts)
+  T.TName s i ts -> T.TName s i (map (subs a u) ts)
+  T.DName s i ts -> T.DName s i (map (subs a u) ts)
   t -> t

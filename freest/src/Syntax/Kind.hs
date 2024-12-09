@@ -100,7 +100,7 @@ instance Show Prekind where
 
 instance Show Kind where
   show (Proper _ m pk) = show m++show pk 
-  show (Arrow _ k1 k2) = show k1++" => "++show k2 
+  show (Arrow _ k1 k2) = show k1++" -> "++show k2 
 
 instance Located Kind where
   getSpan (Proper s _ _) = s 

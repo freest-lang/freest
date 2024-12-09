@@ -1,7 +1,9 @@
 module ListRW where
 
+type IList : *T
 data IList = Nil | Cons Int IList
 
+type IListW : 1S
 type IListW = +{NilC: Skip, ConsC: !Int; IListW}
 
 iListW : IList -> IListW;a -> a

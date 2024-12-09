@@ -1,7 +1,10 @@
 module Triple where
 
+type Value : *T
 type Value = Int
+type Triple : *T
 type Triple = (Value, (Value, Value))
+type Pair : *T
 type Pair = (Value, Value)
 
 -- type Arrow = Int -> dualof RcvInt -> Int

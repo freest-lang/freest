@@ -34,11 +34,10 @@ freest RunOpts{file=f} = do
   source <- readFile f
   runLexer parseModule f source 
     >>= runScoping scopeModule_
-    -- >>= runKinding
+    >>= runKinding
     & \case 
       Left es -> mapM_ print es >> exitFailure
       Right m -> print m        >> exitSuccess
-
 
 lexAll :: Lexer ()
 lexAll = do
