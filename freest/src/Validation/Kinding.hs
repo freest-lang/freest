@@ -39,10 +39,10 @@ runKinding :: M.Module -> Either [Error] M.Module
 runKinding m =
   let s = buildValidationState m
       (x,ValidationState{errors}) = runState (runExceptT (kindModule m)) s
-  in case x of 
+  in case x of
     Left e                -> Left (errors++[e])
     Right _ | null errors -> Right m
-            | otherwise   -> Left errors 
+            | otherwise   -> Left errors
 
 kindModule :: M.Module -> Validation ()
 kindModule m = do
@@ -54,40 +54,40 @@ kindTypeDecl :: (Identifier, ([Variable], T.Type)) -> Validation ()
 kindTypeDecl (i, (as, t)) = do
   k <- lookupKind i
   checkTypeDecl k Map.empty as k
-  where 
+  where
     checkTypeDecl :: Kind -> KindingCtx -> [Variable] -> Kind -> Validation ()
-    checkTypeDecl k ctx [] k' = 
+    checkTypeDecl k ctx [] k' =
       check ctx t k'
-    checkTypeDecl k ctx as Proper{} = 
+    checkTypeDecl k ctx as Proper{} =
       throwE (ExpectsTooManyArgsK (getSpan i) i k)
-    checkTypeDecl k ctx (a : as) (Arrow s k1 k2) = 
+    checkTypeDecl k ctx (a : as) (Arrow s k1 k2) =
       checkTypeDecl k (Map.insert a k1 ctx) as k2
 
 kindDataDecl :: (Identifier, ([Variable], M.ConsDeclList)) -> Validation ()
 kindDataDecl (i, (as, t)) = do
   k <- lookupKind i
-  checkDataDecl k Map.empty as k
-  where 
-    checkDataDecl :: Kind -> KindingCtx -> [Variable] -> Kind -> Validation ()
-    checkDataDecl k ctx [] k' = 
-      checkConsDecls ctx t k'
-    checkDataDecl k ctx as Proper{} = 
+  checkDataDecl k id Map.empty as k
+  where
+    checkDataDecl :: Kind -> (Kind -> Kind) -> KindingCtx -> [Variable] -> Kind -> Validation ()
+    checkDataDecl k f ctx [] _ =
+      checkConsDecls k f ctx t
+    checkDataDecl k f ctx as Proper{} =
       throwE (ExpectsTooManyArgsK (getSpan i) i k)
-    checkDataDecl k ctx (a : as) (Arrow s k1 k2) = 
-      checkDataDecl k (Map.insert a k1 ctx) as k2
-    
-    checkConsDecls :: KindingCtx -> M.ConsDeclList -> Kind -> Validation ()
-    checkConsDecls ctx cds k = do
+    checkDataDecl k f ctx (a : as) (Arrow s k1 k2) =
+      checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) as k2
+
+    checkConsDecls :: Kind -> (Kind -> Kind) -> KindingCtx -> M.ConsDeclList -> Validation ()
+    checkConsDecls k f ctx cds = do
       m <- synthDataMult ctx cds
-      let k' = Proper (getSpan i) m Top
+      let k' = f (Proper (getSpan i) m Top)
       unless (k' <: k)
-        (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) i []) k')) 
-    
-    synthDataMult ctx = foldM (synthConsMult ctx) Un 
+        (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) i []) k'))
 
-    synthConsMult ctx m (i, ts) = foldM (checkJoinConsField ctx) Un ts
+    synthDataMult ctx = foldM (synthConsMult ctx) Un
 
-    checkJoinConsField ctx m' t = 
+    synthConsMult ctx m (i, ts) = foldM (checkJoinConsField ctx) m ts
+
+    checkJoinConsField ctx m' t =
       checkProper ctx t >>= \(m'',_) -> pure (join m' m'')
 
 type KindingCtx = Map.Map Variable Kind
@@ -120,12 +120,12 @@ synth ctx = \case
     synthCheck (Map.insert a k ctx) t (lt s)
     >>= \case Proper _ m _ -> pure (Proper s m Top)
   -- Equations
-  T.TName s i ts -> do 
-    k <- lookupKind i 
+  T.TName s i ts -> do
+    k <- lookupKind i
     let (ks,kn) = Expose.kArrow k
     checkArgs s (T.TName s i []) (length ts) (length ks) ts ks kn
   T.DName s i ts -> do
-    k <- lookupKind i 
+    k <- lookupKind i
     let (ks,kn) = Expose.kArrow k
     checkArgs s (T.TName s i []) (length ts) (length ks) ts ks kn
   -- Higher-order
@@ -164,7 +164,7 @@ checkProper :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkProper ctx t =
   synth ctx t >>= \case
     Proper _ m pk -> pure (m,pk)
-    k -> throwE (ProperKindMismatch (getSpan t) t k) 
+    k -> throwE (ProperKindMismatch (getSpan t) t k)
 
 synthCheck :: KindingCtx -> T.Type -> Kind -> Validation Kind
 synthCheck ctx t k = do
