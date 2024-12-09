@@ -13,6 +13,11 @@ import Data.Bifunctor
 import Control.Applicative
 import Control.Monad.Trans.Except
 
+kArrow :: K.Kind -> ([K.Kind], K.Kind)
+kArrow (K.Arrow _ k1 k2) =
+    first (k1:) (kArrow k2)
+kArrow k = ([], k)
+
 function :: E.Exp -> T.Type -> Validation T.Type -- Suggestion: call the function arrow, so that we have Expose.arrow
 function e t = normalise t >>= \case
     Just t'@T.AppArrow{} -> pure t'

@@ -29,14 +29,18 @@ data Error
   | MultipleVarDecls Span Variable
   | MultipleConsDecls Span Identifier
   | MultipleTypeDecls Span Identifier
-  | TooManyArgs Span E.Exp T.Type Int Int
+  | MultipleKindSigs Span Identifier
+  | LacksKindSig Span Identifier
+  | GivenTooManyArgs Span E.Exp T.Type Int Int
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
   | ExposeError Span String (Either E.Pat E.Exp) T.Type
   | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
-  | TooManyArgsK Span T.Type K.Kind Int Int
+  | ProperKindMismatch Span T.Type K.Kind
+  | GivenTooManyArgsK Span T.Type Int Int
+  | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
 
 
@@ -49,14 +53,18 @@ instance Located Error where
   getSpan (MultipleVarDecls s _) = s
   getSpan (MultipleConsDecls s _) = s
   getSpan (MultipleTypeDecls s _) = s
-  getSpan (TooManyArgs s _ _ _ _) = s
+  getSpan (MultipleKindSigs s _) = s
+  getSpan (LacksKindSig s _) = s
+  getSpan (GivenTooManyArgs s _ _ _ _) = s
   getSpan (LinVarsConsumedInUnFun s _ _) = s
   getSpan (LinVarsCreatedInUnFun s _ _) = s
   getSpan (ExposeError s _ _ _) = s
   getSpan (UnexpectedArg s _ _ _ _) = s
   getSpan (NonLinPat s _ _) = s
   getSpan (KindMismatch s _ _ _) = s
-  getSpan (TooManyArgsK s _ _ _ _) = s
+  getSpan (ProperKindMismatch s _ _) = s
+  getSpan (GivenTooManyArgsK s _ _ _) = s
+  getSpan (ExpectsTooManyArgsK s _ _) = s
   getSpan (InvalidType s _) = s
 
   setSpan = internalError "span not settable for Error type."
@@ -86,13 +94,17 @@ instance Show Error where
                   ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
                   ++msg)
           "" vos
-        MultipleVarDecls _ c ->
-          "\n  Multiple declarations of variable `"++show c++"`"
-        MultipleConsDecls _ c ->
-          "\n  Multiple declarations of constructor `"++show c++"`"
-        MultipleTypeDecls _ c ->
-          "\n  Multiple declarations of type `"++show c++"`"
-        TooManyArgs _ f t expected actual ->
+        MultipleVarDecls _ i ->
+          "\n  Multiple declarations of variable `"++show i++"`"
+        MultipleConsDecls _ i ->
+          "\n  Multiple declarations of constructor `"++show i++"`"
+        MultipleTypeDecls _ i ->
+          "\n  Multiple declarations of type `"++show i++"`"
+        MultipleKindSigs _ i ->
+          "\n  Multiple kind signatures for type `"++show i++"`"
+        LacksKindSig _ i -> 
+          "\n Type `"++show i++"` lacks an accompanying kind signature."
+        GivenTooManyArgs _ f t expected actual ->
           "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
         LinVarsConsumedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
@@ -105,16 +117,20 @@ instance Show Error where
             where showExpPat (Left  p) = "pattern `"++show p++"`"
                   showExpPat (Right e) = "expression `"++show e++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
-          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"` instead."++
+          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
           "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
-          "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++"` instead."++
+          "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
           "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
           "\n Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
-        TooManyArgsK s t k n m ->
-          "\n Type "++show t++" : "++show k++" expects "++show n++" arguments, but it was given "++show m++"."
+        ProperKindMismatch s t k -> 
+          "\n Expected a proper kind for type "++show t++", but got kind "++show k
+        GivenTooManyArgsK s t n m ->
+          "\n Type "++show t++" expects "++show n++" arguments, but it was given "++show m++"."
+        ExpectsTooManyArgsK s i k ->
+          "\n Type "++show i++" expects too many arguments, it should have kind "++show k++"."
         InvalidType s t ->
           "\n Invalid type: "++show t

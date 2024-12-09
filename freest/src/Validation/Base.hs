@@ -6,10 +6,11 @@ module Validation.Base where
 import Syntax.Base
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
+import qualified Syntax.Module as M
 import qualified Syntax.Type as T
 import UI.Error
 
-import Control.Monad.State (State, MonadState, modify, gets)
+import Control.Monad.State (State, MonadState, modify, gets, foldM)
 import qualified Data.Map.Strict as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
@@ -17,7 +18,7 @@ import Control.Arrow ((>>>))
 import Syntax.Substitution (subs)
 import qualified Data.List.NonEmpty as NE
 
-type Lambda t = ([(Variable, K.Kind)], t)
+type Lambda t = ([Variable], t)
 type TypeDeclMap = Map.Map Identifier (Lambda T.Type)
 type ConsDeclMap = Map.Map Identifier [T.Type]
 type DataDeclMap = Map.Map Identifier (Lambda ConsDeclMap)
@@ -30,6 +31,24 @@ data ValidationState
     , dataDecls :: DataDeclMap
     , consDecls :: ConsDeclMap
     }
+  
+emptyValidationState :: ValidationState
+emptyValidationState = ValidationState 
+  { errors    = []
+  , kindCtx   = Map.empty
+  , typeDecls = Map.empty
+  , dataDecls = Map.empty
+  , consDecls = Map.empty
+  }
+
+buildValidationState :: M.Module -> ValidationState
+buildValidationState m = ValidationState -- TODO: traverse module once.
+  { errors    = []
+  , kindCtx   = Map.fromList (M.kindSigs m)
+  , typeDecls = Map.fromList (M.typeDecls m)
+  , dataDecls = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
+  , consDecls = Map.fromList (concatMap (\(_,(_,cds)) -> cds) $ M.dataDecls m)
+  }
 
 type Validation = ExceptT Error (State ValidationState)
 
@@ -41,8 +60,12 @@ putError x e = do
 putError_ :: MonadState ValidationState m => Error -> m ()
 putError_ = putError ()
 
-lookupDKind :: Identifier -> [T.Type] -> Validation K.Kind
-lookupDKind i ts = undefined
+lookupKind :: Identifier -> Validation K.Kind
+lookupKind i = do 
+  ctx <- gets kindCtx
+  case ctx Map.!? i of
+    Just k  -> return k
+    Nothing -> throwE (TypeOutOfScope (getSpan i) i)
 
 lookupTName :: Identifier -> [T.Type] -> Validation T.Type
 lookupTName i ts =
@@ -54,5 +77,5 @@ lookupTName i ts =
       | n <  m -> pure $ T.sApp s t' (NE.fromList $ drop n ts)
       where n  = length aks
             m  = length ts
-            t' = foldr (uncurry subs) t (zip (map fst (take m aks)) ts)
+            t' = foldr (uncurry subs) t (zip (take m aks) ts)
             s  = spanFromTo i (last ts)

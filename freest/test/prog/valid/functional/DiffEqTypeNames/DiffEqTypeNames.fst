@@ -1,7 +1,8 @@
 module DiffEqTypeNames where
 
+type T : *T
 type T = Int
-
+type U : *T
 type U = Int
 
 n : T
