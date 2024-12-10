@@ -81,7 +81,7 @@ kindDataDecl (i, (as, t)) = do
       m <- synthDataMult ctx cds
       let k' = f (Proper (getSpan i) m Top)
       unless (k' <: k)
-        (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) i []) k'))
+        (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) i) k'))
 
     synthDataMult ctx = foldM (synthConsMult ctx) Un
 
@@ -120,14 +120,8 @@ synth ctx = \case
     synthCheck (Map.insert a k ctx) t (lt s)
     >>= \case Proper _ m _ -> pure (Proper s m Top)
   -- Equations
-  T.TName s i ts -> do
-    k <- lookupKind i
-    let (ks,kn) = Expose.kArrow k
-    checkArgs s (T.TName s i []) (length ts) (length ks) ts ks kn
-  T.DName s i ts -> do
-    k <- lookupKind i
-    let (ks,kn) = Expose.kArrow k
-    checkArgs s (T.TName s i []) (length ts) (length ks) ts ks kn
+  T.TName s i -> lookupKind i
+  T.DName s i -> lookupKind i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
@@ -135,7 +129,7 @@ synth ctx = \case
   T.App s t ts -> do
     k <- synth ctx t
     let (ks,kn) = Expose.kArrow k
-    checkArgs s t (length ts) (length ks) (NE.toList ts) ks kn
+    checkArgs s t (length ts) (length ks) ts ks kn
   where
     checkArgs :: Span -> T.Type -> Int -> Int -- error info
               -> [T.Type] -> [Kind] -> Kind -> Validation Kind

@@ -72,13 +72,13 @@ normalise = normalise' Set.empty
     normalise' is = \case
       (reduceBSD -> Just t) -> 
         normalise' is t
-      T.TName _ i ts -> 
+      T.AppTName _ i ts -> 
         visit is i ts
-      T.AppSemi s (T.TName _ i ts) u ->
+      T.AppSemi s (T.AppTName _ i ts) u ->
         visit is i ts -- <&> fmap (\t' -> T.AppSemi s t' u)
-      T.AppDual s (T.TName _ i ts) ->
+      T.AppDual s (T.AppTName _ i ts) ->
         visit is i ts -- <&> fmap (T.AppDual s)
-      T.AppSemi s1 (T.AppDual s2 (T.TName _ i ts)) u ->
+      T.AppSemi s1 (T.AppDual s2 (T.AppTName _ i ts)) u ->
         visit is i ts -- <&> fmap (\t' -> T.AppSemi s1 (T.AppDual s2 t') u)
       t -> return  (Just t)
     visit :: Set.Set (Identifier, [T.Type]) -> Identifier -> [T.Type] -> Validation (Maybe T.Type)

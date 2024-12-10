@@ -29,7 +29,7 @@ normalise :: TypeDeclMap -> T.Type -> T.Type
 normalise td = norm S.empty
   where
     norm :: S.Set T.Type -> T.Type -> T.Type
-    norm visited t@(T.TName s id ts)
+    norm visited t@(T.AppTName s id ts)
       | t `S.member` visited = T.Skip s
       | otherwise = norm (t `S.insert` visited) (reduce td t)
     norm visited t | isWhnf t = t
@@ -68,7 +68,7 @@ reduce td = \case
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 ->
     T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
   -- R-μ
-  T.TName _ id ts -> subsAll as ts u
+  T.AppTName _ id ts -> subsAll as ts u
     where
       (as, u) = td M.! id
   -- R-β - No such thing

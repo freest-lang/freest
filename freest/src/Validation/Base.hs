@@ -72,9 +72,9 @@ lookupTName i ts =
   gets (Map.lookup i . typeDecls) >>= \case 
     Nothing    -> throwE (TypeOutOfScope (getSpan i) i)
     Just (aks, t) 
-      | n >  m -> pure $ T.TName (getSpan i) i ts
+      | n >  m -> pure $ T.AppTName (getSpan i) i ts
       | n == m -> pure t'
-      | n <  m -> pure $ T.sApp s t' (NE.fromList $ drop n ts)
+      | n <  m -> pure $ T.smartApp s t' (drop n ts)
       where n  = length aks
             m  = length ts
             t' = foldr (uncurry subs) t (zip (take m aks) ts)

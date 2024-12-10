@@ -248,10 +248,10 @@ TypePrimary :: { T.Type }
   | 'Close'  { T.End (getSpan $1) T.Out }
   | 'Wait'   { T.End (getSpan $1) T.In }
   -- Unit, Tuples, Operators
-  | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnit (spanFromTo $1 $2)) [] }
+  | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnit (spanFromTo $1 $2)) }
   | '(' Type ',' TypeListComma ')' 
-      { T.DName (spanFromTo $1 $5) (mkTupleCons (length $4) (spanFromTo $1 $5)) ($2 : $4) }
-  | '(' Commas ')' { T.TName (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) [] }
+      { T.AppDName (spanFromTo $1 $5) (mkTupleCons (length $4) (spanFromTo $1 $5)) ($2 : $4) }
+  | '(' Commas ')' { T.TName (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) }
   | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
   -- | '(' Type Arrow ')' -- TODO: sections
   -- | '(' Arrow Type ')' -- TODO: sections
@@ -266,11 +266,11 @@ TypePrimary :: { T.Type }
   | View '{' LabelTypeListComma '}'     { T.Choice (spanFromTo (fst $1) $4) K.Lin (snd $1) $3 }
   | '*' View '{' LabelTypeListComma '}' { T.Choice (spanFromTo $1 $5)       K.Un  (snd $2) $4 }
   -- Variables and constructors
-  | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) [] }
+  | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
   -- Lists
-  | '[' ']'      { T.DName (spanFromTo $1 $2) (mkNil (spanFromTo $1 $2)) []   }
-  | '[' Type ']' { T.DName (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3)) [$2] }
+  | '[' ']'      { T.DName (spanFromTo $1 $2) (mkNil (spanFromTo $1 $2))   }
+  | '[' Type ']' { T.AppDName (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3)) [$2] }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 

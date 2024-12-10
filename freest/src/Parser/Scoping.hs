@@ -361,10 +361,10 @@ scopeType ctx = \case
       Nothing -> T.Var s <$> freshInternal a -- no error here; leave it for the typechecker
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
-  T.TName s i ts ->
-    (if memberDId i ctx then T.DName else T.TName)
-      s i <$> mapM (scopeType ctx) ts
-  T.DName s i ts -> T.DName s i <$> mapM (scopeType ctx) ts
+  T.TName s i 
+    | memberDId i ctx -> return (T.DName s i)
+    | otherwise       -> return (T.TName s i)
+  T.DName s i -> return (T.DName s i)
   t -> pure t
 
 scopeTypeQ :: ScopingCtx -> T.Type -> Scoping T.Type
