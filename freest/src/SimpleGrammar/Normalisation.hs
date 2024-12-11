@@ -29,11 +29,11 @@ normalise :: TypeDeclMap -> T.Type -> T.Type
 normalise td = norm S.empty
   where
     norm :: S.Set T.Type -> T.Type -> T.Type
-    norm visited t@(T.TName s id ts)
-      | t `S.member` visited = T.Skip s
-      | otherwise = norm (t `S.insert` visited) (reduce td t)
-    norm visited t | isWhnf t = t
-                   | otherwise = norm visited (reduce td t)
+    norm visited t
+      | isWhnf t = t
+      | T.isTName t && t `S.member` visited = T.Skip (getSpan t)
+      | T.isTName t = norm (t `S.insert` visited) (reduce td t)
+      | otherwise = norm visited (reduce td t)
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
@@ -42,10 +42,10 @@ isWhnf = \case
   t | T.isConstant t -> True
   -- W-Const1
   T.App _ t _
-    | T.isConstant t && not (T.isSemi t) && not (T.isRec t) && not (T.isDual t) -> True
+    | T.isConstant t && not (T.isSemi t) && not (T.isTName t) && not (T.isDual t) -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | not (T.isSkip t) && not (T.isSemi t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isSkip t) && not (T.isSemi t) -> True
   -- W-Var i)
   T.Var{} -> True
   -- W-Var ii)
@@ -61,17 +61,15 @@ reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
   -- R-Seq1
   T.AppSemi _ T.Skip{} u -> u
-  -- R.Seq2
-  T.AppSemi s t u | not (T.isAppSemi t) ->
-    T.AppSemi s (reduce td t) u
   -- R-Assoc
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 ->
     T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-  -- R-μ
+  -- R.Seq2
+  T.AppSemi s t u -> -- Redundant: not (T.isAppSemi t)
+    T.AppSemi s (reduce td t) u
+  -- R-μ + R-β
   T.TName _ id ts -> subsAll as ts u
-    where
-      (as, u) = td M.! id
-  -- R-β - No such thing
+    where (as, u) = td M.! id
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   -- Duality from here on
