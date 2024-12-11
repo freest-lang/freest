@@ -8,8 +8,8 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
-  , Type(.., AppArrow, AppMessage, AppSemi, AppDual)
-  , sApp
+  , Type(.., AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
+  , smartApp
   , variadicForall
   , Dual(..)
   , isConstant
@@ -54,31 +54,58 @@ data Type
   -- Polymorphism
   | Forall Span Variable K.Kind Type
   -- Equations
-  | TName Span Identifier [Type]
-  | DName Span Identifier [Type]
+  | TName Span Identifier
+  | DName Span Identifier
   -- Higher-order
   | Var Span Variable
-  | App Span Type (NE.NonEmpty Type)
+  | App Span Type [Type]
   deriving Ord
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
 pattern AppArrow :: Span -> K.Multiplicity -> Type -> Type -> Type
-pattern AppArrow s1 m t u <- App s1 (Arrow s2 m) (NE.toList -> [t,u]) 
-  where AppArrow s m t u = App s (Arrow s m) (NE.fromList [t,u])
+pattern AppArrow s1 m t u <- App s1 (Arrow s2 m) [t,u]
+  where AppArrow s m t u = App s (Arrow s m) [t,u]
 
 pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
-pattern AppMessage s1 m p t <- App s1 (Message s2 m p) (NE.toList -> [t]) 
-  where AppMessage s m p t = App s (Message s m p) (NE.singleton t)
+pattern AppMessage s m p t <- App s (Message _ m p) [t] 
+  where AppMessage s m p t =  App s (Message s m p) [t]
 
 pattern AppSemi :: Span -> Type -> Type -> Type
-pattern AppSemi s t u <- App s (Semi _) (NE.toList -> [t,u]) 
-  where AppSemi s t u = App s (Semi s) (NE.fromList [t,u])
+pattern AppSemi s t u <- App s (Semi _) [t,u]
+  where AppSemi s t u =  App s (Semi s) [t,u]
 
 pattern AppDual :: Span -> Type -> Type
-pattern AppDual s t <- App s (Dual _) (NE.toList -> [t]) 
-  where AppDual s t = App s (Dual s) (NE.singleton t)
+pattern AppDual s t <- App s (Dual _) [t]
+  where AppDual s t =  App s (Dual s) [t]
+
+pattern AppTName :: Span -> Identifier -> [Type] -> Type
+pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
+                                  App s (TName _ i) ts -> App s (TName s i) ts
+                                  t                    -> t
+                           -> App s (TName _ i) ts)
+  where AppTName s i ts 
+          | null ts   = TName (getSpan i) i
+          | otherwise = App s (TName (getSpan i) i) ts      
+
+pattern AppDName :: Span -> Identifier -> [Type] -> Type
+pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
+                                  App s (DName _ i) ts -> App s (DName s i) ts
+                                  t                    -> t 
+                           -> App s (DName _ i) ts)
+  where AppDName s i ts 
+          | null ts   = DName (getSpan i) i
+          | otherwise = App s (DName (getSpan i) i) ts
+
+pattern AppVar :: Span -> Variable -> [Type] -> Type
+pattern AppVar s a ts <- (\case Var s a            -> App s (Var s a) []
+                                App s (Var _ a) ts -> App s (Var s a) ts
+                                t                    -> t
+                           -> App s (Var _ a) ts)
+  where AppVar s a ts 
+          | null ts   = Var (getSpan a) a
+          | otherwise = App s (Var (getSpan a) a) ts 
 
 variadicForall :: Span -> NE.NonEmpty (Variable, K.Kind) -> Type -> Type
 variadicForall s ((a,k) NE.:| []) t = 
@@ -86,11 +113,9 @@ variadicForall s ((a,k) NE.:| []) t =
 variadicForall s ((a,k) NE.:| (NE.fromList -> aks)) t =
   Forall s a k $ variadicForall s aks t
 
-sApp :: Span -> Type -> NE.NonEmpty Type -> Type
-sApp s (App _ t ts)   us = App s t (ts `NE.append` us)
-sApp s (TName _ i ts) us = TName s i (ts ++ NE.toList us)
-sApp s (DName _ i ts) us = DName s i (ts ++ NE.toList us)
-sApp s t              us = App s t us
+smartApp :: Span -> Type -> [Type] -> Type
+smartApp s (App _ t ts) us = App s t (ts ++ us)
+smartApp s t            us = App s t us
 
 isConstant :: Type -> Bool
 isConstant Choice{} = False
@@ -98,7 +123,7 @@ isConstant Forall{} = False
 isConstant Var{} = False
 isConstant App{} = False
 isConstant TName{} = False
-isConstant (DName _ _ []) = True -- Non applied datatypes
+isConstant (AppDName _ _ []) = True -- Non applied datatypes
 isConstant _ = True
 
 isSkip :: Type -> Bool
@@ -141,8 +166,8 @@ instance Show Type where
   show (Var _ a)           = show a
   show (Forall _ a k t)    = "(forall "++show a++":"++show k++". "++show t++")"
   show (App _ t ts)        = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
-  show (TName _ t ts)      = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
-  show (DName _ t ts)      = foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+  show (TName _ i)         = show i
+  show (DName _ i)         = show i
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -166,8 +191,8 @@ instance Congruence Type where
   -- Polymorphism
   congruent m (Forall _ a k1 t) (Forall _ b k2 u) = a == b && k1 == k2 && congruent m t u
   -- Equations
-  congruent m (TName _ id1 ts) (TName _ id2 us) = id1 == id2 && congruent m ts us
-  congruent m (DName _ id1 ts) (DName _ id2 us) = id1 == id2 && congruent m ts us
+  congruent m (TName _ i1) (TName _ i2) = i1 == i2
+  congruent m (DName _ i1) (DName _ i2) = i1 == i2
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
     v1 == v2 ||              -- free variables
@@ -202,8 +227,8 @@ instance Located Type where
   getSpan (Var s _)         = s
   getSpan (Forall s _ _ _)  = s
   getSpan (App s _ _)       = s
-  getSpan (TName s _ _)     = s
-  getSpan (DName s _ _)     = s
+  getSpan (TName s _)       = s
+  getSpan (DName s _)       = s
 
   setSpan s (Int _)             = Int s
   setSpan s (Float _)           = Float s
@@ -218,5 +243,5 @@ instance Located Type where
   setSpan s (Var _ a)           = Var s a
   setSpan s (Forall _ a k t)    = Forall s a k t
   setSpan s (App _ t1 t2)       = App s t1 t2
-  setSpan s (TName _ n ts)      = TName s n ts
-  setSpan s (DName _ n ts)      = DName s n ts
+  setSpan s (TName _ n)         = TName s n
+  setSpan s (DName _ n)         = DName s n

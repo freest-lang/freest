@@ -88,15 +88,15 @@ wordWhnf t@(T.Choice _ m p its) = do
         where showView T.In = "&"; showView T.Out = "+"
   mapM_ (uncurry (addProduction y)) termNonterms
   addVisited t [y]
-wordWhnf t@(T.App _ (T.Var _ α) ts) = do -- α T1...Tm
+wordWhnf t@(T.AppVar _ α ts) = do -- α T1...Tm
   y <- nextNonTerminal
   addProduction y (show α ++ "0") []
-  ws <- mapM word (NE.toList ts)
+  ws <- mapM word ts
   let words = map (++ [bottom]) ws
   let terminals = map (\n -> show α ++ show n) [1..]
   mapM_ (uncurry (addProduction y)) (zip terminals words)
   addVisited t [y]
-wordWhnf t@(T.AppDual s u@(T.App _ (T.Var _ α) ts)) = do -- Dual(α T1...Tm)
+wordWhnf t@(T.AppDual s u@(T.AppVar _ α ts)) = do -- Dual(α T1...Tm)
   w <- word u
   y <- nextNonTerminal
   let label = show $ T.Dual s

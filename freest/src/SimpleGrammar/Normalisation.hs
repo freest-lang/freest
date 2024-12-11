@@ -68,7 +68,7 @@ reduce td = \case
   T.AppSemi s t u -> -- Redundant: not (T.isAppSemi t)
     T.AppSemi s (reduce td t) u
   -- R-μ + R-β
-  T.TName _ id ts -> subsAll as ts u
+  T.AppTName _ id ts -> subsAll as ts u
     where (as, u) = td M.! id
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts

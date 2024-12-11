@@ -48,4 +48,4 @@ mkTupleCons :: Located a => Int -> a -> Identifier
 mkTupleCons n = mkId $ "("++replicate n ','++")"
 
 mkBool :: Located a => a -> T.Type
-mkBool (getSpan -> s) = T.DName s (mkId "Bool" s) []
+mkBool (getSpan -> s) = T.AppDName s (mkId "Bool" s) []
