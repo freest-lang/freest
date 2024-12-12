@@ -19,7 +19,6 @@ import qualified Syntax.Type                   as T
 import           Syntax.Substitution           ( subsAll )
 import           Validation.Base               ( TypeDeclMap )
 
-import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
 
@@ -33,16 +32,19 @@ normalise td = norm S.empty
     norm :: Visited -> T.Type -> T.Type
     norm visited t
       | isWhnf t = t
-      | t `reappearsIn` visited = T.Skip (getSpan t)
-      | otherwise = norm (insert t visited) (reduce td t)
+      | reappears = T.Skip (getSpan t)
+      | otherwise = norm insert (reduce td t)
+      where
+        u = tNameRedex t -- u is Maybe (µ∗U)
+        reappears = maybe False (`S.member` visited) u
+        insert  = maybe visited (`S.insert` visited) u
 
-reappearsIn :: T.Type -> Visited -> Bool
-reappearsIn t@T.TName{} visited = t `S.member` visited
-reappearsIn _ _ = undefined
-
-insert :: T.Type -> Visited -> Visited
-insert t@T.TName{} visited = S.insert t visited
-insert _ _ = undefined
+tNameRedex :: T.Type -> Maybe T.Type
+tNameRedex t@T.TName{}                                  = Just t -- µ∗U
+tNameRedex (T.AppSemi _ t@T.AppTName{} _)               = Just t -- (µ∗U) ; V
+tNameRedex (T.AppDual _ t@T.AppTName{})                 = Just t -- Dual (µ∗U)
+tNameRedex (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) = Just t -- (Dual (µ∗U)) ; V
+tNameRedex _                                            = Nothing
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
