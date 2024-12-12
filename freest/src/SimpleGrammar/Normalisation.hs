@@ -23,17 +23,26 @@ import qualified Data.List.NonEmpty            as NE
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
 
+type Visited = S.Set T.Type
+
 -- | The weak head normal form of a type. This function is guaranteed to
 -- converge for well-formed types
 normalise :: TypeDeclMap -> T.Type -> T.Type
 normalise td = norm S.empty
   where
-    norm :: S.Set T.Type -> T.Type -> T.Type
+    norm :: Visited -> T.Type -> T.Type
     norm visited t
       | isWhnf t = t
-      | T.isTName t && t `S.member` visited = T.Skip (getSpan t)
-      | T.isTName t = norm (t `S.insert` visited) (reduce td t)
-      | otherwise = norm visited (reduce td t)
+      | t `reappearsIn` visited = T.Skip (getSpan t)
+      | otherwise = norm (insert t visited) (reduce td t)
+
+reappearsIn :: T.Type -> Visited -> Bool
+reappearsIn t@T.TName{} visited = t `S.member` visited
+reappearsIn _ _ = undefined
+
+insert :: T.Type -> Visited -> Visited
+insert t@T.TName{} visited = S.insert t visited
+insert _ _ = undefined
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
@@ -46,11 +55,9 @@ isWhnf = \case
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
   T.AppSemi _ t _ | isWhnf t && not (T.isSkip t) && not (T.isSemi t) -> True
-  -- W-Var i)
-  T.Var{} -> True
-  -- W-Var ii)
-  T.App _ T.Var{} _ -> True
-  -- W-Abs - we do not have abstractions, but we have forall
+  -- W-Var
+  T.AppVar{} -> True
+  -- W-Abs _ we do not have abstractions, but we have forall
   T.Forall{} -> True
   -- W-Dual - I think this is the only case for well formed Dual types. TODO: check
   T.AppDual _ T.Var{} -> True
@@ -59,15 +66,17 @@ isWhnf = \case
 -- | One step type reduction 
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
-  -- R-Seq1
-  T.AppSemi _ T.Skip{} u -> u
+  -- R-Neut
+  T.AppSemi _ T.Skip{} t -> t
   -- R-Assoc
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 ->
     T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-  -- R.Seq2
-  T.AppSemi s t u -> -- Redundant: not (T.isAppSemi t)
+  -- R.Seq
+  T.AppSemi s t u ->
     T.AppSemi s (reduce td t) u
   -- R-μ + R-β
+  -- Q: What if as and ts are of different lengths?
+  -- A: Should not happen with well-formed types
   T.AppTName _ id ts -> subsAll as ts u
     where (as, u) = td M.! id
   -- R-TAppL
@@ -83,12 +92,12 @@ reduce td = \case
   -- R-D&, – R-D⊕
   T.AppDual s (T.Choice _ m p lts) ->
     T.Choice s m (T.dual p) lts
-  -- R-DD _ new rule!
+  -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
   -- R-D;
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
     T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
-  T.AppDual s t -> -- Redundant: not (T.isAppSemi t)
+  T.AppDual s t ->
     T.AppDual s (reduce td t)
 

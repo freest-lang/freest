@@ -120,10 +120,10 @@ smartApp s t            us = App s t us
 isConstant :: Type -> Bool
 isConstant Choice{} = False
 isConstant Forall{} = False
+isConstant TName{} = False
+isConstant DName{} = False
 isConstant Var{} = False
 isConstant App{} = False
-isConstant TName{} = False
-isConstant (AppDName _ _ []) = True -- Non applied datatypes
 isConstant _ = True
 
 isSkip :: Type -> Bool
