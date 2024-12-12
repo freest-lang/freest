@@ -71,11 +71,9 @@ reduce td = \case
   -- R-Neut
   T.AppSemi _ T.Skip{} t -> t
   -- R-Assoc
-  T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 ->
-    T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
+  T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
   -- R.Seq
-  T.AppSemi s t u ->
-    T.AppSemi s (reduce td t) u
+  T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- R-μ + R-β
   -- Q: What if as and ts are of different lengths?
   -- A: Should not happen with well-formed types
@@ -89,17 +87,13 @@ reduce td = \case
   -- R-DWait, R-DClose
   T.AppDual s (T.End _ p) -> T.End s (T.dual p)
   -- R-D?, R-D!
-  T.AppDual s (T.AppMessage _ m p t) ->
-    T.AppMessage s m (T.dual p) t
+  T.AppDual s (T.AppMessage _ m p t) -> T.AppMessage s m (T.dual p) t
   -- R-D&, – R-D⊕
-  T.AppDual s (T.Choice _ m p lts) ->
-    T.Choice s m (T.dual p) lts
+  T.AppDual s (T.Choice _ m p lts) -> T.Choice s m (T.dual p) lts
   -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
   -- R-D;
-  T.AppDual s1 (T.AppSemi s2 t1 t2) ->
-    T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
+  T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
-  T.AppDual s t ->
-    T.AppDual s (reduce td t)
+  T.AppDual s t -> T.AppDual s (reduce td t)
 
