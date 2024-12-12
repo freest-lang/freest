@@ -45,7 +45,7 @@ synth kctx tctx = \case
     E.Var s x       -> lookupEVar  tctx x
     E.App s f as    -> do
         (t, tctx') <- synth kctx tctx f
-        t' <- Expose.function f t
+        t' <- Expose.arrow f t
         checkArgs kctx tctx' 1 t' (as, t')
       where
         checkArgs :: KindCtx -> TypeCtx -> Int -> T.Type -> ([Level E.Exp T.Type],T.Type) -> Validation (T.Type, TypeCtx)

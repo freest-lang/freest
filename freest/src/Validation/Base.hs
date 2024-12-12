@@ -1,6 +1,3 @@
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 module Validation.Base where
 
 import Syntax.Base
@@ -78,4 +75,8 @@ lookupTName i ts =
       where n  = length aks
             m  = length ts
             t' = foldr (uncurry subs) t (zip (take m aks) ts)
+            -- TODO: Can we have? (zip takes the length of the shorter list)
+            -- t' = foldr (uncurry subs) t (zip aks ts)
+            -- TODO: if yes, then we may as well write (with a proper import)
+            -- t' = subsAll aks ts t
             s  = spanFromTo i (last ts)
