@@ -97,4 +97,4 @@ reduce td = \case
   T.AppDual s t -> T.AppDual s (reduce td t)
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
-  x -> error $ "reduce " ++ show x
+  t -> error $ "reduce " ++ show t

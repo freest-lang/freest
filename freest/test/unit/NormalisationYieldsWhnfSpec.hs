@@ -9,6 +9,8 @@ import qualified Data.Map.Strict               as Map
 import           Test.Hspec
 import           UnitSpecUtils
 
+-- This test should be called with well-formed types only
+
 main :: IO ()
 main = hspec spec
 
