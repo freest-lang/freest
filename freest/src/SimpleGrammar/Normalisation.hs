@@ -10,6 +10,7 @@ Weak reduction strategies do not reduce under lambda abstractions.
 
 module SimpleGrammar.Normalisation
   ( normalise
+  , isWhnf
   )
 where
 
@@ -36,11 +37,11 @@ normalise td = norm S.empty
       | otherwise = norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
-        reappears = maybe False (`S.member` visited) u
-        insert  = maybe visited (`S.insert` visited) u
+        reappears = maybe False   (`S.member` visited) u
+        insert    = maybe visited (`S.insert` visited) u
 
 tNameRedex :: T.Type -> Maybe T.Type
-tNameRedex t@T.TName{}                                  = Just t -- µ∗U
+tNameRedex t@T.AppTName{}                               = Just t -- µ∗U
 tNameRedex (T.AppSemi _ t@T.AppTName{} _)               = Just t -- (µ∗U) ; V
 tNameRedex (T.AppDual _ t@T.AppTName{})                 = Just t -- Dual (µ∗U)
 tNameRedex (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) = Just t -- (Dual (µ∗U)) ; V
@@ -96,4 +97,4 @@ reduce td = \case
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
   T.AppDual s t -> T.AppDual s (reduce td t)
-
+  x -> error $ "reduce " ++ show x

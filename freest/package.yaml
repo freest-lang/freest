@@ -59,7 +59,8 @@ library:
     - Validation.Kinding
     - Validation.Typing
     - Utils
-
+    - SimpleGrammar.Normalisation
+    - Validation.Base
 executables:
   freest:
     main:        FreeST.hs

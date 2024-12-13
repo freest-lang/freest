@@ -118,10 +118,10 @@ smartApp s (App _ t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
 
 isConstant :: Type -> Bool
-isConstant Choice{} = False
+-- isConstant Choice{} = False -- Does not reduce
 isConstant Forall{} = False
 isConstant TName{} = False
-isConstant DName{} = False
+-- isConstant DName{} = False -- Does not reduce
 isConstant Var{} = False
 isConstant App{} = False
 isConstant _ = True
@@ -184,15 +184,15 @@ instance Congruence Type where
   -- Session types
   congruent _ Skip{} Skip{} = True
   congruent _ (End _ p1) (End _ p2) = p1 == p2
-  congruent m Semi{} Semi{} = True
-  congruent _ (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
+  congruent _ Semi{} Semi{} = True
+  congruent m (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
   congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) = m1 == m2 && p1 == p2 && congruent m lts1 lts2
-  congruent m Dual{} Dual{} = True
+  congruent _ Dual{} Dual{} = True
   -- Polymorphism
   congruent m (Forall _ a k1 t) (Forall _ b k2 u) = a == b && k1 == k2 && congruent m t u
   -- Equations
-  congruent m (TName _ i1) (TName _ i2) = i1 == i2
-  congruent m (DName _ i1) (DName _ i2) = i1 == i2
+  congruent _ (TName _ i1) (TName _ i2) = i1 == i2
+  congruent _ (DName _ i1) (DName _ i2) = i1 == i2
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
     v1 == v2 ||              -- free variables
