@@ -5,7 +5,7 @@ where
 
 case Z
 where 
-  type Z : *S
+  type Z : 1S
   type Z = +{A: Skip, C: Z} ; B
   type B : 1S
   type B = (Skip;B);?Char
@@ -18,13 +18,14 @@ where
   type Z2 = A
   type A : 1S
   type A = +{A: Skip, C: A} ; Z3
-  type Z3 : *S
+  type Z3 : 1S
   type Z3 = B
   type B : 1S
   type B = Skip;(Z3;?Bool)
 
   type Bool : *T
   data Bool = False | True
+  -- Expected kind *S for type A, but got kind 1S. (vv) A seems 1S to me
 
 case A
 where
@@ -71,16 +72,18 @@ where
   type Z''' : 1S
   type Z''' = A'
   type A' : 1S 
-  type A' = Z''';(Skip;b)
+  type A' = Z''';(Skip;!Char)
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
 
 case Z
 where
   type Z : 1S
   type Z = A
-  type A : *S
+  type A : 1S
   type A = &{B: Z'}
   type Z' : 1S
-  type Z' = (Z';Skip);b
+  type Z' = (Z';Skip);!Char
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
 
 case A;!Bool 
 where
@@ -89,6 +92,7 @@ where
 
   type Bool : *T
   data Bool = False | True
+  -- Expected kind *S for type (((;) A) ((!) Bool)), but got kind 1S. (vv) I say 1S
 
 case A
 where
@@ -97,15 +101,16 @@ where
 
   type Bool : *T
   data Bool = False | True
+  -- Expected kind *S for type (((;) A) ((!) Bool)), but got kind 1S. (vv) I say 1S
 
 case Z
 where
   type Z : 1S
   type Z = A
-  type A : *S
-  type A = &{B: Z'}
-  type Z' : 1S
-  type Z' = (Z';Skip);b
+  type A : 1S
+  type A = &{B: Z' !Char}
+  type Z' : 1S -> 1S
+  type Z' b = (Z' b;Skip);b
 
 case Z
 where
@@ -118,9 +123,10 @@ where
   type Z'' : 1S
   type Z'' = &{B: Z'''}
   type Z''' : 1S
-  type Z''' = A'
-  type A' : 1S
-  type A' = Z''';(Skip;b)
+  type Z''' = A' ?Char
+  type A' : 1S -> 1S
+  type A' b = Z''';(Skip;b)
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Looks like 1S to me
 
 case A
 where
@@ -134,7 +140,7 @@ where
 
 case A
 where
-  type A : *T
+  type A : *S
   type A = A;A;A;A;A
 
 case A
@@ -152,7 +158,7 @@ case A
 where
   type A : *S
   type A = A';A''
-  type A' : *T
+  type A' : *S
   type A' = Skip;A'
   type A'' : *S
   type A'' = Skip;A''
@@ -161,7 +167,7 @@ case Skip;A
 where
   type A : *S
   type A = (A'; A''); Skip; Skip
-  type A' : *T                    -- *M ? 
+  type A' : *S
   type A' = Skip;A'
   type A'' : *S
   type A'' = Skip;A''
@@ -201,25 +207,26 @@ where
   type C = D
   type D : *T
   type D = A
+  -- expected: True but got: False. (vv) ???
 
 case A
 where 
-  type A : *T
+  type A : *S
   type A = Dual A
 
 case A 
 where 
-  type A : *T
+  type A : *S
   type A = Dual (Dual A)
 
 case A 
 where 
-  type A : *T
-  type A = (Dual (Dual A));&{A: !(), B: ?Int}
+  type A : 1S
+  type A = (Dual (Dual A));&{A: !Int, B: ?Int}
 
 case A 
 where 
-  type A : *T
+  type A : *S
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
 
 case Int
