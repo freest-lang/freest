@@ -12,17 +12,16 @@ module TypeEquivalence.TypeEquivalence
   )
 where
 
-import qualified Syntax.Type                       as T
-import           Syntax.Module
-import           SimpleGrammar.FromType            ( fromType )
--- import qualified Bisimulation.Bisimulation   as G ( bisimilar )
+import qualified Syntax.Type                   as T
+import           Validation.Base               ( TypeDeclMap )
+import           SimpleGrammar.FromType        ( fromType )
+-- import qualified Bisimulation.Bisimulation     ( bisimilar )
 
-equivalent :: Module -> T.Type -> T.Type -> Bool
-equivalent m t u = t == u || bisimilar m t u
+equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
+equivalent td t u = t == u || bisimilar td t u
 
-bisimilar :: Module -> T.Type -> T.Type -> Bool
-bisimilar m t u = True
-  where _ = fromType m [t, u]
--- bisimilar t u = G.bisimilar (convertToGrammar [t, u])
+bisimilar :: TypeDeclMap -> T.Type -> T.Type -> Bool
+bisimilar td t u = let _ = fromType td [t, u] in True
+-- bisimilar td t u = bisimilar $ fromType td [t, u]
 
 -- TODO: Move this code to module Bisimulation.Bisimulation

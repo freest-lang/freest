@@ -1,6 +1,10 @@
 module EquivalenceInvalidSpec (spec) where
 
+import qualified Syntax.Module                 as M
+import           Validation.Base               ( TypeDeclMap )
 import           TypeEquivalence.TypeEquivalence (equivalent)
+
+import qualified Data.Map.Strict               as Map
 import           Test.Hspec
 import           UnitSpecUtils (mkEquivalenceSpec)
 
@@ -11,4 +15,8 @@ spec :: Spec
 spec = mkEquivalenceSpec
   "test/unit/EquivalenceInvalid.test" 
   "Invalid equivalence tests" 
-  \(t,u,m) -> equivalent m t u `shouldBe` False
+  \(t,u,m) -> equivalent (buildDataDecls m) t u `shouldBe` False
+
+-- Warning: code also in from Validation.Base
+buildDataDecls :: M.Module -> TypeDeclMap
+buildDataDecls m = Map.fromList (M.typeDecls m)

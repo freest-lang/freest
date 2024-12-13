@@ -11,43 +11,30 @@ module SimpleGrammar.FromType
   )
 where
 
-import SimpleGrammar.Grammar as G
-import SimpleGrammar.Normalisation
-import Syntax.Base
-import Syntax.Module
-import qualified Syntax.Type as T
+import           Syntax.Base
+import qualified Syntax.Type                   as T
+import           SimpleGrammar.Grammar        as G
+import           SimpleGrammar.Normalisation
+import           Validation.Base               ( TypeDeclMap )
 
 import           Control.Monad.State
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as M
-import           Prelude hiding ( Word, words )
+import qualified Data.Map.Strict               as M
+import           Prelude                       hiding ( Word, words )
 
 -- import qualified Data.Set as S
 -- import Data.Functor
 -- import Debug.Trace (trace)
 
-fromType :: Module -> [T.Type] -> Grammar
-fromType m ts = G.Grammar w (productions s)
-  where (w, s) = runState (mapM word ts) (initial m)
-
-type Visited = M.Map T.Type Word
-
-data TState = TState {
-    productions :: Productions
-  , nextIndex :: Int
-  , visited :: Visited
-  , module_ :: Module
-  }
-
-type TransState = State TState
+fromType :: TypeDeclMap -> [T.Type] -> Grammar
+fromType td ts = G.Grammar w (productions s)
+  where (w, s) = runState (mapM word ts) (initial td)
 
 word :: T.Type -> TransState Word
 word t = wasVisited t >>= \case
   Just w -> pure w -- We have seen t before
   Nothing -> do
-    m <- gets module_
-    let u = normalise M.empty t
-    -- let u = whnf m t
+    td <- gets typeDecls
+    let u = normalise td t
     case u of
       T.Skip{} -> pure []
       otherwise -> do
@@ -106,12 +93,23 @@ wordWhnf t@(T.AppDual s u@(T.AppVar _ α ts)) = do -- Dual(α T1...Tm)
 
 -- The state of the translation to grammar procedure
 
-initial :: Module -> TState
-initial m = TState {
+type Visited = M.Map T.Type Word
+
+data TState = TState
+  { productions :: Productions
+  , nextIndex :: Int
+  , visited :: Visited
+  , typeDecls :: TypeDeclMap
+  }
+
+type TransState = State TState
+
+initial :: TypeDeclMap -> TState
+initial td = TState {
     productions = M.empty
   , nextIndex = 1 -- 0 is for bottom
   , visited = M.empty
-  , module_ = m
+  , typeDecls = td
   }
 
 nextNonTerminal :: TransState NonTerminal
