@@ -203,7 +203,6 @@ where
   type C = D
   type D : *T
   type D = A
-  -- expected: True but got: False. (vv) ???
 
 case A
 where 
