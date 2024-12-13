@@ -80,8 +80,6 @@ reduce td = \case
   -- A: Should not happen with well-formed types
   T.AppTName _ id ts -> subsAll as ts u
     where (as, u) = td M.! id
-  -- R-TAppL
-  T.App s t ts -> T.App s (reduce td t) ts
   -- Duality from here on
   -- R-DSkip
   T.AppDual s T.Skip{} -> T.Skip s
@@ -97,4 +95,6 @@ reduce td = \case
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
   T.AppDual s t -> T.AppDual s (reduce td t)
+  -- R-TAppL
+  T.App s t ts -> T.App s (reduce td t) ts
   x -> error $ "reduce " ++ show x
