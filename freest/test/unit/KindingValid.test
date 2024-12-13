@@ -12,9 +12,9 @@ where
 
 case Z1
 where
-  type Z1 : *S
+  type Z1 : 1S
   type Z1 = Z2
-  type Z2 : *S
+  type Z2 : 1S
   type Z2 = A
   type A : 1S
   type A = +{A: Skip, C: A} ; Z3
@@ -25,7 +25,6 @@ where
 
   type Bool : *T
   data Bool = False | True
-  -- Expected kind *S for type A, but got kind 1S. (vv) A seems 1S to me
 
 case A
 where
@@ -63,11 +62,11 @@ case Z
 where
   type Z : 1S
   type Z = Z'
-  type Z' : *S
+  type Z' : 1S
   type Z' = Skip;A
-  type A : *S
+  type A : 1S
   type A = Z''
-  type Z'' : 1S 
+  type Z'' : 1S
   type Z'' = &{B: Z'''}
   type Z''' : 1S
   type Z''' = A'
@@ -87,21 +86,19 @@ where
 
 case A;!Bool 
 where
-  type A : *S
+  type A : 1S
   type A = A;!Bool
 
   type Bool : *T
   data Bool = False | True
-  -- Expected kind *S for type (((;) A) ((!) Bool)), but got kind 1S. (vv) I say 1S
 
 case A
 where
-  type A : *S
+  type A : 1S
   type A = A;!Bool
 
   type Bool : *T
   data Bool = False | True
-  -- Expected kind *S for type (((;) A) ((!) Bool)), but got kind 1S. (vv) I say 1S
 
 case Z
 where
@@ -116,9 +113,9 @@ case Z
 where
   type Z : 1S
   type Z = Z'
-  type Z' : *S
+  type Z' : 1S
   type Z' = Skip;A
-  type A : *S
+  type A : 1S
   type A = Z''
   type Z'' : 1S
   type Z'' = &{B: Z'''}
@@ -126,7 +123,6 @@ where
   type Z''' = A' ?Char
   type A' : 1S -> 1S
   type A' b = Z''';(Skip;b)
-  -- Expected kind *S for type Z'', but got kind 1S. (vv) Looks like 1S to me
 
 case A
 where
