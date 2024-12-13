@@ -1,0 +1,225 @@
+case B
+where 
+  type B : 1S
+  type B = Skip;B;?Char
+
+case Z
+where 
+  type Z : *S
+  type Z = +{A: Skip, C: Z} ; B
+  type B : 1S
+  type B = (Skip;B);?Char
+
+case Z1
+where
+  type Z1 : *S
+  type Z1 = Z2
+  type Z2 : *S
+  type Z2 = A
+  type A : 1S
+  type A = +{A: Skip, C: A} ; Z3
+  type Z3 : *S
+  type Z3 = B
+  type B : 1S
+  type B = Skip;(Z3;?Bool)
+
+  type Bool : *T
+  data Bool = False | True
+
+case A
+where
+  type A : 1S
+  type A = (Skip;A);!Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case A
+where
+  type A : 1S
+  type A = A;!Int
+
+case A 
+where
+  type A : 1S
+  type A = B
+  type B : 1S
+  type B = C
+  type C : 1S
+  type C = D
+  type D : 1S
+  type D = A;!Char
+
+case A
+where
+  type A : 1S
+  type A = ((A; !Bool); !Int) ; ?Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case Z
+where
+  type Z : 1S
+  type Z = Z'
+  type Z' : *S
+  type Z' = Skip;A
+  type A : *S
+  type A = Z''
+  type Z'' : 1S 
+  type Z'' = &{B: Z'''}
+  type Z''' : 1S
+  type Z''' = A'
+  type A' : 1S 
+  type A' = Z''';(Skip;b)
+
+case Z
+where
+  type Z : 1S
+  type Z = A
+  type A : *S
+  type A = &{B: Z'}
+  type Z' : 1S
+  type Z' = (Z';Skip);b
+
+case A;!Bool 
+where
+  type A : *S
+  type A = A;!Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case A
+where
+  type A : *S
+  type A = A;!Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case Z
+where
+  type Z : 1S
+  type Z = A
+  type A : *S
+  type A = &{B: Z'}
+  type Z' : 1S
+  type Z' = (Z';Skip);b
+
+case Z
+where
+  type Z : 1S
+  type Z = Z'
+  type Z' : *S
+  type Z' = Skip;A
+  type A : *S
+  type A = Z''
+  type Z'' : 1S
+  type Z'' = &{B: Z'''}
+  type Z''' : 1S
+  type Z''' = A'
+  type A' : 1S
+  type A' = Z''';(Skip;b)
+
+case A
+where
+  type A : *T
+  type A = A
+
+case A
+where
+  type A : 1T
+  type A = A
+
+case A
+where
+  type A : *T
+  type A = A;A;A;A;A
+
+case A
+where
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+case A 
+where
+  type A : *S
+  type A = A';A''
+  type A' : *T
+  type A' = Skip;A'
+  type A'' : *S
+  type A'' = Skip;A''
+
+case Skip;A
+where
+  type A : *S
+  type A = (A'; A''); Skip; Skip
+  type A' : *T                    -- *M ? 
+  type A' = Skip;A'
+  type A'' : *S
+  type A'' = Skip;A''
+
+case Int -> A
+where
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+case A -> Bool
+where
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+  type Bool : *T
+  data Bool = False | True
+
+case (A, Int)
+where 
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C 
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+case A
+where 
+  type A : *T
+  type A = Dual A
+
+case A 
+where 
+  type A : *T
+  type A = Dual (Dual A)
+
+case A 
+where 
+  type A : *T
+  type A = (Dual (Dual A));&{A: !(), B: ?Int}
+
+case A 
+where 
+  type A : *T
+  type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
+
+case Int

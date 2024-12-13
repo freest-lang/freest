@@ -2,15 +2,13 @@ module EquivalenceInvalidSpec (spec) where
 
 import           TypeEquivalence.TypeEquivalence (equivalent)
 import           Test.Hspec
-import           UnitSpecUtils (mkSpec)
+import           UnitSpecUtils (mkEquivalenceSpec)
 
 main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkSpec
+spec = mkEquivalenceSpec
   "test/unit/EquivalenceInvalid.test" 
   "Invalid equivalence tests" 
-  \(t,u,m) -> it
-    (show t ++ " /~ " ++ show u)
-    (equivalent m t u `shouldBe` False)
+  \(t,u,m) -> equivalent m t u `shouldBe` False

@@ -7,7 +7,7 @@ import qualified Syntax.Module as M
 import qualified Syntax.Type as T
 import UI.Error
 
-import Control.Monad.State (State, MonadState, modify, gets, foldM)
+import Control.Monad.State (State, MonadState, modify, gets, foldM, runState)
 import qualified Data.Map.Strict as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
@@ -48,6 +48,14 @@ buildValidationState m = ValidationState -- TODO: traverse module once.
   }
 
 type Validation = ExceptT Error (State ValidationState)
+
+runValidation :: ValidationState -> Validation t -> Either [Error] t
+runValidation s v =
+  let (x, ValidationState{errors}) = runState (runExceptT v) s
+  in case x of
+    Left e -> Left (errors ++ [e])
+    Right x' | null errors -> Right x'
+             | otherwise   -> Left errors
 
 putError :: MonadState ValidationState m => a -> Error -> m a
 putError x e = do

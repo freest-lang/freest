@@ -10,7 +10,8 @@ module Validation.Kinding
   ( synth
   , check
   , KindingCtx
-  , runKinding
+  , runKindModule
+  , runSynth
   )
 where
 
@@ -35,20 +36,18 @@ import Control.Monad.Trans.Except (throwE, runExceptT, ExceptT (ExceptT))
 import Control.Monad.Identity (Identity(..))
 import qualified Data.List.NonEmpty as NE
 
-runKinding :: M.Module -> Either [Error] M.Module
-runKinding m =
-  let s = buildValidationState m
-      (x,ValidationState{errors}) = runState (runExceptT (kindModule m)) s
-  in case x of
-    Left e                -> Left (errors++[e])
-    Right _ | null errors -> Right m
-            | otherwise   -> Left errors
+runKindModule :: M.Module -> Either [Error] M.Module
+runKindModule m = runValidation (buildValidationState m) (kindModule m)
 
-kindModule :: M.Module -> Validation ()
+runSynth :: M.Module -> T.Type -> Either [Error] Kind
+runSynth m t = runValidation (buildValidationState m) (synth Map.empty t)
+
+kindModule :: M.Module -> Validation M.Module
 kindModule m = do
   forM_ (M.typeDecls m) kindTypeDecl
   forM_ (M.dataDecls m) kindDataDecl
   -- kindDefs
+  return m
 
 kindTypeDecl :: (Identifier, ([Variable], T.Type)) -> Validation ()
 kindTypeDecl (i, (as, t)) = do

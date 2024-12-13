@@ -9,22 +9,43 @@ import qualified Syntax.Type as T
 import           Control.Monad (forM, forM_)
 import qualified Data.Map as Map
 import           Test.Hspec
+import           Validation.Kinding (runKindModule)
+import Syntax.Base
 
-mkSpec :: FilePath -> String -> ((T.Type, T.Type, M.Module) -> Spec) -> Spec
-mkSpec testPath testDesc testFun = do
+mkKindingSpec :: FilePath -> String -> ((T.Type, M.Module) -> Expectation) -> Spec
+mkKindingSpec testPath testDesc testFun = do
   source <- runIO $ readFile testPath
-  case runLexer parseTypeCmpTests testPath source 
-       >>= runScoping scopeTypeCmpTests of
+  case runLexer parseKindingTests testPath source of
     Left es  -> runIO $ mapM_ print es
     Right ts -> describe testDesc $ 
-      -- TODO: kinding, duality, etc.
-      forM_ ts testFun
+      forM_ ts \(t,m) -> it
+        (show (getSpan t))
+        case do (t',m') <- runScoping scopeKindingTest (t,m) 
+                runKindModule m'
+                return (t',m') of
+          Left es      -> expectationFailure (unlines $ map show es)
+          Right (t,m)  -> testFun (t,m) 
+  where 
+    scopeKindingTest ctx (t,m) = do
+      (ctx,m') <- scopeModule ctx m
+      t' <- scopeType ctx t
+      return (t',m')
 
-scopeTypeCmpTests :: ScopingCtx -> [(T.Type, T.Type, M.Module)] -> Scoping [(T.Type, T.Type, M.Module)]
-scopeTypeCmpTests ctx ts =
-  forM ts (scopeTypeCmpTest ctx)
+mkEquivalenceSpec :: FilePath -> String -> ((T.Type, T.Type, M.Module) -> Expectation) -> Spec
+mkEquivalenceSpec testPath testDesc testFun = do
+  source <- runIO $ readFile testPath
+  case runLexer parseEquivalenceTests testPath source of
+    Left es  -> runIO $ mapM_ print es
+    Right ts -> describe testDesc $ 
+      forM_ ts \(t, u, m) -> it
+        (show t ++ " ~ " ++ show u)
+        case do (t', u', m') <- runScoping scopeEquivalenceTest (t, u, m)
+                runKindModule m'
+                return (t', u', m') of
+          Left es      -> expectationFailure (unlines $ map show es)
+          Right (t, u, m) -> testFun (t, u, m)
   where
-    scopeTypeCmpTest ctx (t,u,m) = do
+    scopeEquivalenceTest ctx (t,u,m) = do
       (ctx,m') <- scopeModule ctx m
       t' <- scopeType ctx t
       u' <- scopeType ctx u
