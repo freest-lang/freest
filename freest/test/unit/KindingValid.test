@@ -129,6 +129,7 @@ case !(!Int;Close)
 case !(!Int;Skip;Close;?Int) 
 
 case forall a:1S. Close;a;!Int 
+
 case forall b:1S. (Close;b);Skip
 
 case forall a:1S. T a
@@ -152,6 +153,34 @@ where
   type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+-- Polymorphic streams
+
+case PolyStream
+where
+  type PolyStream : 1S
+  type PolyStream = forall a:*T . ?a ; PolyStream
+
+-- Dual of the above
+
+case PolyStream
+where
+  type PolyStream : 1S
+  type PolyStream = exists a:*T . !a ; PolyStream
+
+-- Same, with a function to consume the values
+
+case PolyStream Bool
+where
+  type PolyStream : 1T -> 1S
+  type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
+
+-- Dual of the above
+
+case PolyStream Bool
+where
+  type PolyStream : 1T -> 1S
+  type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
 
 -- Noncontractive types are the big new valid types
 
