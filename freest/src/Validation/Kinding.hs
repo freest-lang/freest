@@ -117,7 +117,8 @@ synth ctx = \case
   -- Polymorphism
   T.Quant s p a k t -> do
     checkProper (Map.insert a k ctx) t
-    >>= \case (m,pk) -> pure (Proper s m pk)
+    >>= \case (m,Session) -> pure (Proper s Lin Session)
+              (m,Top    ) -> pure (Proper s m Top      )
   -- Equations
   T.TName s i -> lookupKind i
   T.DName s i -> lookupKind i
