@@ -32,7 +32,7 @@ data Token
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
   | TkSelect Span | TkChannel Span
-  | TkForall Span | TkRec Span
+  | TkForall Span | TkExists Span | TkRec Span
 
   -- Punctuation
   | TkOpen Span | TkPipe Span | TkClose Span

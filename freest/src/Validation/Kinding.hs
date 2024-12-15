@@ -115,9 +115,10 @@ synth ctx = \case
     -- catchE (check' ctx t (ls s)) (putError (us s))
     synthCheck ctx t (ls s)
   -- Polymorphism
-  T.Forall s a k t -> do
-    synthCheck (Map.insert a k ctx) t (lt s)
-    >>= \case Proper _ m _ -> pure (Proper s m Top)
+  T.Quant s p a k t -> do
+    checkProper (Map.insert a k ctx) t
+    >>= \case (m,Session) -> pure (Proper s Lin Session)
+              (m,Top    ) -> pure (Proper s m Top      )
   -- Equations
   T.TName s i -> lookupKind i
   T.DName s i -> lookupKind i

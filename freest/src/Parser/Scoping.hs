@@ -350,11 +350,11 @@ scopeType ctx = \case
   T.Choice  s m p lts ->
     let lts' = mapM (\(l,t) -> (l,) <$> scopeType ctx t) lts
     in T.Choice s m p <$> lts'
-  T.Forall s a k t -> do
+  T.Quant s p a k t -> do
     a' <- freshInternal a
     k' <- scopeKind k
     let ctx' = insertTVar a' ctx
-    T.Forall s a' k' <$> scopeType ctx' t
+    T.Quant s p a' k' <$> scopeType ctx' t
   t@(T.Var s a) ->
     case lookupTVar a ctx of
       Just internal  -> return $ T.Var s a{internal}
@@ -374,8 +374,10 @@ scopeTypeQ ctx t = do
   if Map.null fvm
     then scopeType ctx t
     else do
-      aks <- mapM (\a -> (a,) <$> freshKVar a) $ List.sortBy (compare `on` getSpan) $ Map.elems fvm
-      T.variadicForall (getSpan t) (NE.fromList aks) <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
+      aks <- mapM (\a -> (a,) <$> freshKVar a) 
+        $ List.sortBy (compare `on` getSpan) $ Map.elems fvm
+      T.variadicQuant (getSpan t) T.In aks 
+        <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
 
 scopeKind :: K.Kind -> Scoping K.Kind
 scopeKind = \case

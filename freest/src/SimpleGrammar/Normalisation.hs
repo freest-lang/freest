@@ -61,7 +61,7 @@ isWhnf = \case
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have forall
-  T.Forall{} -> True
+  T.Quant{} -> True
   -- W-Dual - I think this is the only case for well formed Dual types. TODO: check
   T.AppDual _ T.Var{} -> True
   _ -> False

@@ -28,7 +28,7 @@ import Debug.Trace (trace)
 
 freeVars :: T.Type -> Set.Set Variable
 freeVars = \case
-    T.Forall _ a k t   -> Set.delete a $ freeVars t
+    T.Quant _ _ a _ t  -> Set.delete a $ freeVars t
     T.Var _ a          -> Set.singleton a
     T.App _ t ts       -> Set.unions (freeVars t : map freeVars ts)
     T.Choice _ _ _ lts -> Set.unions $ map (freeVars . snd) lts
@@ -36,7 +36,7 @@ freeVars = \case
 
 allVars :: T.Type -> Set.Set Variable
 allVars = \case 
-    T.Forall _ _ _ t   -> allVars t
+    T.Quant _ _ _ _ t  -> allVars t
     T.Var _ a          -> Set.singleton a
     T.App _ t ts       -> Set.unions (allVars t : map allVars ts)
     T.Choice _ _ _ lts -> Set.unions $ map (allVars . snd) lts
@@ -47,11 +47,11 @@ newInternal a as = a{internal=head ([0..] \\ map internal (Set.toList as))}
 
 subs :: Variable -> T.Type -> T.Type -> T.Type
 subs a u = \case 
-  t@(T.Forall s b k t')
+  t@(T.Quant s p b k t')
     | b == a -> t
     | b `Set.member` fvu ->
-      T.Forall s b' k (subs b (T.Var (getSpan b') b') t')
-    | otherwise -> T.Forall s b k (subs a u t')
+      T.Quant s p b' k (subs b (T.Var (getSpan b') b') t')
+    | otherwise -> T.Quant s p b k (subs a u t')
     where 
       b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
       fvu = freeVars u

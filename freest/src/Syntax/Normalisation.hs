@@ -42,7 +42,7 @@ reduceBSD = \case
   -- R-D♯
   T.AppDual _ (T.App s1 (T.Message s2 m p) t) ->
     Just (T.App s1 (T.Message s2 m (T.dual p)) t)
-  -- T.Dual _ (T.Quantifier _ p aks t) -> ...
+  -- T.Dual _ (T.Quant _ p aks t) -> ...
   -- R-DDVar
   T.AppDual _ (T.AppDual _ w@(T.App _ (T.Var _ _) _)) -> Just w
   -- R-β _ No such thing
