@@ -11,12 +11,13 @@ import qualified Data.Map as Map
 import           Test.Hspec
 import           Validation.Kinding (runKindModule)
 import Syntax.Base
+import System.Directory.Internal.Prelude (exitFailure)
 
 mkKindingSpec :: FilePath -> String -> ((T.Type, M.Module) -> Expectation) -> Spec
 mkKindingSpec testPath testDesc testFun = do
   source <- runIO $ readFile testPath
   case runLexer parseKindingTests testPath source of
-    Left es  -> runIO $ mapM_ print es
+    Left es  -> runIO $ mapM_ print es >> exitFailure
     Right ts -> describe testDesc $ 
       forM_ ts \(t,m) -> it
         (show (getSpan t))
