@@ -11,6 +11,9 @@ import           UnitSpecUtils
 
 -- This test should be called with well-formed types only
 
+-- Note: this spec tests very little. As it is, the normalise function returns a
+-- whnf, if it returns at all.
+
 main :: IO ()
 main = hspec spec
 

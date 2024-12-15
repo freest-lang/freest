@@ -156,31 +156,31 @@ where
 
 -- Polymorphic streams
 
-case PolyStream
-where
-  type PolyStream : 1S
-  type PolyStream = forall a:*T . ?a ; PolyStream
+-- case PolyStream
+-- where
+--   type PolyStream : 1S
+--   type PolyStream = forall a:*T . ?a ; PolyStream
 
 -- Dual of the above
 
-case PolyStream
-where
-  type PolyStream : 1S
-  type PolyStream = exists a:*T . !a ; PolyStream
+-- case PolyStream
+-- where
+--   type PolyStream : 1S
+--   type PolyStream = exists a:*T . !a ; PolyStream
 
 -- Same, with a function to consume the values
 
-case PolyStream Bool
-where
-  type PolyStream : 1T -> 1S
-  type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
+-- case PolyStream Bool
+-- where
+--   type PolyStream : 1T -> 1S
+--   type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
 
 -- Dual of the above
 
-case PolyStream Bool
-where
-  type PolyStream : 1T -> 1S
-  type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
+-- case PolyStream Bool
+-- where
+--   type PolyStream : 1T -> 1S
+--   type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
 
 -- Noncontractive types are the big new valid types
 

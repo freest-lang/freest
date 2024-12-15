@@ -13,7 +13,7 @@ where
 
 import           Syntax.Base
 import qualified Syntax.Type                   as T
-import           SimpleGrammar.Grammar        as G
+import           SimpleGrammar.Grammar         as G
 import           SimpleGrammar.Normalisation
 import           Validation.Base               ( TypeDeclMap )
 

@@ -16,8 +16,12 @@ import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           SimpleGrammar.FromType        ( fromType )
 -- import qualified Bisimulation.Bisimulation     ( bisimilar )
+import           Debug.Trace                   (trace)
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
-equivalent td t u = t == u || True -- bisimilar $ fromType td [t, u]
+equivalent td t u =
+  t == u ||
+  trace (show [t, u] ++ "\n" ++ show (fromType td [t, u])) True
+  -- bisimilar $ fromType td [t, u]
 
 -- TODO: Move this code to module Bisimulation.Bisimulation
