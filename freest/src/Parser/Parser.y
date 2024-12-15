@@ -62,6 +62,7 @@ import Debug.Trace
   'then'   { TkThen _ }
   'else'   { TkElse _ }
   'forall' { TkForall _ }
+  'exists' { TkExists _ }
   'rec'    { TkRec _ }
   -- Punctuation
   '.'     { TkDot _ }
@@ -277,10 +278,7 @@ TypePrimary :: { T.Type }
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  -- If forall is just a constant, remove this rule and uncomment the one below and the declaration of Forall.
-  | 'forall' KindedVar KindedVarListWS '.' Type   { T.variadicForall (spanFromTo $1 $5) ($2 NE.:| $3) $5 }
-  -- | 'forall' KindedVar Forall   { T.App (spanFromTo $1 $3) (T.Forall (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $3) [(fst $2, snd $2)] $3)] }
-  -- | 'rec'    KindedVar '.' Type { T.App (spanFromTo $1 $4) (T.Rec    (getSpan $1) (snd $2)) [(T.Abs (spanFromTo (fst $2) $4) [(fst $2, snd $2)] $4)] }
+  | Quant KindedVar KindedVarListWS '.' Type   { T.variadicQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
@@ -292,9 +290,9 @@ TypeListComma :: { [T.Type] }
   : Type ',' TypeListComma { $1 : $3 }
   | Type                   { [$1] }
 
--- Forall :: { T.Type }
---   : '.' Type { $2 }
---   | KindedVar Forall { T.App (spanFromTo (fst $1) $2) (T.Forall (getSpan (fst $1)) (snd $1)) [(T.Abs (spanFromTo (fst $1) $2) [(fst $1, snd $1)] $2)]}
+Quant :: { (Span, T.Polarity) }
+  : 'forall' { (getSpan $1, T.In ) }
+  | 'exists' { (getSpan $1, T.Out) }
 
 Commas :: { Int }
   : ',' { 1 }

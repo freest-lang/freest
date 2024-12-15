@@ -174,6 +174,8 @@ case PolyStream Bool
 where
   type PolyStream : 1T -> 1S
   type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
+  type Bool : 1T
+  data Bool = False | True
 
 -- Dual of the above
 
@@ -181,6 +183,8 @@ case PolyStream Bool
 where
   type PolyStream : 1T -> 1S
   type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
+  type Bool : 1T
+  data Bool = False | True
 
 -- Noncontractive types are the big new valid types
 
