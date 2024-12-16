@@ -124,7 +124,7 @@ smartApp s (App _ t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
 
 isConstant :: Type -> Bool
--- isConstant Choice{} = False -- Does not reduce
+isConstant Choice{} = False
 isConstant Quant{} = False
 isConstant TName{} = False
 -- isConstant DName{} = False -- Does not reduce

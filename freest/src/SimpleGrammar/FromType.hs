@@ -78,15 +78,16 @@ wordWhnf (T.AppSemi _ t u) =
   -- w2 <- word u2
   -- addVisited t $ w1 ++ w2
 wordWhnf t@(T.Choice _ m p its) = do
+  let terms = map  ((\id -> show m ++ showView p ++ show id) . fst) its
+  ws <-       mapM (word                                     . snd) its
   y <- nextNonTerminal
-  ws <- mapM (word . snd) its
-  let termNonterms = zipWith (\(id, _) ws -> (show m ++ showView p ++ show id, ws)) its ws
-        where showView T.In = "&"; showView T.Out = "+"
-  mapM_ (uncurry (addProduction y)) termNonterms
-  addVisited t [y]
+  mapM_ (uncurry (addProduction y)) (zip terms ws)
+  pure [y] -- addVisited t [y]
+    where showView T.In = "&"; showView T.Out = "+"
 wordWhnf (T.Quant _ p α k t) = do
   w <- word t
-  getLHS $ M.singleton (show p ++ show α ++ ":" ++ show k) (w ++ [bottom])
+  getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
+    where showView T.In = "∀"; showView T.Out = "∃"
 wordWhnf t@(T.AppVar _ α ts) = do -- α T1...Tm
   y <- nextNonTerminal
   addProduction y (show α ++ "0") []

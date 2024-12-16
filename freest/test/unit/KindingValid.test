@@ -154,6 +154,40 @@ where
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
+-- Unrestricted session types
+
+case *!Int
+
+case *?Int
+
+case *!(!Int;?Bool;Close)
+
+case *?(!Int;?Bool;Close)
+
+case *&{One}
+
+case *&{One, Two}
+
+case *&{One}
+
+case *!{One, Two}
+
+case *!Int ; !Char
+
+case *?Int ; !Char
+
+case *!(!Int ; ?Bool ; Close) ; !Char
+
+case *?(!Int ; ?Bool ; Close) ; !Char
+
+case *&{One} ; !Char
+
+case *&{One, Two} ; !Char
+
+case *&{One} ; !Char
+
+case *!{One, Two} ; !Char
+
 -- Polymorphic streams
 
 -- case PolyStream

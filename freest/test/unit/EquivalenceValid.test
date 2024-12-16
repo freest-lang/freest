@@ -125,3 +125,7 @@ case *?Int ; ?Char == *?Int
 case *?Int == *?Int ; Close
 
 case *?Int ; Close == *?Int
+
+-- Choices
+
+case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip}

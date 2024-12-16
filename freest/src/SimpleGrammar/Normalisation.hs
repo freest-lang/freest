@@ -50,8 +50,10 @@ tNameRedex _                                            = Nothing
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
 isWhnf = \case
-  -- W-Const0
+  -- W-Const0 i)
   t | T.isConstant t -> True
+  -- W-Const0 ii)
+  T.Choice{} -> True
   -- W-Const1
   T.App _ t _
     | T.isConstant t && not (T.isSemi t) && not (T.isTName t) && not (T.isDual t) -> True
