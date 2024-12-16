@@ -107,3 +107,21 @@ where
   type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+-- Unrestricted sessions
+
+case *!Int == *!Int ; ?Char
+
+case *!Int ; ?Char == *!Int
+
+case *!Int == *!Int ; Wait
+
+case *!Int ; Wait == *!Int
+
+case *?Int == *?Int ; ?Char
+
+case *?Int ; ?Char == *?Int
+
+case *?Int == *?Int ; Close
+
+case *?Int ; Close == *?Int

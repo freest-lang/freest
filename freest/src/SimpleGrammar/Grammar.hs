@@ -88,7 +88,7 @@ bottom = 0
 
 instance Show Grammar where
   show (Grammar xss p) =
-    "start words: (" ++ intercalate ", " (map show xss) ++
+    "start words: (" ++ intercalate ", " (map showWord xss) ++
     ")\nproductions: " ++ showProductions p
 
 -- Cannot be a flexible instance for there is an instance Show Map in module Map
@@ -100,8 +100,12 @@ showProductions = M.foldrWithKey showTransitions ""
 
     showTransition :: NonTerminal -> Terminal -> Word -> String -> String
     showTransition x l xs s =
-      s ++ "\n" ++ show x ++ " -> " ++ l ++ " " ++ show xs
+      s ++ "\n" ++ showNonTerminal x ++ " -" ++ l ++ "-> " ++ showWord xs
+
+showWord :: Word -> String
+showWord w = intercalate " " (map showNonTerminal w) -- foldr (\nt str -> showNonTerminal nt ++ " ") ""
 
 -- Cannot be a flexible instance for there is an instance Show Int in the Prelude
+showNonTerminal :: NonTerminal -> String
 showNonTerminal 0 = "⊥"
-showNonTerminal n = 'X' : show n
+showNonTerminal n = 'Y' : show n

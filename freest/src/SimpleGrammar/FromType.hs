@@ -12,6 +12,7 @@ module SimpleGrammar.FromType
 where
 
 import           Syntax.Base
+import           Syntax.Kind
 import qualified Syntax.Type                   as T
 import           SimpleGrammar.Grammar         as G
 import           SimpleGrammar.Normalisation
@@ -49,25 +50,33 @@ word t = wasVisited t >>= \case
 wordWhnf :: T.Type -> TransState Word
 wordWhnf T.Skip{} =
   pure []
-wordWhnf t@T.End{} = do
-  y <- nextNonTerminal
-  addProduction y (show t) [bottom]
-  addVisited t [y]
-wordWhnf t | T.isConstant t = do
-  y <- nextNonTerminal
-  addProduction y (show t) []
-  addVisited t [y]
+wordWhnf t@T.End{} =
+  getLHS $ M.singleton (show t) [bottom]
+  -- y <- nextNonTerminal
+  -- addProduction y (show t) [bottom]
+  -- addVisited t [y]
+wordWhnf t | T.isConstant t =
+  getLHS $ M.singleton (show t) []
+ -- do
+ --  y <- nextNonTerminal
+ --  addProduction y (show t) []
+ --  addVisited t [y]
 -- wordWhnf t@(T.Forall` _ mult pol u) = do
 wordWhnf t@(T.AppMessage _ mult pol u) = do
-  y <- nextNonTerminal
   w <- word u
-  addProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
-  addProduction y (show mult ++ show pol ++ "2") []
-  addVisited t [y]
-wordWhnf t@(T.AppSemi _ u1 u2) = do
-  w1 <- word u1
-  w2 <- word u2
-  addVisited t $ w1 ++ w2
+  getLHS $ M.fromList [
+    (show mult ++ show pol ++ "1", w ++ [bottom]),
+    (show mult ++ show pol ++ "2", if mult == Lin then [] else [bottom])]
+  -- y <- nextNonTerminal
+  -- addProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
+  -- addProduction y (show mult ++ show pol ++ "2") []
+  -- addVisited t [y]
+wordWhnf (T.AppSemi _ t u) =
+  liftM2 (++) (word t) (word u)
+  -- do
+  -- w1 <- word u1
+  -- w2 <- word u2
+  -- addVisited t $ w1 ++ w2
 wordWhnf t@(T.Choice _ m p its) = do
   y <- nextNonTerminal
   ws <- mapM (word . snd) its
@@ -75,6 +84,9 @@ wordWhnf t@(T.Choice _ m p its) = do
         where showView T.In = "&"; showView T.Out = "+"
   mapM_ (uncurry (addProduction y)) termNonterms
   addVisited t [y]
+wordWhnf (T.Quant _ p α k t) = do
+  w <- word t
+  getLHS $ M.singleton (show p ++ show α ++ ":" ++ show k) (w ++ [bottom])
 wordWhnf t@(T.AppVar _ α ts) = do -- α T1...Tm
   y <- nextNonTerminal
   addProduction y (show α ++ "0") []
@@ -90,6 +102,7 @@ wordWhnf t@(T.AppDual s u@(T.AppVar _ α ts)) = do -- Dual(α T1...Tm)
   addProduction y (label ++ "1") [y] --
   addProduction y (label ++ "2") []
   addVisited t [y]
+wordWhnf t = error $ "wordWhnf " ++ show t
 
 -- The state of the translation to grammar procedure
 
@@ -128,6 +141,7 @@ addVisited t w = do
     modify $ \s -> s { visited = M.insert t w (visited s) }
     pure w
 
+-- TODO: Add only if needed
 addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
 addProduction x a w =
   modify $ \s -> s { productions = G.insertProduction x a w (productions s) }
@@ -136,13 +150,27 @@ addProductions :: NonTerminal -> Transitions -> TransState ()
 addProductions x m =
   modify $ \s -> s { productions = M.insert x m (productions s) }
 
--- getProductions :: TransState Productions
--- getProductions = gets productions
-
 getTransitions :: NonTerminal -> TransState Transitions
 getTransitions x = do
   ps <- gets productions
   pure $ ps M.! x
+
+-- Get the LHS for given transitions; if no productions for the
+-- transitions are found, add new productions and return its LHS
+getLHS :: Transitions -> TransState Word
+getLHS ts = do
+  ps <- gets productions
+  case reverseLookup ts ps of
+    Nothing -> do
+      y <- nextNonTerminal
+      addProductions y ts
+      pure [y]
+    Just x -> pure [x]
+ where
+  -- Lookup a key for a value in the map. Probably O(n)
+  reverseLookup :: Eq a => Ord k => a -> M.Map k a -> Maybe k
+  reverseLookup a =
+    M.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
 
 {-
 
