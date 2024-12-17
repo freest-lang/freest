@@ -52,57 +52,36 @@ wordWhnf T.Skip{} =
   pure []
 wordWhnf t@T.End{} =
   getLHS $ M.singleton (show t) [bottom]
-  -- y <- nextNonTerminal
-  -- addProduction y (show t) [bottom]
-  -- addVisited t [y]
 wordWhnf t | T.isConstant t =
   getLHS $ M.singleton (show t) []
- -- do
- --  y <- nextNonTerminal
- --  addProduction y (show t) []
- --  addVisited t [y]
 -- wordWhnf t@(T.Forall` _ mult pol u) = do
 wordWhnf t@(T.AppMessage _ mult pol u) = do
   w <- word u
   getLHS $ M.fromList [
     (show mult ++ show pol ++ "1", w ++ [bottom]),
     (show mult ++ show pol ++ "2", if mult == Lin then [] else [bottom])]
-  -- y <- nextNonTerminal
-  -- addProduction y (show mult ++ show pol ++ "1") (w ++ [bottom])
-  -- addProduction y (show mult ++ show pol ++ "2") []
-  -- addVisited t [y]
 wordWhnf (T.AppSemi _ t u) =
   liftM2 (++) (word t) (word u)
-  -- do
-  -- w1 <- word u1
-  -- w2 <- word u2
-  -- addVisited t $ w1 ++ w2
 wordWhnf t@(T.Choice _ m p its) = do
-  let terms = map  ((\id -> show m ++ showView p ++ show id) . fst) its
-  ws <-       mapM (word                                     . snd) its
-  y <- nextNonTerminal
-  mapM_ (uncurry (addProduction y)) (zip terms ws)
-  pure [y] -- addVisited t [y]
+  let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
+  ws <-           mapM (word                                     . snd) its
+  getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
+wordWhnf t@(T.AppVar _ α ts) = do -- α T1...Tm
+  ws <- mapM word ts
+  let words = map (++ [bottom]) ws
+  let terminals = map (\n -> show α ++ show n) [1..]
+  getLHS $ M.fromList (zip terminals words)
 wordWhnf (T.Quant _ p α k t) = do
   w <- word t
   getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
     where showView T.In = "∀"; showView T.Out = "∃"
-wordWhnf t@(T.AppVar _ α ts) = do -- α T1...Tm
-  y <- nextNonTerminal
-  addProduction y (show α ++ "0") []
-  ws <- mapM word ts
-  let words = map (++ [bottom]) ws
-  let terminals = map (\n -> show α ++ show n) [1..]
-  mapM_ (uncurry (addProduction y)) (zip terminals words)
-  addVisited t [y]
-wordWhnf t@(T.AppDual s u@(T.AppVar _ α ts)) = do -- Dual(α T1...Tm)
+wordWhnf (T.AppDual s u@T.AppVar{}) = do -- Dual(α T1...Tm)
   w <- word u
-  y <- nextNonTerminal
   let label = show $ T.Dual s
-  addProduction y (label ++ "1") [y] --
-  addProduction y (label ++ "2") []
-  addVisited t [y]
+  getLHS $ M.fromList [
+    (label ++ "1", w),
+    (label ++ "2", [])]
 wordWhnf t = error $ "wordWhnf " ++ show t
 
 -- The state of the translation to grammar procedure

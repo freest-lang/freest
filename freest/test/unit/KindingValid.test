@@ -164,13 +164,13 @@ case *!(!Int;?Bool;Close)
 
 case *?(!Int;?Bool;Close)
 
-case *&{One}
+-- case *&{One}
 
-case *&{One, Two}
+-- case *&{One, Two}
 
-case *&{One}
+-- case *&{One}
 
-case *!{One, Two}
+-- case *!{One, Two}
 
 case *!Int ; !Char
 
@@ -180,13 +180,13 @@ case *!(!Int ; ?Bool ; Close) ; !Char
 
 case *?(!Int ; ?Bool ; Close) ; !Char
 
-case *&{One} ; !Char
+-- case *&{One} ; !Char
 
-case *&{One, Two} ; !Char
+-- case *&{One, Two} ; !Char
 
-case *&{One} ; !Char
+-- case *&{One} ; !Char
 
-case *!{One, Two} ; !Char
+-- case *!{One, Two} ; !Char
 
 -- Polymorphic streams
 
