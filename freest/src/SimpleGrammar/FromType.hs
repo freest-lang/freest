@@ -54,24 +54,23 @@ wordWhnf t@T.End{} =
   getLHS $ M.singleton (show t) [bottom]
 wordWhnf t | T.isConstant t =
   getLHS $ M.singleton (show t) []
--- wordWhnf t@(T.Forall` _ mult pol u) = do
-wordWhnf t@(T.AppMessage _ mult pol u) = do
+wordWhnf (T.AppMessage _ mult p u) = do
   w <- word u
   getLHS $ M.fromList [
-    (show mult ++ show pol ++ "1", w ++ [bottom]),
-    (show mult ++ show pol ++ "2", if mult == Lin then [] else [bottom])]
+    (show mult ++ show p ++ "1", w ++ [bottom]),
+    (show mult ++ show p ++ "2", if mult == Lin then [] else [bottom])]
 wordWhnf (T.AppSemi _ t u) =
   liftM2 (++) (word t) (word u)
-wordWhnf t@(T.Choice _ m p its) = do
+wordWhnf (T.Choice _ m p its) = do
   let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
   ws <-           mapM (word                                     . snd) its
   getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
-wordWhnf t@(T.AppVar _ α ts) = do -- α T1...Tm
+wordWhnf (T.AppVar _ α ts) = do -- α T1...Tm
   ws <- mapM word ts
   let words = map (++ [bottom]) ws
   let terminals = map (\n -> show α ++ show n) [1..]
-  getLHS $ M.fromList (zip terminals words)
+  getLHS $ M.insert (show α ++ show 0) [] (M.fromList (zip terminals words))
 wordWhnf (T.Quant _ p α k t) = do
   w <- word t
   getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
@@ -98,8 +97,8 @@ data TState = TState
 type TransState = State TState
 
 initial :: TypeDeclMap -> TState
-initial td = TState {
-    productions = M.empty
+initial td = TState
+  { productions = M.empty
   , nextIndex = 1 -- 0 is for bottom
   , visited = M.empty
   , typeDecls = td
