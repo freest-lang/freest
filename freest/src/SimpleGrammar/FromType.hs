@@ -32,7 +32,7 @@ fromType td ts = G.Grammar w (productions s)
 
 word :: T.Type -> TransState Word
 word t = wasVisited t >>= \case
-  Just w -> pure w -- We have seen t before
+  Just w -> pure [w] -- We have seen t before
   Nothing -> do
     td <- gets typeDecls
     let u = normalise td t
@@ -40,7 +40,7 @@ word t = wasVisited t >>= \case
       T.Skip{} -> pure []
       otherwise -> do
         y <- nextNonTerminal
-        addVisited t [y]
+        addVisited t y
         ~(z:δ) <- wordWhnf u
         γ <- getTransitions z
         addProductions y (M.map (++ δ) γ)
@@ -71,6 +71,11 @@ wordWhnf (T.AppVar _ α ts) = do -- α T1...Tm
   let words = map (++ [bottom]) ws
   let terminals = map (\n -> show α ++ show n) [1..]
   getLHS $ M.insert (show α ++ show 0) [] (M.fromList (zip terminals words))
+wordWhnf (T.AppDName _ id ts) = do -- D T1...Tm, as in α T1...Tm?
+  ws <- mapM word ts
+  let words = map (++ [bottom]) ws
+  let terminals = map (\n -> show id ++ show n) [1..]
+  getLHS $ M.insert (show id ++ show 0) [] (M.fromList (zip terminals words))
 wordWhnf (T.Quant _ p α k t) = do
   w <- word t
   getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
@@ -85,7 +90,7 @@ wordWhnf t = error $ "wordWhnf " ++ show t
 
 -- The state of the translation to grammar procedure
 
-type Visited = M.Map T.Type Word
+type Visited = M.Map T.Type NonTerminal
 
 data TState = TState
   { productions :: Productions
@@ -108,17 +113,17 @@ nextNonTerminal :: TransState NonTerminal
 nextNonTerminal = do
   n <- gets nextIndex
   modify $ \s -> s { nextIndex = n + 1 }
-  return n
+  pure n
 
-wasVisited :: T.Type -> TransState (Maybe Word)
+wasVisited :: T.Type -> TransState (Maybe NonTerminal)
 wasVisited t = do
   v <- gets visited
-  return $ v M.!? t
+  pure $ v M.!? t
 
-addVisited :: T.Type -> Word -> TransState Word
-addVisited t w = do
-    modify $ \s -> s { visited = M.insert t w (visited s) }
-    pure w
+addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
+addVisited t y = do
+    modify $ \s -> s { visited = M.insert t y (visited s) }
+    pure y
 
 -- TODO: Add only if needed
 addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
@@ -182,7 +187,7 @@ toGrammar' (T.Labelled _ s m) = do
 -- toGrammar' (T.Labelled _ t m) | t == T.Variant || t == T.Record = do
 --   ms <- tMapM toGrammar m
 --   getLHS $ Map.insert (show t ++ "✓") [] $ Map.mapKeys (\k -> show t ++ show k) ms
-toGrammar' (T.Skip _) = return []
+toGrammar' (T.Skip _) = pure []
 toGrammar' t@T.End{} = getLHS $ Map.singleton (show t) [bottom]
 toGrammar' (T.Semi _ t u) = liftM2 (++) (toGrammar t) (toGrammar u)
 toGrammar' (T.Message _ p t) = do
@@ -194,7 +199,7 @@ toGrammar' (T.Forall _ (Bind _ a k t)) = do
   xs <- toGrammar t
   getLHS $  Map.singleton ('∀' : intern a ++ ":" ++ show k) xs
 toGrammar' (T.Var _ a) = getLHS $ Map.singleton (intern a) []
-toGrammar' (T.Rec _ (Bind _ a _ _)) = return [a]
+toGrammar' (T.Rec _ (Bind _ a _ _)) = pure [a]
 -- Type operators
 toGrammar' t@(T.Dualof _ T.Var{}) = getLHS $ Map.singleton (show t) []
 toGrammar' t = internalError "Equivalence.TypeToGrammar.toGrammar" t
@@ -249,7 +254,7 @@ collect σ t@(T.Rec _ (Bind _ a _ u)) = do
   m         <- getTransitions z
   addProductions a (Map.map (++ zs) m)
   collect σ' u
-collect _ _ = return ()
+collect _ _ = pure ()
 
 -- The state of the translation to grammar
 
@@ -282,7 +287,7 @@ getFreshVar = do
   s <- get
   let n = nextIndex s
   modify $ \s -> s { nextIndex = n + 1 }
-  return $ mkVar defaultSpan ("#X" ++ show n)
+  pure $ mkVar defaultSpan ("#X" ++ show n)
 
 getProductions :: TransState Productions
 getProductions = gets productions
@@ -290,7 +295,7 @@ getProductions = gets productions
 getTransitions :: Variable -> TransState Transitions
 getTransitions x = do
   ps <- getProductions
-  return $ ps Map.! x
+  pure $ ps Map.! x
 
 -- getSubstitution :: TransState Substitution
 -- getSubstitution = gets substitution
@@ -312,8 +317,8 @@ getLHS ts = do
     Nothing -> do
       y <- getFreshVar
       putProductions y ts
-      return [y]
-    Just x -> return [x]
+      pure [y]
+    Just x -> pure [x]
  where
   -- Lookup a key for a value in the map. Probably O(n)
   reverseLookup :: Eq a => Ord k => a -> Map.Map k a -> Maybe k
@@ -329,10 +334,10 @@ addProductions x ts = do
   unless b (putProductions x ts)
 
 existProductions :: Variable -> Transitions -> Productions -> TransState Bool
--- existProductions x ts _ = return False
+-- existProductions x ts _ = pure False
 existProductions x ts = Map.foldrWithKey
-  (\x' ts' acc -> sameTrans x x' ts ts' >>= \b -> if b then return True else acc)
-  (return False)
+  (\x' ts' acc -> sameTrans x x' ts ts' >>= \b -> if b then pure True else acc)
+  (pure False)
 
 sameTrans :: Variable -> Variable -> Transitions -> Transitions -> TransState Bool
 sameTrans x1 x2 ts1 ts2
@@ -340,8 +345,8 @@ sameTrans x1 x2 ts1 ts2
     let s   = Set.singleton (x1, x2)
     let res = findGoals s ts1 ts2
     b <- fixedPoint s res ts1
-    if not (null res) && b then putSubstitution x1 x2 $> True else return False
-  | otherwise = return False
+    if not (null res) && b then putSubstitution x1 x2 $> True else pure False
+  | otherwise = pure False
 
 -- Are two transitions equal?  Do they have the same keys and the
 -- corresponding words are of the same size?
@@ -366,7 +371,7 @@ compareWords xs ys visited = foldr
 
 fixedPoint :: VisitedProds -> ToVisitProds -> Transitions -> TransState Bool
 fixedPoint visited goals ts
-  | Set.null goals = return True
+  | Set.null goals = pure True
   | otherwise = do
     let (x, y) = Set.elemAt 0 goals
     ps <- getProductions
@@ -374,8 +379,8 @@ fixedPoint visited goals ts
       (Map.findWithDefault ts x ps) =<< getTransitions y
  where
   fixedPoint' goal@(_, y) ps ts1 ts2
-    | y `Map.notMember` ps        = return False
-    | not $ matchingTrans ts1 ts2 = return False
+    | y `Map.notMember` ps        = pure False
+    | not $ matchingTrans ts1 ts2 = pure False
     | otherwise                   =
       let newVisited = Set.insert goal visited in
         fixedPoint newVisited

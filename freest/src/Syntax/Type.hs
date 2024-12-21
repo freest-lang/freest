@@ -72,50 +72,47 @@ pattern Exists s a k t <- Quant s Out a k t
   where Exists s a k t  = Quant s Out a k t
 
 pattern AppArrow :: Span -> K.Multiplicity -> Type -> Type -> Type
-pattern AppArrow s1 m t u <- App s1 (Arrow s2 m) [t,u]
-  where AppArrow s m t u = App s (Arrow s m) [t,u]
+pattern AppArrow s m t u <- App s (Arrow _ m) [t,u]
+  where AppArrow s m t u  = App s (Arrow s m) [t,u]
 
 pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
 pattern AppMessage s m p t <- App s (Message _ m p) [t] 
-  where AppMessage s m p t =  App s (Message s m p) [t]
+  where AppMessage s m p t  = App s (Message s m p) [t]
 
 pattern AppSemi :: Span -> Type -> Type -> Type
 pattern AppSemi s t u <- App s (Semi _) [t,u]
-  where AppSemi s t u =  App s (Semi s) [t,u]
+  where AppSemi s t u  = App s (Semi s) [t,u]
 
 pattern AppDual :: Span -> Type -> Type
 pattern AppDual s t <- App s (Dual _) [t]
-  where AppDual s t =  App s (Dual s) [t]
+  where AppDual s t  = App s (Dual s) [t]
 
 pattern AppTName :: Span -> Identifier -> [Type] -> Type
 pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
                                   App s (TName _ i) ts -> App s (TName s i) ts
                                   t                    -> t
                            -> App s (TName _ i) ts)
-  where AppTName s i ts 
-          | null ts   = TName (getSpan i) i
-          | otherwise = App s (TName (getSpan i) i) ts      
+  where AppTName _ i [] = TName (getSpan i) i
+        AppTName s i ts = App s (TName (getSpan i) i) ts      
 
 pattern AppDName :: Span -> Identifier -> [Type] -> Type
 pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
                                   App s (DName _ i) ts -> App s (DName s i) ts
                                   t                    -> t 
                            -> App s (DName _ i) ts)
-  where AppDName s i ts 
-          | null ts   = DName (getSpan i) i
-          | otherwise = App s (DName (getSpan i) i) ts
+  where AppDName _ i [] = DName (getSpan i) i
+        AppDName s i ts = App s (DName (getSpan i) i) ts
 
 pattern AppVar :: Span -> Variable -> [Type] -> Type
 pattern AppVar s a ts <- (\case Var s a            -> App s (Var s a) []
                                 App s (Var _ a) ts -> App s (Var s a) ts
-                                t                    -> t
+                                t                  -> t
                            -> App s (Var _ a) ts)
-  where AppVar s a ts 
-          | null ts   = Var (getSpan a) a
-          | otherwise = App s (Var (getSpan a) a) ts 
+  where AppVar _ a [] = Var (getSpan a) a
+        AppVar s a ts = App s (Var (getSpan a) a) ts 
 
 variadicQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
-variadicQuant s p [] t = t
+variadicQuant _ _ [] t = t
 variadicQuant s p ((a,k) : aks) t =
   Quant s p a k $ variadicQuant s p aks t
 
