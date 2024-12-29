@@ -21,10 +21,10 @@ import           Validation.Base               ( TypeDeclMap )
 import           Control.Monad.State
 import qualified Data.Map.Strict               as M
 import           Prelude                       hiding ( Word, words )
-
+import           Debug.Trace (trace)
+import           Data.List
 -- import qualified Data.Set as S
 -- import Data.Functor
--- import Debug.Trace (trace)
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts = G.Grammar w (productions s)
@@ -41,7 +41,7 @@ word t = wasVisited t >>= \case
       otherwise -> do
         y <- nextNonTerminal
         addVisited t y
-        ~(z:δ) <- wordWhnf u
+        ~(z:δ) <- trace ("t = " ++ show t ++ ",\tu = " ++ show u ++ ",\ty = " ++ show y) $ wordWhnf u
         γ <- getTransitions z
         addProductions y (M.map (++ δ) γ)
         pure [y]
@@ -118,7 +118,7 @@ nextNonTerminal = do
 wasVisited :: T.Type -> TransState (Maybe NonTerminal)
 wasVisited t = do
   v <- gets visited
-  pure $ v M.!? t
+  trace ("Visited: " ++ show v ++ "\t" ++ show t ++ "\tkeys: " ++ show (M.keys v) ++ "\tnub: " ++ show (nub ((M.keys v)))) pure $ v M.!? t
 
 addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
 addVisited t y = do
@@ -137,7 +137,7 @@ addProductions x m =
 getTransitions :: NonTerminal -> TransState Transitions
 getTransitions x = do
   ps <- gets productions
-  pure $ ps M.! x
+  trace ("\nProductions: " ++ show ps ++ "\t" ++ show x) pure $ ps M.! x
 
 -- Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS
