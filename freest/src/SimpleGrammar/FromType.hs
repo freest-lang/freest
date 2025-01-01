@@ -36,18 +36,18 @@ word  t
       case u of
         T.Skip{} -> pure []
         _ -> wasVisited t >>= \case
-            Just y -> pure [y]
-            Nothing -> do
-              y <- nextNonTerminal
-              addVisited t y
-              ~(z:δ) <- wordWhnf u
-              γ <- getTransitions z
-              addProductions y (M.map (++ δ) γ)
-              pure [y]
+          Just y -> pure [y]
+          Nothing -> do
+            y <- nextNonTerminal
+            addVisited t y
+            ~(z:δ) <- wordWhnf u
+            γ <- getTransitions z
+            addProductions y (M.map (++ δ) γ)
+            pure [y]
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
--- Skip is not a whnf
+wordWhnf T.Skip{} = pure []
 wordWhnf t@T.End{} =
   getLHS $ M.singleton (show t) [bottom]
 wordWhnf t | T.isConstant t =
