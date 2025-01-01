@@ -58,10 +58,10 @@ lookupEVar x = Map.lookup $ EVar $ external x
 
 memberKSig, memberCId, memberTId, memberDId
   :: Identifier -> ScopingCtx -> Bool
-memberKSig ti ctx = KSig (show ti) `Map.member` ctx
-memberCId  ci ctx = CId  (show ci) `Map.member` ctx
-memberTId  ti ctx = TId  (show ti) `Map.member` ctx
-memberDId  di ctx = DId  (show di) `Map.member` ctx
+memberKSig (Identifier _ s) ctx = KSig s `Map.member` ctx
+memberCId  (Identifier _ s) ctx = CId  s `Map.member` ctx
+memberTId  (Identifier _ s) ctx = TId  s `Map.member` ctx
+memberDId  (Identifier _ s) ctx = DId  s `Map.member` ctx
 
 fromTVarList, fromEVarList
   :: [Variable] -> ScopingCtx
@@ -77,10 +77,10 @@ deleteEVar x = Map.delete (EVar $ external x)
 
 insertKSig, insertCId, insertTId, insertDId
   :: Identifier -> ScopingCtx -> ScopingCtx
-insertKSig ti = Map.insert (KSig $ show ti) (-1)
-insertCId  ci = Map.insert (CId  $ show ci) (-1)
-insertTId  ti = Map.insert (TId  $ show ti) (-1)
-insertDId  di = Map.insert (DId  $ show di) (-1)
+insertKSig (Identifier _ s) = Map.insert (KSig s) (-1)
+insertCId  (Identifier _ s) = Map.insert (CId  s) (-1)
+insertTId  (Identifier _ s) = Map.insert (TId  s) (-1)
+insertDId  (Identifier _ s) = Map.insert (DId  s) (-1)
 
 type Scoping = State ScopingState
 
