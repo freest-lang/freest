@@ -21,35 +21,33 @@ import           Validation.Base               ( TypeDeclMap )
 import           Control.Monad.State
 import qualified Data.Map.Strict               as M
 import           Prelude                       hiding ( Word, words )
-import           Debug.Trace (trace)
-import           Data.List
--- import qualified Data.Set as S
--- import Data.Functor
+-- import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts = G.Grammar w (productions s)
   where (w, s) = runState (mapM word ts) (initial td)
 
 word :: T.Type -> TransState Word
-word t = wasVisited t >>= \case
-  Just w -> pure [w] -- We have seen t before
-  Nothing -> do
-    td <- gets typeDecls
-    let u = normalise td t
-    case u of
-      T.Skip{} -> pure []
-      otherwise -> do
-        y <- nextNonTerminal
-        addVisited t y
-        ~(z:δ) <- trace ("t = " ++ show t ++ ",\tu = " ++ show u ++ ",\ty = " ++ show y) $ wordWhnf u
-        γ <- getTransitions z
-        addProductions y (M.map (++ δ) γ)
-        pure [y]
+word  t
+  | isWhnf t = wordWhnf t
+  | otherwise = do
+      td <- gets typeDecls
+      let u = normalise td t
+      case u of
+        T.Skip{} -> pure []
+        _ -> wasVisited t >>= \case
+            Just y -> pure [y]
+            Nothing -> do
+              y <- nextNonTerminal
+              addVisited t y
+              ~(z:δ) <- wordWhnf u
+              γ <- getTransitions z
+              addProductions y (M.map (++ δ) γ)
+              pure [y]
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
-wordWhnf T.Skip{} =
-  pure []
+-- Skip is not a whnf
 wordWhnf t@T.End{} =
   getLHS $ M.singleton (show t) [bottom]
 wordWhnf t | T.isConstant t =
@@ -64,7 +62,8 @@ wordWhnf (T.AppSemi _ t u) =
 wordWhnf (T.Choice _ m p its) = do
   let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
   ws <-           mapM (word                                     . snd) its
-  getLHS $ M.fromList (zip terminals ws)
+  w <- getLHS $ M.fromList (zip terminals ws)
+  pure w
     where showView T.In = "&"; showView T.Out = "+"
 wordWhnf (T.AppVar _ α ts) = do -- α T1...Tm
   ws <- mapM word ts
@@ -118,7 +117,7 @@ nextNonTerminal = do
 wasVisited :: T.Type -> TransState (Maybe NonTerminal)
 wasVisited t = do
   v <- gets visited
-  trace ("Visited: " ++ show v ++ "\t" ++ show t ++ "\tkeys: " ++ show (M.keys v) ++ "\tnub: " ++ show (nub ((M.keys v)))) pure $ v M.!? t
+  pure $ v M.!? t
 
 addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
 addVisited t y = do
@@ -136,8 +135,8 @@ addProductions x m =
 
 getTransitions :: NonTerminal -> TransState Transitions
 getTransitions x = do
-  ps <- gets productions
-  trace ("\nProductions: " ++ show ps ++ "\t" ++ show x) pure $ ps M.! x
+  p <- gets productions
+  pure $ p M.! x
 
 -- Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS
