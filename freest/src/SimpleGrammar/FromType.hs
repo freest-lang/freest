@@ -28,22 +28,25 @@ fromType td ts = G.Grammar w (productions s)
   where (w, s) = runState (mapM word ts) (initial td)
 
 word :: T.Type -> TransState Word
-word  t
-  | isWhnf t = wordWhnf t
-  | otherwise = do
-      td <- gets typeDecls
-      let u = normalise td t
-      case u of
-        T.Skip{} -> pure []
-        _ -> wasVisited t >>= \case
-          Just y -> pure [y]
-          Nothing -> do
-            y <- nextNonTerminal
-            addVisited t y
-            ~(z:δ) <- wordWhnf u
-            γ <- getTransitions z
-            addProductions y (M.map (++ δ) γ)
-            pure [y]
+word t =
+  case fatTerminal t of
+  Just t' ->  getLHS $ M.singleton (show t') []
+  Nothing ->
+    if isWhnf t then wordWhnf t
+    else do
+        td <- gets typeDecls
+        let u = normalise td t
+        case u of
+          T.Skip{} -> pure []
+          _ -> wasVisited t >>= \case
+            Just y -> pure [y]
+            Nothing -> do
+              y <- nextNonTerminal
+              addVisited t y
+              ~(z:δ) <- wordWhnf u
+              γ <- getTransitions z
+              addProductions y (M.map (++ δ) γ)
+              pure [y]
 
 -- Requires whnf t
 wordWhnf :: T.Type -> TransState Word
@@ -154,6 +157,36 @@ getLHS ts = do
   reverseLookup :: Eq a => Ord k => a -> M.Map k a -> Maybe k
   reverseLookup a =
     M.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
+
+-- Fat terminal types can be compared for syntactic equality
+fatTerminal :: T.Type -> Maybe T.Type
+-- Functional Types
+fatTerminal t@T.Int{} = Just t
+fatTerminal t@T.Float{} = Just t
+fatTerminal t@T.Char{} = Just t
+fatTerminal t@T.Arrow{} = Just t
+-- Session Types
+fatTerminal t@T.Skip{} = Just t
+fatTerminal t@T.End{} = Just t
+fatTerminal t@T.Semi{} = Just t
+fatTerminal t@T.Message{} = Just t
+fatTerminal (T.Choice s m p its) =
+  Just (T.Choice s m p) <*> mapM fat its
+  where fat (id, t) = case fatTerminal t of
+          Just u -> Just (id, u)
+          Nothing -> Nothing
+fatTerminal t@T.Dual{} = Just t
+-- Polymorphism
+fatTerminal (T.Quant s p a k t) =
+  Just (T.Quant s p a k) <*> fatTerminal t
+-- Equations
+fatTerminal t@T.DName{} = Just t
+-- Higher-order
+fatTerminal t@T.Var{} = Just t
+fatTerminal (T.App s t ts) =
+  Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts
+-- otherwise
+fatTerminal _ = Nothing
 
 {-
 

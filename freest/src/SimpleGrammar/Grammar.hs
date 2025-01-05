@@ -89,7 +89,8 @@ bottom = 0
 instance Show Grammar where
   show (Grammar xss p) =
     "start words: (" ++ intercalate ", " (map showWord xss) ++
-    ")\nproductions: " ++ showProductions p
+    ")\nproductions: " ++ showProductions p ++
+    "\ntotal productions: " ++ show (M.foldr' (\t n -> M.size t + n) 0 p)
 
 -- Cannot be a flexible instance for there is an instance Show Map in module Map
 showProductions :: Productions -> String
