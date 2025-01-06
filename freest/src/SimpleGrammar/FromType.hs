@@ -30,6 +30,7 @@ fromType td ts = G.Grammar w (productions s)
 word :: T.Type -> TransState Word
 word t =
   case fatTerminal t of
+    -- Optimisation; not strictly necessary
   Just t' ->  getLHS $ M.singleton (show t') []
   Nothing ->
     if isWhnf t then wordWhnf t
@@ -152,10 +153,10 @@ getLHS ts = do
       addProductions y ts
       pure [y]
     Just x -> pure [x]
- where
-  -- Lookup a key for a value in the map. Probably O(n)
-  reverseLookup :: Eq a => Ord k => a -> M.Map k a -> Maybe k
-  reverseLookup a =
+
+-- Lookup a key for a value in the map. Probably O(n)
+reverseLookup :: Eq a => Ord k => a -> M.Map k a -> Maybe k
+reverseLookup a =
     M.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
 
 -- Fat terminal types can be compared for syntactic equality
