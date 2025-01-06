@@ -167,7 +167,6 @@ fatTerminal t@T.Float{} = Just t
 fatTerminal t@T.Char{} = Just t
 fatTerminal t@T.Arrow{} = Just t
 -- Session Types
-fatTerminal t@T.Skip{} = Just t
 fatTerminal t@T.End{} = Just t
 fatTerminal t@T.Semi{} = Just t
 fatTerminal t@T.Message{} = Just t

@@ -15,15 +15,14 @@ where
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           SimpleGrammar.FromType        ( fromType )
--- import qualified Bisimulation.Bisimulation     ( bisimilar )
+import           Bisimulation.Bisimulation     ( bisimilar )
 import           Debug.Trace                   (trace)
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
   t == u ||
-  trace ("\nThe types: " ++ show [t, u] ++ "\nand the grammar: " ++ show (fromType td [t, u])) True
-  -- bisimilar $ fromType td [minimal t, minimal u]
-  -- (trace (show (minimal t, minimal u)) $ bisimilarGrm (fromType [minimal t, minimal u]))
+  -- trace ("\nThe types: " ++ show [t, u] ++ "\nand the grammar: " ++ show (fromType td [t, u])) True
+  trace (show $ fromType td [minimal t, minimal u]) bisimilar (fromType td [minimal t, minimal u])
 
 -- TODO: fix me!
 minimal :: T.Type -> T.Type
