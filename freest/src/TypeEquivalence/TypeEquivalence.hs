@@ -21,7 +21,12 @@ import           Debug.Trace                   (trace)
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
   t == u ||
-  trace (show [t, u] ++ "\n" ++ show (fromType td [t, u])) True
-  -- bisimilar $ fromType td [t, u]
+  trace ("\nThe types: " ++ show [t, u] ++ "\nand the grammar: " ++ show (fromType td [t, u])) True
+  -- bisimilar $ fromType td [minimal t, minimal u]
+  -- (trace (show (minimal t, minimal u)) $ bisimilarGrm (fromType [minimal t, minimal u]))
+
+-- TODO: fix me!
+minimal :: T.Type -> T.Type
+minimal = id
 
 -- TODO: Move this code to module Bisimulation.Bisimulation
