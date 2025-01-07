@@ -1,5 +1,12 @@
--- # OPTIONS_GHC -Wno-incomplete-patterns #
-module Bisimulation.Bisimulation 
+{- |
+Module      :  Bisimulation.Bisimulation
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module TODO
+-}
+
+module Bisimulation.Bisimulation
  ( bisimilar
  )
 where
@@ -11,16 +18,16 @@ import           Bisimulation.Norm
 import           Bisimulation.State
 import           Bisimulation.Congruence 
 
-import           Control.Monad.State (State, evalState, gets, modify, runState, foldM)
-import           Data.Foldable ()
-import           Data.Function (on)
-import           Data.List (sortBy)
-import qualified Data.Map.Strict              as Map
-import           Data.Maybe (isNothing)
-import           Data.Ord (comparing)
+import           Control.Monad.State
+import           Data.Foldable                 ()
+import           Data.Function                 ( on )
+import           Data.List                     ( sortBy )
+import qualified Data.Map.Strict               as Map
 import qualified Data.Set                      as Set
 import qualified Data.Sequence                 as Seq
-import           Prelude hiding (Word, log)
+import           Data.Maybe                    ( isNothing )
+import           Data.Ord                      ( comparing )
+import           Prelude                       hiding ( Word, log )
 
 -- Are two words bisimilar?
 bisimilar :: Grammar -> Bool

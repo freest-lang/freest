@@ -166,16 +166,15 @@ fatTerminal t@T.Int{} = Just t
 fatTerminal t@T.Float{} = Just t
 fatTerminal t@T.Char{} = Just t
 fatTerminal t@T.Arrow{} = Just t
--- Session Types
-fatTerminal t@T.End{} = Just t
-fatTerminal t@T.Semi{} = Just t
-fatTerminal t@T.Message{} = Just t
-fatTerminal (T.Choice s m p its) =
-  Just (T.Choice s m p) <*> mapM fat its
-  where fat (id, t) = case fatTerminal t of
-          Just u -> Just (id, u)
-          Nothing -> Nothing
-fatTerminal t@T.Dual{} = Just t
+-- Session Types - I believe these cannot be fat terminals
+-- fatTerminal t@T.End{} = Just t
+-- fatTerminal t@T.Message{} = Just t
+-- fatTerminal (T.Choice s m p its) =
+--   Just (T.Choice s m p) <*> mapM fat its
+--   where fat (id, t) = case fatTerminal t of
+--           Just u -> Just (id, u)
+--           Nothing -> Nothing
+-- fatTerminal t@T.Dual{} = Just t
 -- Polymorphism
 fatTerminal (T.Quant s p a k t) =
   Just (T.Quant s p a k) <*> fatTerminal t

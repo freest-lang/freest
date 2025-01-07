@@ -1,3 +1,11 @@
+{- |
+Module      :  Bisimulation.State
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module TODO
+-}
+
 module Bisimulation.State
   ( IOF
   , NormMap
@@ -18,11 +26,11 @@ where
 import           Syntax.Base
 import           SimpleGrammar.Grammar
 
-import           Data.Map.Strict               as Map
-import           Data.Sequence                 as Seq
-import           Data.Set                      as Set
-import           Prelude                       hiding (Word, log)
 import           Control.Monad.State
+import qualified Data.Map.Strict               as Map
+import qualified Data.Set                      as Set
+import qualified Data.Sequence                 as Seq
+import           Prelude                       hiding ( Word, log )
 
 -- Type used in norm
 type IOF = Maybe Int

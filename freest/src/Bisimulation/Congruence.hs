@@ -1,3 +1,11 @@
+{- |
+Module      :  Bisimulation.Congruence
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module TODO
+-}
+
 module Bisimulation.Congruence
   ( applyRules
   )
@@ -7,11 +15,11 @@ import           Syntax.Base
 import           SimpleGrammar.Grammar
 import           Bisimulation.State            hiding ( TState, visitedPairs )
 
-import           Data.List                     ( isPrefixOf, nub )
+import           Control.Monad.State           ( State, evalState, gets, modify )
 import qualified Data.Map.Strict               as Map ( empty, lookup )
 import qualified Data.Set                      as Set ( empty, Set, union, fromList )
+import           Data.List                     ( isPrefixOf, nub )
 import           Prelude hiding                ( Word )
-import           Control.Monad.State           ( State, evalState, gets, modify )
 
 type VisitedState = State VisitedStateData
 

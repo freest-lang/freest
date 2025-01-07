@@ -1,5 +1,11 @@
--- # LANGUAGE FlexibleInstances #
--- # OPTIONS_GHC -Wno-incomplete-patterns #
+{- |
+Module      :  Bisimulation.Norm
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module TODO
+-}
+
 module Bisimulation.Norm
   ( isNormed
   , norm
@@ -13,13 +19,13 @@ import           Syntax.Base
 import           SimpleGrammar.Grammar
 import           Bisimulation.State
 
-import           Data.List
+import           Control.Monad.State
+import           Control.Applicative
 import qualified Data.Map.Strict               as Map
 import qualified Data.Set                      as Set
+import           Data.List
 import           Data.Maybe
 import           Data.Function                 ( on )
-import           Control.Applicative
-import           Control.Monad.State
 import           Prelude                       hiding ( Word, log )
 
 nonterminals :: Grammar -> Set.Set NonTerminal

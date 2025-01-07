@@ -72,7 +72,7 @@ where
   type U' : 1S
   type U' = +{A: !Int;U', B:Close;U'}
 
-case T == Skip -- U
+case T == U
 where
   type T : 1S
   type T = &{N:T};Skip
@@ -99,6 +99,9 @@ where
 
 case !(!Int;Close) 
   == !(!Int;Skip;Close;?Int) 
+
+case forall a:1S. Close ; a ; !Int 
+  == forall a:1S. (Close ; a) ; Skip
 
 case forall a:1S. Close;a;!Int 
   == forall b:1S. (Close;b);Skip
