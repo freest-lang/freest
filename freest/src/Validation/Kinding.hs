@@ -128,7 +128,7 @@ synth ctx = \case
     Nothing -> putError (bot s) (OutOfScope s a)
   T.App s t ts -> do
     k <- synth ctx t
-    let (ks,kn) = Expose.kArrow k
+    let (ks,kn) = Expose.kindArrow k
     checkArgs s t (length ts) (length ks) ts ks kn
   where
     checkArgs :: Span -> T.Type -> Int -> Int -- error info

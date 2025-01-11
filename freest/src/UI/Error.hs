@@ -24,6 +24,7 @@ data Error
   = LexicalError Span Char 
   | ParseError Span (Token, [String])
   | OutOfScope Span Variable
+  | ConsOutOfScope Span Identifier
   | TypeOutOfScope Span Identifier
   | ConflictingDefs (Map.Map (Level String String) [Span])
   | MultipleVarDecls Span Variable
@@ -34,7 +35,7 @@ data Error
   | GivenTooManyArgs Span E.Exp T.Type Int Int
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
-  | ExposeError Span String (Either E.Pat E.Exp) T.Type
+  | ExposeError Span String (Either E.Exp E.Pat) T.Type
   | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
@@ -42,12 +43,16 @@ data Error
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
-
+  | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
+  | TypeCtxMismatch Span E.Exp [(Variable, T.Type)] [(Variable, T.Type)]
+  | ConstructorArgumentMismatch Span Identifier Int Int
+  | ChoiceNotAllowed Span Identifier T.Type
 
 instance Located Error where
   getSpan (LexicalError s _) = s
   getSpan (ParseError s _) = s
   getSpan (OutOfScope s _) = s
+  getSpan (ConsOutOfScope s _) = s
   getSpan (TypeOutOfScope s _) = s
   getSpan (ConflictingDefs xss) = foldr1 spanFromTo $ concat $ Map.elems xss
   getSpan (MultipleVarDecls s _) = s
@@ -66,6 +71,10 @@ instance Located Error where
   getSpan (GivenTooManyArgsK s _ _ _) = s
   getSpan (ExpectsTooManyArgsK s _ _) = s
   getSpan (InvalidType s _) = s
+  getSpan (TypeMismatch s _ _ _) = s
+  getSpan (TypeCtxMismatch s _ _ _) = s
+  getSpan (ConstructorArgumentMismatch s _ _ _) = s
+  getSpan (ChoiceNotAllowed s _ _) = s
 
   setSpan = internalError "span not settable for Error type."
 
@@ -80,6 +89,8 @@ instance Show Error where
           "\n  Parse error, expected: `"++intercalate "`, `" ss++"`"
         OutOfScope _ x -> 
           "\n  Not in scope: variable `"++external x++"`"
+        ConsOutOfScope _ i -> 
+          "\n  Not in scope: constructor `"++show i++"`"
         TypeOutOfScope _ i ->
           "\n Not in scope: type constructor `"++show i++"`"
         ConflictingDefs vos -> 
@@ -114,8 +125,6 @@ instance Show Error where
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
         ExposeError _ s e t -> 
           "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
-            where showExpPat (Left  p) = "pattern `"++show p++"`"
-                  showExpPat (Right e) = "expression `"++show e++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
           "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
           "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
@@ -134,3 +143,20 @@ instance Show Error where
           "\n Type "++show i++" expects too many arguments, it should have kind "++show k++"."
         InvalidType s t ->
           "\n Invalid type: "++show t
+        TypeMismatch s t u ep ->
+          "\n Couldn't match expected type "++show t++" with actual type "++show u++" in the "++showExpPat ep++"."
+        TypeCtxMismatch s e tctx1 tctx2 -> 
+          -- TODO: different messages for abstractions, cases and conditional expressions; ideally better than Freest 3.
+          "\nCouldn't match the final contexts in two distinct branches in a case expression " ++
+          "\n\t       One context is " ++ show tctx1 ++
+          "\n\t         the other is " ++ show tctx2 ++
+          "\n\tand the expression is " ++ show e ++
+          "\n\t(was a variable consumed in one branch and not in the other?)" ++
+          "\n\t(is there a variable with different types in the two contexts?)"
+        ConstructorArgumentMismatch s i n m ->
+          "\n The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
+        ChoiceNotAllowed s i t ->
+          "\n Choice `"++show i++"` is not allowed by type "++show t
+
+      showExpPat (Left  p) = "pattern `"++show p++"`"
+      showExpPat (Right e) = "expression `"++show e++"`"

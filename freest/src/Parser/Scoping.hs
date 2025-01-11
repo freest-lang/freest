@@ -235,6 +235,10 @@ scopeExp ctx e@(E.Var s x) =
     Nothing -> {- insertError (OutOfScope (getSpan x) x) -} -- leaving this for the typechecker
       pure e
     Just internal -> pure $ E.Var s x{internal}
+-- scopeExp ctx e@(E.Cons s i) = do -- leaving this for the typechecker
+--   unless (memberCId i ctx) 
+--     (insertError (ConsOutOfScope (getSpan i) i))
+--   return e
 scopeExp ctx (E.App s e args) =
   E.App s
   <$> scopeExp ctx e
@@ -298,13 +302,6 @@ scopePat ctx ictx p@(E.ConsPat s c ps) =
                             ps
       return (ictx', E.ConsPat s c ps')
     else pure (ictx, p) -- leaving this error for the typechecker
-scopePat ctx ictx (E.TuplePat s ps) = do
-  (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
-                          (ictx''', p') <- scopePat ctx ictx'' p
-                          return (ictx''', ps''++[p]))
-                        (Map.empty, [])
-                        ps
-  return (ictx', E.TuplePat s ps')
 scopePat ctx ictx (E.AsPat s x p) =
   case lookupEVar x ictx of
     Nothing -> do
@@ -326,7 +323,6 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
     patVarOccurs = \case
       E.VarPat s x     -> Map.singleton (ExpLevel $ external x) [getSpan x]
       E.ConsPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
-      E.TuplePat _ ps  -> Map.unionsWith (++) (map patVarOccurs ps)
       E.AsPat _ x p    -> Map.insertWith (++) (ExpLevel $ external x) [getSpan x] (patVarOccurs p)
       _                -> Map.empty
 
@@ -335,7 +331,6 @@ patVars = \case
   E.WildPat _ _    -> Set.empty
   E.VarPat _ x     -> Set.singleton x
   E.ConsPat s _ ps -> Set.unions (map patVars ps)
-  E.TuplePat s ps  -> Set.unions (map patVars ps)
   E.AsPat _ x p    -> Set.insert x (patVars p)
   _                -> Set.empty
 

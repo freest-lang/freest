@@ -12,6 +12,7 @@ import qualified Data.Map.Strict as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Control.Arrow ((>>>))
+import Data.Bifunctor (second)
 import Syntax.Substitution (subs)
 import qualified Data.List.NonEmpty as NE
 
@@ -26,7 +27,7 @@ data ValidationState
     , kindCtx   :: Map.Map Identifier K.Kind
     , typeDecls :: TypeDeclMap
     , dataDecls :: DataDeclMap
-    , consDecls :: ConsDeclMap
+    , consDecls :: Map.Map Identifier (Identifier, [Variable], [T.Type])
     }
   
 emptyValidationState :: ValidationState
@@ -44,7 +45,7 @@ buildValidationState m = ValidationState -- TODO: traverse module once.
   , kindCtx   = Map.fromList (M.kindSigs m)
   , typeDecls = Map.fromList (M.typeDecls m)
   , dataDecls = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
-  , consDecls = Map.fromList (concatMap (\(_,(_,cds)) -> cds) $ M.dataDecls m)
+  , consDecls = Map.fromList (concatMap (\(i,(as,cds)) -> map (second (i,as,)) cds) $ M.dataDecls m)
   }
 
 type Validation = ExceptT Error (State ValidationState)

@@ -385,7 +385,7 @@ Exp :: { E.Exp }
 
 ExpApp :: { E.Exp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
-  | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
+  | 'select' UPPER_ID ExpPrimary { E.Select (spanFromTo $1 $2) (mkIdTk $2) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
@@ -446,11 +446,11 @@ PatPrimary :: { E.Pat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
-  -- | STRING_LIT       { E.StringPat (getSpan $1) (read (getText $1)) }
+  -- | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | LOWER_ID         { E.VarPat    (getSpan $1) (mkVarTk $1) }
   | DataConstructor  { E.ConsPat   (getSpan $1) $1 [] }
-  | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
+  | '(' Pat ',' PatListComma ')' { E.ConsPat (spanFromTo $1 $5) (mkTupleCons (length $4) (spanFromTo $1 $5)) ($2 : $4) }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID '&' PatPrimary { E.AsPat (spanFromTo $1 $3) (mkVarTk $1) $3 }
 

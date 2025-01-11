@@ -20,17 +20,20 @@ import Syntax.Kind (Multiplicity, Kind)
 import Syntax.Type (Type)
 
 import Data.List (intercalate)
+import Syntax.Names 
 
 data Pat 
   = WildPat Span Variable
   | VarPat Span Variable 
   | ConsPat Span Identifier [Pat]
-  | TuplePat Span [Pat]
   | IntPat Span Int 
   | FloatPat Span Double 
   | CharPat Span Char 
-  | StringPat Span String 
   | AsPat Span Variable Pat
+
+stringPat :: Span -> String -> Pat
+stringPat s [] = ConsPat s (mkNil s) []
+stringPat s (c:cs) = ConsPat s (mkCons s) [CharPat s c, stringPat s cs]
 
 data LetDecl
   = ValDecl Pat      RHS
@@ -55,40 +58,32 @@ data Exp
   | Case   Span Exp [(Pat, Exp)]
   | If     Span Exp Exp Exp
   | Channel Span Type
-  | Select Span Identifier
+  | Select Span Identifier Exp
 
 instance Show Pat where
   show (WildPat _ x) = show x
   show (VarPat _ x) = show x 
   show (ConsPat _ c ps) = "("++show c++" "++unwords (map show ps)++")"
-  show (TuplePat _ []) = "()"
-  show (TuplePat _ [p]) = error "Syntax.Expression.show: tuple pattern with one element"
-  show (TuplePat _ (p:ps)) = "("++show p++unwords (map (\e -> ", "++show e) ps)++")"
   show (IntPat _ i) = show i 
   show (FloatPat _ f) = show f
   show (CharPat _ c) = show c
-  show (StringPat _ s) = show s
   show (AsPat _ x p) = show x++"&"++show p -- TODO: change to @
 
 instance Located Pat where
   getSpan (WildPat s _) = s
   getSpan (VarPat s _) = s 
   getSpan (ConsPat s _ _) = s 
-  getSpan (TuplePat s _) = s
   getSpan (IntPat s _) = s 
   getSpan (FloatPat s _) = s
   getSpan (CharPat s _) = s
-  getSpan (StringPat s _) = s
   getSpan (AsPat s _ _) = s
   
   setSpan s (WildPat _ x) = WildPat s x
   setSpan s (VarPat _ x) = VarPat s x
   setSpan s (ConsPat _ c ps) = ConsPat s c ps
-  setSpan s (TuplePat _ ps) = TuplePat s ps
   setSpan s (IntPat _ i) = IntPat s i
   setSpan s (FloatPat _ f) = FloatPat s f
   setSpan s (CharPat _ c) = CharPat s c
-  setSpan s (StringPat _ s') = StringPat s s'
   setSpan s (AsPat _ x p) = AsPat s x p
 
 instance Show LetDecl where 
@@ -126,7 +121,7 @@ instance Show Exp where
     where showCase (p, e) = show p ++ " -> " ++ show e 
   show (If _ e1 e2 e3) = "(if "++show e1++" then "++show e2++" else "++show e3++")"
   show (Channel _ t) = "(channel @"++show t++")"
-  show (Select _ i) = "select "++show i
+  show (Select _ i e) = "select "++show i++" "++show e
 
 instance Located Exp where
   getSpan (Int s _) = s
@@ -142,7 +137,7 @@ instance Located Exp where
   getSpan (Case s _ _) = s
   getSpan (If s _ _ _) = s
   getSpan (Channel s _) = s
-  getSpan (Select s _) = s
+  getSpan (Select s _ _) = s
   
   setSpan s (Int _ i) = Int s i
   setSpan s (Float _ f) = Float s f
@@ -157,4 +152,4 @@ instance Located Exp where
   setSpan s (Case _ e cs) = Case s e cs
   setSpan s (If _ e1 e2 e3) = If s e1 e2 e3
   setSpan s (Channel _ t) = Channel s t
-  setSpan s (Select _ i) = Select s i
+  setSpan s (Select _ i e) = Select s i e
