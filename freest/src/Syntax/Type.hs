@@ -25,9 +25,9 @@ module Syntax.Type
 where
 
 import           Syntax.Base
-import qualified Syntax.Kind                  as K
+import qualified Syntax.Kind                   as K
 
-import           Data.List (intercalate, sort)
+import           Data.List                     (intercalate, sort)
 import           Data.Bifunctor
 import qualified Data.Map.Strict               as M
 
@@ -64,13 +64,28 @@ data Type
   | App Span Type [Type]
   deriving Ord
 
--- Datatype constructor declaration list
+-- Datatype constructor declaration list, e.g.,
+--   Leaf | Node (Tree a) a (Tree a)
+-- represented as
+--   [ (Leaf, [])
+--   , (Node , [Tree a, a, Tree a])
+--   ]
 type ConsDeclList = [(Identifier, [Type])]
--- Datatype (data) constructor declaration list
+-- Datatype constructor declaration list, e.g.,
+--   data Tree a = Leaf | Node (Tree a) a (Tree a)
+-- that is,
+--   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
+-- represented as
+--   (Tree, ([a], <see above>))
 type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
--- Type (type) constructor declaration list
+-- Type (type) constructor declaration list, e.g.
+--   type Stream a = !a ; Stream a
+-- that is,
+--   type Stream = λa. µs. !a ; s a
+-- represented as
+--   (Stream, ([a], (!a ; Stream a))
 type TypeDeclList = [(Identifier, ([Variable], Type))]
--- Identifier declaration list
+-- Identifier declaration list, TODO
 type IdDeclList   = [(Identifier, K.Kind)]
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
