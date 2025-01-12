@@ -28,22 +28,3 @@ rename = ren S.empty
 
 reachable :: Visited -> T.Type -> S.Set Identifier
 reachable = undefined
-
-bounded :: Visited -> TypeDeclMap -> T.Type -> Bool
-bounded v td = \case
-  -- Session types
-  T.End{} -> True
-  T.AppSemi _ t u -> bounded v td t || bounded v td u
-  T.Choice _ _ _ its -> any (bounded v td . snd) its
-  T.AppDual _ t -> bounded v td t
-  -- Polymorphism
-  T.AppQuant _ _ _ _ t -> bounded v td t
-  -- Equations
-  T.AppTName _ id ts
-    | id `S.member` v -> True
-    | otherwise -> bounded v td (snd (td M.! id)) -- TODO: Check
-  -- Higher-order
-  T.Var _ var -> undefined
-  T.App _ t ts -> undefined
-  -- Functional types, Skip, Message, DName
-  _ -> False

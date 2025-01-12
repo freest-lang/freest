@@ -1,3 +1,7 @@
+-- TODO: This test file could be replaced by two:
+--   BoundedValid.test and
+--   BoundedInvalid.test
+
 -- Simple types
 
 case Int

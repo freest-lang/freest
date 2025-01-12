@@ -58,6 +58,7 @@ library:
     - Validation.Expose
     - Validation.Kinding
     - Validation.Typing
+    - Validation.Bounded
     - Utils
     - SimpleGrammar.Normalisation
     - Validation.Base

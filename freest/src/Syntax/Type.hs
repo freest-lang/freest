@@ -8,7 +8,7 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
-  , Type(.., AppQuant, Forall, Exists, AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
+  , Type(.., Forall, Exists, AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
   , DataDeclList
   , ConsDeclList
   , TypeDeclList
@@ -91,10 +91,6 @@ type IdDeclList   = [(Identifier, K.Kind)]
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
-pattern AppQuant :: Span -> Polarity -> Variable -> K.Kind -> Type -> Type
-pattern AppQuant s p a k t <- Quant s p a k t
-  where AppQuant s p a k t  = Quant s p a k t
-
 pattern Forall :: Span -> Variable -> K.Kind -> Type -> Type
 pattern Forall s a k t <- Quant s In a k t
   where Forall s a k t  = Quant s In a k t

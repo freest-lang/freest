@@ -1,13 +1,14 @@
-module NormalisationYieldsWhnfSpec (spec) where
+module BoundedInvalidSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           SimpleGrammar.Normalisation   ( normalise, isWhnf )
+import           Validation.Bounded            ( bounded )
+import           SimpleGrammar.Normalisation   ( normalise )
+import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
-import           UnitSpecUtils
 
 -- This test should be called with well-formed types only
 
@@ -19,12 +20,13 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
-  "Normalisation yields WHNF tests" 
-  \(t,m) -> normYieldsWnnf m t `shouldBe` True
+  "test/unit/BoundedInvalid.test" 
+  "Unbounded types" 
+  \(t,m) -> isBounded m t `shouldBe` False
 
-normYieldsWnnf :: M.Module -> T.Type -> Bool
-normYieldsWnnf m t = isWhnf $ normalise (buildDataDecls m) t
+isBounded :: M.Module -> T.Type -> Bool
+isBounded m t = bounded dd $ normalise dd t
+  where dd = buildDataDecls m
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
