@@ -73,14 +73,14 @@ data Type
 type ConsDeclList = [(Identifier, [Type])]
 -- Datatype constructor declaration list, e.g.,
 --   data Tree a = Leaf | Node (Tree a) a (Tree a)
--- that is,
+-- In Fµω:
 --   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
 -- represented as
 --   (Tree, ([a], <see above>))
 type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
 -- Type (type) constructor declaration list, e.g.
 --   type Stream a = !a ; Stream a
--- that is,
+-- In Fµω:
 --   type Stream = λa. µs. !a ; s a
 -- represented as
 --   (Stream, ([a], (!a ; Stream a))
