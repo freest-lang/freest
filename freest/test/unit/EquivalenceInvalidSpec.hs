@@ -1,3 +1,4 @@
+
 module EquivalenceInvalidSpec (spec) where
 
 import qualified Syntax.Module                 as M
@@ -19,4 +20,4 @@ spec = mkEquivalenceSpec
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls m = Map.fromList (M.typeDecls m)
+buildDataDecls = Map.fromList . M.typeDecls

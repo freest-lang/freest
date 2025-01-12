@@ -26,7 +26,7 @@ import           Prelude                       hiding ( Word, words )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts = G.Grammar w (productions s)
-  where (w, s) = runState (mapM (word . rename td) ts) (initial td)
+  where (w, s) = runState (mapM (word {- . rename td -}) ts) (initial td)
 
 word :: T.Type -> TransState Word
 word t =
