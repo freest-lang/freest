@@ -16,6 +16,7 @@ import           Syntax.Kind
 import qualified Syntax.Type                   as T
 import           SimpleGrammar.Grammar         as G
 import           SimpleGrammar.Normalisation
+import           SimpleGrammar.Rename
 import           Validation.Base               ( TypeDeclMap )
 
 import           Control.Monad.State
@@ -25,7 +26,7 @@ import           Prelude                       hiding ( Word, words )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts = G.Grammar w (productions s)
-  where (w, s) = runState (mapM word ts) (initial td)
+  where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word
 word t =
