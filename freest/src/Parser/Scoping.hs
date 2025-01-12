@@ -117,14 +117,14 @@ scopeModule ctx m = do
 scopeModule_ :: ScopingCtx -> M.Module -> Scoping M.Module
 scopeModule_ ctx m = snd <$> scopeModule ctx m
 
-scopeKindSigs :: ScopingCtx -> M.IdDeclList -> Scoping ScopingCtx
+scopeKindSigs :: ScopingCtx -> T.IdDeclList -> Scoping ScopingCtx
 scopeKindSigs = foldM scopeKindSig
   where
     scopeKindSig ctx (i, k) = do
       when (memberKSig i ctx) (insertError (MultipleKindSigs (getSpan i) i))
       return (insertKSig i ctx)
 
-scopeDataDecls :: ScopingCtx -> M.DataDeclList -> Scoping (ScopingCtx, M.DataDeclList)
+scopeDataDecls :: ScopingCtx -> T.DataDeclList -> Scoping (ScopingCtx, T.DataDeclList)
 scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
   where
     scopeDataDecl (ctx',dds') dd@(ti, (as, cds)) =
@@ -150,7 +150,7 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
               let ctx'' = insertCId ci ctx'
               return (ctx'', (ci, ts') : cds')
 
-scopeTypeDecls :: ScopingCtx -> M.TypeDeclList -> Scoping (ScopingCtx, M.TypeDeclList)
+scopeTypeDecls :: ScopingCtx -> T.TypeDeclList -> Scoping (ScopingCtx, T.TypeDeclList)
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
   where
     scopeTypeDecl (ctx', tds') td@(ti, (as, t)) =

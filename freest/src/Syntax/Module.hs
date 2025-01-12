@@ -8,11 +8,7 @@ This module contains types and functions to represent and manipulate FreeST
 modules.
 -}
 module Syntax.Module
-  ( DataDeclList
-  , ConsDeclList
-  , TypeDeclList
-  , IdDeclList
-  , Module(..)
+  ( Module(..)
   , setName
   , insertImport
   , insertKindSig
@@ -26,16 +22,11 @@ where
 import           Syntax.Base
 import           Syntax.Expression (Exp, Pat, LetDecl)
 import           Syntax.Kind (Kind)
-import           Syntax.Type (Type)
+import           Syntax.Type (Type, DataDeclList, TypeDeclList, IdDeclList, ConsDeclList)
 
 import           Data.List (intercalate)
 import           Data.Maybe (fromMaybe)
-import           Debug.Trace (trace)
-
-type ConsDeclList = [(Identifier, [Type])]
-type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
-type TypeDeclList = [(Identifier, ([Variable], Type))]
-type IdDeclList  = [(Identifier, Kind)]
+import                                     Debug.Trace (trace)
 
 data Module
   = Module { name        :: Maybe [String]

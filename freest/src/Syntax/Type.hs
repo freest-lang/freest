@@ -9,6 +9,10 @@ polymorphic context-free session types.
 module Syntax.Type
   ( Polarity(..)
   , Type(.., AppQuant, Forall, Exists, AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
+  , DataDeclList
+  , ConsDeclList
+  , TypeDeclList
+  , IdDeclList
   , smartApp
   , variadicQuant
   , Dual(..)
@@ -59,6 +63,15 @@ data Type
   | Var Span Variable
   | App Span Type [Type]
   deriving Ord
+
+-- Datatype constructor declaration list
+type ConsDeclList = [(Identifier, [Type])]
+-- Datatype (data) constructor declaration list
+type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
+-- Type (type) constructor declaration list
+type TypeDeclList = [(Identifier, ([Variable], Type))]
+-- Identifier declaration list
+type IdDeclList   = [(Identifier, K.Kind)]
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
