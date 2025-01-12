@@ -11,7 +11,7 @@ module Syntax.Module
   ( DataDeclList
   , ConsDeclList
   , TypeDeclList
-  , KindSigList
+  , IdDeclList
   , Module(..)
   , setName
   , insertImport
@@ -35,14 +35,14 @@ import           Debug.Trace (trace)
 type ConsDeclList = [(Identifier, [Type])]
 type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
 type TypeDeclList = [(Identifier, ([Variable], Type))]
-type KindSigList  = [(Identifier, Kind)]
+type IdDeclList  = [(Identifier, Kind)]
 
 data Module
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
            , dataDecls   :: DataDeclList
            , typeDecls   :: TypeDeclList
-           , kindSigs    :: KindSigList
+           , kindSigs    :: IdDeclList
            , definitions :: [LetDecl]
            }
 

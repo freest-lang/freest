@@ -117,7 +117,7 @@ scopeModule ctx m = do
 scopeModule_ :: ScopingCtx -> M.Module -> Scoping M.Module
 scopeModule_ ctx m = snd <$> scopeModule ctx m
 
-scopeKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
+scopeKindSigs :: ScopingCtx -> M.IdDeclList -> Scoping ScopingCtx
 scopeKindSigs = foldM scopeKindSig
   where
     scopeKindSig ctx (i, k) = do
