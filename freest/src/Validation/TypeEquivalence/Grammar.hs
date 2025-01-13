@@ -15,7 +15,7 @@ non-terminals to a map from terminals to words.
 
 -}
 
-module SimpleGrammar.Grammar
+module Validation.TypeEquivalence.Grammar
   ( Terminal
   , NonTerminal
   , Word

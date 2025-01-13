@@ -6,7 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 Minimal (or canonical) type renaming
 -}
 
-module SimpleGrammar.Rename
+module Validation.Rename
   ( rename
   , bounded -- for testing purposes
   )

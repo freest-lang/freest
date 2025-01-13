@@ -8,7 +8,7 @@ Normalising types
 Weak reduction strategies do not reduce under lambda abstractions.
 -}
 
-module SimpleGrammar.Normalisation
+module Validation.Normalisation
   ( normalise
   , isWhnf
   )
@@ -17,8 +17,8 @@ where
 import           Syntax.Base
 import           Syntax.Kind (Kind)
 import qualified Syntax.Type                   as T
-import           Syntax.Substitution           ( subsAll )
 import           Validation.Base               ( TypeDeclMap )
+import           Validation.Substitution           ( subsAll )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S

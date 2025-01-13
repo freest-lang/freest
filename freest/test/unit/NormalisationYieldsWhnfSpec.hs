@@ -3,7 +3,7 @@ module NormalisationYieldsWhnfSpec (spec) where
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           SimpleGrammar.Normalisation   ( normalise, isWhnf )
+import           Validation.Normalisation   ( normalise, isWhnf )
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec

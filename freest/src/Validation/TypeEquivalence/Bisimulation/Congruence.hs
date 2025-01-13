@@ -6,14 +6,14 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module TODO
 -}
 
-module Bisimulation.Congruence
+module Validation.TypeEquivalence.Bisimulation.Congruence
   ( applyRules
   )
 where
 
 import           Syntax.Base
-import           SimpleGrammar.Grammar
-import           Bisimulation.State            hiding ( TState, visitedPairs )
+import           Validation.TypeEquivalence.Grammar
+import           Validation.TypeEquivalence.Bisimulation.State hiding ( TState, visitedPairs )
 
 import           Control.Monad.State           ( State, evalState, gets, modify )
 import qualified Data.Map.Strict               as Map ( empty, lookup )

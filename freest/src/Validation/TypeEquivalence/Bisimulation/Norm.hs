@@ -6,7 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module TODO
 -}
 
-module Bisimulation.Norm
+module Validation.TypeEquivalence.Bisimulation.Norm
   ( isNormed
   , norm
   , normUsingMap
@@ -16,8 +16,8 @@ module Bisimulation.Norm
 where
 
 import           Syntax.Base
-import           SimpleGrammar.Grammar
-import           Bisimulation.State
+import           Validation.TypeEquivalence.Grammar
+import           Validation.TypeEquivalence.Bisimulation.State
 
 import           Control.Monad.State
 import           Control.Applicative

@@ -7,19 +7,19 @@ This module implements FreeST's bidirectional type checking algorithm.
 -}
 module Validation.Typing where
 
-
-import SimpleGrammar.Normalisation (normalise)
 import Syntax.Base
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import Syntax.Names
 import qualified Syntax.Type as T
-import TypeEquivalence.TypeEquivalence (equivalent)
+import Validation.TypeEquivalence.TypeEquivalence (equivalent)
 import UI.Error
 import Utils
 import Validation.Base
 import qualified Validation.Expose as Expose
 import qualified Validation.Kinding as Kinding
+import Validation.Normalisation (normalise)
+import Validation.Substitution (subs, subsAll)
 
 import Control.Monad
 import Data.Bifunctor
@@ -27,10 +27,10 @@ import Data.Function (on)
 import Data.Functor
 import Data.List.Extra (snoc)
 import qualified Data.Map.Strict as Map
-import Syntax.Substitution (subs, subsAll)
 import Control.Monad.State
 import Control.Applicative ()
 import Control.Monad.Trans.Except ( catchE, throwE )
+
 
 type TypeCtx = Map.Map Variable T.Type
 type KindCtx = Map.Map Variable K.Kind

@@ -3,7 +3,7 @@ module EquivalenceInvalidSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import           Validation.Base               ( TypeDeclMap )
-import           TypeEquivalence.TypeEquivalence (equivalent)
+import           Validation.TypeEquivalence.TypeEquivalence (equivalent)
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec

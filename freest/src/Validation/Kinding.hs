@@ -19,12 +19,12 @@ import UI.Error
 import Syntax.Base
 import Syntax.Kind
 import qualified Syntax.Module as M
-import Syntax.Normalisation
-import Syntax.Substitution (subs)
 import qualified Syntax.Type as T
 import Utils
 import Validation.Base
 import qualified Validation.Expose as Expose
+import Validation.Normalisation
+import Validation.Substitution (subs)
 
 import Data.Bifunctor (first)
 import Data.Functor ((<&>))

@@ -3,8 +3,8 @@ module BoundedInvalidSpec (spec) where
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Bounded            ( bounded )
-import           SimpleGrammar.Normalisation   ( normalise )
+import           Validation.Rename            ( bounded )
+import           Validation.Normalisation   ( normalise )
 import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map

@@ -8,7 +8,7 @@ the corrected version of Lennart Augustsson's naïve substitution found in
 [lambda-n-ways repository](https://github.com/sweirich/lambda-n-ways/blob/main/lib/Lennart/Simple.hs).
 To be replaced by a more efficient alternative.
 -}
-module Syntax.Substitution
+module Validation.Substitution
   ( subs
   , subsAll
   , freeVars

@@ -6,7 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module converts a list of session types into a simple grammar
 -}
 
-module SimpleGrammar.FromType
+module Validation.TypeEquivalence.FromType
   ( fromType
   )
 where
@@ -14,9 +14,9 @@ where
 import           Syntax.Base
 import           Syntax.Kind
 import qualified Syntax.Type                   as T
-import           SimpleGrammar.Grammar         as G
-import           SimpleGrammar.Normalisation
-import           SimpleGrammar.Rename
+import           Validation.TypeEquivalence.Grammar         as G
+import           Validation.Normalisation
+import           Validation.Rename
 import           Validation.Base               ( TypeDeclMap )
 
 import           Control.Monad.State

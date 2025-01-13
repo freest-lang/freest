@@ -6,6 +6,7 @@ import qualified Syntax.Kind as K
 import qualified Syntax.Module as M
 import qualified Syntax.Type as T
 import UI.Error
+import Validation.Substitution (subs)
 
 import Control.Monad.State (State, MonadState, modify, gets, foldM, runState)
 import qualified Data.Map.Strict as Map
@@ -13,7 +14,6 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Control.Arrow ((>>>))
 import Data.Bifunctor (second)
-import Syntax.Substitution (subs)
 import qualified Data.List.NonEmpty as NE
 
 type Lambda t = ([Variable], t)

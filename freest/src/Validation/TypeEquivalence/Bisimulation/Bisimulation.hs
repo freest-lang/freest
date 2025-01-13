@@ -6,17 +6,17 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module TODO
 -}
 
-module Bisimulation.Bisimulation
+module Validation.TypeEquivalence.Bisimulation.Bisimulation
  ( bisimilar
  )
 where
 
 import           Syntax.Base
 import qualified Syntax.Type                   as T
-import           SimpleGrammar.Grammar
-import           Bisimulation.Norm
-import           Bisimulation.State
-import           Bisimulation.Congruence 
+import           Validation.TypeEquivalence.Grammar
+import           Validation.TypeEquivalence.Bisimulation.Norm
+import           Validation.TypeEquivalence.Bisimulation.State
+import           Validation.TypeEquivalence.Bisimulation.Congruence 
 
 import           Control.Monad.State
 import           Data.Foldable                 ()
