@@ -8,10 +8,12 @@ Minimal (or canonical) type renaming
 
 module SimpleGrammar.Rename
   ( rename
+  , bounded -- for testing purposes
   )
 where
 
 import           Syntax.Base
+import qualified Syntax.Kind                   as K
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 
@@ -28,3 +30,26 @@ rename = ren S.empty
 
 reachable :: Visited -> T.Type -> S.Set Identifier
 reachable = undefined
+
+-- Requires: the type is normalised,
+-- otherwise the function may diverge on non-contractive types
+bounded :: TypeDeclMap -> T.Type -> Bool
+bounded = bound S.empty
+
+bound :: Visited -> TypeDeclMap -> T.Type -> Bool
+bound v td = \case
+  -- Session types
+  T.End{} -> True
+  T.AppMessage _ K.Un _ _ -> True -- Unrestricted type - Temporary?
+  T.AppSemi _ t u -> bound v td t || bound v td u
+  T.Choice _ _ _ its -> all (bound v td . snd) its
+  -- Polymorphism
+  T.Quant _ _ _ _ t -> bound v td t
+  -- Equations
+  T.AppTName _ id ts
+    | id `S.member` v -> True
+    | otherwise -> bound (S.insert id v) td (snd (td M.! id)) -- TODO: Check
+  -- Higher-order, including AppDual
+  T.App _ t ts -> all (bound v td) (t:ts)
+  -- Functional types, Skip, Message, DName, Var
+  _ -> False

@@ -3,7 +3,7 @@ module BoundedValidSpec (spec) where
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Bounded            ( bounded )
+import           SimpleGrammar.Rename          ( bounded )
 import           SimpleGrammar.Normalisation   ( normalise )
 import           UnitSpecUtils
 
