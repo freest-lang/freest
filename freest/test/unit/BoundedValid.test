@@ -107,17 +107,17 @@ case *+{One, Two} ; !Char
 
 -- Polymorphic streams
 
--- case PolyStream
--- where
---   type PolyStream : 1S
---   type PolyStream = forall a:*T . ?a ; PolyStream
+case PolyStream
+where
+  type PolyStream : 1S
+  type PolyStream = forall a:*T . ?a ; PolyStream
 
 -- Dual of the above
 
--- case PolyStream
--- where
---   type PolyStream : 1S
---   type PolyStream = exists a:*T . !a ; PolyStream
+case PolyStream
+where
+  type PolyStream : 1S
+  type PolyStream = exists a:*T . !a ; PolyStream
 
 -- Same, with a function to consume the values
 
