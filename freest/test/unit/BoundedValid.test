@@ -104,6 +104,7 @@ case *&{One} ; !Char
 
 case *+{One, Two} ; !Char
 
+
 -- Polymorphic streams
 
 -- case PolyStream
