@@ -265,7 +265,8 @@ TypePrimary :: { T.Type }
   | '*' Polarity TypePrimary %prec MSG { T.AppMessage (spanFromTo $1 $3) K.Un  (snd $2) $3 }
   -- Choices
   | View '{' LabelTypeListComma '}'     { T.Choice (spanFromTo (fst $1) $4) K.Lin (snd $1) $3 }
-  | '*' View '{' LabelTypeListComma '}' { T.Choice (spanFromTo $1 $5)       K.Un  (snd $2) $4 }
+  | '*' View '{' LabelListComma '}'     { T.Choice (spanFromTo $1       $5) K.Un  (snd $2) 
+                                            (map (\i -> (i, T.Skip (getSpan i))) $4) }
   -- Variables and constructors
   | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
@@ -309,6 +310,10 @@ View :: { (Span, T.Polarity) }
 LabelTypeListComma :: { [(Identifier, T.Type)] }
   : UPPER_ID ':' Type ',' LabelTypeListComma { (mkIdTk $1, $3) : $5 }
   | UPPER_ID ':' Type { [(mkIdTk $1, $3)] }
+
+LabelListComma :: { [Identifier] }
+  : UPPER_ID ',' LabelListComma { mkIdTk $1 : $3 }
+  | UPPER_ID                    { [mkIdTk $1] }
 
 VarListWS :: { [Variable] }
   : {- empty -} { [] }
