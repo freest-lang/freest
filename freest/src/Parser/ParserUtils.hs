@@ -30,7 +30,7 @@ split d str =
     (a, _)   -> [a]
 
 mkVarTk :: Token -> Variable
-mkVarTk t = mkVar (getText t) t
+mkVarTk t = mkDefaultVar (getText t) t
 
 mkIdTk :: Token -> Identifier
 mkIdTk t = mkId (getText t) t
