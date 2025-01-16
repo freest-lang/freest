@@ -20,7 +20,7 @@ import qualified Syntax.Type as T
 import qualified Syntax.Kind as K
 
 import Data.Bifunctor (first, second)
-import Data.List (intersperse, union, (\\))
+import Data.List (intersperse, union)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -42,9 +42,7 @@ allVars = \case
     T.Choice _ _ _ lts -> Set.unions $ map (allVars . snd) lts
     _                  -> Set.empty
 
-newInternal :: Variable -> Set.Set Variable -> Variable
-newInternal a as = a{internal=head ([0..] \\ map internal (Set.toList as))}
-
+-- [a -> u] t
 subs :: Variable -> T.Type -> T.Type -> T.Type
 subs a u = \case 
   t@(T.Quant s p b k t')
@@ -53,7 +51,7 @@ subs a u = \case
       T.Quant s p b' k (subs b (T.Var (getSpan b') b') t')
     | otherwise -> T.Quant s p b k (subs a u t')
     where 
-      b' = newInternal b (Set.insert a fvu `Set.union` allVars t')
+      b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
       fvu = freeVars u
   t@(T.Var _ b)
     | b == a    -> u

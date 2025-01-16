@@ -26,7 +26,7 @@ rename :: TypeDeclMap -> T.Type -> T.Type
 rename td = ren S.empty
   where
     ren :: Visited -> T.Type -> T.Type
-    ren = undefined
+    ren _ = id
 
 reachable :: Visited -> T.Type -> S.Set Identifier
 reachable = undefined
@@ -54,3 +54,6 @@ bounded td = bound S.empty
       T.App _ t ts -> all (bound v) (t:ts)
       -- Functional types, Skip, Message, DName, Var
       _ -> False
+
+-- first :: S.Set Variable -> Variable -> Variable
+-- first s a = head $ filter (\n -> `S.notMember` s)) [-1, -2 ..]

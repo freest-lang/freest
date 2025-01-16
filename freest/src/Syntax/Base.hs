@@ -8,10 +8,13 @@ represent FreeST's external syntax.
 -}
 
 module Syntax.Base
-
+-- TODO: explicit export list!
 where
 
-import Data.Bifunctor
+import qualified Data.Set                      as Set
+
+import Data.List ((\\))
+import           Data.Bifunctor
 
 -- | Used to separate the syntax of different computational levels 
 -- (expressions vs. types).
@@ -130,11 +133,39 @@ instance Located Variable where
   getSpan = varSpan
   setSpan s x = x{varSpan=s}
 
--- | Constructs a variable with the first argument as its external representation
--- and the same span as the second argument. 
-mkVar :: Located a => String -> a -> Variable
-mkVar external l = Variable{varSpan=getSpan l, external, internal= -1}
-
--- | Constructs an identifier with the span of the second argument.
+-- | Construct an identifier with the span of the second argument.
 mkId :: Located a => String -> a -> Identifier
 mkId i l = Identifier (getSpan l) i
+
+-- | The first internal available for scoping.
+firstInternal :: Int
+firstInternal = 1
+
+-- | Reserved for renaming; represents an unreachable variable in a type.
+nullInternal :: Int
+nullInternal = 0
+
+-- | The default internal. Included in variables created by the parser. Scoping
+-- must eliminate all defaults.
+defaultInternal :: Int
+defaultInternal = -1
+
+-- | Construct a variable given its external representation and a Located value
+-- to extract the span from. The internal representation is the default.
+mkVar :: Located a => String -> a -> Variable
+mkVar external l = Variable{varSpan = getSpan l, external, internal = defaultInternal}
+
+-- | The first variable in a list of internals, and not in a given set of
+-- variables.
+unusedVar :: [Int] -> Variable -> Set.Set Variable -> Variable
+unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as))}
+
+-- | The first variable not in a given set of variables, counting upwards. Used
+-- in substitution, for example.
+freshVar :: Variable -> Set.Set Variable -> Variable
+freshVar = unusedVar [firstInternal..]
+
+-- | The first variable not in a given set of variables, counting downwards. Used
+-- in the renaming process, prior to translation to simple grammar.
+firstVar :: Variable -> Set.Set Variable -> Variable
+firstVar = unusedVar [defaultInternal, defaultInternal - 1 ..]

@@ -1,5 +1,4 @@
 {
-{-# LANGUAGE TupleSections #-}
 {- |
 Module      :  Parser.Parser
 Copyright   :  © The FreeST Team

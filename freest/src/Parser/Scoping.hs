@@ -77,10 +77,10 @@ deleteEVar x = Map.delete (EVar $ external x)
 
 insertKSig, insertCId, insertTId, insertDId
   :: Identifier -> ScopingCtx -> ScopingCtx
-insertKSig (Identifier _ s) = Map.insert (KSig s) (-1)
-insertCId  (Identifier _ s) = Map.insert (CId  s) (-1)
-insertTId  (Identifier _ s) = Map.insert (TId  s) (-1)
-insertDId  (Identifier _ s) = Map.insert (DId  s) (-1)
+insertKSig (Identifier _ s) = Map.insert (KSig s) defaultInternal
+insertCId  (Identifier _ s) = Map.insert (CId  s) defaultInternal
+insertTId  (Identifier _ s) = Map.insert (TId  s) defaultInternal
+insertDId  (Identifier _ s) = Map.insert (DId  s) defaultInternal
 
 type Scoping = State ScopingState
 
@@ -88,7 +88,7 @@ data ScopingState = ScopingState{counter :: Int, errors :: [Error]}
 
 runScoping :: (ScopingCtx -> a -> Scoping b) -> a -> Either [Error] b
 runScoping f x =
-  let (x',s) = runState (f Map.empty x) (ScopingState 0 [])
+  let (x',s) = runState (f Map.empty x) (ScopingState firstInternal [])
   in if null (errors s) then Right x' else Left (errors s)
 
 incCounter :: Scoping Int
