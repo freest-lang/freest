@@ -270,10 +270,12 @@ eval ctx (E.If _ ifExp thenExp elseExp) = do
   if fstToHsBool ifVal then return thenVal else return elseVal
 eval _ (E.Channel _ _) = do
   (chanL, chanR) <- chan
-  return $ VTuple [VChan chanL, VChan chanR]
--- eval _ (E.Select _ iden) = 
+  return $ VCons ("(,)") [VChan chanL, VChan chanR]
+eval ctx (E.Select _ (B.Identifier _ iden) chan) = do
+  VChan chan2 <- eval ctx chan
+  chan3 <- send (VLabel iden) chan2
+  return $ VChan chan3
 
--- TODO: Perguntar ao Gil como é que é utilizado o campo internal das Variable para saber se as posso usar desta maneira
 getVar :: (Context, Context) -> B.Variable -> Value
 getVar _ (B.Variable {B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 getVar (global, local) var = case find (\(var2, val) -> B.external var == var2) local of
