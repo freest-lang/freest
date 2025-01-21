@@ -41,6 +41,7 @@ stack test TARGET
 Where `TARGET` may be
 * `:unit`, to run the unit tests
 * `:prog`, to run the program tests
+* Nothing, to run all tests
 
 ## Test arguments
 To pass arguments to the test suite through stack, use the `--ta ARGS` (`--test-arguments ARGS`) option, where `ARGS` is a quote-enclosed string containing the command line arguments to be passed. 
