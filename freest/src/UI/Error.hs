@@ -49,32 +49,33 @@ data Error
   | ChoiceNotAllowed Span Identifier T.Type
 
 instance Located Error where
-  getSpan (LexicalError s _) = s
-  getSpan (ParseError s _) = s
-  getSpan (OutOfScope s _) = s
-  getSpan (ConsOutOfScope s _) = s
-  getSpan (TypeOutOfScope s _) = s
-  getSpan (ConflictingDefs xss) = foldr1 spanFromTo $ concat $ Map.elems xss
-  getSpan (MultipleVarDecls s _) = s
-  getSpan (MultipleConsDecls s _) = s
-  getSpan (MultipleTypeDecls s _) = s
-  getSpan (MultipleKindSigs s _) = s
-  getSpan (LacksKindSig s _) = s
-  getSpan (GivenTooManyArgs s _ _ _ _) = s
-  getSpan (LinVarsConsumedInUnFun s _ _) = s
-  getSpan (LinVarsCreatedInUnFun s _ _) = s
-  getSpan (ExposeError s _ _ _) = s
-  getSpan (UnexpectedArg s _ _ _ _) = s
-  getSpan (NonLinPat s _ _) = s
-  getSpan (KindMismatch s _ _ _) = s
-  getSpan (ProperKindMismatch s _ _) = s
-  getSpan (GivenTooManyArgsK s _ _ _) = s
-  getSpan (ExpectsTooManyArgsK s _ _) = s
-  getSpan (InvalidType s _) = s
-  getSpan (TypeMismatch s _ _ _) = s
-  getSpan (TypeCtxMismatch s _ _ _) = s
-  getSpan (ConstructorArgumentMismatch s _ _ _) = s
-  getSpan (ChoiceNotAllowed s _ _) = s
+  getSpan = \case 
+    LexicalError s _ -> s
+    ParseError s _ -> s
+    OutOfScope s _ -> s
+    ConsOutOfScope s _ -> s
+    TypeOutOfScope s _ -> s
+    ConflictingDefs xss -> foldr1 spanFromTo $ concat $ Map.elems xss
+    MultipleVarDecls s _ -> s
+    MultipleConsDecls s _ -> s
+    MultipleTypeDecls s _ -> s
+    MultipleKindSigs s _ -> s
+    LacksKindSig s _ -> s
+    GivenTooManyArgs s _ _ _ _ -> s
+    LinVarsConsumedInUnFun s _ _ -> s
+    LinVarsCreatedInUnFun s _ _ -> s
+    ExposeError s _ _ _ -> s
+    UnexpectedArg s _ _ _ _ -> s
+    NonLinPat s _ _ -> s
+    KindMismatch s _ _ _ -> s
+    ProperKindMismatch s _ _ -> s
+    GivenTooManyArgsK s _ _ _ -> s
+    ExpectsTooManyArgsK s _ _ -> s
+    InvalidType s _ -> s
+    TypeMismatch s _ _ _ -> s
+    TypeCtxMismatch s _ _ _ -> s
+    ConstructorArgumentMismatch s _ _ _ -> s
+    ChoiceNotAllowed s _ _ -> s
 
   setSpan = internalError "span not settable for Error type."
 
@@ -158,5 +159,6 @@ instance Show Error where
         ChoiceNotAllowed s i t ->
           "\n Choice `"++show i++"` is not allowed by type "++show t
 
-      showExpPat (Left  p) = "pattern `"++show p++"`"
-      showExpPat (Right e) = "expression `"++show e++"`"
+      showExpPat = \case 
+        Left  p -> "pattern `"++show p++"`"
+        Right e -> "expression `"++show e++"`"

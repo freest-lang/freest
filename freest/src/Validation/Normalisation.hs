@@ -41,11 +41,12 @@ normalise td = norm S.empty
         insert    = maybe visited (`S.insert` visited) u
 
 tNameRedex :: T.Type -> Maybe T.Type
-tNameRedex t@T.AppTName{}                               = Just t -- µ∗U
-tNameRedex (T.AppSemi _ t@T.AppTName{} _)               = Just t -- (µ∗U) ; V
-tNameRedex (T.AppDual _ t@T.AppTName{})                 = Just t -- Dual (µ∗U)
-tNameRedex (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) = Just t -- (Dual (µ∗U)) ; V
-tNameRedex _                                            = Nothing
+tNameRedex = \case 
+  t@T.AppTName{}                               -> Just t -- µ∗U
+  (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
+  (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
+  (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
+  _                                            -> Nothing
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool

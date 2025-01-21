@@ -48,13 +48,13 @@ instance Subsort Prekind where
   _       <: _       = True
 
 instance Join Prekind where
-  join Absorb Absorb   = Absorb
+  join Absorb  Absorb  = Absorb
   join Session Session = Session
-  join Absorb Session  = Session
+  join Absorb  Session = Session
   join Session Absorb  = Session  
-  join _         _     = Top
+  join _       _       = Top
 
-data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind
+data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind            
   deriving (Ord)
 
 instance Eq Kind where
@@ -71,7 +71,7 @@ instance Join Kind where
     Proper s (join m1 m2) (join pk1 pk2)
   join _ _ = internalError "join of non-proper kinds."
 
--- Abbreviations for the six proper kinds
+-- | Abbreviations for the six proper kinds
 lt, ut, ls, us, la, ua :: Span -> Kind
 lt s = Proper s Lin Top 
 ut s = Proper s Un  Top 
@@ -79,7 +79,8 @@ ls s = Proper s Lin Session
 us s = Proper s Un  Session
 la s = Proper s Lin Absorb
 ua s = Proper s Un  Absorb
--- Abbreviation for the bottom proper kind
+
+-- | Abbreviation for the bottom proper kind
 bot :: Span -> Kind
 bot = us -- (ua later)
 
@@ -88,23 +89,28 @@ lin (Proper _ m _) | m <: Lin = True
 lin _ = False
 
 instance Show Multiplicity where
-  show Lin = "1"
-  show Un  = "*"
-  show (VarM φ) = external φ
+  show = \case 
+    Lin    -> "1"
+    Un     -> "*"
+    VarM φ -> external φ
 
 instance Show Prekind where
-  show Top = "T"
-  show Session = "S"
-  show Absorb = "A"
-  show (VarPK ψ) = external ψ
+  show = \case 
+    Top     -> "T"
+    Session -> "S"
+    Absorb  -> "A"
+    VarPK ψ -> external ψ
 
 instance Show Kind where
-  show (Proper _ m pk) = show m++show pk 
-  show (Arrow _ k1 k2) = show k1++" -> "++show k2 
+  show = \case 
+    Proper _ m pk -> show m++show pk 
+    Arrow _ k1 k2 -> show k1++" -> "++show k2 
 
 instance Located Kind where
-  getSpan (Proper s _ _) = s 
-  getSpan (Arrow s _ _) = s
+  getSpan = \case 
+    Proper s _ _ -> s 
+    Arrow s _ _  -> s
   
-  setSpan s (Proper _ m pk) = Proper s m pk 
-  setSpan s (Arrow _ k1 k2) = Arrow s k1 k2 
+  setSpan s = \case
+    Proper _ m pk -> Proper s m pk 
+    Arrow _ k1 k2 -> Arrow s k1 k2 

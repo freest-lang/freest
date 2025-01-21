@@ -48,10 +48,12 @@ class Located a where
          }
 
 instance (Located a, Located b) => Located (Either a b) where 
-  getSpan (Left x) = getSpan x
-  getSpan (Right x) = getSpan x
-  setSpan s (Left x) = Left (setSpan s x)
-  setSpan s (Right x) = Right (setSpan s x)
+  getSpan = \case
+    Left  x -> getSpan x
+    Right x -> getSpan x
+  setSpan s = \case
+    Left  x -> Left (setSpan s x)
+    Right x -> Right (setSpan s x)
 
 -- | For convenience, a span's span is itself.
 instance Located Span where 
@@ -68,7 +70,6 @@ instance Show Span where
 -- positions in the source code are irrelevant.
 nullSpan :: Span
 nullSpan = Span "" (0,0) (0,0)
-
 
 -- Identifiers
 
@@ -92,7 +93,6 @@ instance Show Identifier where
 -- | Construct an identifier with the span of the second argument.
 mkId :: Located a => String -> a -> Identifier
 mkId i l = Identifier (getSpan l) i
-
 
 -- Variables
 
@@ -164,10 +164,12 @@ instance (Show a, Show b) => Show (Level a b) where
   show (TypeLevel x) = show x
 
 instance (Located a, Located b) => Located (Level a b) where 
-  getSpan (ExpLevel  x) = getSpan x
-  getSpan (TypeLevel x) = getSpan x
-  setSpan s (ExpLevel x) = ExpLevel (setSpan s x)
-  setSpan s (TypeLevel x) = TypeLevel (setSpan s x)
+  getSpan = \case 
+    ExpLevel  x -> getSpan x
+    TypeLevel x -> getSpan x
+  setSpan s = \case
+    ExpLevel  x -> ExpLevel  (setSpan s x)
+    TypeLevel x -> TypeLevel (setSpan s x)
 
 -- | Similar to Either.
 instance Bifunctor Level where

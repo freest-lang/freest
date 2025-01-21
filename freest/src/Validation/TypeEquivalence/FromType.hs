@@ -50,47 +50,49 @@ word t =
               addProductions y (M.map (++ δ) γ)
               pure [y]
 
--- Requires whnf t
+-- | Requires whnf t.
 wordWhnf :: T.Type -> TransState Word
-wordWhnf T.Skip{} = pure []
-wordWhnf t@T.End{} =
-  getLHS $ M.singleton (show t) [bottom]
-wordWhnf t | T.isConstant t =
-  getLHS $ M.singleton (show t) []
-wordWhnf (T.AppMessage _ mult p u) = do
-  w <- word u
-  getLHS $ M.fromList [
-    (show mult ++ show p ++ "1", w ++ [bottom]),
-    (show mult ++ show p ++ "2", if mult == Lin then [] else [bottom])]
-wordWhnf (T.AppSemi _ t u) =
-  liftM2 (++) (word t) (word u)
-wordWhnf (T.Choice _ m p its) = do
-  let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
-  ws <-           mapM (word                                     . snd) its
-  w <- getLHS $ M.fromList (zip terminals ws)
-  pure w
+wordWhnf = \case 
+  T.Skip{} -> 
+    pure []
+  t@T.End{} -> 
+    getLHS $ M.singleton (show t) [bottom]
+  t | T.isConstant t ->
+    getLHS $ M.singleton (show t) []
+  T.AppMessage _ mult p u -> do
+    w <- word u
+    getLHS $ M.fromList [
+      (show mult ++ show p ++ "1", w ++ [bottom]),
+      (show mult ++ show p ++ "2", if mult == Lin then [] else [bottom])]
+  T.AppSemi _ t u ->
+    liftM2 (++) (word t) (word u)
+  T.Choice _ m p its -> do
+    let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
+    ws <-           mapM (word                                     . snd) its
+    w <- getLHS $ M.fromList (zip terminals ws)
+    pure w
     where showView T.In = "&"; showView T.Out = "+"
-wordWhnf (T.AppVar _ α ts) = do -- α T1...Tm
-  ws <- mapM word ts
-  let words = map (++ [bottom]) ws
-  let terminals = map (\n -> show α ++ show n) [1..]
-  getLHS $ M.insert (show α ++ show 0) [] (M.fromList (zip terminals words))
-wordWhnf (T.AppDName _ id ts) = do -- D T1...Tm, as in α T1...Tm?
-  ws <- mapM word ts
-  let words = map (++ [bottom]) ws
-  let terminals = map (\n -> show id ++ show n) [1..]
-  getLHS $ M.insert (show id ++ show 0) [] (M.fromList (zip terminals words))
-wordWhnf (T.Quant _ p α k t) = do
-  w <- word t
-  getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
+  T.AppVar _ α ts -> do -- α T1...Tm
+    ws <- mapM word ts
+    let words = map (++ [bottom]) ws
+    let terminals = map (\n -> show α ++ show n) [1..]
+    getLHS $ M.insert (show α ++ show 0) [] (M.fromList (zip terminals words))
+  T.AppDName _ id ts -> do -- D T1...Tm, as in α T1...Tm?
+    ws <- mapM word ts
+    let words = map (++ [bottom]) ws
+    let terminals = map (\n -> show id ++ show n) [1..]
+    getLHS $ M.insert (show id ++ show 0) [] (M.fromList (zip terminals words))
+  T.Quant _ p α k t -> do
+    w <- word t
+    getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
     where showView T.In = "∀"; showView T.Out = "∃"
-wordWhnf (T.AppDual s u@T.AppVar{}) = do -- Dual(α T1...Tm)
-  w <- word u
-  let label = show $ T.Dual s
-  getLHS $ M.fromList [
-    (label ++ "1", w),
-    (label ++ "2", [])]
-wordWhnf t = error $ "wordWhnf " ++ show t
+  T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm)
+    w <- word u
+    let label = show $ T.Dual s
+    getLHS $ M.fromList [
+      (label ++ "1", w),
+      (label ++ "2", [])]
+  t -> error $ "wordWhnf " ++ show t
 
 -- The state of the translation to grammar procedure
 
@@ -143,8 +145,8 @@ getTransitions x = do
   p <- gets productions
   pure $ p M.! x
 
--- Get the LHS for given transitions; if no productions for the
--- transitions are found, add new productions and return its LHS
+-- | Get the LHS for given transitions; if no productions for the
+-- transitions are found, add new productions and return its LHS.
 getLHS :: Transitions -> TransState Word
 getLHS ts = do
   ps <- gets productions
@@ -155,39 +157,37 @@ getLHS ts = do
       pure [y]
     Just x -> pure [x]
 
--- Lookup a key for a value in the map. Probably O(n)
+-- | Lookup a key for a value in the map. Probably O(n).
 reverseLookup :: Eq a => Ord k => a -> M.Map k a -> Maybe k
 reverseLookup a =
     M.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
 
--- Fat terminal types can be compared for syntactic equality
+-- | Fat terminal types can be compared for syntactic equality.
 fatTerminal :: T.Type -> Maybe T.Type
--- Functional Types
-fatTerminal t@T.Int{} = Just t
-fatTerminal t@T.Float{} = Just t
-fatTerminal t@T.Char{} = Just t
-fatTerminal t@T.Arrow{} = Just t
--- Session Types - I believe these cannot be fat terminals
--- fatTerminal t@T.End{} = Just t
--- fatTerminal t@T.Message{} = Just t
--- fatTerminal (T.Choice s m p its) =
---   Just (T.Choice s m p) <*> mapM fat its
---   where fat (id, t) = case fatTerminal t of
---           Just u -> Just (id, u)
---           Nothing -> Nothing
--- fatTerminal t@T.Dual{} = Just t
--- Polymorphism
-fatTerminal (T.Quant s p a k t) =
-  Just (T.Quant s p a k) <*> fatTerminal t
--- Equations
-fatTerminal t@T.DName{} = Just t
--- Higher-order
-fatTerminal t@T.Var{} = Just t
-fatTerminal (T.App s t ts) =
-  Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts
--- otherwise
-fatTerminal _ = Nothing
-
+fatTerminal = \case 
+  -- Functional Types
+  t@T.Int{}   -> Just t
+  t@T.Float{} -> Just t
+  t@T.Char{}  -> Just t
+  t@T.Arrow{} -> Just t
+  -- Session Types - I believe these cannot be fat terminals
+  -- t@T.End{} -> Just t
+  -- t@T.Dual{} -> Just t
+  -- t@T.Message{} -> Just t
+  -- T.Choice s m p its ->
+  --   Just (T.Choice s m p) <*> mapM fat its
+  --   where fat (id, t) = case fatTerminal t of
+  --           Just u -> Just (id, u)
+  --           Nothing -> Nothing
+  -- Polymorphism
+  T.Quant s p a k t -> Just (T.Quant s p a k) <*> fatTerminal t
+  -- Higher-order
+  t@T.Var{}      -> Just t
+  T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts
+  -- Equations
+  t@T.DName{} -> Just t
+  -- Otherwise
+  _ -> Nothing
 {-
 
 toGrammar ts = {- trace (show ts ++ "\n" ++ show grammar) -} grammar

@@ -123,7 +123,6 @@ synth kctx tctx = \case
             Just t' -> return (t', tctx')
             Nothing -> throwE (ChoiceNotAllowed s i t)
   where
-
     checkPat :: KindCtx -> T.Type -> E.Pat -> Validation TypeCtx
     checkPat kctx t = \case
         p@(E.IntPat    s _)  -> do 

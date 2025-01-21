@@ -62,7 +62,7 @@ kindTypeDecl (i, (as, t)) = do
     checkTypeDecl k ctx (a : as) (Arrow s k1 k2) =
       checkTypeDecl k (Map.insert a k1 ctx) as k2
 
-kindDataDecl :: (Identifier, ([Variable], T.ConsDeclList)) -> Validation ()
+kindDataDecl :: (Identifier, ([Variable], M.ConsDeclList)) -> Validation ()
 kindDataDecl (i, (as, t)) = do
   k <- lookupKind i
   checkDataDecl k id Map.empty as k
@@ -75,7 +75,7 @@ kindDataDecl (i, (as, t)) = do
     checkDataDecl k f ctx (a : as) (Arrow s k1 k2) =
       checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) as k2
 
-    checkConsDecls :: Kind -> (Kind -> Kind) -> KindingCtx -> T.ConsDeclList -> Validation ()
+    checkConsDecls :: Kind -> (Kind -> Kind) -> KindingCtx -> M.ConsDeclList -> Validation ()
     checkConsDecls k f ctx cds = do
       m <- synthDataMult ctx cds
       let k' = f (Proper (getSpan i) m Top)

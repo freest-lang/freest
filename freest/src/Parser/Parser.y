@@ -333,10 +333,11 @@ ExpPrimary :: { E.Exp }
   -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
   | LOWER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
   | UPPER_ID    { E.Cons   (getSpan $1) (mkIdTk $1) }
-  | '(' ')'     { E.Tuple  (spanFromTo $1 $2) [] }
+  | '(' ')'     -- { E.Tuple  (spanFromTo $1 $2) [] }
+                {let s = spanFromTo $1 $2 in E.Cons s (mkTupleCons 0 s)}
   | '(' Commas ')' { let s = spanFromTo $1 $3 in E.Cons s (mkTupleCons $2 s) }
-  | '(' Exp ',' ExpListComma ')' {E.Tuple (spanFromTo $1 $5) ($2 : $4) }      -- with tuples in the Exp AST
-                              -- { tupleAppExp (spanFromTo $1 $5) ($2 : $4) } -- using tuple constructors (,+)
+  | '(' Exp ',' ExpListComma ')' -- {E.Tuple (spanFromTo $1 $5) ($2 : $4) }   -- with tuples in the Exp AST
+                                 { tupleAppExp (spanFromTo $1 $5) ($2 : $4) } -- using tuple constructors (,+)
   -- | TupleSection { ... }                                                   -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }

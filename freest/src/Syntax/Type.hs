@@ -9,10 +9,6 @@ polymorphic context-free session types.
 module Syntax.Type
   ( Polarity(..)
   , Type(.., Forall, Exists, AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
-  , DataDeclList
-  , ConsDeclList
-  , TypeDeclList
-  , IdDeclList
   , smartApp
   , variadicQuant
   , Dual(..)
@@ -49,44 +45,20 @@ data Type
   | Arrow Span K.Multiplicity
   -- Session types
   | Skip Span
-  | End Span Polarity
   | Semi Span
+  | Dual Span
+  | End Span Polarity
   | Message Span K.Multiplicity Polarity
   | Choice Span K.Multiplicity Polarity [(Identifier, Type)]
-  | Dual Span
   -- Polymorphism
   | Quant Span Polarity Variable K.Kind Type
-  -- Equations
-  | TName Span Identifier
-  | DName Span Identifier
   -- Higher-order
   | Var Span Variable
   | App Span Type [Type]
+  -- Equations
+  | TName Span Identifier
+  | DName Span Identifier
   deriving Ord
-
--- Datatype constructor declaration list, e.g.,
---   Leaf | Node (Tree a) a (Tree a)
--- represented as
---   [ (Leaf, [])
---   , (Node , [Tree a, a, Tree a])
---   ]
-type ConsDeclList = [(Identifier, [Type])]
--- Datatype constructor declaration list, e.g.,
---   data Tree a = Leaf | Node (Tree a) a (Tree a)
--- In Fµω:
---   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
--- represented as
---   (Tree, ([a], <see above>))
-type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
--- Type (type) constructor declaration list, e.g.
---   type Stream a = !a ; Stream a
--- In Fµω:
---   type Stream = λa. µs. !a ; s a
--- represented as
---   (Stream, ([a], (!a ; Stream a))
-type TypeDeclList = [(Identifier, ([Variable], Type))]
--- Identifier declaration list, TODO
-type IdDeclList   = [(Identifier, K.Kind)]
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
@@ -121,7 +93,7 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
                                   t                    -> t
                            -> App s (TName _ i) ts)
   where AppTName _ i [] = TName (getSpan i) i
-        AppTName s i ts = App s (TName (getSpan i) i) ts      
+        AppTName s i ts = App s (TName (getSpan i) i) ts  
 
 pattern AppDName :: Span -> Identifier -> [Type] -> Type
 pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
@@ -149,59 +121,55 @@ smartApp s (App _ t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
 
 isConstant :: Type -> Bool
-isConstant Choice{} = False
-isConstant Quant{} = False
-isConstant TName{} = False
--- isConstant DName{} = False -- Does not reduce
-isConstant Var{} = False
-isConstant App{} = False
-isConstant _ = True
+isConstant = \case 
+  Choice{} -> False
+  Quant{}  -> False
+  TName{}  -> False
+  -- DName{} -> False -- Does not reduce
+  Var{}    -> False
+  App{}    -> False
+  _        -> True
 
-isSkip :: Type -> Bool
-isSkip Skip{} = True
-isSkip _ = False
-
-isSemi :: Type -> Bool
-isSemi Semi{} = True
-isSemi _ = False
-
-isDual :: Type -> Bool
-isDual Dual{} = True
-isDual _ = False
-
-isTName :: Type -> Bool
-isTName TName{} = True
-isTName _ = False
+isSkip, isSemi, isDual, isTName :: Type -> Bool
+isSkip  = \case Skip{}  -> True; _ -> False
+isSemi  = \case Semi{}  -> True; _ -> False
+isDual  = \case Dual{}  -> True; _ -> False
+isTName = \case TName{} -> True; _ -> False
 
 instance Show Polarity where
-  show In  = "?"
-  show Out = "!"
+  show = \case In -> "?"; Out -> "!"
 
 instance Show Type where
   show = \case 
-    Int{}             -> "Int"
-    Float{}           -> "Float"
-    Char{}            -> "Char"
-    Arrow _ m         -> "("++show m++"->)"
-    Message _ K.Un p  ->  "(*"++ show p++")"
-    Message _ _ p     -> "("++show p++")"
-    Choice  _ m p lts -> showMult m++showView p++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
-      where showMult K.Lin = ""
-            showMult K.Un  = "*"
-            showView In    = "&"
-            showView Out   = "+"
-    End _ In          -> "Wait"
-    End _ Out         -> "Close"
+   -- Functional types
+    Int{}     -> "Int"
+    Float{}   -> "Float"
+    Char{}    -> "Char"
+    Arrow _ m -> "("++show m++"->)"
+    -- Session types
     Skip{}            -> "Skip"
     Semi{}            -> "(;)"
     Dual{}            -> "Dual"
-    Var _ a           -> show a
-    Quant _ p a k t   -> "("++showQuant p++" "++show a++":"++show k++". "++show t++")"
+    End _ In          -> "Wait"
+    End _ Out         -> "Close"
+    Message _ K.Un p  -> "(*"++ show p++")"
+    Message _ _ p     -> "("++show p++")"
+    Choice  _ m p lts -> 
+      showMult m ++ showView p 
+      ++ "{" ++ intercalate "," (map (\(l, t) -> show l ++ ": " ++ show t) lts)
+      ++ "}"
+      where showMult = \case K.Lin -> "" ; K.Un -> "*"
+            showView = \case In    -> "&"; Out  -> "+"
+    -- Polymorphism
+    Quant _ p a k t -> "(" ++showQuant p++" "++show a++":"++show k++". "++show t++")"
       where showQuant In  = "forall"
             showQuant Out = "exists"
-    App _ t ts        -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
-    TName _ i         -> show i
-    DName _ i         -> show i
+    -- Higher-order
+    Var _ a    -> show a
+    App _ t ts -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+    -- Equations
+    TName _ i -> show i
+    DName _ i -> show i
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -211,29 +179,29 @@ instance Eq Type where
   
 instance Congruence Type where
   -- Functional types
-  congruent _ Int{} Int{} = True
+  congruent _ Int{}   Int{}   = True
   congruent _ Float{} Float{} = True
-  congruent _ Char{} Char{} = True
+  congruent _ Char{}  Char{}  = True
   congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
   -- Session types
   congruent _ Skip{} Skip{} = True
-  congruent _ (End _ p1) (End _ p2) = p1 == p2
   congruent _ Semi{} Semi{} = True
+  congruent _ Dual{} Dual{} = True
+  congruent _ (End _ p1) (End _ p2) = p1 == p2
   congruent m (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
   congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) = 
     m1 == m2 && p1 == p2 && congruent m lts1 lts2
-  congruent _ Dual{} Dual{} = True
   -- Polymorphism
   congruent m (Quant _ p1 a k1 t) (Quant _ p2 b k2 u) = 
     p1 == p2 && a == b && k1 == k2 && congruent m t u
-  -- Equations
-  congruent _ (TName _ i1) (TName _ i2) = i1 == i2
-  congruent _ (DName _ i1) (DName _ i2) = i1 == i2
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
     v1 == v2 ||              -- free variables
     Just v2 == M.lookup v1 m -- bound variables
   congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
+  -- Equations
+  congruent _ (TName _ i1) (TName _ i2) = i1 == i2
+  congruent _ (DName _ i1) (DName _ i2) = i1 == i2
   congruent _ _ _ = False
 
 instance Congruence [Type] where
@@ -244,37 +212,40 @@ instance Congruence [Type] where
 instance Congruence [(Identifier, Type)] where
   congruent m m1 m2 =
     length m1 == length m2 &&
-    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2) (zip (sort m1) (sort m2))
+    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2) 
+        (zip (sort m1) (sort m2))
 
 instance Located Type where
-  getSpan (Int s)           = s
-  getSpan (Float s)         = s
-  getSpan (Char s)          = s
-  getSpan (Arrow s _)       = s
-  getSpan (Message s _ _)   = s
-  getSpan (Choice  s _ _ _) = s
-  getSpan (End s _)         = s
-  getSpan (Skip s)          = s
-  getSpan (Semi s)          = s
-  getSpan (Dual s)          = s
-  getSpan (Var s _)         = s
-  getSpan (Quant s _ _ _ _) = s
-  getSpan (App s _ _)       = s
-  getSpan (TName s _)       = s
-  getSpan (DName s _)       = s
+  getSpan = \case 
+    Int s           -> s
+    Float s         -> s
+    Char s          -> s
+    Arrow s _       -> s
+    Message s _ _   -> s
+    Choice  s _ _ _ -> s
+    End s _         -> s
+    Skip s          -> s
+    Semi s          -> s
+    Dual s          -> s
+    Var s _         -> s
+    Quant s _ _ _ _ -> s
+    App s _ _       -> s
+    TName s _       -> s
+    DName s _       -> s
 
-  setSpan s (Int _)             = Int s
-  setSpan s (Float _)           = Float s
-  setSpan s (Char _)            = Char s
-  setSpan s (Arrow _ m)         = Arrow s m
-  setSpan s (Message _ m p)     = Message s m p
-  setSpan s (Choice  _ m p lts) = Choice s m p lts
-  setSpan s (End _ p)           = End s p
-  setSpan s (Skip _)            = Skip s
-  setSpan s (Semi _)            = Semi s
-  setSpan s (Dual _)            = Dual s
-  setSpan s (Var _ a)           = Var s a
-  setSpan s (Quant _ p a k t)   = Quant s p a k t
-  setSpan s (App _ t1 t2)       = App s t1 t2
-  setSpan s (TName _ n)         = TName s n
-  setSpan s (DName _ n)         = DName s n
+  setSpan s = \case
+    Int _             -> Int s
+    Float _           -> Float s
+    Char _            -> Char s
+    Arrow _ m         -> Arrow s m
+    Message _ m p     -> Message s m p
+    Choice  _ m p lts -> Choice s m p lts
+    End _ p           -> End s p
+    Skip _            -> Skip s
+    Semi _            -> Semi s
+    Dual _            -> Dual s
+    Var _ a           -> Var s a
+    Quant _ p a k t   -> Quant s p a k t
+    App _ t1 t2       -> App s t1 t2
+    TName _ n         -> TName s n
+    DName _ n         -> DName s n
