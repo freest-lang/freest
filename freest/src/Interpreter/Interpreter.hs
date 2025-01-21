@@ -24,7 +24,7 @@ data Value = VInt Int
             | VChar Char
             | VString String
             | VCons String [Value]
-            | VTuple [Value]
+            -- | VTuple [Value]
             | VFun [([E.Pat], E.RHS)]
             | VClosure [E.Pat] E.Exp Context
             | VBuiltin (Value -> Value)
@@ -41,7 +41,7 @@ instance Show Value where
   show (VChar c) = show c
   show (VString str) = show str
   show (VCons str vals) = str ++ " " ++ unwords (map show vals)
-  show (VTuple tups) = "(" ++ showTups tups ++ ")"
+  -- show (VTuple tups) = "(" ++ showTups tups ++ ")"
   show (VFun _) = "<fun>"
   show (VClosure _ _ _) = "closure>"
   show (VBuiltin _) = "<builtin>"
@@ -84,7 +84,7 @@ close (VChan c) = do
 
 builtins :: [(String , Value)]
 builtins = [
-  ("receive", VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VTuple [val, VChan c])),
+  ("receive", VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c])),
   ("send", VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c))),
   ("wait", VBuiltin wait),
   ("close", VBuiltin (VIO . close)),
