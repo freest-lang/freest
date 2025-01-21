@@ -9,14 +9,13 @@ inspired by [Amélia Liao's tutorial](https://amelia.how/posts/parsing-layout.ht
 -}
 module Parser.Lexer where
 
-import Parser.Token 
 import Parser.LexerUtils
+import Parser.Token 
 import Syntax.Base
-import IO.Error
+import UI.Error
 
 import Control.Monad.State
 import Control.Monad.Except
-import Debug.Trace
 }
 
 %encoding "latin1"
@@ -61,6 +60,7 @@ $upper = [ A-Z ]
 <0> "then"   { token TkThen }
 <0> "else"   { token TkElse }
 <0> "forall" { token TkForall }
+<0> "exists" { token TkForall }
 <0> "rec"    { token TkRec }
 <0> "channel"{ token TkChannel }
 <0> "select" { token TkSelect }
@@ -112,7 +112,6 @@ $upper = [ A-Z ]
 <0> "Int"   { token TkIntType }
 <0> "Float" { token TkFloatType }
 <0> "Char"  { token TkCharType }
-<0> "String"{ token TkStringType }
 <0> "Dual"  { token TkDualType }
 <0> "Skip"  { token TkSkipType }
 <0> "Close" { token TkCloseType }
@@ -133,7 +132,7 @@ $upper = [ A-Z ]
 <0> @intLit    { emit TkIntLit }
 <0> @floatLit  { emit TkFloatLit }
 <0> @charLit   { emit TkCharLit }
-<0> @stringLit { emit TkStringLit }
+-- <0> @stringLit { emit TkStringLit }
 
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }

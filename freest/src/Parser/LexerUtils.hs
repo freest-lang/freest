@@ -14,15 +14,14 @@ module Parser.LexerUtils where
 
 import Parser.Token 
 import Syntax.Base 
-import IO.Error
+import UI.Error
 
 
 import Data.Word (Word8)
 import Data.List (uncons)
+import qualified Data.List.NonEmpty as NE
 import Data.Char (ord)
 import Control.Monad.State (gets, modify', MonadState, StateT(..))
-import Data.List.NonEmpty (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty as NE
 import Control.Monad.Except (MonadError)
 
 data AlexInput
@@ -66,7 +65,7 @@ data Layout = ExplicitLayout | LayoutColumn Int
 
 data LexerState
   = LS { lexerInput      :: {-# UNPACK #-} !AlexInput
-       , lexerStartCodes :: {-# UNPACK #-} !(NonEmpty Int)
+       , lexerStartCodes :: {-# UNPACK #-} !(NE.NonEmpty Int)
        , lexerLayout     :: [Layout]
        , counter         :: Int
        }
@@ -84,8 +83,8 @@ popStartCode :: Lexer ()
 popStartCode = modify' $ \st ->
   st { lexerStartCodes =
          case lexerStartCodes st of
-           _ :| [] -> 0 :| []
-           _ :| (x:xs) -> x :| xs
+           _ NE.:| [] -> 0 NE.:| []
+           _ NE.:| (x:xs) -> x NE.:| xs
      }
 
 layout :: Lexer (Maybe Layout)
@@ -108,7 +107,7 @@ incCounter = modify' (\st -> st{counter = succ $ counter st}) >> gets counter
 
 initState :: FilePath -> String -> LexerState
 initState f s = LS { lexerInput      = Input 1 1 '\n' s f
-                   , lexerStartCodes = 0 :| []
+                   , lexerStartCodes = 0 NE.:| []
                    , lexerLayout     = []
                    , counter         = 0
                    }

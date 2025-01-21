@@ -18,13 +18,11 @@ data Token
   | TkUpperId Span String 
   | TkQualifiedUpperId Span String
   | TkWildcard Span String
-
   -- Literals 
   | TkIntLit Span String 
   | TkFloatLit Span String 
   | TkCharLit Span String 
   | TkStringLit Span String
-
   -- Keywords
   | TkModule Span | TkWhere Span | TkImport Span
   | TkData Span | TkType Span
@@ -32,8 +30,7 @@ data Token
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
   | TkSelect Span | TkChannel Span
-  | TkForall Span | TkRec Span
-
+  | TkForall Span | TkExists Span | TkRec Span
   -- Punctuation
   | TkOpen Span | TkPipe Span | TkClose Span
   | TkLParen Span | TkRParen Span | TkLSquare Span | TkRSquare Span
@@ -41,7 +38,6 @@ data Token
   | TkBackslash Span
   | TkArrow Span | TkUnArrow Span | TkLinArrow Span
   | TkDot Span | TkAt Span | TkComma Span
-
   -- Operators
   | TkSemi Span | TkColonColon Span
   | TkDollar Span | TkPipeGT Span
@@ -52,16 +48,13 @@ data Token
   | TkCaret Span | TkCaretCaret Span
   | TkCmp Span String
   | TkAmpAmp Span | TkPipePipe Span
-
   -- Layout punctuation
   | TkVOpen Span | TkVPipe Span | TkVClose Span
   | TkEOF Span
-
   -- Types
-  | TkIntType Span | TkFloatType Span | TkCharType Span | TkStringType Span
+  | TkIntType Span | TkFloatType Span | TkCharType Span
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
-
   -- Kinds 
   | TkLinTopKind Span | TkUnTopKind Span
   | TkLinSessionKind Span | TkUnSessionKind Span
@@ -71,193 +64,199 @@ data Token
 
 
 -- Identifiers
-getText (TkLowerId _ s) = s
-getText (TkUpperId _ s) = s
-getText (TkQualifiedUpperId _ s) = s
-getText (TkWildcard _ s) = s
-getText (TkIntLit _ s) = s
-getText (TkFloatLit _ s) = s
-getText (TkCharLit _ s) = s
-getText (TkStringLit _ s) = s
-getText (TkCmp _ s) = s
-getText t = error "Parser.Token.getText: no text"
+getText = \case
+  -- Identifiers
+  TkLowerId _ s -> s
+  TkUpperId _ s -> s
+  TkQualifiedUpperId _ s -> s
+  TkWildcard _ s -> s
+  -- Literals 
+  TkIntLit _ s -> s
+  TkFloatLit _ s -> s
+  TkCharLit _ s -> s
+  TkStringLit _ s -> s
+  TkCmp _ s -> s
+  -- Keywords
+  _ -> error "Parser.Token.getText: no text"
 
 instance Located Token where
   getSpan :: Token -> Span
-  -- Identifiers
-  getSpan (TkLowerId s _) = s
-  getSpan (TkUpperId s _) = s
-  getSpan (TkQualifiedUpperId s _) = s
-  getSpan (TkWildcard s _) = s
-  -- Literals
-  getSpan (TkIntLit s _) = s
-  getSpan (TkFloatLit s _) = s
-  getSpan (TkCharLit s _) = s
-  getSpan (TkStringLit s _) = s
-  -- Keywords
-  getSpan (TkModule s) = s
-  getSpan (TkWhere s) = s
-  getSpan (TkImport s) = s
-  getSpan (TkData s) = s
-  getSpan (TkType s) = s
-  getSpan (TkLet s) = s
-  getSpan (TkIn s) = s
-  getSpan (TkCase s) = s
-  getSpan (TkOf s) = s
-  getSpan (TkIf s) = s
-  getSpan (TkThen s) = s
-  getSpan (TkElse s) = s
-  getSpan (TkSelect s) = s
-  getSpan (TkForall s) = s
-  getSpan (TkRec s) = s
-  -- Punctuation
-  getSpan (TkOpen s) = s
-  getSpan (TkPipe s) = s
-  getSpan (TkClose s) = s
-  getSpan (TkLParen s) = s
-  getSpan (TkRParen s) = s
-  getSpan (TkLSquare s) = s
-  getSpan (TkRSquare s) = s
-  getSpan (TkEqual s) = s
-  getSpan (TkColon s) = s
-  getSpan (TkBackslash s) = s
-  getSpan (TkArrow s) = s
-  getSpan (TkUnArrow s) = s
-  getSpan (TkLinArrow s) = s
-  getSpan (TkDot s) = s
-  getSpan (TkAt s) = s
-  getSpan (TkComma s) = s
-  -- Operators
-  getSpan (TkSemi s) = s
-  getSpan (TkColonColon s) = s
-  getSpan (TkDollar s) = s
-  getSpan (TkPipeGT s) = s
-  getSpan (TkPlus s) = s
-  getSpan (TkPlusPlus s) = s
-  getSpan (TkPlusDot s) = s
-  getSpan (TkMinus s) = s
-  getSpan (TkMinusDot s) = s
-  getSpan (TkStar s) = s
-  getSpan (TkStarStar s) = s 
-  getSpan (TkStarDot s) = s
-  getSpan (TkSlash s) = s
-  getSpan (TkSlashDot s) = s
-  getSpan (TkCaret s) = s
-  getSpan (TkCaretCaret s) = s
-  getSpan (TkCmp s _) = s
-  getSpan (TkAmpAmp s) = s
-  getSpan (TkPipePipe s) = s
-  -- Layout punctuation
-  getSpan (TkVOpen s) = s
-  getSpan (TkVPipe s) = s
-  getSpan (TkVClose s) = s
-  getSpan (TkEOF s) = s
-  -- Types
-  getSpan (TkIntType s) = s
-  getSpan (TkFloatType s) = s
-  getSpan (TkCharType s) = s
-  getSpan (TkStringType s) = s
-  getSpan (TkBang s) = s
-  getSpan (TkQuestion s) = s
-  getSpan (TkAmp s) = s
-  getSpan (TkSkipType s) = s
-  getSpan (TkCloseType s) = s
-  getSpan (TkWaitType s) = s
-  getSpan (TkDualType s) = s
-  -- Kinds
-  getSpan (TkLinTopKind s) = s
-  getSpan (TkUnTopKind s) = s
-  getSpan (TkLinSessionKind s) = s
-  getSpan (TkUnSessionKind s) = s
-  getSpan (TkLinAbsorbKind s) = s
-  getSpan (TkUnAbsorbKind s) = s
+  getSpan = \case 
+    -- Identifiers
+    TkLowerId s _ -> s
+    TkUpperId s _ -> s
+    TkQualifiedUpperId s _ -> s
+    TkWildcard s _ -> s
+    -- Literals
+    TkIntLit s _ -> s
+    TkFloatLit s _ -> s
+    TkCharLit s _ -> s
+    TkStringLit s _ -> s
+    -- Keywords
+    TkModule s -> s
+    TkWhere s -> s
+    TkImport s -> s
+    TkData s -> s
+    TkType s -> s
+    TkLet s -> s
+    TkIn s -> s
+    TkCase s -> s
+    TkOf s -> s
+    TkIf s -> s
+    TkThen s -> s
+    TkElse s -> s
+    TkSelect s -> s
+    TkForall s -> s
+    TkRec s -> s
+    TkChannel s -> s
+    -- Punctuation
+    TkOpen s -> s
+    TkPipe s -> s
+    TkClose s -> s
+    TkLParen s -> s
+    TkRParen s -> s
+    TkLSquare s -> s
+    TkRSquare s -> s
+    TkEqual s -> s
+    TkColon s -> s
+    TkBackslash s -> s
+    TkArrow s -> s
+    TkUnArrow s -> s
+    TkLinArrow s -> s
+    TkDot s -> s
+    TkAt s -> s
+    TkComma s -> s
+    -- Operators
+    TkSemi s -> s
+    TkColonColon s -> s
+    TkDollar s -> s
+    TkPipeGT s -> s
+    TkPlus s -> s
+    TkPlusPlus s -> s
+    TkPlusDot s -> s
+    TkMinus s -> s
+    TkMinusDot s -> s
+    TkStar s -> s
+    TkStarStar s -> s 
+    TkStarDot s -> s
+    TkSlash s -> s
+    TkSlashDot s -> s
+    TkCaret s -> s
+    TkCaretCaret s -> s
+    TkCmp s _ -> s
+    TkAmpAmp s -> s
+    TkPipePipe s -> s
+    -- Layout punctuation
+    TkVOpen s -> s
+    TkVPipe s -> s
+    TkVClose s -> s
+    TkEOF s -> s
+    -- Types
+    TkIntType s -> s
+    TkFloatType s -> s
+    TkCharType s -> s
+    TkBang s -> s
+    TkQuestion s -> s
+    TkAmp s -> s
+    TkSkipType s -> s
+    TkCloseType s -> s
+    TkWaitType s -> s
+    TkDualType s -> s
+    -- Kinds
+    TkLinTopKind s -> s
+    TkUnTopKind s -> s
+    TkLinSessionKind s -> s
+    TkUnSessionKind s -> s
+    TkLinAbsorbKind s -> s
+    TkUnAbsorbKind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
-  setSpan s (TkLowerId _ i) = TkLowerId s i
-  setSpan s (TkUpperId _ i) = TkUpperId s i
-  setSpan s (TkQualifiedUpperId _ i) = TkQualifiedUpperId s i
-  setSpan s (TkWildcard _ i) = TkWildcard s i
-  -- Literals
-  setSpan s (TkIntLit _ i) = TkIntLit s i
-  setSpan s (TkFloatLit _ f) = TkFloatLit s f
-  setSpan s (TkCharLit _ c) = TkCharLit s c
-  setSpan s (TkStringLit _ s') = TkStringLit s s'
-  -- Keywords
-  setSpan s (TkModule _) = TkModule s
-  setSpan s (TkWhere _) = TkWhere s
-  setSpan s (TkImport _) = TkImport s
-  setSpan s (TkData _) = TkData s
-  setSpan s (TkType _) = TkType s
-  setSpan s (TkLet _) = TkLet s
-  setSpan s (TkIn _) = TkIn s
-  setSpan s (TkCase _) = TkCase s
-  setSpan s (TkOf _) = TkOf s
-  setSpan s (TkIf _) = TkIf s
-  setSpan s (TkThen _) = TkThen s
-  setSpan s (TkElse _) = TkElse s
-  setSpan s (TkSelect _) = TkSelect s
-  setSpan s (TkForall _) = TkForall s
-  setSpan s (TkRec _) = TkRec s
-  -- Punctuation
-  setSpan s (TkOpen _) = TkOpen s
-  setSpan s (TkPipe _) = TkPipe s
-  setSpan s (TkClose _) = TkClose s
-  setSpan s (TkLParen _) = TkLParen s
-  setSpan s (TkRParen _) = TkRParen s
-  setSpan s (TkLSquare _) = TkLSquare s
-  setSpan s (TkRSquare _) = TkRSquare s
-  setSpan s (TkEqual _) = TkEqual s
-  setSpan s (TkColon _) = TkColon s
-  setSpan s (TkBackslash _) = TkBackslash s
-  setSpan s (TkArrow _) = TkArrow s
-  setSpan s (TkUnArrow _) = TkUnArrow s
-  setSpan s (TkLinArrow _) = TkLinArrow s
-  setSpan s (TkDot _) = TkDot s
-  setSpan s (TkAt _) = TkAt s
-  setSpan s (TkComma _) = TkComma s
-  -- Operators
-  setSpan s (TkSemi _) = TkSemi s
-  setSpan s (TkColonColon _) = TkColonColon s
-  setSpan s (TkDollar _) = TkDollar s
-  setSpan s (TkPipeGT _) = TkPipeGT s
-  setSpan s (TkPlus _) = TkPlus s
-  setSpan s (TkPlusPlus _) = TkPlusPlus s
-  setSpan s (TkPlusDot _) = TkPlusDot s
-  setSpan s (TkMinus _) = TkMinus s
-  setSpan s (TkMinusDot _) = TkMinusDot s
-  setSpan s (TkStar _) = TkStar s
-  setSpan s (TkStarStar _) = TkStarStar s
-  setSpan s (TkStarDot _) = TkStarDot s
-  setSpan s (TkSlash _) = TkSlash s
-  setSpan s (TkSlashDot _) = TkSlashDot s
-  setSpan s (TkCaret _) = TkCaret s
-  setSpan s (TkCaretCaret _) = TkCaretCaret s
-  setSpan s (TkCmp _ c) = TkCmp s c
-  setSpan s (TkAmpAmp _) = TkAmpAmp s
-  setSpan s (TkPipePipe _) = TkPipePipe s
-  -- Layout punctuation
-  setSpan s (TkVOpen _) = TkVOpen s
-  setSpan s (TkVPipe _) = TkVPipe s
-  setSpan s (TkVClose _) = TkVClose s
-  setSpan s (TkEOF _) = TkEOF s
-  -- Types
-  setSpan s (TkIntType _) = TkIntType s
-  setSpan s (TkFloatType _) = TkFloatType s
-  setSpan s (TkCharType _) = TkCharType s
-  setSpan s (TkStringType _) = TkStringType s
-  setSpan s (TkBang _) = TkBang s
-  setSpan s (TkQuestion _) = TkQuestion s
-  setSpan s (TkAmp _) = TkAmp s
-  setSpan s (TkSkipType _) = TkSkipType s
-  setSpan s (TkDualType _) = TkDualType s
-  setSpan s (TkCloseType _) = TkCloseType s
-  setSpan s (TkWaitType _) = TkWaitType s
-  -- Kinds
-  setSpan s (TkLinTopKind _) = TkLinTopKind s
-  setSpan s (TkUnTopKind _) = TkUnTopKind s
-  setSpan s (TkLinSessionKind _) = TkLinSessionKind s
-  setSpan s (TkUnSessionKind _) = TkUnSessionKind s
-  setSpan s (TkLinAbsorbKind _) = TkLinAbsorbKind s
-  setSpan s (TkUnAbsorbKind _) = TkUnAbsorbKind s
+  setSpan s  = \case
+    TkLowerId _ i -> TkLowerId s i
+    TkUpperId _ i -> TkUpperId s i
+    TkQualifiedUpperId _ i -> TkQualifiedUpperId s i
+    TkWildcard _ i -> TkWildcard s i
+    -- Literals
+    TkIntLit _ i -> TkIntLit s i
+    TkFloatLit _ f -> TkFloatLit s f
+    TkCharLit _ c -> TkCharLit s c
+    TkStringLit _ s' -> TkStringLit s s'
+    -- Keywords
+    TkModule _ -> TkModule s
+    TkWhere _ -> TkWhere s
+    TkImport _ -> TkImport s
+    TkData _ -> TkData s
+    TkType _ -> TkType s
+    TkLet _ -> TkLet s
+    TkIn _ -> TkIn s
+    TkCase _ -> TkCase s
+    TkOf _ -> TkOf s
+    TkIf _ -> TkIf s
+    TkThen _ -> TkThen s
+    TkElse _ -> TkElse s
+    TkSelect _ -> TkSelect s
+    TkForall _ -> TkForall s
+    TkRec _ -> TkRec s
+    TkChannel _ -> TkChannel s
+    -- Punctuation
+    TkOpen _ -> TkOpen s
+    TkPipe _ -> TkPipe s
+    TkClose _ -> TkClose s
+    TkLParen _ -> TkLParen s
+    TkRParen _ -> TkRParen s
+    TkLSquare _ -> TkLSquare s
+    TkRSquare _ -> TkRSquare s
+    TkEqual _ -> TkEqual s
+    TkColon _ -> TkColon s
+    TkBackslash _ -> TkBackslash s
+    TkArrow _ -> TkArrow s
+    TkUnArrow _ -> TkUnArrow s
+    TkLinArrow _ -> TkLinArrow s
+    TkDot _ -> TkDot s
+    TkAt _ -> TkAt s
+    TkComma _ -> TkComma s
+    -- Operators
+    TkSemi _ -> TkSemi s
+    TkColonColon _ -> TkColonColon s
+    TkDollar _ -> TkDollar s
+    TkPipeGT _ -> TkPipeGT s
+    TkPlus _ -> TkPlus s
+    TkPlusPlus _ -> TkPlusPlus s
+    TkPlusDot _ -> TkPlusDot s
+    TkMinus _ -> TkMinus s
+    TkMinusDot _ -> TkMinusDot s
+    TkStar _ -> TkStar s
+    TkStarStar _ -> TkStarStar s
+    TkStarDot _ -> TkStarDot s
+    TkSlash _ -> TkSlash s
+    TkSlashDot _ -> TkSlashDot s
+    TkCaret _ -> TkCaret s
+    TkCaretCaret _ -> TkCaretCaret s
+    TkCmp _ c -> TkCmp s c
+    TkAmpAmp _ -> TkAmpAmp s
+    TkPipePipe _ -> TkPipePipe s
+    -- Layout punctuation
+    TkVOpen _ -> TkVOpen s
+    TkVPipe _ -> TkVPipe s
+    TkVClose _ -> TkVClose s
+    TkEOF _ -> TkEOF s
+    -- Types
+    TkIntType _ -> TkIntType s
+    TkFloatType _ -> TkFloatType s
+    TkCharType _ -> TkCharType s
+    TkBang _ -> TkBang s
+    TkQuestion _ -> TkQuestion s
+    TkAmp _ -> TkAmp s
+    TkSkipType _ -> TkSkipType s
+    TkDualType _ -> TkDualType s
+    TkCloseType _ -> TkCloseType s
+    TkWaitType _ -> TkWaitType s
+    -- Kinds
+    TkLinTopKind _ -> TkLinTopKind s
+    TkUnTopKind _ -> TkUnTopKind s
+    TkLinSessionKind _ -> TkLinSessionKind s
+    TkUnSessionKind _ -> TkUnSessionKind s
+    TkLinAbsorbKind _ -> TkLinAbsorbKind s
+    TkUnAbsorbKind _ -> TkUnAbsorbKind s
 

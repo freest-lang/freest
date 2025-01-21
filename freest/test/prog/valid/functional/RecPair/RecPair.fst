@@ -1,5 +1,6 @@
 module RecPair where
 
+type InfinitePair : *T -> *T
 type InfinitePair a = (a, Int)
 
 f : Int -> InfinitePair

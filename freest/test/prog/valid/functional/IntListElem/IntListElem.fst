@@ -1,5 +1,6 @@
 module IntListElem where
 
+type IntList : *T
 data IntList = Nil | Cons Int IntList
 
 elem' : Int -> IntList -> Bool

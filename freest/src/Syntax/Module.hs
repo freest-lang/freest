@@ -8,12 +8,14 @@ This module contains types and functions to represent and manipulate FreeST
 modules.
 -}
 module Syntax.Module
-  ( DataDecl
-  , ConsDecl
-  , TypeDecl
+  ( ConsDeclList
+  , DataDeclList
+  , TypeDeclList
+  , KindSigList
   , Module(..)
   , setName
   , insertImport
+  , insertKindSig
   , insertDataDecl
   , insertTypeDecl
   , insertDef
@@ -21,26 +23,50 @@ module Syntax.Module
   )
 where
 
-import Syntax.Base
-import Syntax.Expression (Exp, Pat, LetDecl)
-import Syntax.Kind (Kind)
-import Syntax.Type (Type)
+import           Syntax.Base
+import qualified Syntax.Expression as E
+import qualified Syntax.Kind as K
+import qualified Syntax.Type as T
 
-import Data.List (intercalate)
-import Data.Maybe (fromMaybe)
-import qualified Data.Map as Map 
-import Debug.Trace (trace)
+import           Data.List (intercalate)
+import           Data.Maybe (fromMaybe)
+import                                     Debug.Trace (trace)
 
-type ConsDecl = (Identifier, [Type])
-type DataDecl = (Identifier, [(Variable, Kind)], [ConsDecl])
-type TypeDecl = (Identifier, [(Variable, Kind)], Type)
+-- Datatype constructor declaration list, e.g.,
+--   Leaf | Node (Tree a) a (Tree a)
+-- represented as
+--   [ (Leaf, [])
+--   , (Node , [Tree a, a, Tree a])
+--   ]
+type ConsDeclList = [(Identifier, [T.Type])]
+-- Datatype constructor declaration list, e.g.,
+--   data Tree a = Leaf | Node (Tree a) a (Tree a)
+-- In Fµω:
+--   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
+-- represented as
+--   [(Tree, ([a], <see above>))]
+type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
+-- Type (type) constructor declaration list, e.g.
+--   type Stream a = !a ; Stream a
+-- In Fµω:
+--   type Stream = λa. µs. !a ; s a
+-- represented as
+--   [(Stream, ([a], (!a ; Stream a))
+type TypeDeclList = [(Identifier, ([Variable], T.Type))]
+-- Kind signature list, e.g.
+--   type Tree : *T -> *T
+--   type Stream : 1T -> 1S
+-- represented as
+--   [(Tree, *T -> *T), (Stream, 1T -> 1S)]
+type KindSigList = [(Identifier, K.Kind)]
 
 data Module
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
-           , dataDecls   :: [DataDecl]
-           , typeDecls   :: [TypeDecl]
-           , definitions :: [LetDecl]
+           , dataDecls   :: DataDeclList
+           , typeDecls   :: TypeDeclList
+           , kindSigs    :: KindSigList
+           , definitions :: [E.LetDecl]
            }
 
 type Prog = [Module]
@@ -55,13 +81,16 @@ setName n m = m {name = Just n}
 insertImport :: [String] -> Module -> Module
 insertImport i m = m{imports = i : imports m}
 
-insertDataDecl ::  Identifier -> [(Variable, Kind)] -> [ConsDecl] -> Module -> Module
-insertDataDecl n aks b m = m{dataDecls = (n, aks, b) : dataDecls m}
+insertDataDecl ::  Identifier -> [Variable] -> ConsDeclList -> Module -> Module
+insertDataDecl n as b m = m{dataDecls = (n, (as, b)) : dataDecls m}
 
-insertTypeDecl :: Identifier -> [(Variable, Kind)] -> Type -> Module -> Module
-insertTypeDecl n aks t m = m{typeDecls = (n, aks, t) : typeDecls m}
+insertTypeDecl :: Identifier -> [Variable] -> T.Type -> Module -> Module
+insertTypeDecl n as t m = m{typeDecls = (n, (as, t)) : typeDecls m}
 
-insertDef :: LetDecl -> Module -> Module
+insertKindSig :: Identifier -> K.Kind -> Module -> Module
+insertKindSig n k m = m{kindSigs = (n, k) : kindSigs m}
+
+insertDef :: E.LetDecl -> Module -> Module
 insertDef d m = m{definitions = d : definitions m}
 
 empty :: Module
@@ -69,15 +98,18 @@ empty = Module{ name        = Nothing
               , imports     = []
               , dataDecls   = []
               , typeDecls   = []
+              , kindSigs    = []
               , definitions = []
               }
 
 instance Show Module where
-  show Module{name,imports,dataDecls,typeDecls,definitions} =
+  show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
     intercalate "\n"
       [case name of Nothing -> "\n" ; Just n -> "\nmodule "++intercalate "." n++" where"
       ,"-- imports"
       ,intercalate "\n" (map showImport imports)
+      ,"-- kind signatures"
+      ,intercalate "\n" (map showKindSig kindSigs)
       ,"-- type declarations"
       ,intercalate "\n" (map showTypeDecl typeDecls)
       ,"-- data declarations"
@@ -86,8 +118,8 @@ instance Show Module where
       ,intercalate "\n" (map show definitions)
       ]
     where showImport ss = "import "++intercalate "." ss
-          showDataDecl (tn,as,cds) =
-            "data "++show tn++" "++unwords (map showKindedVar as)++" = "++intercalate " | " (map showConsDecl cds)
+          showKindSig (i, k) = "type "++show i++" : "++show k
+          showDataDecl (i, (as,cds)) =
+            "data "++show i++" "++unwords (map show as)++" = "++intercalate " | " (map showConsDecl cds)
             where showConsDecl (cn,ts) = show cn ++" "++ unwords (map show ts)
-          showTypeDecl (tn,as, t) = "type "++show tn++" "++unwords (map showKindedVar as)++" = "++show t
-          showKindedVar (a,k) = show a++":"++show k
+          showTypeDecl (i, (as, t)) = "type "++show i++" "++unwords (map show as)++" = "++show t

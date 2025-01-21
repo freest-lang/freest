@@ -8,8 +8,20 @@ maintainer: The FreeST Team
 homepage:   https://freest-lang.github.io/
 category:   Session types
 
+default-extensions:
+  - FlexibleInstances
+  - LambdaCase
+  - TupleSections
+  - ViewPatterns
+  - MultiWayIf
+  - PatternSynonyms
+  - BlockArguments
+  - FlexibleContexts
+  - NamedFieldPuns
+
+
 extra-source-files:
- - README.md
+  - README.md
 
 dependencies:
   - base >= 4.7 && < 5
@@ -20,6 +32,7 @@ dependencies:
   - filepath >= 1.4.2
   - optparse-applicative >= 0.16.1.0
   - extra >= 1.7.9
+  - transformers >= 0.5.6.2
 
 library:
   source-dirs: src
@@ -28,8 +41,8 @@ library:
     - happy
   exposed-modules:
     - FreeST
-    - IO.CmdLine
-    - IO.Error
+    - UI.CLI
+    - UI.Error
     - Parser.Parser
     - Parser.LexerUtils
     - Parser.Scoping
@@ -38,14 +51,16 @@ library:
     - Syntax.Kind
     - Syntax.Module
     - Syntax.Names
-    - Syntax.Normalisation
-    - Syntax.Substitution
     - Syntax.Type
-    - Typing.Extract
-    - Typing.Kinding
-    - Typing.Typing
-    - Utils.Utils
-
+    - Validation.Base
+    - Validation.Expose
+    - Validation.Kinding
+    - Validation.Normalisation
+    - Validation.Rename
+    - Validation.Substitution
+    - Validation.TypeEquivalence.TypeEquivalence
+    - Validation.Typing
+    - Utils
 executables:
   freest:
     main:        FreeST.hs
@@ -53,7 +68,11 @@ executables:
     build-tools:
       - alex
       - happy
-    ghc-options: -main-is FreeST -threaded -rtsopts -with-rtsopts=-N
+    ghc-options: 
+      - -main-is FreeST 
+      - -threaded 
+      - -rtsopts 
+      - -with-rtsopts=-N
 
 tests:
     prog:
@@ -65,5 +84,17 @@ tests:
         - hspec >= 2.7.1       
         - HUnit >= 1.6.0.0
         - silently >= 1.2.5.1
-      ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
-
+      ghc-options: 
+        - -O2 -threaded 
+        - -rtsopts 
+        - -with-rtsopts=-N
+    unit:
+      main: UnitSpec.hs
+      source-dirs:
+        - test/unit
+      dependencies:
+        - freest
+        - hspec >= 2.7.1
+        - hspec-expectations >= 0.8.2
+        - hspec-discover >= 2.7.1
+        - split >= 0.2.3.3

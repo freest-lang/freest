@@ -3,7 +3,8 @@ module FixZCombinator where
 -- The fixed-point Z combinator: Z=\f.(\x.f(\z.xxz))(\y.f(\z.yyz)) is
 -- used to calculate the factorial of 8
 
-type X a = X -> a -> a
+type X : *T -> *T
+type X a = (X a) -> a -> a
 
 fixZcomb : ((a -> a) -> (a -> a)) -> (a -> a)
 fixZcomb f =

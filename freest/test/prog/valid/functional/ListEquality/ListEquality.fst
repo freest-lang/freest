@@ -1,5 +1,6 @@
 module ListEquality where
 
+type List : *T
 data List = Nil | Cons Int List
 
 -- A list: [2,3,4,5]

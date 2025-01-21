@@ -15,7 +15,6 @@ import qualified Syntax.Module as M
 import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 import Syntax.Expression ( LetDecl )
-import IO.Error as IOE
 
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
@@ -201,15 +200,15 @@ fstToHsBool (VCons "False" []) = False
 -- TODO: change to a hashmap
 type Context = [(String, Value)]
 
-interpret :: M.Module -> Either [IOE.Error] (IO Value)
+interpret :: M.Module -> IO Value
 interpret m = case getMainFunction m of
   -- Assuming that the RHS of main is always in the form main = <exp>
   -- necessary to initialize the context with information from the module
   -- other modules, prelude, etc
-  Just (E.ValDecl _ (E.UnguardedRHS mainExp _)) -> Right $ do initial_ctx <- initContext m
-                                                              eval (initial_ctx ++ builtins, []) mainExp
+  Just (E.ValDecl _ (E.UnguardedRHS mainExp _)) -> do initial_ctx <- initContext m
+                                                      eval (initial_ctx ++ builtins, []) mainExp
   -- Return unit when main function is not present
-  Nothing -> Right $ do return VUnit
+  Nothing -> do return VUnit
 
 getMainFunction :: M.Module -> Maybe LetDecl 
 getMainFunction m = find foo (M.definitions m)
@@ -237,11 +236,11 @@ eval :: (Context, Context) -> E.Exp -> IO Value
 eval _ (E.Int _ n) = return $ VInt n 
 eval _ (E.Float _ n) = return $ VFloat n
 eval _ (E.Char _ c) = return $ VChar c
-eval _ (E.String _ str) = return $ VString str
+-- eval _ (E.String _ str) = return $ VString str
 -- [Exp] -> [Value]
-eval ctx (E.Tuple _ tup) = do
-  vals <- sequence $ map (eval ctx) tup
-  return $ VTuple vals 
+-- eval ctx (E.Tuple _ tup) = do
+--   vals <- sequence $ map (eval ctx) tup
+--   return $ VTuple vals 
 eval _ (E.Cons _ (B.Identifier _ str)) = return $ VCons str []
 eval ctx (E.Var _ var) = case getVar ctx var of VIO io -> io
                                                 val -> return val
@@ -360,11 +359,11 @@ doPatternMatching (pat:pats) (arg:args) = case pat of
   E.VarPat _ var -> Just (B.external var, arg) : doPatternMatching pats args
   E.ConsPat _ (B.Identifier _ pStr) consPats -> let (str, vals) = (\(VCons str vals) -> (str, vals)) arg in
     if str == pStr then doPatternMatching consPats vals ++ doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.TuplePat _ tupPats -> doPatternMatching tupPats ((\(VTuple tupVals) -> tupVals) arg) ++ doPatternMatching pats args
+  -- E.TuplePat _ tupPats -> doPatternMatching tupPats ((\(VTuple tupVals) -> tupVals) arg) ++ doPatternMatching pats args
   E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
   E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
+  -- E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
   E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] ++ doPatternMatching pats args
 
 chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(String, Value)], [E.Pat])

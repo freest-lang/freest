@@ -1,0 +1,212 @@
+-- Close 
+
+case Close
+
+case Close;!Int
+
+case Close;!Int
+
+case Close;?Int
+
+case !Char;Close;!Int 
+
+case !Char;Close;?Int
+
+case (!Int;Close;!Int);?Int 
+
+case !Int;Close;!Int
+
+case T;!Int
+where
+  type T : 1S
+  type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U : 1S
+  type U = +{A: !Int;U, B: Close;U}
+
+case U
+where
+  type T : 1S
+  type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U : 1S
+  type U = +{A: !Int;U, B: Close;U}
+
+case T
+where 
+  type T : 1S
+  type T = T'
+  type T' : 1S
+  type T' = +{A: !Int;T', B:Close;T}
+  type U : 1S
+  type U = U'
+  type U' : 1S
+  type U' = +{A: !Int;U', B:Close;U'}
+
+case U
+where 
+  type T : 1S
+  type T = T'
+  type T' : 1S
+  type T' = +{A: !Int;T', B:Close;T}
+  type U : 1S
+  type U = U'
+  type U' : 1S
+  type U' = +{A: !Int;U', B:Close;U'}
+
+case T
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1S
+  type U = &{N:!Int;!Int;U, L:Skip};Close
+
+case U
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1S
+  type U = &{N:!Int;!Int;U, L:Skip};Close
+
+case forall a:1S. Close;a;!Int 
+
+case forall b:1S. (Close;b);Skip
+
+-- Unrestricted session types
+
+case *!Int
+
+case *?Int
+
+case *!(!Int;?Bool;Close)
+
+case *?(!Int;?Bool;Close)
+
+case *&{One}
+
+case *&{One, Two}
+
+case *&{One}
+
+case *&{One, Two}
+
+case *!Int ; !Char
+
+case *?Int ; !Char
+
+case *!(!Int ; ?Bool ; Close) ; !Char
+
+case *?(!Int ; ?Bool ; Close) ; !Char
+
+case *&{One} ; !Char
+
+case *&{One, Two} ; !Char
+
+case *&{One} ; !Char
+
+case *+{One, Two} ; !Char
+
+
+-- Polymorphic streams
+
+case PolyStream
+where
+  type PolyStream : 1S
+  type PolyStream = forall a:*T . ?a ; PolyStream
+
+-- Dual of the above
+
+case PolyStream
+where
+  type PolyStream : 1S
+  type PolyStream = exists a:*T . !a ; PolyStream
+
+-- Same, with a function to consume the values
+
+case PolyStream Bool
+where
+  type PolyStream : 1T -> 1S
+  type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
+  type Bool : 1T
+  data Bool = False | True
+
+-- Dual of the above
+
+case PolyStream Bool
+where
+  type PolyStream : 1T -> 1S
+  type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
+  type Bool : 1T
+  data Bool = False | True
+
+case Z
+where
+  type Z : 1S
+  type Z = Z'
+  type Z' : 1S
+  type Z' = Skip;A
+  type A : 1S
+  type A = Z''
+  type Z'' : 1S
+  type Z'' = &{B: Z'''}
+  type Z''' : 1S
+  type Z''' = A'
+  type A' : 1S 
+  type A' = Z''';(Skip;!Char)
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
+
+case Z
+where
+  type Z : 1S
+  type Z = A
+  type A : 1S
+  type A = &{B: Z'}
+  type Z' : 1S
+  type Z' = (Z';Skip);!Char
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
+
+case Z
+where
+  type Z : 1S
+  type Z = A
+  type A : 1S
+  type A = &{B: Z' !Char}
+  type Z' : 1S -> 1S
+  type Z' b = (Z' b;Skip);b
+
+case Z
+where
+  type Z : 1S
+  type Z = Z'
+  type Z' : 1S
+  type Z' = Skip;A
+  type A : 1S
+  type A = Z''
+  type Z'' : 1S
+  type Z'' = &{B: Z'''}
+  type Z''' : 1S
+  type Z''' = A' ?Char
+  type A' : 1S -> 1S
+  type A' b = Z''';(Skip;b)
+
+case Z
+where 
+  type Z : 1S
+  type Z = +{A: Skip, C: Z} ; B
+  type B : 1S
+  type B = (Skip;B);?Char
+
+case Z1
+where
+  type Z1 : 1S
+  type Z1 = Z2
+  type Z2 : 1S
+  type Z2 = A
+  type A : 1S
+  type A = +{A: Skip, C: A} ; Z3
+  type Z3 : 1S
+  type Z3 = B
+  type B : 1S
+  type B = Skip;(Z3;?Bool)
+
+  type Bool : *T
+  data Bool = False | True
+

@@ -6,131 +6,246 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module defines the Type data type, which represents FreeST's higher-order
 polymorphic context-free session types.
 -}
-{-# LANGUAGE PatternSynonyms #-}
 module Syntax.Type
   ( Polarity(..)
-  , Labelled(..)
-  , Type(.., Arrow', Message')
+  , Type(.., Forall, Exists, AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
+  , smartApp
+  , variadicQuant
+  , Dual(..)
+  , isConstant
+  , isSkip
+  , isSemi
+  , isDual
+  , isTName
   )
 where
 
-import Syntax.Base
-import qualified Syntax.Kind as K
+import           Syntax.Base
+import qualified Syntax.Kind                   as K
 
-import Data.List (intercalate)
-import Data.Bifunctor
+import           Data.List                     (intercalate, sort)
+import           Data.Bifunctor
+import qualified Data.Map.Strict               as M
 
-data Polarity = In | Out
+data Polarity = In | Out 
+  deriving (Eq, Ord)
 
-data Labelled
-  = Variant
-  | Choice K.Multiplicity Polarity
+class Dual a where
+  dual :: a -> a
+
+instance Dual Polarity where
+  dual Out = In
+  dual In = Out
 
 data Type
-  -- Constants
+  -- Functional types
   = Int Span
   | Float Span
   | Char Span
-  | String Span
   | Arrow Span K.Multiplicity
-  | Message Span K.Multiplicity Polarity
-  | End Span Polarity
+  -- Session types
   | Skip Span
-  | Semi Span Type Type
-  | Dual Span Type
-  | Forall Span [(Variable, K.Kind)] Type -- | Forall Span Kind  
-  -- | Rec Span K.Kind 
-  -- Lambda
+  | Semi Span
+  | Dual Span
+  | End Span Polarity
+  | Message Span K.Multiplicity Polarity
+  | Choice Span K.Multiplicity Polarity [(Identifier, Type)]
+  -- Polymorphism
+  | Quant Span Polarity Variable K.Kind Type
+  -- Higher-order
   | Var Span Variable
   | App Span Type [Type]
-  | Abs Span [(Variable, K.Kind)] Type
-  -- Special cases
-  | Name Span Identifier
-  | Labelled Span Labelled [(Identifier, Type)]
-  | Tuple Span [Type]
-  -- Hole
-  | Hole Span
+  -- Equations
+  | TName Span Identifier
+  | DName Span Identifier
+  deriving Ord
 
-pattern Arrow' s1 m t u <- App s1 (Arrow s2 m) [t,u] where
-  Arrow' s m t u = App s (Arrow s m) [t,u]
-pattern Message' s1 m p t <- App s1 (Message s2 m p) [t] where
-  Message' s m p t = App s (Message s m p) [t]
+-- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
+-- (also, consider OverloadedLists:
+-- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
+pattern Forall :: Span -> Variable -> K.Kind -> Type -> Type
+pattern Forall s a k t <- Quant s In a k t
+  where Forall s a k t  = Quant s In a k t
 
+pattern Exists :: Span -> Variable -> K.Kind -> Type -> Type
+pattern Exists s a k t <- Quant s Out a k t
+  where Exists s a k t  = Quant s Out a k t
+
+pattern AppArrow :: Span -> K.Multiplicity -> Type -> Type -> Type
+pattern AppArrow s m t u <- App s (Arrow _ m) [t,u]
+  where AppArrow s m t u  = App s (Arrow s m) [t,u]
+
+pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
+pattern AppMessage s m p t <- App s (Message _ m p) [t] 
+  where AppMessage s m p t  = App s (Message s m p) [t]
+
+pattern AppSemi :: Span -> Type -> Type -> Type
+pattern AppSemi s t u <- App s (Semi _) [t,u]
+  where AppSemi s t u  = App s (Semi s) [t,u]
+
+pattern AppDual :: Span -> Type -> Type
+pattern AppDual s t <- App s (Dual _) [t]
+  where AppDual s t  = App s (Dual s) [t]
+
+pattern AppTName :: Span -> Identifier -> [Type] -> Type
+pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
+                                  App s (TName _ i) ts -> App s (TName s i) ts
+                                  t                    -> t
+                           -> App s (TName _ i) ts)
+  where AppTName _ i [] = TName (getSpan i) i
+        AppTName s i ts = App s (TName (getSpan i) i) ts  
+
+pattern AppDName :: Span -> Identifier -> [Type] -> Type
+pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
+                                  App s (DName _ i) ts -> App s (DName s i) ts
+                                  t                    -> t 
+                           -> App s (DName _ i) ts)
+  where AppDName _ i [] = DName (getSpan i) i
+        AppDName s i ts = App s (DName (getSpan i) i) ts
+
+pattern AppVar :: Span -> Variable -> [Type] -> Type
+pattern AppVar s a ts <- (\case Var s a            -> App s (Var s a) []
+                                App s (Var _ a) ts -> App s (Var s a) ts
+                                t                  -> t
+                           -> App s (Var _ a) ts)
+  where AppVar _ a [] = Var (getSpan a) a
+        AppVar s a ts = App s (Var (getSpan a) a) ts 
+
+variadicQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
+variadicQuant _ _ [] t = t
+variadicQuant s p ((a,k) : aks) t =
+  Quant s p a k $ variadicQuant s p aks t
+
+smartApp :: Span -> Type -> [Type] -> Type
+smartApp s (App _ t ts) us = App s t (ts ++ us)
+smartApp s t            us = App s t us
+
+isConstant :: Type -> Bool
+isConstant = \case 
+  Choice{} -> False
+  Quant{}  -> False
+  TName{}  -> False
+  -- DName{} -> False -- Does not reduce
+  Var{}    -> False
+  App{}    -> False
+  _        -> True
+
+isSkip, isSemi, isDual, isTName :: Type -> Bool
+isSkip  = \case Skip{}  -> True; _ -> False
+isSemi  = \case Semi{}  -> True; _ -> False
+isDual  = \case Dual{}  -> True; _ -> False
+isTName = \case TName{} -> True; _ -> False
 
 instance Show Polarity where
-  show In  = "?"
-  show Out = "!"
-
-instance Show Labelled where
-  show Variant = "<>"
-  show (Choice K.Lin In)  = "&"
-  show (Choice K.Lin Out) = "+"
-  show (Choice K.Un In)   = "*&"
-  show (Choice K.Un Out)  = "*+"
-  show _ = error "Syntax.Type.show: kind or multiplicity variable in Labelled"
+  show = \case In -> "?"; Out -> "!"
 
 instance Show Type where
-  show (Int _)             = "Int"
-  show (Float _)           = "Float"
-  show (Char _)            = "Char"
-  show (String _)          = "String"
-  show (Arrow _ m)         = "("++show m++"->)"
-  show (Labelled  _ l lts) = show l++"{"++intercalate "," (map (\(l, t) -> show l ++ ": "++ show t) lts)++"}"
-  show (Tuple _ [])        = "()"
-  show (Tuple _ (t:ts))    = "("++show t++(if null ts then "" else concatMap (\t -> ", "++show t) ts)++")"
-  show (Message _ K.Un p)  =  "(*"++ show p++")"
-  show (Message _ _ p)     = "("++show p++")"
-  show (End _ In )         = "Wait"
-  show (End _ Out)         = "Close"
-  show (Skip _)            = "Skip"
-  show (Semi _ t u)        = "("++show t++ ";" ++show u++")"
-  show (Dual _ t)          = "(Dual"++ show t++")"
-  show (Var _ a)           = show a
-  show (Forall _ aks t)    = "(forall "++concatMap (\(a,k) -> show a++":"++show k++" ") aks++". "++show t++")"
-  -- show (Rec _ k)           = "rec_"++show k
-  show (App _ t as)        = foldl (\s a -> "("++s++" "++show a++")") (show t) as
-  show (Abs _ aks t)       = "(\\"++concatMap (\(a,k) -> show a++":"++show k++" ") aks++"-> "++show t++")"
-  show (Name _ n)          = show n
-  show (Hole s)            = "_"
+  show = \case 
+   -- Functional types
+    Int{}     -> "Int"
+    Float{}   -> "Float"
+    Char{}    -> "Char"
+    Arrow _ m -> "("++show m++"->)"
+    -- Session types
+    Skip{}            -> "Skip"
+    Semi{}            -> "(;)"
+    Dual{}            -> "Dual"
+    End _ In          -> "Wait"
+    End _ Out         -> "Close"
+    Message _ K.Un p  -> "(*"++ show p++")"
+    Message _ _ p     -> "("++show p++")"
+    Choice  _ m p lts -> 
+      showMult m ++ showView p 
+      ++ "{" ++ intercalate "," (map (\(l, t) -> show l ++ ": " ++ show t) lts)
+      ++ "}"
+      where showMult = \case K.Lin -> "" ; K.Un -> "*"
+            showView = \case In    -> "&"; Out  -> "+"
+    -- Polymorphism
+    Quant _ p a k t -> "(" ++showQuant p++" "++show a++":"++show k++". "++show t++")"
+      where showQuant In  = "forall"
+            showQuant Out = "exists"
+    -- Higher-order
+    Var _ a    -> show a
+    App _ t ts -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+    -- Equations
+    TName _ i -> show i
+    DName _ i -> show i
+
+class Congruence t where
+  congruent :: M.Map Variable Variable -> t -> t -> Bool
+
+instance Eq Type where
+  (==) = congruent M.empty
+  
+instance Congruence Type where
+  -- Functional types
+  congruent _ Int{}   Int{}   = True
+  congruent _ Float{} Float{} = True
+  congruent _ Char{}  Char{}  = True
+  congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
+  -- Session types
+  congruent _ Skip{} Skip{} = True
+  congruent _ Semi{} Semi{} = True
+  congruent _ Dual{} Dual{} = True
+  congruent _ (End _ p1) (End _ p2) = p1 == p2
+  congruent m (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
+  congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) = 
+    m1 == m2 && p1 == p2 && congruent m lts1 lts2
+  -- Polymorphism
+  congruent m (Quant _ p1 a k1 t) (Quant _ p2 b k2 u) = 
+    p1 == p2 && a == b && k1 == k2 && congruent m t u
+  -- Higher-order
+  congruent m (Var _ v1) (Var _ v2) =
+    v1 == v2 ||              -- free variables
+    Just v2 == M.lookup v1 m -- bound variables
+  congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
+  -- Equations
+  congruent _ (TName _ i1) (TName _ i2) = i1 == i2
+  congruent _ (DName _ i1) (DName _ i2) = i1 == i2
+  congruent _ _ _ = False
+
+instance Congruence [Type] where
+  congruent m ts us =
+    length ts == length us &&
+    all (uncurry (congruent m)) (zip ts us)
+
+instance Congruence [(Identifier, Type)] where
+  congruent m m1 m2 =
+    length m1 == length m2 &&
+    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2) 
+        (zip (sort m1) (sort m2))
 
 instance Located Type where
-  getSpan (Int s)           = s
-  getSpan (Float s)         = s
-  getSpan (Char s)          = s
-  getSpan (String s)        = s
-  getSpan (Arrow s _)       = s
-  getSpan (Labelled  s _ _) = s
-  getSpan (Tuple s _)       = s
-  getSpan (Message s _ _)   = s
-  getSpan (End s _)         = s
-  getSpan (Skip s)          = s
-  getSpan (Semi s _ _)      = s
-  getSpan (Dual s _)        = s
-  getSpan (Var s _)         = s
-  getSpan (Forall s _ _)    = s
-  -- getSpan (Rec s _)         = s
-  getSpan (App s _ _)       = s
-  getSpan (Abs s _ _)       = s
-  getSpan (Name s _)        = s
-  getSpan (Hole s)          = s
+  getSpan = \case 
+    Int s           -> s
+    Float s         -> s
+    Char s          -> s
+    Arrow s _       -> s
+    Message s _ _   -> s
+    Choice  s _ _ _ -> s
+    End s _         -> s
+    Skip s          -> s
+    Semi s          -> s
+    Dual s          -> s
+    Var s _         -> s
+    Quant s _ _ _ _ -> s
+    App s _ _       -> s
+    TName s _       -> s
+    DName s _       -> s
 
-  setSpan s (Int _)             = Int s
-  setSpan s (Float _)           = Float s
-  setSpan s (Char _)            = Char s
-  setSpan s (String _)          = String s
-  setSpan s (Arrow _ m)         = Arrow s m
-  setSpan s (Labelled  _ l lts) = Labelled s l lts
-  setSpan s (Tuple _ ts)        = Tuple s ts
-  setSpan s (Message _ m p)     = Message s m p
-  setSpan s (End _ p)           = End s p
-  setSpan s (Skip _)            = Skip s
-  setSpan s (Semi _ t u)        = Semi s t u
-  setSpan s (Dual _ t)          = Dual s t
-  setSpan s (Var _ a)           = Var s a
-  setSpan s (Forall _ aks t)    = Forall s aks t
-  -- setSpan s (Rec _ k)           = Rec s k
-  setSpan s (App _ t1 t2)       = App s t1 t2
-  setSpan s (Abs _ aks t)       = Abs s aks t
-  setSpan s (Name _ n)          = Name s n
-  setSpan s (Hole _)            = Hole s
-
+  setSpan s = \case
+    Int _             -> Int s
+    Float _           -> Float s
+    Char _            -> Char s
+    Arrow _ m         -> Arrow s m
+    Message _ m p     -> Message s m p
+    Choice  _ m p lts -> Choice s m p lts
+    End _ p           -> End s p
+    Skip _            -> Skip s
+    Semi _            -> Semi s
+    Dual _            -> Dual s
+    Var _ a           -> Var s a
+    Quant _ p a k t   -> Quant s p a k t
+    App _ t1 t2       -> App s t1 t2
+    TName _ n         -> TName s n
+    DName _ n         -> DName s n

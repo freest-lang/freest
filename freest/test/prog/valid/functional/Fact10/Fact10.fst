@@ -1,5 +1,6 @@
 module Fact10 where
 {-abbbbcbcb-}
+type Choice : 1S
 type Choice = +{More: !Int;Choice, Enough: Skip}
 
 sendInt : Int -> Choice;a -> a

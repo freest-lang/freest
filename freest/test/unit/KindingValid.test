@@ -1,0 +1,453 @@
+-- TODO: This test file could be replaced by two:
+--   BoundedValid.test and
+--   BoundedInvalid.test
+
+-- Simple types
+
+case Int
+
+case Char
+
+case Float
+
+case Int
+
+case ()
+
+-- Session types
+
+case !Int
+
+case ?Char
+
+case !Int
+
+case ?()
+
+case Skip
+
+case Skip;!Int
+
+case !Int;Skip
+
+case Skip;!Int;Skip
+
+case Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip
+
+case !Int;?Int
+
+case Skip;Skip
+
+-- Close 
+
+case Close
+
+case Close;!Int
+
+case Close;!Int
+
+case Close;?Int
+
+case !Char;Close;!Int 
+
+case !Char;Close;?Int
+
+case (!Int;Close;!Int);?Int 
+
+case !Int;Close;!Int
+
+case T;!Int
+where
+  type T : 1S
+  type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U : 1S
+  type U = +{A: !Int;U, B: Close;U}
+
+case U
+where
+  type T : 1S
+  type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U : 1S
+  type U = +{A: !Int;U, B: Close;U}
+
+case T
+where 
+  type T : 1S
+  type T = T'
+  type T' : 1S
+  type T' = +{A: !Int;T', B:Close;T}
+  type U : 1S
+  type U = U'
+  type U' : 1S
+  type U' = +{A: !Int;U', B:Close;U'}
+
+case U
+where 
+  type T : 1S
+  type T = T'
+  type T' : 1S
+  type T' = +{A: !Int;T', B:Close;T}
+  type U : 1S
+  type U = U'
+  type U' : 1S
+  type U' = +{A: !Int;U', B:Close;U'}
+
+case T
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1S
+  type U = &{N:!Int;!Int;U, L:Skip};Close
+
+case U
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1S
+  type U = &{N:!Int;!Int;U, L:Skip};Close
+
+case T
+where
+  type T : 1S
+  type T = !(T';!Int);?(T;!(Close);Close;?Int)
+  type T' : 1S
+  type T' = +{A: !Int;T', B: Skip;Close;Skip}
+  type U : 1S
+  type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
+  type U' : 1S
+  type U' = +{A: !Int;U', B: Close;U'}
+
+case U
+where
+  type T : 1S
+  type T = !(T';!Int);?(T;!(Close);Close;?Int)
+  type T' : 1S
+  type T' = +{A: !Int;T', B: Skip;Close;Skip}
+  type U : 1S
+  type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
+  type U' : 1S
+  type U' = +{A: !Int;U', B: Close;U'}
+
+case !(!Int;Close) 
+
+case !(!Int;Skip;Close;?Int) 
+
+case forall a:1S. Close;a;!Int 
+
+case forall b:1S. (Close;b);Skip
+
+case forall a:1S. T a
+where
+  type T : 1S -> 1S
+  type T a = !(T' a;!Int);?(T a;!(Close);Close)
+  type T' : 1S -> 1S
+  type T' a = +{A: !a;T' a, B: a;Close;a}
+  type U : 1S -> 1S
+  type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
+  type U' : 1S -> 1S
+  type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+case forall b: 1S . U b
+where
+  type T : 1S -> 1S
+  type T a = !(T' a;!Int);?(T a;!(Close);Close)
+  type T' : 1S -> 1S
+  type T' a = +{A: !a;T' a, B: a;Close;a}
+  type U : 1S -> 1S
+  type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
+  type U' : 1S -> 1S
+  type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+-- Unrestricted session types
+
+case *!Int
+
+case *?Int
+
+case *!(!Int;?Bool;Close)
+
+case *?(!Int;?Bool;Close)
+
+-- case *&{One}
+
+-- case *&{One, Two}
+
+-- case *&{One}
+
+-- case *!{One, Two}
+
+case *!Int ; !Char
+
+case *?Int ; !Char
+
+case *!(!Int ; ?Bool ; Close) ; !Char
+
+case *?(!Int ; ?Bool ; Close) ; !Char
+
+-- case *&{One} ; !Char
+
+-- case *&{One, Two} ; !Char
+
+-- case *&{One} ; !Char
+
+-- case *!{One, Two} ; !Char
+
+-- Polymorphic streams
+
+-- case PolyStream
+-- where
+--   type PolyStream : 1S
+--   type PolyStream = forall a:*T . ?a ; PolyStream
+
+-- Dual of the above
+
+-- case PolyStream
+-- where
+--   type PolyStream : 1S
+--   type PolyStream = exists a:*T . !a ; PolyStream
+
+-- Same, with a function to consume the values
+
+case PolyStream Bool
+where
+  type PolyStream : 1T -> 1S
+  type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
+  type Bool : 1T
+  data Bool = False | True
+
+-- Dual of the above
+
+case PolyStream Bool
+where
+  type PolyStream : 1T -> 1S
+  type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
+  type Bool : 1T
+  data Bool = False | True
+
+-- Noncontractive types are the big new valid types
+
+case B
+where 
+  type B : 1S
+  type B = Skip;B;?Char
+
+case Z
+where 
+  type Z : 1S
+  type Z = +{A: Skip, C: Z} ; B
+  type B : 1S
+  type B = (Skip;B);?Char
+
+case Z1
+where
+  type Z1 : 1S
+  type Z1 = Z2
+  type Z2 : 1S
+  type Z2 = A
+  type A : 1S
+  type A = +{A: Skip, C: A} ; Z3
+  type Z3 : 1S
+  type Z3 = B
+  type B : 1S
+  type B = Skip;(Z3;?Bool)
+
+  type Bool : *T
+  data Bool = False | True
+
+case A
+where
+  type A : 1S
+  type A = (Skip;A);!Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case A
+where
+  type A : 1S
+  type A = A;!Int
+
+case A 
+where
+  type A : 1S
+  type A = B
+  type B : 1S
+  type B = C
+  type C : 1S
+  type C = D
+  type D : 1S
+  type D = A;!Char
+
+case A
+where
+  type A : 1S
+  type A = ((A; !Bool); !Int) ; ?Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case Z
+where
+  type Z : 1S
+  type Z = Z'
+  type Z' : 1S
+  type Z' = Skip;A
+  type A : 1S
+  type A = Z''
+  type Z'' : 1S
+  type Z'' = &{B: Z'''}
+  type Z''' : 1S
+  type Z''' = A'
+  type A' : 1S 
+  type A' = Z''';(Skip;!Char)
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
+
+case Z
+where
+  type Z : 1S
+  type Z = A
+  type A : 1S
+  type A = &{B: Z'}
+  type Z' : 1S
+  type Z' = (Z';Skip);!Char
+  -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
+
+case A;!Bool 
+where
+  type A : 1S
+  type A = A;!Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case A
+where
+  type A : 1S
+  type A = A;!Bool
+
+  type Bool : *T
+  data Bool = False | True
+
+case Z
+where
+  type Z : 1S
+  type Z = A
+  type A : 1S
+  type A = &{B: Z' !Char}
+  type Z' : 1S -> 1S
+  type Z' b = (Z' b;Skip);b
+
+case Z
+where
+  type Z : 1S
+  type Z = Z'
+  type Z' : 1S
+  type Z' = Skip;A
+  type A : 1S
+  type A = Z''
+  type Z'' : 1S
+  type Z'' = &{B: Z'''}
+  type Z''' : 1S
+  type Z''' = A' ?Char
+  type A' : 1S -> 1S
+  type A' b = Z''';(Skip;b)
+
+case A
+where
+  type A : *T
+  type A = A
+
+case A
+where
+  type A : 1T
+  type A = A
+
+case A
+where
+  type A : *S
+  type A = A;A;A;A;A
+
+case A
+where
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+case A 
+where
+  type A : *S
+  type A = A';A''
+  type A' : *S
+  type A' = Skip;A'
+  type A'' : *S
+  type A'' = Skip;A''
+
+case Skip;A
+where
+  type A : *S
+  type A = (A'; A''); Skip; Skip
+  type A' : *S
+  type A' = Skip;A'
+  type A'' : *S
+  type A'' = Skip;A''
+
+case Int -> A
+where
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+case A -> Bool
+where
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+  type Bool : *T
+  data Bool = False | True
+
+case (A, Int)
+where 
+  type A : *T
+  type A = B
+  type B : *T
+  type B = C 
+  type C : *T
+  type C = D
+  type D : *T
+  type D = A
+
+case A
+where 
+  type A : *S
+  type A = Dual A
+
+case A 
+where 
+  type A : *S
+  type A = Dual (Dual A)
+
+case A 
+where 
+  type A : 1S
+  type A = (Dual (Dual A));&{A: !Int, B: ?Int}
+
+case A 
+where 
+  type A : *S
+  type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))

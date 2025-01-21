@@ -1,0 +1,141 @@
+-- Simple types
+
+case Int == Int
+
+case Char == Char
+
+case Float == Float
+
+case Int == Int
+
+case () == ()
+
+-- Session types
+
+case !Int == !Int
+
+case ?Char == ?Char
+
+case !Int == !Int
+
+case ?() == ?()
+
+case Skip == Skip
+
+case !Int == Skip;!Int
+
+case !Int == !Int;Skip
+
+case !Int == Skip;!Int;Skip
+
+case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip
+
+case !Int;Skip;?Int == !Int;?Int
+
+case Skip;!Int == !Int;Skip
+
+case !Int;Skip == Skip;!Int
+
+case Skip == Skip;Skip
+
+-- Close 
+
+case Close == Close
+
+case Close == Close;!Int
+
+case Close;!Int == Close;?Int
+
+case Close;!Int == Close;?Int
+
+case !Char;Close;!Int 
+  == !Char;Close;?Int
+
+case (!Int;Close;!Int);?Int 
+  == !Int;Close;!Int
+
+case T;!Int == U
+where
+  type T : 1S
+  type T = +{A: !Int;T, B: Skip;Close;Skip}
+  type U : 1S
+  type U = +{A: !Int;U, B: Close;U}
+
+case T == U
+where 
+  type T : 1S
+  type T = T'
+  type T' : 1S
+  type T' = +{A: !Int;T', B:Close;T}
+  type U : 1S
+  type U = U'
+  type U' : 1S
+  type U' = +{A: !Int;U', B:Close;U'}
+
+case T == U
+where
+  type T : 1S
+  type T = &{N:T};Skip
+  type U : 1S
+  type U = &{N:U}
+
+case T == U
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1S
+  type U = &{N:!Int;!Int;U, L:Skip};Close
+
+case T == U
+where
+  type T : 1S
+  type T = !(T';!Int);?(T;!(Close);Close;?Int)
+  type T' : 1S
+  type T' = +{A: !Int;T', B: Skip;Close;Skip}
+  type U : 1S
+  type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
+  type U' : 1S
+  type U' = +{A: !Int;U', B: Close;U'}
+
+case !(!Int;Close) 
+  == !(!Int;Skip;Close;?Int) 
+
+case forall a:1S. Close ; a ; !Int 
+  == forall a:1S. (Close ; a) ; Skip
+
+case forall a:1S. Close;a;!Int 
+  == forall b:1S. (Close;b);Skip
+
+case forall a:1S. T a
+  == forall b: 1S . U b
+where
+  type T : 1S -> 1S
+  type T a = !(T' a;!Int);?(T a;!(Close);Close)
+  type T' : 1S -> 1S
+  type T' a = +{A: !a;T' a, B: a;Close;a}
+  type U : 1S -> 1S
+  type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
+  type U' : 1S -> 1S
+  type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+-- Unrestricted sessions
+
+case *!Int == *!Int ; ?Char
+
+case *!Int ; ?Char == *!Int
+
+case *!Int == *!Int ; Wait
+
+case *!Int ; Wait == *!Int
+
+case *?Int == *?Int ; ?Char
+
+case *?Int ; ?Char == *?Int
+
+case *?Int == *?Int ; Close
+
+case *?Int ; Close == *?Int
+
+-- Choices
+
+case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip}
