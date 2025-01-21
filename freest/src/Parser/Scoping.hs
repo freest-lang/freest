@@ -216,18 +216,18 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
         t' <- scopeTypeQ ctx t
         second (E.SigDecl xs' t':) <$> scopeDefs' ctx ictx' ds
 
-    scopeRHS :: ScopingCtx -> E.RHS -> Scoping E.RHS
-    scopeRHS ctx = \case
-      E.GuardedRHS ges Nothing   ->
-        E.GuardedRHS <$> mapM (bimapM (scopeExp ctx) (scopeExp ctx)) ges <*> pure Nothing
-      E.GuardedRHS ges (Just ds) -> do
-        (ctx',ds') <- scopeDefs ctx ds
-        E.GuardedRHS <$> mapM (bimapM (scopeExp ctx') (scopeExp ctx')) ges <*> pure (Just ds')
-      E.UnguardedRHS e Nothing   ->
-        E.UnguardedRHS <$> scopeExp ctx e <*> pure Nothing
-      E.UnguardedRHS e (Just ds) -> do
-        (ctx',ds') <- scopeDefs ctx ds
-        E.UnguardedRHS <$> scopeExp ctx' e <*> pure (Just ds')
+scopeRHS :: ScopingCtx -> E.RHS -> Scoping E.RHS
+scopeRHS ctx = \case
+  E.GuardedRHS ges Nothing   ->
+    E.GuardedRHS <$> mapM (bimapM (scopeExp ctx) (scopeExp ctx)) ges <*> pure Nothing
+  E.GuardedRHS ges (Just ds) -> do
+    (ctx',ds') <- scopeDefs ctx ds
+    E.GuardedRHS <$> mapM (bimapM (scopeExp ctx') (scopeExp ctx')) ges <*> pure (Just ds')
+  E.UnguardedRHS e Nothing   ->
+    E.UnguardedRHS <$> scopeExp ctx e <*> pure Nothing
+  E.UnguardedRHS e (Just ds) -> do
+    (ctx',ds') <- scopeDefs ctx ds
+    E.UnguardedRHS <$> scopeExp ctx' e <*> pure (Just ds')
 
 scopeExp :: ScopingCtx -> E.Exp -> Scoping E.Exp
 scopeExp ctx = \case
@@ -259,17 +259,17 @@ scopeExp ctx = \case
   E.Let s ds e -> do
     (ctx', ds') <- scopeDefs ctx ds
     E.Let s ds' <$> scopeExp ctx' e
-  E.Case s e pes -> do
+  E.Case s e prhss -> do
     e' <- scopeExp ctx e
-    E.Case s e' <$> mapM scopePatExp pes
+    E.Case s e' <$> mapM scopePatRHS prhss
     where
-      scopePatExp :: (E.Pat, E.Exp) -> Scoping (E.Pat, E.Exp)
-      scopePatExp (p,e) = do
+      scopePatRHS :: (E.Pat, E.RHS) -> Scoping (E.Pat, E.RHS)
+      scopePatRHS (p,rhs) = do
         checkConflictingDefs [ExpLevel p]
         (_,p') <- scopePat ctx Map.empty p
         let pvs = Set.toList $ patVars p'
         let ctx' = fromEVarList pvs `Map.union` ctx
-        (p',) <$> scopeExp ctx' e
+        (p',) <$> scopeRHS ctx' rhs
   E.If s e1 e2 e3 ->
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
   e -> pure e

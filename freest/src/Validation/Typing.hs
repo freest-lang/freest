@@ -95,27 +95,24 @@ synth kctx tctx = \case
     E.Let s ds e    -> do
         tctx' <- checkDecls kctx tctx ds
         synth kctx tctx' e
-    E.Case s e cs@((p1, e1) : cs')   -> do
+    E.Case s e cs@((p1, rhs1) : cs')   -> do
         -- TODO: detect redundant and incomplete patterns
         (t, tctx') <- synth kctx tctx e
         (t1, tctx1) <- do
-            tctx1' <- checkPat kctx t p1
-            synth kctx tctx1' e1
-        forM_ cs' \(pi,ei) -> do
+          tctx1' <- checkPat kctx t p1
+          synthRHS kctx tctx1' rhs1
+        forM_ cs' \(pi,rhsi) -> do
           tctxi' <- checkPat kctx t pi
-          (ti, tctxi) <- synth kctx tctxi' ei
-          checkEquivTypes (Left ei) ti t1
-          unless (equivalentCtx tctxi tctx1) $
-            -- TODO: better error message.
-            throwE (TypeCtxMismatch (getSpan ei) ei (Map.assocs tctxi) (Map.assocs tctx1))
+          checkRHS kctx tctxi' t1 rhsi
         return (t1, tctx1)
     E.If s e1 e2 e3 -> do 
         tctx' <- check kctx tctx e1 (mkBool e1)
         (t1, tctx1) <- synth kctx tctx' e1
-        (t2, tctx2) <- synth kctx tctx' e2
-        checkEquivTypes (Left e2) t2 t1
+        tctx2 <- check kctx tctx' e2 t1
         checkEquivTypeCtxs e2 tctx1 tctx2
         return (t1, tctx1)
+    E.Channel s t -> 
+        pure (T.App s (T.DName s (mkTupleCons 1 s)) [t, T.AppDual s t], tctx)
     E.Select s i e -> do
         (t,tctx') <- synth kctx tctx e
         ts <- Expose.internalChoice e t
@@ -153,6 +150,42 @@ synth kctx tctx = \case
             k <- Kinding.synth kctx t
             when (K.lin k) (throwE (NonLinPat s p t))
             Map.insert x t <$> checkPat kctx t p
+
+    synthRHS :: KindCtx -> TypeCtx -> E.RHS -> Validation (T.Type, TypeCtx)
+    synthRHS kctx tctx = \case
+        E.GuardedRHS ((g1,e1):ges) ds -> do
+            tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
+            tctx1 <- check kctx tctx' g1 (mkBool g1)
+            (t1,tctx1') <- synth kctx tctx1 e1
+            (t1,) <$> foldM (\tctxi (gj,ej) -> do
+                tctxj <- check kctx tctxi gj (mkBool gj)
+                tctxj' <- check kctx tctxj ej t1
+                unless (equivalentCtx tctxj' tctx1') $
+                -- TODO: better error message.
+                  throwE (TypeCtxMismatch (getSpan ej) ej (Map.assocs tctxj') (Map.assocs tctx1'))
+                return tctxj) 
+              tctx1 ges
+        E.UnguardedRHS e ds -> do
+            tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
+            synth kctx tctx' e
+    -- TODO: avoid this duplication
+    checkRHS :: KindCtx -> TypeCtx -> T.Type -> E.RHS -> Validation TypeCtx
+    checkRHS kctx tctx t = \case
+        E.GuardedRHS ((g1,e1):ges) ds -> do
+            tctx'  <- maybe (pure tctx) (checkDecls kctx tctx) ds
+            tctx1  <- check kctx tctx' g1 (mkBool g1)
+            tctx1' <- check kctx tctx1 e1 t
+            foldM (\tctxi (gj,ej) -> do
+                tctxj <- check kctx tctxi gj (mkBool gj)
+                tctxj' <- check kctx tctxj ej t
+                unless (equivalentCtx tctxj' tctx1') $
+                -- TODO: better error message.
+                  throwE (TypeCtxMismatch (getSpan ej) ej (Map.assocs tctxj') (Map.assocs tctx1'))
+                return tctxj) 
+              tctx1 ges
+        E.UnguardedRHS e ds -> do
+            tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
+            check kctx tctx' e t
 
     equivalentCtx :: TypeCtx -> TypeCtx -> Bool
     equivalentCtx = (==) `on` Map.keysSet

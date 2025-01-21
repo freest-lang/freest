@@ -192,20 +192,22 @@ KindSig :: { M.Module -> M.Module }
   : 'type' UPPER_ID ':' Kind { M.insertKindSig (mkIdTk $2) $4 }
 
 LetDecl
-  : Pat DefRHS { E.ValDecl $1 ($2 Nothing) }
-  | Pat DefRHS 'where' LetDeclBlock { E.ValDecl $1 ($2 (Just $4)) }
-  | LOWER_ID PatPrimaryOrAtVarListWS DefRHS                      { E.FnDecl (mkVarTk $1) [($2, $3 Nothing)] }
-  | LOWER_ID PatPrimaryOrAtVarListWS DefRHS 'where' LetDeclBlock { E.FnDecl (mkVarTk $1) [($2, $3 (Just $5))] }
+  : Pat RHS('=') { E.ValDecl $1 $2 }
+  | LOWER_ID PatPrimaryOrAtVarListWS RHS('=') { E.FnDecl (mkVarTk $1) [($2, $3)] }
   | LowerIdListComma ':' Type { E.SigDecl $1 $3 }
 
-DefRHS :: { Maybe [E.LetDecl] -> E.RHS }
-  : '=' Exp     { E.UnguardedRHS $2 }
-  | GuardedExps { E.GuardedRHS $1 }
+RHS(sep) :: { E.RHS }
+  : sep Exp Where { E.UnguardedRHS $2 $3 }
+  | GuardedExps(sep) Where { E.GuardedRHS $1 $2 }
 
-GuardedExps :: { [(E.Exp, E.Exp)] }
-  : '|' Exp '=' Exp GuardedExps { ($2,$4) : $5 }
-  | '|' Exp '=' Exp             { [($2,$4)] }
+GuardedExps(sep) :: { [(E.Exp, E.Exp)] }
+  : '|' Exp sep Exp GuardedExps(sep) { ($2,$4) : $5 }
+  | '|' Exp sep Exp             { [($2,$4)] }
   -- otherwise is simply a variable defined as True
+
+Where :: { Maybe [E.LetDecl] }
+  : 'where' LetDeclBlock { Just $2 }
+  | {- empty -}          { Nothing }
 
 -- LowerIdListWS :: { [Variable] }
 --   : LOWER_ID LowerIdListWS { mkVarTk $1 : $2 }
@@ -357,7 +359,8 @@ Exp :: { E.Exp }
   | 'if' Exp 'then' Exp 'else' Exp { E.If (spanFromTo $1 $6) $2 $4 $6 }
   | 'case' Exp 'of' CaseBlock { E.Case (spanFromTo $1 (snd $ last $4)) $2 $4 }
   -- Operators
-  -- TODO: handle operators more elegantly. They are responsible for most s/r conflicts.
+  -- TODO: handle operators more elegantly. They are responsible for most s/r 
+  -- conflicts. We should:
   -- * Allow programmers to define operators (x op y = e, (op) x y = e)
   -- * Define precedences:
   --   * à la Haskell (declared by programmer) 
@@ -432,20 +435,20 @@ Arrow :: { (Span, K.Multiplicity) }
   | LinArrow { $1 }
 
 PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.Type) (Variable, K.Kind)], K.Multiplicity) } 
-  : PatPrimary   ':' TypePrimary PatTypeOrKindedVarListArrow { first (ExpLevel  ($1        , $3) :) $4 }
+  : PatPrimary ':' TypePrimary PatTypeOrKindedVarListArrow { first (ExpLevel ($1, $3) :) $4 }
   | '@' KindedVar PatTypeOrKindedVarListArrow { first (TypeLevel $2 :) $3 }
-  | PatPrimary   ':' TypePrimary Arrow { ([ExpLevel  ($1, $3)], snd $4) }
+  | PatPrimary ':' TypePrimary Arrow { ([ExpLevel  ($1, $3)], snd $4) }
   | '@' KindedVar UnArrow { ([TypeLevel $2], snd $3) }
 
-CaseBlock :: { [(E.Pat, E.Exp)] }
+CaseBlock :: { [(E.Pat, E.RHS)] }
   : OPEN CaseListPIPE Close { $2 }
 
-CaseListPIPE :: { [(E.Pat, E.Exp)] }
+CaseListPIPE :: { [(E.Pat, E.RHS)] }
   : Case PIPE CaseListPIPE { $1 : $3 }
   | Case                   { [$1] }
 
-Case :: { (E.Pat, E.Exp) }
-  : Pat '->' Exp { ($1, $3) }
+Case :: { (E.Pat, E.RHS) }
+  : Pat RHS('->') { ($1, $2) }
 
 PatPrimary :: { E.Pat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
