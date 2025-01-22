@@ -68,6 +68,11 @@ receive c = do
   v <- C.readChan (fst c)
   return (v, c)
 
+receiveLabel :: ChannelEnd -> IO String
+receiveLabel c = do 
+  val <- C.readChan (fst c)
+  return $ (\(VLabel str) -> str) val
+
 send :: Value -> ChannelEnd -> IO ChannelEnd
 send v c = do
   C.writeChan (snd c) v
@@ -259,7 +264,8 @@ eval (global, local) (E.Let _ letDecls exp) = do
   eval (global, letDeclsCtx ++ local) exp
 eval (global, local) (E.Case _ exp pats) = do
   val <- (eval (global, local) exp)
-  case chooseCase pats val of
+  labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
+  case chooseCase pats val labels of
     Just (exp, matched) -> eval (global, matched ++ local) exp 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
     Nothing -> undefined
@@ -299,7 +305,7 @@ filterTypesFromLetDecls = filter (\letDecl -> case letDecl of E.ValDecl _ _ -> T
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
 consumeAllArgs :: (Context, Context) -> Value -> [Value] -> IO Value
-consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args) of
+consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args []) of
   Just patternMatching ->
     if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
     else if length pats < length args then do val <- (eval (global, patternMatching ++ local_ctx ++ local) exp)
@@ -307,20 +313,22 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
     else return $ VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
-consumeAllArgs (global, local) (VFun patExps) args = case chooseRhs patExps args of
-  Just (rhs, matched, pats) ->
-    do (exp, whereDecls) <- (case rhs of E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
-                                         E.GuardedRHS predExps whereDecls -> do guardsCtx <- chooseGuard (global, matched) predExps
-                                                                                return (guardsCtx, whereDecls))
-       let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
-                                          Nothing -> return [])
-       whereCtx2 <- whereCtx
-       if length pats == length args then eval (global, matched++whereCtx2) exp 
-       else if length pats < length args then do val <- (eval (global, matched++whereCtx2) exp)
-                                                 consumeAllArgs (global, matched++whereCtx2) val (drop (length pats) args)
-       else return $ VClosure (drop (length args) pats) exp (matched++whereCtx2)
-  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
-  Nothing -> undefined
+consumeAllArgs (global, local) (VFun patExps) args = do
+  labels <- mapM receiveLabel $ getInternalChoiceChannels (fst $ head patExps) args
+  case chooseRhs patExps args labels of
+    Just (rhs, matched, pats) ->
+      do (exp, whereDecls) <- (case rhs of E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
+                                           E.GuardedRHS predExps whereDecls -> do guardsCtx <- chooseGuard (global, matched) predExps
+                                                                                  return (guardsCtx, whereDecls))
+         let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
+                                            Nothing -> return [])
+         whereCtx2 <- whereCtx
+         if length pats == length args then eval (global, matched++whereCtx2) exp 
+         else if length pats < length args then do val <- (eval (global, matched++whereCtx2) exp)
+                                                   consumeAllArgs (global, matched++whereCtx2) val (drop (length pats) args)
+         else return $ VClosure (drop (length args) pats) exp (matched++whereCtx2)
+    -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+    Nothing -> undefined
 -- Is there builtins that take no arguments?
 consumeAllArgs ctx (VBuiltin builtin) [] = return $ builtin VUnit
 consumeAllArgs ctx (VBuiltin builtin) [arg] = return $ builtin arg
@@ -339,7 +347,7 @@ resolveLetDecls global ((E.ValDecl pat rhs):letDecls) = do
                                    Nothing -> return [])
   val <- eval (global, whereCtx2) exp
   letDeclsCtx <- resolveLetDecls global letDecls
-  return $ case sequence $ doPatternMatching [pat] [val] of
+  return $ case sequence $ doPatternMatching [pat] [val] [] of
     Just matched -> matched ++ letDeclsCtx
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
     Nothing -> undefined
@@ -352,34 +360,46 @@ resolveLetDecls global ((E.FnDecl var levelRhss):letDecls) = do
 
 -- TODO: refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
-doPatternMatching :: [E.Pat] -> [Value] -> [Maybe (String, Value)]
-doPatternMatching [] [] = []
-doPatternMatching pats [] = []
-doPatternMatching [] args = []
-doPatternMatching (pat:pats) (arg:args) = case pat of
-  E.WildPat _ _ -> doPatternMatching pats args
-  E.VarPat _ var -> Just (B.external var, arg) : doPatternMatching pats args
-  E.ConsPat _ (B.Identifier _ pStr) consPats -> let (str, vals) = (\(VCons str vals) -> (str, vals)) arg in
-    if str == pStr then doPatternMatching consPats vals ++ doPatternMatching pats args else Nothing : doPatternMatching pats args
+doPatternMatching :: [E.Pat] -> [Value] -> [String] -> [Maybe (String, Value)]
+doPatternMatching [] [] _ = []
+doPatternMatching pats [] _ = []
+doPatternMatching [] args _ = []
+doPatternMatching (pat:pats) (arg:args) labels = case pat of
+  E.WildPat _ _ -> doPatternMatching pats args labels
+  E.VarPat _ var -> Just (B.external var, arg) : doPatternMatching pats args labels
+  E.ConsPat _ (B.Identifier _ patIden) consPats -> case arg of
+    VCons iden consArgs -> if iden == patIden then doPatternMatching consPats consArgs labels ++ doPatternMatching pats args labels else Nothing : doPatternMatching pats args labels
+    VChan chan -> if patIden == head labels then Just (B.external $ (\[E.VarPat _ var] -> var) consPats, VChan chan) : doPatternMatching pats args (tail labels) else Nothing : doPatternMatching pats args (tail labels)
   -- E.TuplePat _ tupPats -> doPatternMatching tupPats ((\(VTuple tupVals) -> tupVals) arg) ++ doPatternMatching pats args
-  E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
-  E.FloatPat _ n -> if (\(VFloat n) -> n) arg == n then doPatternMatching pats args else Nothing : doPatternMatching pats args 
-  E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args else Nothing : doPatternMatching pats args
+  E.IntPat _ n -> if (\(VInt n) -> n) arg == n then doPatternMatching pats args labels else Nothing : doPatternMatching pats args labels
+  E.FloatPat _ n -> if (\(VFloat n) -> n) arg == n then doPatternMatching pats args labels else Nothing : doPatternMatching pats args labels
+  E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args labels else Nothing : doPatternMatching pats args labels
   -- E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] ++ doPatternMatching pats args
+  E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] labels ++ doPatternMatching pats args labels
 
-chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (E.RHS, [(String, Value)], [E.Pat])
-chooseRhs [] _ = Nothing
-chooseRhs ((pats, rhs):rest) args = case sequence $ doPatternMatching pats args of
+-- necessary to find out if there is an internal choice in the pattern matching to pre receive the label
+getInternalChoiceChannels :: [E.Pat] -> [Value] -> [ChannelEnd]
+getInternalChoiceChannels [] [] = []
+getInternalChoiceChannels pats [] = []
+getInternalChoiceChannels [] args = []
+getInternalChoiceChannels (pat:pats) (arg:args) = case pat of
+  E.ConsPat _ (B.Identifier _ patIden) patCons -> case arg of
+    VCons _ consArgs -> getInternalChoiceChannels patCons consArgs ++ getInternalChoiceChannels pats args
+    VChan chan -> chan : getInternalChoiceChannels pats args
+  _  -> getInternalChoiceChannels pats args
+
+chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> [String] -> Maybe (E.RHS, [(String, Value)], [E.Pat])
+chooseRhs [] _ _ = Nothing
+chooseRhs ((pats, rhs):rest) args labels = case sequence $ doPatternMatching pats args labels of
   Just matching -> Just (rhs, matching, pats)
-  Nothing -> chooseRhs rest args
+  Nothing -> chooseRhs rest args labels
 
-chooseCase :: [(E.Pat, E.Exp)] -> Value -> Maybe (E.Exp, [(String, Value)])
-chooseCase [] _ = Nothing
-chooseCase ((pat, exp):patsExps) val = case doPatternMatching [pat] [val] of
+chooseCase :: [(E.Pat, E.Exp)] -> Value -> [String] -> Maybe (E.Exp, [(String, Value)])
+chooseCase [] _ _ = Nothing
+chooseCase ((pat, exp):patsExps) val labels = case doPatternMatching [pat] [val] labels of
   [] -> Just (exp, [])
   [Just (var, val)] -> Just (exp, [(var, val)])
-  [Nothing] -> chooseCase patsExps val
+  [Nothing] -> chooseCase patsExps val labels
 
 chooseGuard :: (Context, Context) -> [(E.Exp, E.Exp)] -> IO E.Exp
 -- TODO: error for no exaustive guards
