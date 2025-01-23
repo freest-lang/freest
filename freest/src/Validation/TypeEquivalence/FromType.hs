@@ -52,10 +52,10 @@ word t =
 
 -- | Requires whnf t.
 wordWhnf :: T.Type -> TransState Word
-wordWhnf = \case 
-  T.Skip{} -> 
+wordWhnf = \case
+  T.Skip{} ->
     pure []
-  t@T.End{} -> 
+  t@T.End{} ->
     getLHS $ M.singleton (show t) [bottom]
   t | T.isConstant t ->
     getLHS $ M.singleton (show t) []
@@ -63,14 +63,13 @@ wordWhnf = \case
     w <- word u
     getLHS $ M.fromList [
       (show mult ++ show p ++ "1", w ++ [bottom]),
-      (show mult ++ show p ++ "2", if mult == Lin then [] else [bottom])]
+      (show mult ++ show p ++ "2", [bottom | mult /= Lin])]
   T.AppSemi _ t u ->
     liftM2 (++) (word t) (word u)
   T.Choice _ m p its -> do
     let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
     ws <-           mapM (word                                     . snd) its
-    w <- getLHS $ M.fromList (zip terminals ws)
-    pure w
+    getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
   T.AppVar _ α ts -> do -- α T1...Tm
     ws <- mapM word ts
@@ -164,7 +163,7 @@ reverseLookup a =
 
 -- | Fat terminal types can be compared for syntactic equality.
 fatTerminal :: T.Type -> Maybe T.Type
-fatTerminal = \case 
+fatTerminal = \case
   -- Functional Types
   t@T.Int{}   -> Just t
   t@T.Float{} -> Just t
