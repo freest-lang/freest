@@ -47,6 +47,7 @@ data Error
   | TypeCtxMismatch Span E.Exp [(Variable, T.Type)] [(Variable, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
   | ChoiceNotAllowed Span Identifier T.Type
+  | UnsupportedError Span String
 
 instance Located Error where
   getSpan = \case 
@@ -76,6 +77,7 @@ instance Located Error where
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
     ChoiceNotAllowed s _ _ -> s
+    UnsupportedError s _ -> s
 
   setSpan = internalError "span not settable for Error type."
 
@@ -135,29 +137,31 @@ instance Show Error where
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
-          "\n Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
+          "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
         ProperKindMismatch s t k -> 
-          "\n Expected a proper kind for type "++show t++", but got kind "++show k
+          "\n  Expected a proper kind for type "++show t++", but got kind "++show k
         GivenTooManyArgsK s t n m ->
-          "\n Type "++show t++" expects "++show n++" arguments, but it was given "++show m++"."
+          "\n  Type "++show t++" expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->
-          "\n Type "++show i++" expects too many arguments, it should have kind "++show k++"."
+          "\n  Type "++show i++" expects too many arguments, it should have kind "++show k++"."
         InvalidType s t ->
-          "\n Invalid type: "++show t
+          "\n  Invalid type: "++show t
         TypeMismatch s t u ep ->
-          "\n Couldn't match expected type "++show t++" with actual type "++show u++" in the "++showExpPat ep++"."
+          "\n  Couldn't match expected type "++show t++" with actual type "++show u++" in the "++showExpPat ep++"."
         TypeCtxMismatch s e tctx1 tctx2 -> 
           -- TODO: different messages for abstractions, cases and conditional expressions; ideally better than Freest 3.
-          "\nCouldn't match the final contexts in two distinct branches in a case expression " ++
-          "\n\t       One context is " ++ show tctx1 ++
-          "\n\t         the other is " ++ show tctx2 ++
-          "\n\tand the expression is " ++ show e ++
-          "\n\t(was a variable consumed in one branch and not in the other?)" ++
-          "\n\t(is there a variable with different types in the two contexts?)"
-        ConstructorArgumentMismatch s i n m ->
-          "\n The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
+          "\n  Couldn't match the final contexts in two distinct branches in a case expression " ++
+          "\n  \t       One context is " ++ show tctx1 ++
+          "\n  \t         the other is " ++ show tctx2 ++
+          "\n  \tand the expression is " ++ show e ++
+          "\n  \t(was a variable consumed in one branch and not in the other?)" ++
+          "\n  \t(is there a variable with different types in the two contexts?)"
+        ConstructorArgumentMismatch _ i n m ->
+          "\n  The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
         ChoiceNotAllowed s i t ->
-          "\n Choice `"++show i++"` is not allowed by type "++show t
+          "\n  Choice `"++show i++"` is not allowed by type "++show t
+        UnsupportedError _ m ->
+          "\n  " ++ m
 
       showExpPat = \case 
         Left  p -> "pattern `"++show p++"`"

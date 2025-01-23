@@ -253,7 +253,8 @@ TypePrimary :: { T.Type }
   | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnit (spanFromTo $1 $2)) }
   | '(' Type ',' TypeListComma ')' 
       { T.AppDName (spanFromTo $1 $5) (mkTupleCons (length $4) (spanFromTo $1 $5)) ($2 : $4) }
-  | '(' Commas ')' { T.TName (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) }
+  | '(' Commas ')' {% prefixTupleTypeConsError $1 $3 }
+                -- { T.TName (spanFromTo $1 $3) (mkTupleCons $2 (spanFromTo $1 $3)) }
   | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
   -- | '(' Type Arrow ')' -- TODO: sections
   -- | '(' Arrow Type ')' -- TODO: sections
@@ -272,7 +273,8 @@ TypePrimary :: { T.Type }
   | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
   -- Lists
-  | '[' ']'      { T.DName (spanFromTo $1 $2) (mkNil (spanFromTo $1 $2))   }
+  | '[' ']' {% prefixListConsError $1 $2 }
+         -- { T.DName (spanFromTo $1 $2) (mkListId (spanFromTo $1 $2)) } -- TODO: multiplicities
   | '[' Type ']' { T.AppDName (spanFromTo $1 $3) (mkNil (spanFromTo $1 $3)) [$2] }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
@@ -335,12 +337,11 @@ ExpPrimary :: { E.Exp }
   -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
   | LOWER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
   | UPPER_ID    { E.Cons   (getSpan $1) (mkIdTk $1) }
-  | '(' ')'     -- { E.Tuple  (spanFromTo $1 $2) [] }
-                {let s = spanFromTo $1 $2 in E.Cons s (mkTupleCons 0 s)}
-  | '(' Commas ')' { let s = spanFromTo $1 $3 in E.Cons s (mkTupleCons $2 s) }
-  | '(' Exp ',' ExpListComma ')' -- {E.Tuple (spanFromTo $1 $5) ($2 : $4) }   -- with tuples in the Exp AST
-                                 { tupleAppExp (spanFromTo $1 $5) ($2 : $4) } -- using tuple constructors (,+)
-  -- | TupleSection { ... }                                                   -- TODO: tuple sections
+  | '(' ')'     {let s = spanFromTo $1 $2 in E.Cons s (mkTupleCons 0 s)}
+  | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
+                -- { let s = spanFromTo $1 $3 in E.Cons s (mkTupleCons $2 s) } -- TODO: multiplicities
+  | '(' Exp ',' ExpListComma ')' { tupleExp (spanFromTo $1 $5) ($2 : $4) }
+  -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' ConsOp ')' { E.Cons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
@@ -349,8 +350,8 @@ ExpPrimary :: { E.Exp }
   | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) $3) $2) }
   | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Cons (getSpan $3) $3) $2) }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinus $3)) $2) }
-  | '[' ']'     { let s = spanFromTo $1 $2 in E.Cons s (mkNil s)}
-  | '[' ExpListComma ']' { consAppExp (spanFromTo $1 $3) $2 }
+  | '[' ']' {% listMissingTypeAppError $1 $2 }
+  | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
 Exp :: { E.Exp }
   -- Keyword expressions
@@ -395,6 +396,8 @@ ExpApp :: { E.Exp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID ExpPrimary { E.Select (spanFromTo $1 $2) (mkIdTk $2) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
+  | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.Cons s (mkNil s)) [TypeLevel $4] } -- TODO: multiplicities
+  | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
 
@@ -469,7 +472,7 @@ Pat :: { E.Pat }
 
 DataConstructor :: { Identifier }
   : UPPER_ID { mkIdTk $1 }
-  | '(' Commas ')' { mkTupleCons $2 (spanFromTo $1 $3) }
+  -- | '(' Commas ')' { mkTupleCons $2 (spanFromTo $1 $3) } -- TODO: multiplicities
   | '[' ']' { mkNil (spanFromTo $1 $2) }
 
 PatPrimaryListWS :: { [E.Pat] } 
@@ -530,5 +533,22 @@ TypeTestDecl :: { M.Module -> M.Module }
 lexer cont = scan >>= cont
 
 parseError :: (Token, [String]) -> Lexer a
-parseError (tk,ss) = throwError [(ParseError (getSpan tk) (tk, ss))] 
+parseError (tk,ss) = throwError [ParseError (getSpan tk) (tk, ss)] 
+
+listMissingTypeAppError :: Token -> Token -> Lexer a
+listMissingTypeAppError tk1 tk2 =
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "Lists expressions require a type application. Please add `@TYPE` after this expression, where TYPE is the type of the elements of the list."]
+
+prefixListConsError :: Token -> Token -> Lexer a
+prefixListConsError tk1 tk2 =
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "The prefix list type constructor is not yet supported. Please provide a type between the brackets."]
+
+prefixTupleTypeConsError :: Token -> Token -> Lexer a
+prefixTupleTypeConsError tk1 tk2 = 
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple type constructors are not yet supported. Consider using a tuple type."] 
+
+prefixTupleExpConsError :: Token -> Token -> Lexer a
+prefixTupleExpConsError tk1 tk2 = 
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported. Consider using a tuple expression."] 
+
 }

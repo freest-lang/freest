@@ -44,11 +44,14 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 unOp :: E.Exp -> E.Exp -> E.Exp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
-tupleAppExp :: Span -> [E.Exp] -> E.Exp
-tupleAppExp s es = E.App s (E.Cons s (mkTupleCons (length es) s)) (map ExpLevel es)
+tupleExp :: Span -> [E.Exp] -> E.Exp
+tupleExp s es = E.App s (E.Cons s (mkTupleCons (length es - 1) s)) (map ExpLevel es)
 
-consAppExp :: Span -> [E.Exp] -> E.Exp
-consAppExp s = foldr (\e l -> E.App s (E.Cons s $ mkCons s) (map ExpLevel [e,l])) (E.Cons s (mkNil s))
+listExp :: Span -> T.Type -> [E.Exp] -> E.Exp
+listExp s t = 
+  foldr (\e l -> E.App s (E.Cons s $ mkCons s) 
+                         (TypeLevel t : map ExpLevel [e,l])) 
+        (E.App s (E.Cons s (mkNil s)) [TypeLevel t])
 
 addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp 
 addArgExp a (E.App s e as) = E.App s e (as ++ [a])
