@@ -77,8 +77,7 @@ synth kctx tctx = \case
         (pkctx, ptctx) <- collectParams kctx ps
         (t, tctx') <- synth (pkctx `Map.union` kctx) (ptctx `Map.union` tctx) e
         let tctx'' = tctx' Map.\\ ptctx
-        unless (m /= K.Un || equivalentCtx tctx'' tctx) $ 
-            throwE (TypeCtxMismatch (getSpan e) e (Map.assocs tctx'') (Map.assocs tctx))
+        unless (m /= K.Un) $ checkEquivTypeCtxs e tctx'' tctx
         return (foldr (\case ExpLevel  (_,u) -> T.AppArrow s m u
                              TypeLevel (a,k) -> T.Forall s a k) t ps
                ,tctx'')
@@ -106,7 +105,7 @@ synth kctx tctx = \case
           checkRHS kctx tctxi' t1 rhsi
         return (t1, tctx1)
     E.If s e1 e2 e3 -> do 
-        tctx' <- check kctx tctx e1 (mkBool e1)
+        tctx' <- check kctx tctx e1 (T.DName (getSpan e1) (mkBool e1))
         (t1, tctx1) <- synth kctx tctx' e1
         tctx2 <- check kctx tctx' e2 t1
         checkEquivTypeCtxs e2 tctx1 tctx2
@@ -151,45 +150,21 @@ synth kctx tctx = \case
             when (K.lin k) (throwE (NonLinPat s p t))
             Map.insert x t <$> checkPat kctx t p
 
-    synthRHS :: KindCtx -> TypeCtx -> E.RHS -> Validation (T.Type, TypeCtx)
-    synthRHS kctx tctx = \case
-        E.GuardedRHS ((g1,e1):ges) ds -> do
-            tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
-            tctx1 <- check kctx tctx' g1 (mkBool g1)
-            (t1,tctx1') <- synth kctx tctx1 e1
-            (t1,) <$> foldM (\tctxi (gj,ej) -> do
-                tctxj <- check kctx tctxi gj (mkBool gj)
-                tctxj' <- check kctx tctxj ej t1
-                unless (equivalentCtx tctxj' tctx1') $
-                -- TODO: better error message.
-                  throwE (TypeCtxMismatch (getSpan ej) ej (Map.assocs tctxj') (Map.assocs tctx1'))
-                return tctxj) 
-              tctx1 ges
-        E.UnguardedRHS e ds -> do
-            tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
-            synth kctx tctx' e
-    -- TODO: avoid this duplication
-    checkRHS :: KindCtx -> TypeCtx -> T.Type -> E.RHS -> Validation TypeCtx
-    checkRHS kctx tctx t = \case
-        E.GuardedRHS ((g1,e1):ges) ds -> do
-            tctx'  <- maybe (pure tctx) (checkDecls kctx tctx) ds
-            tctx1  <- check kctx tctx' g1 (mkBool g1)
-            tctx1' <- check kctx tctx1 e1 t
-            foldM (\tctxi (gj,ej) -> do
-                tctxj <- check kctx tctxi gj (mkBool gj)
-                tctxj' <- check kctx tctxj ej t
-                unless (equivalentCtx tctxj' tctx1') $
-                -- TODO: better error message.
-                  throwE (TypeCtxMismatch (getSpan ej) ej (Map.assocs tctxj') (Map.assocs tctx1'))
-                return tctxj) 
-              tctx1 ges
-        E.UnguardedRHS e ds -> do
-            tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
-            check kctx tctx' e t
-
-    equivalentCtx :: TypeCtx -> TypeCtx -> Bool
-    equivalentCtx = (==) `on` Map.keysSet
-
+synthRHS :: KindCtx -> TypeCtx -> E.RHS -> Validation (T.Type, TypeCtx)
+synthRHS kctx tctx = \case
+    E.GuardedRHS ((g1,e1):ges) ds -> do
+        tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
+        tctx1 <- check kctx tctx' g1 (T.DName (getSpan g1) (mkBool g1))
+        (t1,tctx1') <- synth kctx tctx1 e1
+        (t1,) <$> foldM (\tctxi (gj,ej) -> do
+            tctxj <- check kctx tctxi gj (T.DName (getSpan gj) (mkBool gj))
+            tctxj' <- check kctx tctxj ej t1
+            checkEquivTypeCtxs ej tctxj' tctx1'
+            return tctxj) 
+            tctx1 ges
+    E.UnguardedRHS e ds -> do
+        tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
+        synth kctx tctx' e
 
 lookupCons :: Identifier -> Validation (Identifier, [Variable], [T.Type])
 lookupCons i = do
@@ -197,6 +172,9 @@ lookupCons i = do
     case dds Map.!? i of
         Just ias -> return ias
         Nothing  -> throwE (ConsOutOfScope (getSpan i) i) 
+
+check :: KindCtx -> TypeCtx -> E.Exp -> T.Type -> Validation TypeCtx
+check = undefined
 
 checkEquivTypes :: Either E.Exp E.Pat -> T.Type -> T.Type -> Validation ()
 checkEquivTypes eop t1 t2 = do
@@ -216,5 +194,18 @@ checkDecls kctx = foldM (checkDecl kctx)
       E.SigDecl xs t -> return (Map.fromList (map (,t) xs) `Map.union` tctx)
       _ -> undefined
 
-check :: KindCtx -> TypeCtx -> E.Exp -> T.Type -> Validation TypeCtx
-check = undefined
+checkRHS :: KindCtx -> TypeCtx -> T.Type -> E.RHS -> Validation TypeCtx
+checkRHS kctx tctx t = \case
+    E.GuardedRHS ((g1,e1):ges) ds -> do
+        tctx'  <- maybe (pure tctx) (checkDecls kctx tctx) ds
+        tctx1  <- check kctx tctx' g1 (T.DName (getSpan g1) (mkBool g1))
+        tctx1' <- check kctx tctx1 e1 t
+        foldM (\tctxi (gj,ej) -> do
+            tctxj <- check kctx tctxi gj (T.DName (getSpan gj) (mkBool gj))
+            tctxj' <- check kctx tctxj ej t
+            checkEquivTypeCtxs gj tctxj' tctx1'
+            return tctxj) 
+            tctx1 ges
+    E.UnguardedRHS e ds -> do
+        tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
+        check kctx tctx' e t

@@ -9,7 +9,6 @@ This module contains helper functions to generate variables with standard names.
 module Syntax.Names where
 
 import Syntax.Base
-import qualified Syntax.Type as T
 
 ; mkOr, mkAnd,
   mkPlus, mkMinus, mkTimes, mkDiv, mkPower, mkNegate,
@@ -47,5 +46,8 @@ mkCons = mkId "(::)"
 mkTupleCons :: Located a => Int -> a -> Identifier
 mkTupleCons n = mkId $ "("++replicate n ','++")"
 
-mkBool :: Located a => a -> T.Type
-mkBool (getSpan -> s) = T.AppDName s (mkId "Bool" s) []
+mkBool :: Located a => a -> Identifier
+mkBool (getSpan -> s) = mkId "Bool" s
+
+mkList :: Located a => a -> Identifier
+mkList (getSpan -> s) = mkId "[]" s

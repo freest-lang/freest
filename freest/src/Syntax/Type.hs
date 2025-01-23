@@ -22,6 +22,7 @@ where
 
 import           Syntax.Base
 import qualified Syntax.Kind                   as K
+import           Syntax.Names
 
 import           Data.List                     (intercalate, sort)
 import           Data.Bifunctor
@@ -93,7 +94,7 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
                                   t                    -> t
                            -> App s (TName _ i) ts)
   where AppTName _ i [] = TName (getSpan i) i
-        AppTName s i ts = App s (TName (getSpan i) i) ts  
+        AppTName s i ts = App s (TName (getSpan i) i) ts
 
 pattern AppDName :: Span -> Identifier -> [Type] -> Type
 pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
@@ -217,35 +218,45 @@ instance Congruence [(Identifier, Type)] where
 
 instance Located Type where
   getSpan = \case 
+    -- Functional types
     Int s           -> s
     Float s         -> s
     Char s          -> s
     Arrow s _       -> s
+    -- Session types
     Message s _ _   -> s
     Choice  s _ _ _ -> s
     End s _         -> s
     Skip s          -> s
     Semi s          -> s
     Dual s          -> s
-    Var s _         -> s
+    -- Polymorphism
     Quant s _ _ _ _ -> s
+    -- Higher-order
+    Var s _         -> s
     App s _ _       -> s
+    -- Equations
     TName s _       -> s
     DName s _       -> s
 
   setSpan s = \case
+    -- Functional types
     Int _             -> Int s
     Float _           -> Float s
     Char _            -> Char s
     Arrow _ m         -> Arrow s m
+    -- Session types
     Message _ m p     -> Message s m p
     Choice  _ m p lts -> Choice s m p lts
     End _ p           -> End s p
     Skip _            -> Skip s
     Semi _            -> Semi s
     Dual _            -> Dual s
-    Var _ a           -> Var s a
+    -- Polymorphism
     Quant _ p a k t   -> Quant s p a k t
+    -- Higher-order
+    Var _ a           -> Var s a
     App _ t1 t2       -> App s t1 t2
+    -- Equations
     TName _ n         -> TName s n
     DName _ n         -> DName s n
