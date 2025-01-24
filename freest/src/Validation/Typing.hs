@@ -47,6 +47,18 @@ synth kctx tctx = \case
     E.Char s _      -> pure (T.Char s  , tctx)
     E.Cons s i      -> lookupECons tctx i
     E.Var s x       -> lookupEVar  tctx x
+    -- Tuples, (e1 ... , en)
+    E.App s (E.Cons _ i) (partitionLevels -> (es,_)) 
+        | isTupleId i    -> do
+            first (T.App s (T.DName s i)) <$> 
+              foldM (\(ts,tctx') e -> first (:ts) <$> synth kctx tctx' e) 
+                    ([], tctx) es
+    -- Nil, [] @a
+    E.App s (E.Cons _ i) [TypeLevel t] 
+        | i == mkNilId i -> pure (T.App s (T.DName s (mkListId s)) [t], tctx)
+    -- Cons, (::) @a e1 e2
+    E.App s (E.Cons _ i) [TypeLevel t, ExpLevel e1, ExpLevel e2] 
+      | i == mkConsId i  -> pure (T.App s (T.DName s (mkListId s)) [t], tctx)
     E.App s f as    -> do
         (t, tctx') <- synth kctx tctx f
         t' <- Expose.typeArrow f t
@@ -105,13 +117,13 @@ synth kctx tctx = \case
           checkRHS kctx tctxi' t1 rhsi
         return (t1, tctx1)
     E.If s e1 e2 e3 -> do 
-        tctx' <- check kctx tctx e1 (T.DName (getSpan e1) (mkBool e1))
+        tctx' <- check kctx tctx e1 (T.DName (getSpan e1) (mkBoolId e1))
         (t1, tctx1) <- synth kctx tctx' e1
         tctx2 <- check kctx tctx' e2 t1
         checkEquivTypeCtxs e2 tctx1 tctx2
         return (t1, tctx1)
     E.Channel s t -> 
-        pure (T.App s (T.DName s (mkTupleCons 1 s)) [t, T.AppDual s t], tctx)
+        pure (T.App s (T.DName s (mkTupleId 1 s)) [t, T.AppDual s t], tctx)
     E.Select s i e -> do
         (t,tctx') <- synth kctx tctx e
         ts <- Expose.internalChoice e t
@@ -135,7 +147,26 @@ synth kctx tctx = \case
             k <- Kinding.synth kctx t
             when (K.lin k) (throwE (NonLinPat s p t))
             return Map.empty
-        p@(E.ConsPat s i ps) -> do
+        p@(E.NilPat s) -> do
+            td <- gets typeDecls
+            case normalise td t of
+                T.List _ _ -> return Map.empty
+                t' -> throwE (TypeMismatchList (getSpan p) t (Right p))
+        p@(E.ConsPat s p1 p2) -> do
+            td <- gets typeDecls
+            case normalise td t of
+                t'@(T.List s t'') -> do 
+                    tctx <- checkPat kctx t'' p1
+                    tctx' <- checkPat kctx t' p2
+                    return (Map.union tctx tctx')
+                t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
+        p@(E.TuplePat s ps) -> do
+            td <- gets typeDecls
+            case normalise td t of
+                t'@(T.Tuple s ts) -> do
+                    foldM (\tctx (u,p) -> Map.union tctx <$> checkPat kctx u p) Map.empty (zip ts ps)
+                t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
+        p@(E.DataPat s i ps) -> do
             (i',as,ts) <- lookupCons i
             td <- gets typeDecls
             case normalise td t of 
@@ -154,10 +185,10 @@ synthRHS :: KindCtx -> TypeCtx -> E.RHS -> Validation (T.Type, TypeCtx)
 synthRHS kctx tctx = \case
     E.GuardedRHS ((g1,e1):ges) ds -> do
         tctx' <- maybe (pure tctx) (checkDecls kctx tctx) ds
-        tctx1 <- check kctx tctx' g1 (T.DName (getSpan g1) (mkBool g1))
+        tctx1 <- check kctx tctx' g1 (T.DName (getSpan g1) (mkBoolId g1))
         (t1,tctx1') <- synth kctx tctx1 e1
         (t1,) <$> foldM (\tctxi (gj,ej) -> do
-            tctxj <- check kctx tctxi gj (T.DName (getSpan gj) (mkBool gj))
+            tctxj <- check kctx tctxi gj (T.DName (getSpan gj) (mkBoolId gj))
             tctxj' <- check kctx tctxj ej t1
             checkEquivTypeCtxs ej tctxj' tctx1'
             return tctxj) 
@@ -198,10 +229,10 @@ checkRHS :: KindCtx -> TypeCtx -> T.Type -> E.RHS -> Validation TypeCtx
 checkRHS kctx tctx t = \case
     E.GuardedRHS ((g1,e1):ges) ds -> do
         tctx'  <- maybe (pure tctx) (checkDecls kctx tctx) ds
-        tctx1  <- check kctx tctx' g1 (T.DName (getSpan g1) (mkBool g1))
+        tctx1  <- check kctx tctx' g1 (T.DName (getSpan g1) (mkBoolId g1))
         tctx1' <- check kctx tctx1 e1 t
         foldM (\tctxi (gj,ej) -> do
-            tctxj <- check kctx tctxi gj (T.DName (getSpan gj) (mkBool gj))
+            tctxj <- check kctx tctxi gj (T.DName (getSpan gj) (mkBoolId gj))
             tctxj' <- check kctx tctxj ej t
             checkEquivTypeCtxs gj tctxj' tctx1'
             return tctxj) 

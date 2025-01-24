@@ -14,6 +14,18 @@ case Int
 
 case ()
 
+case (Int, Char)
+
+case (Int, Char, Float)
+
+case [Int]
+
+case [(Int, Char, Float)]
+
+case ([Int], Char, Float)
+
+case [[Int]]
+
 -- Session types
 
 case !Int
@@ -165,8 +177,14 @@ case *!Int
 case *?Int
 
 case *!(!Int;?Bool;Close)
+where
+  type Bool : 1T
+  data Bool = True | False
 
 case *?(!Int;?Bool;Close)
+where
+  type Bool : 1T
+  data Bool = True | False
 
 -- case *&{One}
 
@@ -181,8 +199,14 @@ case *!Int ; !Char
 case *?Int ; !Char
 
 case *!(!Int ; ?Bool ; Close) ; !Char
+where
+  type Bool : 1T
+  data Bool = True | False
 
 case *?(!Int ; ?Bool ; Close) ; !Char
+where
+  type Bool : 1T
+  data Bool = True | False
 
 -- case *&{One} ; !Char
 

@@ -77,17 +77,12 @@ kindDataDecl (i, (as, t)) = do
 
     checkConsDecls :: Kind -> (Kind -> Kind) -> KindingCtx -> M.ConsDeclList -> Validation ()
     checkConsDecls k f ctx cds = do
-      m <- synthDataMult ctx cds
+      m <- synthDataMult ctx (map snd cds)
       let k' = f (Proper (getSpan i) m Top)
       unless (k' <: k)
         (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) i) k'))
 
-    synthDataMult ctx = foldM (synthConsMult ctx) Un
-
-    synthConsMult ctx m (i, ts) = foldM (checkJoinConsField ctx) m ts
-
-    checkJoinConsField ctx m' t =
-      checkProper ctx t >>= \(m'',_) -> pure (join m' m'')
+    synthDataMult ctx = foldM (foldCheckProperJoin ctx) Un
 
 type KindingCtx = Map.Map Variable Kind
 
@@ -119,8 +114,10 @@ synth ctx = \case
     checkProper (Map.insert a k ctx) t
     >>= \case (m,Session) -> pure (Proper s Lin Session)
               (m,Top    ) -> pure (Proper s m Top      )
-  -- Equations
+  -- Equations (including built-ins)
   T.TName s i -> lookupKind i
+  T.Tuple s ts -> Proper s <$> foldCheckProperJoin ctx Un ts <*> pure Top
+  T.List s t -> (Proper s . fst <$> checkProper ctx t) <*> pure Top
   T.DName s i -> lookupKind i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
@@ -153,6 +150,11 @@ synth ctx = \case
 
 check :: KindingCtx -> T.Type -> Kind -> Validation ()
 check ctx t k = void (synthCheck ctx t k)
+
+foldCheckProperJoin :: KindingCtx -> Multiplicity -> [T.Type] -> Validation Multiplicity
+foldCheckProperJoin ctx = foldM (checkProperJoin ctx)
+  where checkProperJoin ctx m' t =
+          checkProper ctx t >>= \(m'',_) -> pure (join m' m'')
 
 checkProper :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkProper ctx t =

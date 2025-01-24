@@ -8,7 +8,18 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
-  , Type(.., Forall, Exists, AppArrow, AppMessage, AppSemi, AppDual, AppTName, AppDName, AppVar)
+  , Type( ..
+        , Forall
+        , Exists
+        , AppArrow
+        , AppMessage
+        , AppSemi
+        , AppDual
+        , AppTName
+        , Tuple
+        , List
+        , AppDName
+        , AppVar)
   , smartApp
   , variadicQuant
   , Dual(..)
@@ -23,12 +34,13 @@ where
 import           Syntax.Base
 import qualified Syntax.Kind                   as K
 import           Syntax.Names
+import           Utils ( internalError )
 
 import           Data.List                     (intercalate, sort)
 import           Data.Bifunctor
 import qualified Data.Map.Strict               as M
 
-data Polarity = In | Out 
+data Polarity = In | Out
   deriving (Eq, Ord)
 
 class Dual a where
@@ -77,7 +89,7 @@ pattern AppArrow s m t u <- App s (Arrow _ m) [t,u]
   where AppArrow s m t u  = App s (Arrow s m) [t,u]
 
 pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
-pattern AppMessage s m p t <- App s (Message _ m p) [t] 
+pattern AppMessage s m p t <- App s (Message _ m p) [t]
   where AppMessage s m p t  = App s (Message s m p) [t]
 
 pattern AppSemi :: Span -> Type -> Type -> Type
@@ -96,10 +108,18 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
   where AppTName _ i [] = TName (getSpan i) i
         AppTName s i ts = App s (TName (getSpan i) i) ts
 
+pattern Tuple :: Span -> [Type] -> Type
+pattern Tuple s ts <- AppDName s i@(isTupleId -> True) ts
+  where Tuple s ts =  AppDName s (mkTupleId (length ts - 1) s) ts
+
+pattern List :: Span -> Type -> Type
+pattern List s t <- AppDName s i@((== mkListId s) -> True) [t]
+  where List s t =  AppDName s (mkListId s) [t]
+
 pattern AppDName :: Span -> Identifier -> [Type] -> Type
 pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
                                   App s (DName _ i) ts -> App s (DName s i) ts
-                                  t                    -> t 
+                                  t                    -> t
                            -> App s (DName _ i) ts)
   where AppDName _ i [] = DName (getSpan i) i
         AppDName s i ts = App s (DName (getSpan i) i) ts
@@ -110,7 +130,7 @@ pattern AppVar s a ts <- (\case Var s a            -> App s (Var s a) []
                                 t                  -> t
                            -> App s (Var _ a) ts)
   where AppVar _ a [] = Var (getSpan a) a
-        AppVar s a ts = App s (Var (getSpan a) a) ts 
+        AppVar s a ts = App s (Var (getSpan a) a) ts
 
 variadicQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
 variadicQuant _ _ [] t = t
@@ -122,7 +142,7 @@ smartApp s (App _ t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
 
 isConstant :: Type -> Bool
-isConstant = \case 
+isConstant = \case
   Choice{} -> False
   Quant{}  -> False
   TName{}  -> False
@@ -141,7 +161,7 @@ instance Show Polarity where
   show = \case In -> "?"; Out -> "!"
 
 instance Show Type where
-  show = \case 
+  show = \case
    -- Functional types
     Int{}     -> "Int"
     Float{}   -> "Float"
@@ -155,8 +175,8 @@ instance Show Type where
     End _ Out         -> "Close"
     Message _ K.Un p  -> "(*"++ show p++")"
     Message _ _ p     -> "("++show p++")"
-    Choice  _ m p lts -> 
-      showMult m ++ showView p 
+    Choice  _ m p lts ->
+      showMult m ++ showView p
       ++ "{" ++ intercalate "," (map (\(l, t) -> show l ++ ": " ++ show t) lts)
       ++ "}"
       where showMult = \case K.Lin -> "" ; K.Un -> "*"
@@ -177,7 +197,7 @@ class Congruence t where
 
 instance Eq Type where
   (==) = congruent M.empty
-  
+
 instance Congruence Type where
   -- Functional types
   congruent _ Int{}   Int{}   = True
@@ -190,14 +210,15 @@ instance Congruence Type where
   congruent _ Dual{} Dual{} = True
   congruent _ (End _ p1) (End _ p2) = p1 == p2
   congruent m (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
-  congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) = 
+  congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) =
     m1 == m2 && p1 == p2 && congruent m lts1 lts2
   -- Polymorphism
-  congruent m (Quant _ p1 a k1 t) (Quant _ p2 b k2 u) = 
+  congruent m (Quant _ p1 a k1 t) (Quant _ p2 b k2 u) =
     p1 == p2 && a == b && k1 == k2 && congruent m t u
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
-    v1 == v2 ||              -- free variables
+    v1 == v2 ||              -- free variables              -- free variables
+                  -- free variables
     Just v2 == M.lookup v1 m -- bound variables
   congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
   -- Equations
@@ -213,11 +234,11 @@ instance Congruence [Type] where
 instance Congruence [(Identifier, Type)] where
   congruent m m1 m2 =
     length m1 == length m2 &&
-    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2) 
+    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2)
         (zip (sort m1) (sort m2))
 
 instance Located Type where
-  getSpan = \case 
+  getSpan = \case
     -- Functional types
     Int s           -> s
     Float s         -> s

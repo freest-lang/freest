@@ -8,7 +8,11 @@ external language. Expressions contain patterns and let declarations, which
 are also represented by the Pat and LetDecl data types also defined here.
 -}
 module Syntax.Expression
-  ( Pat(..)
+  ( Pat( ..
+       , NilPat
+       , ConsPat
+       , TuplePat
+       )
   , RHS(..)
   , LetDecl(..)
   , Exp(..)
@@ -28,13 +32,25 @@ data Pat
   | CharPat Span Char
   | WildPat Span Variable
   | VarPat Span Variable
-  | ConsPat Span Identifier [Pat]
+  | DataPat Span Identifier [Pat]
   | AsPat Span Variable Pat
+
+pattern NilPat :: Span -> Pat
+pattern NilPat s <- DataPat s ((== mkNilId s) -> True) []
+  where NilPat s =  DataPat s (mkNilId s) []
+
+pattern ConsPat :: Span -> Pat -> Pat -> Pat
+pattern ConsPat s p1 p2 <- DataPat s ((== mkConsId s) -> True) [p1,p2]
+  where ConsPat s p1 p2 =  DataPat s (mkConsId s) [p1,p2]
+
+pattern TuplePat :: Span -> [Pat] -> Pat
+pattern TuplePat s ps <- DataPat s (isTupleId -> True) ps
+  where TuplePat s ps =  DataPat s (mkTupleId (length ps - 1) s) ps
 
 stringPat :: Span -> String -> Pat
 stringPat s = \case
-  []     -> ConsPat s (mkNil s) []
-  (c:cs) -> ConsPat s (mkCons s) [CharPat s c, stringPat s cs]
+  []     -> DataPat s (mkNilId s) []
+  (c:cs) -> DataPat s (mkConsId s) [CharPat s c, stringPat s cs]
 
 data LetDecl
   = ValDecl Pat      RHS
@@ -63,7 +79,7 @@ instance Located Pat where
   getSpan = \case
     WildPat s _   -> s
     VarPat s _    -> s
-    ConsPat s _ _ -> s
+    DataPat s _ _ -> s
     IntPat s _    -> s
     FloatPat s _  -> s
     CharPat s _   -> s
@@ -72,7 +88,7 @@ instance Located Pat where
   setSpan s = \case
     WildPat _ x    -> WildPat s x
     VarPat _ x     -> VarPat s x
-    ConsPat _ c ps -> ConsPat s c ps
+    DataPat _ c ps -> DataPat s c ps
     IntPat _ i     -> IntPat s i
     FloatPat _ f   -> FloatPat s f
     CharPat _ c    -> CharPat s c
@@ -127,7 +143,7 @@ instance Show Pat where
   show = \case
     WildPat _ x    -> show x
     VarPat _ x     -> show x
-    ConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
+    DataPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
     IntPat _ i     -> show i
     FloatPat _ f   -> show f
     CharPat _ c    -> show c

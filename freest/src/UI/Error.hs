@@ -44,6 +44,8 @@ data Error
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
   | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
+  | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
+  | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
   | TypeCtxMismatch Span E.Exp [(Variable, T.Type)] [(Variable, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
   | ChoiceNotAllowed Span Identifier T.Type
@@ -74,6 +76,8 @@ instance Located Error where
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
     TypeMismatch s _ _ _ -> s
+    TypeMismatchList s _ _ -> s
+    TypeMismatchTuple s _ _ _ -> s
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
     ChoiceNotAllowed s _ _ -> s
@@ -148,6 +152,14 @@ instance Show Error where
           "\n  Invalid type: "++show t
         TypeMismatch s t u ep ->
           "\n  Couldn't match expected type "++show t++" with actual type "++show u++" in the "++showExpPat ep++"."
+        TypeMismatchList _ t ep ->
+          "\n  Couldn't match expected type "++show t++" with a list type in the "++showExpPat ep++"."
+        TypeMismatchTuple _ n t ep ->
+          "\n  Couldn't match expected type "++show t++" with "++
+            (case n of 0 -> "actual type ()"
+                       2 -> "a pair type"
+                       n -> "a "++show n++"-tuple type.")
+          ++" in the "++showExpPat ep++"."
         TypeCtxMismatch s e tctx1 tctx2 -> 
           -- TODO: different messages for abstractions, cases and conditional expressions; ideally better than Freest 3.
           "\n  Couldn't match the final contexts in two distinct branches in a case expression " ++
