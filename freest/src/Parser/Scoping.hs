@@ -287,14 +287,14 @@ scopePat ctx ictx = \case
   E.VarPat s x  -> case lookupEVar x ictx of
     Just internal -> pure (deleteEVar x ictx, E.VarPat s x{internal})
     Nothing -> (ictx,) . E.VarPat s <$> freshInternal x
-  p@(E.DataPat s c ps)
+  p@(E.DConsPat s c ps)
     | memberCId c ctx -> do
         (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
                                 (ictx''', p') <- scopePat ctx ictx'' p
                                 return (ictx''', ps''++[p]))
                               (Map.empty, [])
                               ps
-        return (ictx', E.DataPat s c ps')
+        return (ictx', E.DConsPat s c ps')
     | otherwise -> pure (ictx, p) -- leaving this error for the typechecker
   E.AsPat s x p -> case lookupEVar x ictx of
     Nothing -> do
@@ -315,14 +315,14 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
     patVarOccurs :: E.Pat -> Map.Map (Level String String) [Span]
     patVarOccurs = \case
       E.VarPat s x     -> Map.singleton (ExpLevel $ external x) [getSpan x]
-      E.DataPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
+      E.DConsPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
       E.AsPat _ x p    -> Map.insertWith (++) (ExpLevel $ external x) [getSpan x] (patVarOccurs p)
       _                -> Map.empty
 
 patVars :: E.Pat -> Set.Set Variable
 patVars = \case
   E.VarPat _ x     -> Set.singleton x
-  E.DataPat s _ ps -> Set.unions (map patVars ps)
+  E.DConsPat s _ ps -> Set.unions (map patVars ps)
   E.AsPat _ x p    -> Set.insert x (patVars p)
   _                -> Set.empty
 

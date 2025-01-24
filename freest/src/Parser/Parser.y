@@ -340,19 +340,19 @@ ExpPrimary :: { E.Exp }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
   -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
   | LOWER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
-  | UPPER_ID    { E.Cons   (getSpan $1) (mkIdTk $1) }
-  | '(' ')'     {let s = spanFromTo $1 $2 in E.Cons s (mkTupleId 0 s)}
+  | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
+  | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
-                -- { let s = spanFromTo $1 $3 in E.Cons s (mkTupleId $2 s) } -- TODO: multiplicities
+                -- { let s = spanFromTo $1 $3 in E.DCons s (mkTupleId $2 s) } -- TODO: multiplicities
   | '(' Exp ',' ExpListComma ')' { tupleExp (spanFromTo $1 $5) ($2 : $4) }
   -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
-  | '(' ConsOp ')' { E.Cons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
+  | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkNegateVar (spanFromTo $1 $3))}
   -- | '(' Op Exp ')' { setSpan (spanFromTo $1 $4) (leftSection $2 $3) } -- TODO: waiting for type inference
   | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) $3) $2) }
-  | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Cons (getSpan $3) $3) $2) }
+  | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
@@ -388,7 +388,7 @@ Exp :: { E.Exp }
   | Exp '**' Exp { binOp $1 (E.Var (getSpan $2) $ mkTimesTimesVar $2) $3 }
   | Exp '++' Exp { binOp $1 (E.Var (getSpan $2) $ mkPlusPlusVar $2) $3 }
   | Exp '^^' Exp { binOp $1 (E.Var (getSpan $2) $ mkCaretCaretVar $2) $3 }
-  | Exp '::' Exp { binOp $1 (E.Cons(getSpan $2) $ mkConsId $2) $3 }
+  | Exp '::' Exp { binOp $1 (E.DCons(getSpan $2) $ mkConsId $2) $3 }
   -- Unary minus
   -- Should we do something like GHC's NegativeLiterals or LexicalNegation instead?
   -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/negative_literals.html
@@ -400,7 +400,7 @@ ExpApp :: { E.Exp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID ExpPrimary { E.Select (spanFromTo $1 $2) (mkIdTk $2) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
-  | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.Cons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
+  | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
   | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
@@ -466,12 +466,12 @@ PatPrimary :: { E.Pat }
   | LOWER_ID         { E.VarPat    (getSpan $1) (mkVarTk $1) }
   | '[' ']'          { E.NilPat (spanFromTo $1 $2) }
   | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
-  | DataConstructor  { E.DataPat   (getSpan $1) $1 [] }
+  | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID '&' PatPrimary { E.AsPat (spanFromTo $1 $3) (mkVarTk $1) $3 }
 
 Pat :: { E.Pat }
-  : DataConstructor PatPrimaryListWS { E.DataPat (spanFromTo $1 (last $2)) $1 $2 }
+  : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
   | Pat '::' Pat { E.ConsPat (spanFromTo $1 $3) $1 $3 }
   | PatPrimary { $1 }
 

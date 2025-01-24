@@ -58,13 +58,16 @@ runValidation s v =
     Right x' | null errors -> Right x'
              | otherwise   -> Left errors
 
-putError :: MonadState ValidationState m => a -> Error -> m a
-putError x e = do
+putErrorWithDefault :: MonadState ValidationState m => a -> Error -> m a
+putErrorWithDefault x e = do
   modify \s -> s{errors=errors s++[e]}
   return x
 
-putError_ :: MonadState ValidationState m => Error -> m ()
-putError_ = putError ()
+catch :: Validation () -> Validation ()
+catch v = catchE v (putErrorWithDefault ())
+
+catchWithDefault :: a -> Validation a -> Validation a
+catchWithDefault x v = catchE v (putErrorWithDefault x)
 
 lookupKind :: Identifier -> Validation K.Kind
 lookupKind i = do 

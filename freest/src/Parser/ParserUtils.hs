@@ -45,13 +45,13 @@ unOp :: E.Exp -> E.Exp -> E.Exp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
 tupleExp :: Span -> [E.Exp] -> E.Exp
-tupleExp s es = E.App s (E.Cons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
+tupleExp s es = E.App s (E.DCons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
 
 listExp :: Span -> T.Type -> [E.Exp] -> E.Exp
 listExp s t = 
-  foldr (\e l -> E.App s (E.Cons s $ mkConsId s) 
+  foldr (\e l -> E.App s (E.DCons s $ mkConsId s) 
                          (TypeLevel t : map ExpLevel [e,l])) 
-        (E.App s (E.Cons s (mkNilId s)) [TypeLevel t])
+        (E.App s (E.DCons s (mkNilId s)) [TypeLevel t])
 
 addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp 
 addArgExp a (E.App s e as) = E.App s e (as ++ [a])

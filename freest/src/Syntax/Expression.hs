@@ -15,7 +15,11 @@ module Syntax.Expression
        )
   , RHS(..)
   , LetDecl(..)
-  , Exp(..)
+  , Exp( ..
+       , Tuple
+       , Nil
+       , Cons
+       )
   )
 where
 
@@ -32,25 +36,25 @@ data Pat
   | CharPat Span Char
   | WildPat Span Variable
   | VarPat Span Variable
-  | DataPat Span Identifier [Pat]
+  | DConsPat Span Identifier [Pat]
   | AsPat Span Variable Pat
 
 pattern NilPat :: Span -> Pat
-pattern NilPat s <- DataPat s ((== mkNilId s) -> True) []
-  where NilPat s =  DataPat s (mkNilId s) []
+pattern NilPat s <- DConsPat s ((== mkNilId s) -> True) []
+  where NilPat s =  DConsPat s (mkNilId s) []
 
 pattern ConsPat :: Span -> Pat -> Pat -> Pat
-pattern ConsPat s p1 p2 <- DataPat s ((== mkConsId s) -> True) [p1,p2]
-  where ConsPat s p1 p2 =  DataPat s (mkConsId s) [p1,p2]
+pattern ConsPat s p1 p2 <- DConsPat s ((== mkConsId s) -> True) [p1,p2]
+  where ConsPat s p1 p2 =  DConsPat s (mkConsId s) [p1,p2]
 
 pattern TuplePat :: Span -> [Pat] -> Pat
-pattern TuplePat s ps <- DataPat s (isTupleId -> True) ps
-  where TuplePat s ps =  DataPat s (mkTupleId (length ps - 1) s) ps
+pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
+  where TuplePat s ps =  DConsPat s (mkTupleId (length ps - 1) s) ps
 
 stringPat :: Span -> String -> Pat
 stringPat s = \case
-  []     -> DataPat s (mkNilId s) []
-  (c:cs) -> DataPat s (mkConsId s) [CharPat s c, stringPat s cs]
+  []     -> DConsPat s (mkNilId s) []
+  (c:cs) -> DConsPat s (mkConsId s) [CharPat s c, stringPat s cs]
 
 data LetDecl
   = ValDecl Pat      RHS
@@ -65,7 +69,7 @@ data Exp
   = Int    Span Int
   | Float  Span Double
   | Char   Span Char
-  | Cons   Span Identifier
+  | DCons  Span Identifier
   | Var    Span Variable
   | App    Span Exp [Level Exp Type]
   | Abs    Span [Level (Pat,Type) (Variable,Kind)] Multiplicity Exp
@@ -75,11 +79,23 @@ data Exp
   | Channel Span Type
   | Select Span Identifier Exp
 
+pattern Tuple :: Span -> [Exp] -> Exp
+pattern Tuple s es <- App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_))
+  where Tuple s es =  App s (DCons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
+
+pattern Nil :: Span -> Type -> Exp
+pattern Nil s t <- App s (DCons _ ((== mkNilId s) -> True)) [TypeLevel t]
+  where Nil s t =  App s (DCons s (mkNilId s)) [TypeLevel t]
+
+pattern Cons :: Span -> Exp -> Exp -> Exp 
+pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, ExpLevel e2]
+  where Cons s e1 e2 =  App s (DCons s (mkConsId s)) (map ExpLevel [e1,e2])
+
 instance Located Pat where
   getSpan = \case
     WildPat s _   -> s
     VarPat s _    -> s
-    DataPat s _ _ -> s
+    DConsPat s _ _ -> s
     IntPat s _    -> s
     FloatPat s _  -> s
     CharPat s _   -> s
@@ -88,7 +104,7 @@ instance Located Pat where
   setSpan s = \case
     WildPat _ x    -> WildPat s x
     VarPat _ x     -> VarPat s x
-    DataPat _ c ps -> DataPat s c ps
+    DConsPat _ c ps -> DConsPat s c ps
     IntPat _ i     -> IntPat s i
     FloatPat _ f   -> FloatPat s f
     CharPat _ c    -> CharPat s c
@@ -106,7 +122,7 @@ instance Located Exp where
     Int s _      -> s
     Float s _    -> s
     Char s _     -> s
-    Cons s _     -> s
+    DCons s _    -> s
     Var s _      -> s
     App s _ _    -> s
     Abs s _ _ _  -> s
@@ -120,7 +136,7 @@ instance Located Exp where
     Int _ i       -> Int s i
     Float _ f     -> Float s f
     Char _ c      -> Char s c
-    Cons _ i      -> Cons s i
+    DCons _ i     -> DCons s i
     Var _ x       -> Var s x
     App _ e as    -> App s e as
     Abs _ ps m e  -> Abs s ps m e
@@ -143,7 +159,7 @@ instance Show Pat where
   show = \case
     WildPat _ x    -> show x
     VarPat _ x     -> show x
-    DataPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
+    DConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
     IntPat _ i     -> show i
     FloatPat _ f   -> show f
     CharPat _ c    -> show c
@@ -172,7 +188,7 @@ instance Show Exp where
     Int _ i        -> show i
     Float _ d      -> show d
     Char _ c       -> show c
-    Cons _ i       -> show i
+    DCons _ i      -> show i
     Var _ x        -> show x
     App _ f as     -> foldl (\s a -> "("++s++" "++showArg a++")") (show f) as
                       where showArg (ExpLevel  e) = show e

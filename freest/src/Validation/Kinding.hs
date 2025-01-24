@@ -9,6 +9,7 @@ This module implements FreeST's bidirectional kinding algorithm.
 module Validation.Kinding
   ( synth
   , check
+  , checkSubkindOf
   , KindingCtx
   , runKindModule
   , runSynth
@@ -101,13 +102,13 @@ synth ctx = \case
   T.End s _ -> pure (ls s)
   T.Skip s -> pure (us s)
   T.AppSemi s t u -> do
-    -- k1 <- catchE (check' ctx t (ls s)) (putError (us s))
-    -- k2 <- catchE (check' ctx u (ls s)) (putError (us s))
+    -- k1 <- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
+    -- k2 <- catchE (check' ctx u (ls s)) (putErrorWithDefault (us s))
     k1 <- synthCheck ctx t (ls s)
     k2 <- synthCheck ctx u (ls s)
     return (join k1 k2)
   T.AppDual s t -> do
-    -- catchE (check' ctx t (ls s)) (putError (us s))
+    -- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
     synthCheck ctx t (ls s)
   -- Polymorphism
   T.Quant s p a k t -> do
@@ -122,7 +123,7 @@ synth ctx = \case
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
-    Nothing -> putError (bot s) (OutOfScope s a)
+    Nothing -> putErrorWithDefault (bot s) (OutOfScope s a)
   T.App s t ts -> do
     k <- synth ctx t
     let (ks,kn) = Expose.kindArrow k
@@ -162,10 +163,14 @@ checkProper ctx t =
     Proper _ m pk -> pure (m,pk)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
 
+checkSubkindOf :: T.Type -> Kind -> Kind -> Validation ()
+checkSubkindOf t k' k = 
+  unless (k' <: k) $
+    throwE (KindMismatch (getSpan t) k t k')
+  
 synthCheck :: KindingCtx -> T.Type -> Kind -> Validation Kind
 synthCheck ctx t k = do
   k' <- synth ctx t
-  unless (k' <: k) $
-    throwE (KindMismatch (getSpan t) k t k')
+  checkSubkindOf t k' k
   return k'
 

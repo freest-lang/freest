@@ -40,9 +40,12 @@ dataCons p t = do
     T.AppTName _ i ts -> pure (i, ts)
     _ -> throwE (ExposeError (getSpan p) "a datatype" (Right p) t)
 
-internalChoice :: E.Exp -> T.Type -> Validation (Map.Map Identifier T.Type)
-internalChoice e t = do
+internalChoice :: E.Exp -> T.Type -> Identifier -> Validation T.Type
+internalChoice e t i = do
   ds <- gets typeDecls
   case normalise ds t of
-    T.Choice s m T.In ts -> pure (Map.fromList ts)
+    T.Choice s m T.In ts -> 
+        case lookup i ts of
+            Just t' -> return t'
+            Nothing -> throwE (ChoiceNotAllowed s i t)
     _ -> throwE (ExposeError (getSpan e) "an internal choice channel" (Left e) t)

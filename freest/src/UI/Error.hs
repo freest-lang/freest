@@ -33,10 +33,12 @@ data Error
   | MultipleKindSigs Span Identifier
   | LacksKindSig Span Identifier
   | GivenTooManyArgs Span E.Exp T.Type Int Int
+  | ExpectsTooManyArgs Span E.Exp 
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
   | ExposeError Span String (Either E.Exp E.Pat) T.Type
   | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
+  | UnexpectedParam Span (Level T.Type K.Kind) (Level E.Pat Variable) Int E.Exp
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
@@ -138,6 +140,12 @@ instance Show Error where
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
           "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
           "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
+        UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
+          "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
+          "\n  In the "++show n {- TODO: use numerals-}++"th parameter of function `"++show f++"`."
+        UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f -> 
+          "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++
+          "\n  In the "++show n {- TODO: use numerals-}++"th parameter of function `"++show f++"`."
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
