@@ -193,8 +193,13 @@ KindSig :: { M.Module -> M.Module }
 
 LetDecl
   : Pat RHS('=') { E.ValDecl $1 $2 }
-  | LOWER_ID PatPrimaryOrAtVarListWS RHS('=') { E.FnDecl (mkVarTk $1) [($2, $3)] }
-  | LowerIdListComma ':' Type { E.SigDecl $1 $3 }
+  | FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDecl $1 [($2, $3)] }
+  | PatPrimary Op PatPrimaryOrAtVarListWS RHS('=') { E.FnDecl $2 [(ExpLevel $1 : $3, $4)] }
+  | FnNameListComma ':' Type { E.SigDecl $1 $3 }
+
+FnName :: { Variable }
+  : LOWER_ID   { mkVarTk $1 }
+  | '(' Op ')' { $2 }
 
 RHS(sep) :: { E.RHS }
   : sep Exp Where { E.UnguardedRHS $2 $3 }
@@ -213,9 +218,9 @@ Where :: { Maybe [E.LetDecl] }
 --   : LOWER_ID LowerIdListWS { mkVarTk $1 : $2 }
 --   | {- empty -}            { [] }
 
-LowerIdListComma :: { [Variable] }
-  : LOWER_ID ',' LowerIdListComma { mkVarTk $1 : $3 }
-  | LOWER_ID                  { [mkVarTk $1] }
+FnNameListComma :: { [Variable] }
+  : FnName ',' FnNameListComma { $1 : $3 }
+  | FnName                     { [$1] }
 
 DataConsListPipe :: { [(Identifier, [T.Type])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }
