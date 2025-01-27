@@ -43,6 +43,7 @@ data Error
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
+  | SessionTypeMismatch Span T.Type K.Kind
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
@@ -77,6 +78,7 @@ instance Located Error where
     NonLinPat s _ _ -> s
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
+    SessionTypeMismatch s _ _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
@@ -158,6 +160,8 @@ instance Show Error where
           "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
         ProperKindMismatch s t k -> 
           "\n  Expected a proper kind for type "++show t++", but got kind "++show k
+        SessionTypeMismatch s t k -> 
+          "\n Expected a session type, but found type "++show t++" of kind "++show k
         GivenTooManyArgsK s t n m ->
           "\n  Type "++show t++" expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->

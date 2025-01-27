@@ -57,9 +57,9 @@ stringPat s = \case
   (c:cs) -> DConsPat s (mkConsId s) [CharPat s c, stringPat s cs]
 
 data LetDecl
-  = ValDecl Pat      RHS
-  | FnDecl  Variable [([Level Pat Variable], RHS)]
-  | SigDecl [Variable] Type
+  = ValDef Pat      RHS
+  | FnDef  Variable [([Level Pat Variable], RHS)]
+  | TypeSig [Variable] Type
 
 data RHS
   = GuardedRHS [(Exp, Exp)] (Maybe [LetDecl])
@@ -112,9 +112,9 @@ instance Located Pat where
 
 instance Located LetDecl where 
   getSpan = \case
-    ValDecl p rhs -> spanFromTo p rhs
-    FnDecl x rhs  -> spanFromTo x (snd $ last rhs)
-    SigDecl xs t  -> spanFromTo (head xs) t
+    ValDef p rhs -> spanFromTo p rhs
+    FnDef x rhs  -> spanFromTo x (snd $ last rhs)
+    TypeSig xs t  -> spanFromTo (head xs) t
   setSpan = error "cannot set span of a LetDecl"
 
 instance Located Exp where
@@ -167,9 +167,9 @@ instance Show Pat where
 
 instance Show LetDecl where
   show = \case
-    ValDecl p rhs   -> show p++show rhs
-    FnDecl x psrhss -> intercalate "\n" $ map (\(ps,rhs) -> show x++" "++unwords (map show ps)++show rhs) psrhss
-    SigDecl xs t    -> intercalate ", " (map show xs) ++" : "++show t
+    ValDef p rhs   -> show p++show rhs
+    FnDef x psrhss -> intercalate "\n" $ map (\(ps,rhs) -> show x++" "++unwords (map show ps)++show rhs) psrhss
+    TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
 
 instance Show RHS where
   show = \case

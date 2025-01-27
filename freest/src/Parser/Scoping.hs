@@ -168,22 +168,22 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
     groupEquations = \case 
       []  -> []
       [d] -> [d]
-      (E.FnDecl f1 psrhss1 : E.FnDecl f2 psrhss2 : ds) 
+      (E.FnDef f1 psrhss1 : E.FnDef f2 psrhss2 : ds) 
         | external f1 == external f2 -> 
-          groupEquations (E.FnDecl f1 (psrhss1 ++ psrhss2) : ds)
+          groupEquations (E.FnDef f1 (psrhss1 ++ psrhss2) : ds)
       (d1:d2:ds) -> d1 : groupEquations (d2:ds)
 
     scopeDefs' :: ScopingCtx -> ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
     scopeDefs' ctx ictx = \case 
       [] -> return (ctx, [])
-      (E.ValDecl p rhs : ds) -> do
+      (E.ValDef p rhs : ds) -> do
         checkConflictingDefs [ExpLevel p]
         (ictx', p') <- scopePat ctx ictx p
         rhs' <- scopeRHS ctx rhs
         let ctx'' = fromEVarList (Set.toList $ patVars p')
         let ctx' = ctx'' `Map.union` ctx
-        second (E.ValDecl p' rhs':) <$> scopeDefs' ctx' ictx' ds
-      (E.FnDecl x psrhss : ds) -> do
+        second (E.ValDef p' rhs':) <$> scopeDefs' ctx' ictx' ds
+      (E.FnDef x psrhss : ds) -> do
         (ictx', x') <- case lookupEVar x ictx of
           Nothing -> (ictx,) <$> freshInternal x
           Just internal -> pure (deleteEVar x ictx, x{internal})
@@ -192,7 +192,7 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
           checkConflictingDefs (ExpLevel (E.VarPat (getSpan x') x') : pars)
           (ctx'', pars') <- foldM scopeParam (ctx',[]) pars
           (pars',) <$> scopeRHS ctx'' rhs
-        second (E.FnDecl x' psrhss' :) <$> scopeDefs' ctx' ictx' ds
+        second (E.FnDef x' psrhss' :) <$> scopeDefs' ctx' ictx' ds
         where
           scopeParam (ctx',pars') (ExpLevel  p) = do
             (_, p') <- scopePat ctx' Map.empty p
@@ -202,7 +202,7 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
             a' <- freshInternal a
             let ctx'' = insertTVar a' ctx'
             return (ctx'', pars'++[TypeLevel a'])
-      (E.SigDecl xs t : ds) -> do
+      (E.TypeSig xs t : ds) -> do
         checkConflictingDefs $ map (\x -> ExpLevel $ E.VarPat (getSpan x) x) xs
         (ictx', xs') <- foldM (\(ictx'',xs'') x ->
             case lookupEVar x ictx'' of
@@ -214,7 +214,7 @@ scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
                 return (ictx'',xs''++[x])
           ) (ictx,[]) xs
         t' <- scopeTypeQ ctx t
-        second (E.SigDecl xs' t':) <$> scopeDefs' ctx ictx' ds
+        second (E.TypeSig xs' t':) <$> scopeDefs' ctx ictx' ds
 
 scopeRHS :: ScopingCtx -> E.RHS -> Scoping E.RHS
 scopeRHS ctx = \case

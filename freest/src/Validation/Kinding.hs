@@ -10,6 +10,8 @@ module Validation.Kinding
   ( synth
   , check
   , checkSubkindOf
+  , checkProper
+  , checkSession
   , KindingCtx
   , runKindModule
   , runSynth
@@ -97,15 +99,15 @@ synth ctx = \case
   -- Session types
   T.Message s m _ -> pure (Arrow s (lt s) (Proper s m Session))
   T.Choice s m p lts -> do
-    forM_ lts \(_,t) -> check ctx t (Proper s m Session)
+    forM_ lts \(_,t) -> checkSession ctx t
     pure (Proper s m Session)
   T.End s _ -> pure (ls s)
   T.Skip s -> pure (us s)
   T.AppSemi s t u -> do
     -- k1 <- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
     -- k2 <- catchE (check' ctx u (ls s)) (putErrorWithDefault (us s))
-    k1 <- synthCheck ctx t (ls s)
-    k2 <- synthCheck ctx u (ls s)
+    k1 <- checkSession ctx t
+    k2 <- checkSession ctx u
     return (join k1 k2)
   T.AppDual s t -> do
     -- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
@@ -162,6 +164,13 @@ checkProper ctx t =
   synth ctx t >>= \case
     Proper _ m pk -> pure (m,pk)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
+
+checkSession :: KindingCtx -> T.Type -> Validation Kind
+checkSession ctx t = do
+  k <- synth ctx t
+  unless (k <: ls (getSpan k)) $
+    throwE (SessionTypeMismatch (getSpan t) t k)
+  return k
 
 checkSubkindOf :: T.Type -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k = 

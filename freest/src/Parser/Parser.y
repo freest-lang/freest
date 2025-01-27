@@ -192,10 +192,10 @@ KindSig :: { M.Module -> M.Module }
   : 'type' UPPER_ID ':' Kind { M.insertKindSig (mkIdTk $2) $4 }
 
 LetDecl
-  : Pat RHS('=') { E.ValDecl $1 $2 }
-  | FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDecl $1 [($2, $3)] }
-  | PatPrimary Op PatPrimaryOrAtVarListWS RHS('=') { E.FnDecl $2 [(ExpLevel $1 : $3, $4)] }
-  | FnNameListComma ':' Type { E.SigDecl $1 $3 }
+  : Pat RHS('=') { E.ValDef $1 $2 }
+  | FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
+  | PatPrimary Op PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
+  | FnNameListComma ':' Type { E.TypeSig $1 $3 }
 
 FnName :: { Variable }
   : LOWER_ID   { mkVarTk $1 }
