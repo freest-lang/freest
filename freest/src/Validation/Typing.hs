@@ -28,7 +28,7 @@ import Data.Functor
 import Data.List.Extra (snoc)
 import qualified Data.Map.Strict as Map
 import Control.Monad.State
-import Control.Monad.Extra ( ifM )
+import Control.Monad.Extra ( ifM, whenM )
 import Control.Applicative ()
 import Control.Monad.Trans.Except ( catchE, throwE )
 
@@ -40,7 +40,7 @@ lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier -> Validation (T.
 lookupType kctx tctx xi = case tctx Map.!? xi of
   Just t -> do
     k <- Kinding.synth kctx t
-    return (t, if K.lin k then Map.delete xi tctx else tctx)
+    return (t, if K.isStrictlyLin k then Map.delete xi tctx else tctx)
   Nothing -> case xi of
     Left  x -> throwE (OutOfScope (getSpan x) x)
     Right i -> throwE (ConsOutOfScope (getSpan i) i)
@@ -51,6 +51,16 @@ lookupDConsDecl i = do
     case dds Map.!? i of
         Just ias -> return ias
         Nothing  -> throwE (ConsOutOfScope (getSpan i) i)
+
+typeCtxDifference :: KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
+typeCtxDifference kctx tctx1 tctx2 = do
+  foldM (\tctx1' x -> case tctx2 Map.!? x of
+      Just t  -> do
+        whenM (K.isStrictlyLin <$> Kinding.synth kctx t) $
+          throwE (LinVarAtEndOfScope (getSpan x) x t)
+        return (Map.delete x tctx1')
+      Nothing -> return tctx1'
+    ) tctx1 (Map.keys tctx2)
 
 synth :: KindCtx -> TypeCtx -> E.Exp -> Validation (T.Type, TypeCtx)
 synth kctx tctx = \case
@@ -79,7 +89,7 @@ synth kctx tctx = \case
     -- TODO: detect incomplete patterns
     (pkctx, ptctx) <- synthParams kctx ps
     (t, tctx') <- synth (pkctx `Map.union` kctx) (ptctx `Map.union` tctx) e
-    let tctx'' = tctx' Map.\\ ptctx
+    tctx'' <- typeCtxDifference kctx tctx' ptctx
     unless (m /= K.Un) $ checkEquivTypeCtxs e tctx'' tctx
     return (foldr (\case ExpLevel  (_,u) -> T.AppArrow s m u
                          TypeLevel (a,k) -> T.Forall s a k) t ps
@@ -96,18 +106,20 @@ synth kctx tctx = \case
         [] -> return (Map.empty, Map.empty)
   E.Let s ds e    -> do
     (tctxds, tctx') <- checkDecls kctx tctx ds
-    second (Map.\\ tctxds) <$> synth kctx tctx' e
+    (t, tctxe) <- synth kctx tctx' e
+    (t,) <$> typeCtxDifference kctx tctxe tctxds
   E.Case s e cs@((p1, rhs1) : cs')   -> do
     -- TODO: detect redundant and incomplete patterns
     (t, tctx') <- synth kctx tctx e
     tctxp1 <- checkPat kctx t p1
     (t1, tctxrhs1) <- synthRHS kctx (tctxp1 `Map.union` tctx') rhs1
-    let tctx'' = tctxrhs1 Map.\\ tctxp1
+    tctx1 <- typeCtxDifference kctx tctxrhs1 tctxp1
     forM_ cs' \(pi,rhsi) -> do
       tctxpi <- checkPat kctx t pi
       tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx') rhsi t1
-      checkEquivTypeCtxs e (tctxrhsi Map.\\ tctxpi) tctx''
-    return (t1, tctx'')
+      tctxi <- typeCtxDifference kctx tctxrhsi tctxpi
+      checkEquivTypeCtxs e tctxi tctx1
+    return (t1, tctx1)
   E.If s e1 e2 e3 -> do
     tctx' <- check kctx tctx e1 (T.bool (getSpan e1))
     (t1, tctx1) <- synth kctx tctx' e1
@@ -130,10 +142,11 @@ synthRHS kctx tctx = \case
       tctxgi <- check kctx tctx' gi (T.bool (getSpan gi))
       tctxei <- check kctx tctxgi ei t1
       checkEquivTypeCtxs ei tctxei tctxe1)
-    return (t1, tctxe1 Map.\\ tctxds)
+    (t1,) <$> typeCtxDifference kctx tctxe1 tctxds
   E.UnguardedRHS e ds -> do
     (tctxds,tctx') <- maybe (pure (Map.empty,tctx)) (checkDecls kctx tctx) ds
-    second (Map.\\ tctxds) <$> synth kctx tctx' e
+    (t,tctx'') <- synth kctx tctx' e
+    (t,) <$> typeCtxDifference kctx tctx'' tctxds 
 
 check :: KindCtx -> TypeCtx -> E.Exp -> T.Type -> Validation TypeCtx
 check kctx tctx e t = gets typeDecls >>= \tds -> case e of
@@ -184,16 +197,18 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
       prepareParams = map (bimap (second Just) (second Just))
   E.Let s ds e' -> do
     (tctxds, tctx') <- checkDecls kctx tctx ds
-    (Map.\\ tctxds) <$> check kctx tctx' e' t
+    tctx'' <- check kctx tctx' e' t
+    typeCtxDifference kctx tctx'' tctxds
   E.Case s e' ((p1,rhs1):psrhss) -> do
     tctxp1 <- checkPat kctx t p1
     tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx) rhs1 t
-    let tctx' = tctxrhs1 Map.\\ tctxp1
+    tctx1 <- typeCtxDifference kctx tctxrhs1 tctxp1
     forM_ psrhss \(pi,rhsi) -> do
       tctxpi <- checkPat kctx t pi
       tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx) rhsi t
-      checkEquivTypeCtxs e (tctxrhsi Map.\\ tctxpi) tctx'
-    return tctx'
+      tctxi <- typeCtxDifference kctx tctxrhsi tctxpi
+      checkEquivTypeCtxs e tctxi tctx1
+    return tctx1
   E.If s e1 e2 e3 -> do
     tctx1 <- check kctx tctx e1 (T.bool s)
     tctx2 <- check kctx tctx1 e2 t
@@ -243,12 +258,13 @@ checkDecls kctx tctx0 = foldM (checkDecl kctx) (Map.empty, tctx0)
         (t,tctx') <- lookupType kctx tctx0 (Left x)
         (t1, kctxps1, tctxps1) <- checkParams e t 1 kctx tctx' (prepareParams ps1) t
         tctxrhs1 <- checkRHS (kctxps1 `Map.union` kctx) (tctxps1 `Map.union` tctx') rhs1 t1
-        let tctx'' = tctxrhs1 Map.\\ tctxps1
+        tctx1 <- typeCtxDifference kctx tctxrhs1 tctxps1
         forM_ psrhss \(psi,rhsi) -> do
             (ti, kctxpsi, tctxpsi) <- checkParams e t 1 kctx tctx' (prepareParams psi) t
             tctxrhsi <- checkRHS (kctxpsi `Map.union` kctx) (tctxpsi `Map.union` tctx') rhsi ti
-            checkEquivTypeCtxs e (tctxrhsi Map.\\ tctxpsi) tctx''
-        return (tctxds, tctx'')
+            tctxi <- typeCtxDifference kctx tctxrhsi tctxpsi
+            checkEquivTypeCtxs e tctxi tctx1
+        return (tctxds, tctx1)
         where
           prepareParams = map (bimap (,Nothing) (,Nothing))
 
@@ -317,7 +333,7 @@ checkPat kctx t p = gets typeDecls >>= \tds -> case p of
   E.VarPat    s x  -> pure $ Map.singleton (Left x) t
   p@(E.WildPat  s _ ) -> do
     k <- Kinding.synth kctx t
-    when (K.lin k) (throwE (NonLinPat s p t))
+    when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
     return Map.empty
   -- []
   p@(E.NilPat s) ->
@@ -351,7 +367,7 @@ checkPat kctx t p = gets typeDecls >>= \tds -> case p of
     -- x@p
   p@(E.AsPat s x p') -> do
     k <- Kinding.synth kctx t
-    when (K.lin k) (throwE (NonLinPat s p t))
+    when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
     Map.insert (Left x) t <$> checkPat kctx t p
 
 checkRHS :: KindCtx -> TypeCtx -> E.RHS -> T.Type -> Validation TypeCtx
@@ -364,8 +380,8 @@ checkRHS kctx tctx rhs t = case rhs of
         tctxgj <- check kctx tctx' gj (T.bool (getSpan gj))
         tctxej <- check kctx tctxgj ej t
         checkEquivTypeCtxs gj tctxej tctxe1)
-    return (tctxe1 Map.\\ tctxds)
+    typeCtxDifference kctx tctxe1 tctxds
   E.UnguardedRHS e ds -> do
     (tctxds, tctx') <- maybe (pure (Map.empty, tctx)) (checkDecls kctx tctx) ds
     tctx'' <- check kctx tctx' e t
-    return (tctx'' Map.\\ tctxds)
+    typeCtxDifference kctx tctx'' tctxds

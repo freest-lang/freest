@@ -14,7 +14,7 @@ module Syntax.Kind
   , lt, ut, ls, us, la, ua, bot
   , Subsort(..)
   , Join(..)
-  , lin
+  , isStrictlyLin
   )
 where 
 
@@ -84,9 +84,9 @@ ua s = Proper s Un  Absorb
 bot :: Span -> Kind
 bot = us -- (ua later)
 
-lin :: Kind -> Bool
-lin (Proper _ Lin _) = True 
-lin _ = False
+isStrictlyLin :: Kind -> Bool
+isStrictlyLin (Proper _ Lin _) = True 
+isStrictlyLin _ = False
 
 instance Show Multiplicity where
   show = \case 

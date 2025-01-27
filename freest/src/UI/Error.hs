@@ -53,6 +53,7 @@ data Error
                                [(Either Variable Identifier, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
   | ChoiceNotAllowed Span Identifier T.Type
+  | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
   | UnsupportedError Span String
 
 instance Located Error where
@@ -84,6 +85,7 @@ instance Located Error where
     TypeMismatchTuple s _ _ _ -> s
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
+    LinVarAtEndOfScope s _ _ -> s
     ChoiceNotAllowed s _ _ -> s
     UnsupportedError s _ -> s
 
@@ -182,6 +184,8 @@ instance Show Error where
           "\n  \t(is there a variable with different types in the two contexts?)"
         ConstructorArgumentMismatch _ i n m ->
           "\n  The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
+        LinVarAtEndOfScope _ x t -> 
+          "\n  Variable `"++show x++"`, of linear type `"++show t++"`, was not consumed."
         ChoiceNotAllowed s i t ->
           "\n  Choice `"++show i++"` is not allowed by type "++show t
         UnsupportedError _ m ->
