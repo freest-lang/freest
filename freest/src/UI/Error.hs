@@ -32,6 +32,7 @@ data Error
   | MultipleTypeDecls Span Identifier
   | MultipleKindSigs Span Identifier
   | LacksKindSig Span Identifier
+  | LacksTypeSig Span Variable
   | GivenTooManyArgs Span E.Exp T.Type Int Int
   | ExpectsTooManyArgs Span E.Exp 
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
@@ -48,7 +49,8 @@ data Error
   | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
-  | TypeCtxMismatch Span E.Exp [(Variable, T.Type)] [(Variable, T.Type)]
+  | TypeCtxMismatch Span E.Exp [(Either Variable Identifier, T.Type)] 
+                               [(Either Variable Identifier, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
   | ChoiceNotAllowed Span Identifier T.Type
   | UnsupportedError Span String
@@ -124,6 +126,8 @@ instance Show Error where
           "\n  Multiple kind signatures for type `"++show i++"`"
         LacksKindSig _ i -> 
           "\n Type `"++show i++"` lacks an accompanying kind signature."
+        LacksTypeSig _ x -> 
+          "\n Function `"++show x++"` lacks an accompanying type signature."
         GivenTooManyArgs _ f t expected actual ->
           "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
         LinVarsConsumedInUnFun _ xs e ->

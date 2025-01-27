@@ -52,7 +52,7 @@ kindModule m = do
 
 kindTypeDecl :: (Identifier, ([Variable], T.Type)) -> Validation ()
 kindTypeDecl (i, (as, t)) = do
-  k <- lookupKind i
+  k <- lookupKindSig i
   checkTypeDecl k Map.empty as k
   where
     checkTypeDecl :: Kind -> KindingCtx -> [Variable] -> Kind -> Validation ()
@@ -65,7 +65,7 @@ kindTypeDecl (i, (as, t)) = do
 
 kindDataDecl :: (Identifier, ([Variable], M.ConsDeclList)) -> Validation ()
 kindDataDecl (i, (as, t)) = do
-  k <- lookupKind i
+  k <- lookupKindSig i
   checkDataDecl k id Map.empty as k
   where
     checkDataDecl :: Kind -> (Kind -> Kind) -> KindingCtx -> [Variable] -> Kind -> Validation ()
@@ -116,10 +116,10 @@ synth ctx = \case
     >>= \case (m,Session) -> pure (Proper s Lin Session)
               (m,Top    ) -> pure (Proper s m Top      )
   -- Equations (including built-ins)
-  T.TName s i -> lookupKind i
+  T.TName s i -> lookupKindSig i
   T.Tuple s ts -> Proper s <$> foldCheckProperJoin ctx Un ts <*> pure Top
   T.List s t -> (Proper s . fst <$> checkProper ctx t) <*> pure Top
-  T.DName s i -> lookupKind i
+  T.DName s i -> lookupKindSig i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k

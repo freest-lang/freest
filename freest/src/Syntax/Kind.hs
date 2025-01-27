@@ -85,7 +85,7 @@ bot :: Span -> Kind
 bot = us -- (ua later)
 
 lin :: Kind -> Bool
-lin (Proper _ m _) | m <: Lin = True 
+lin (Proper _ Lin _) = True 
 lin _ = False
 
 instance Show Multiplicity where

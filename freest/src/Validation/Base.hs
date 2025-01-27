@@ -24,7 +24,7 @@ type DataDeclMap = Map.Map Identifier (Lambda ConsDeclMap)
 data ValidationState
   = ValidationState
     { errors    :: [Error]
-    , kindCtx   :: Map.Map Identifier K.Kind
+    , kindSigs  :: Map.Map Identifier K.Kind
     , typeDecls :: TypeDeclMap
     , dataDecls :: DataDeclMap
     , consDecls :: Map.Map Identifier (Identifier, [Variable], [T.Type])
@@ -33,7 +33,7 @@ data ValidationState
 emptyValidationState :: ValidationState
 emptyValidationState = ValidationState 
   { errors    = []
-  , kindCtx   = Map.empty
+  , kindSigs  = Map.empty
   , typeDecls = Map.empty
   , dataDecls = Map.empty
   , consDecls = Map.empty
@@ -42,7 +42,7 @@ emptyValidationState = ValidationState
 buildValidationState :: M.Module -> ValidationState
 buildValidationState m = ValidationState -- TODO: traverse module once.
   { errors    = []
-  , kindCtx   = Map.fromList (M.kindSigs m)
+  , kindSigs  = Map.fromList (M.kindSigs m)
   , typeDecls = Map.fromList (M.typeDecls m)
   , dataDecls = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
   , consDecls = Map.fromList (concatMap (\(i,(as,cds)) -> map (second (i,as,)) cds) $ M.dataDecls m)
@@ -69,9 +69,9 @@ catch v = catchE v (putErrorWithDefault ())
 catchWithDefault :: a -> Validation a -> Validation a
 catchWithDefault x v = catchE v (putErrorWithDefault x)
 
-lookupKind :: Identifier -> Validation K.Kind
-lookupKind i = do 
-  ctx <- gets kindCtx
+lookupKindSig :: Identifier -> Validation K.Kind
+lookupKindSig i = do 
+  ctx <- gets kindSigs
   case ctx Map.!? i of
     Just k  -> return k
     Nothing -> throwE (TypeOutOfScope (getSpan i) i)

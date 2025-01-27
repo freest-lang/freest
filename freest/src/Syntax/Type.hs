@@ -22,6 +22,7 @@ module Syntax.Type
         , AppVar)
   , smartApp
   , variadicQuant
+  , bool
   , Dual(..)
   , isConstant
   , isSkip
@@ -140,6 +141,9 @@ variadicQuant s p ((a,k) : aks) t =
 smartApp :: Span -> Type -> [Type] -> Type
 smartApp s (App _ t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
+
+bool :: Span -> Type
+bool s = DName (getSpan s) (mkBoolId s)
 
 isConstant :: Type -> Bool
 isConstant = \case
