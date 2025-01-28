@@ -602,7 +602,7 @@ where
   type TermF : *T -> *T
   type TermF t = TermBase String t t
   type Term : *T
-  type Term = TermBase String Term Term -- Mu TermF, what is type Mu?
+  type Term = TermBase String Term Term -- Mu TermF, what type is Mu?
   type EvalCtx : *T -> *T
   type EvalCtx t = TermBase String Term t
   type VarTerm : *T -> *T
