@@ -60,7 +60,7 @@ isWhnf = \case
     | T.isConstant t && not (T.isSemi t) && not (T.isTName t) && not (T.isDual t) -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isSkip t) && not (T.isSemi t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isSemi t) {- needed? -} -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have forall

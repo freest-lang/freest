@@ -475,3 +475,5 @@ case A
 where 
   type A : *S
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
+
+case (!Int ; !Int) ; !Int
