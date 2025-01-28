@@ -484,3 +484,66 @@ case (!Int ; !Int) ; !Int
 -- Types with the Dual operator
 
 case Dual Close
+
+case Dual !Int
+
+case Dual Skip
+
+case Dual (Skip ; Skip)
+
+case Dual (Dual (Dual Wait))
+
+case Dual T
+where
+  type T : *S
+  type T = Skip
+
+case Dual T
+where
+  type T : *S
+  type T = Dual Skip
+
+case !(Dual ?Int) ; Close
+
+case Id
+where
+  type Id : 1S -> 1S
+  type Id a = a
+
+case Id (Int -> Char -> (Int, Char))
+where
+  type Id : *T -> *T
+  type Id a = a
+
+case Convert
+where
+  type Convert : (*T -> *T) -> *T -> *T
+  type Convert a b = a b
+
+case Convert Id
+where
+  type Convert : (1S -> 1S) -> 1S -> 1S
+  type Convert a b = a b
+  type Id : 1S -> 1S
+  type Id a = a
+
+case Convert Id Wait
+where
+  type Convert : (1S -> 1S) -> 1S -> 1S
+  type Convert a b = a b
+  type Id : 1S -> 1S
+  type Id a = a
+
+-- Dual partially applied
+
+-- case Dual
+
+-- case Convert Dual
+-- where
+--   type Convert : (1S -> 1S) -> 1S -> 1S
+--   type Convert a b = a b
+
+-- case Convert Dual Wait
+-- where
+--   type Convert : (1S -> 1S) -> 1S -> 1S
+--   type Convert a b = a b
