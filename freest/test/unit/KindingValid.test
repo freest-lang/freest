@@ -186,13 +186,13 @@ where
   type Bool : 1T
   data Bool = True | False
 
--- case *&{One}
+case *&{One}
 
--- case *&{One, Two}
+case *&{One, Two}
 
--- case *&{One}
+case *+{One}
 
--- case *!{One, Two}
+case *+{One, Two}
 
 case *!Int ; !Char
 
@@ -208,27 +208,30 @@ where
   type Bool : 1T
   data Bool = True | False
 
--- case *&{One} ; !Char
+case *&{One} ; !Char
 
--- case *&{One, Two} ; !Char
+case *&{One, Two} ; !Char
 
--- case *&{One} ; !Char
+case *&{One} ; !Char
 
--- case *!{One, Two} ; !Char
+case *+{One, Two} ; !Char
 
--- Polymorphic streams
+case Stream
+where
+  type Stream : 1S -> 1S
+  type Stream a = ?a ; Stream a
 
--- case PolyStream
--- where
---   type PolyStream : 1S
---   type PolyStream = forall a:*T . ?a ; PolyStream
+-- Poly Streams
 
--- Dual of the above
+case OutStream
+where
+  type OutStream : 1S
+  type OutStream = exists a:*T . !a ; OutStream
 
--- case PolyStream
--- where
---   type PolyStream : 1S
---   type PolyStream = exists a:*T . !a ; PolyStream
+case InStream
+where
+  type InStream : 1S
+  type InStream = forall a:*T . ?a ; InStream
 
 -- Same, with a function to consume the values
 
@@ -477,3 +480,7 @@ where
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
 
 case (!Int ; !Int) ; !Int
+
+-- Types with the Dual operator
+
+case Dual Close
