@@ -534,7 +534,16 @@ where
   type Id : 1S -> 1S
   type Id a = a
 
--- Dual partially applied
+case Convert Id (Tree Int)
+where
+  type Convert : (1S -> 1S) -> 1S -> 1S
+  type Convert a b = a b
+  type Id : 1S -> 1S
+  type Id a = a
+  type Tree : *T -> 1S
+  type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+-- Dual, partially applied
 
 -- case Dual
 
@@ -547,3 +556,46 @@ where
 -- where
 --   type Convert : (1S -> 1S) -> 1S -> 1S
 --   type Convert a b = a b
+
+-- System F-omega with Equirecursive Types for Datatype-Generic Programming
+-- Yufei Cai Paolo G. Giarrusso Klaus Ostermann
+
+case Term
+where
+  type Term : *T
+  data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
+  type String : *T
+  type String = [Char]
+
+case EvalCtx
+where
+  type EvalCtx : *T
+  data EvalCtx = LitC Int | AbsC String Term | VarC String | AppC EvalCtx Term
+  type Term : *T
+  data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
+  type String : *T
+  type String = [Char]
+
+case VarTerm String
+where
+  type VarTerm : *T -> *T
+  data VarTerm t = LitV Int | AbsV String Term | VarV t | AppV Term Term
+  type Term : *T
+  data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
+  type String : *T
+  type String = [Char]
+
+case TermBase
+where
+  type TermBase : *T -> *T -> *T -> *T
+  data TermBase r s t = Lit Int | Abs String s | Var r | App t s
+  type TermF : *T -> *T
+  type TermF t = TermBase String t t
+  type Term : *T
+  type Term = TermBase String Term Term -- Mu TermF, what is type Mu?
+  type EvalCtx : *T -> *T
+  type EvalCtx t = TermBase String Term t
+  type VarTerm : *T -> *T
+  type VarTerm t = TermBase t Term Term
+  type String : *T
+  type String = [Char]
