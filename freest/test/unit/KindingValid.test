@@ -585,7 +585,7 @@ where
   type String : *T
   type String = [Char]
 
-case TermBase
+case (Term, EvalCtx, VarTerm)
 where
   type TermBase : *T -> *T -> *T -> *T
   data TermBase r s t = Lit Int | Abs String s | Var r | App t s
