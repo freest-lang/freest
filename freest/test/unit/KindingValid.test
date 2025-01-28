@@ -216,6 +216,16 @@ case *&{One} ; !Char
 
 case *+{One, Two} ; !Char
 
+case Either
+where
+  type Either : *T -> *T -> *T
+  data Either a b = Left a | Right b
+
+case Either (Int -> Char)
+where
+  type Either : *T -> *T -> *T
+  data Either a b = Left a | Right b
+
 case Stream
 where
   type Stream : 1S -> 1S
@@ -585,7 +595,7 @@ where
   type String : *T
   type String = [Char]
 
-case (Term, EvalCtx, VarTerm)
+case EvalCtx
 where
   type TermBase : *T -> *T -> *T -> *T
   data TermBase r s t = Lit Int | Abs String s | Var r | App t s
