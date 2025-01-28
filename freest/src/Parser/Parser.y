@@ -30,8 +30,8 @@ import Debug.Trace
 %name parseType Type
 %name parseModuleDecl ModuleDecl
 %name parseModule Module
-%name parseEquivalenceTests EquivalenceTests
-%name parseKindingTests KindingTests
+%name parseEquivalenceTests EquivalenceTestCases
+%name parseKindingTests KindingTestCases
 
 %tokentype { Token }
 %monad { Lexer }
@@ -507,21 +507,26 @@ Close
   : CLOSE { () }
   | error {% popLayout }
 
-KindingTests :: { [(T.Type, M.Module)] }
-  : KindingTest KindingTests { $1 : $2 }
-  | {- empty -} { [] }
+TypeTestCases(t)
+  : TypeTestCase(t) TypeTestCases(t) { $1 : $2 }
+  | {- empty -}    { [] }
 
-KindingTest :: { (T.Type, M.Module) }
-  : 'case' Type 'where' TypeTestBlock {($2, $4)}
-  | 'case' Type { ($2, M.empty)}
+TypeTestCase(t)
+  : 'case' t 'where' TypeTestBlock { ($2, $4) }
+  | 'case' t { ($2, M.empty) }
 
-EquivalenceTests :: { [(T.Type, T.Type, M.Module)] }
-  : EquivalenceTest EquivalenceTests { $1 : $2 }
-  | {- empty -} { [] }
+EquivalenceTestCases :: { [((T.Type, T.Type), M.Module)] }
+  : TypeTestCases(EquivalenceTest) { $1 }
 
-EquivalenceTest :: { (T.Type, T.Type, M.Module) }
-  : 'case' Type CMP Type 'where' TypeTestBlock  { ($2, $4, $6) }
-  | 'case' Type CMP Type { ($2, $4, M.empty) }
+KindingTestCases :: {[((T.Type, Maybe K.Kind), M.Module)]}
+  : TypeTestCases(KindingTest) {$1}
+
+EquivalenceTest :: { (T.Type, T.Type) }
+  : Type CMP Type { ($1, $3) }
+
+KindingTest :: { (T.Type, Maybe K.Kind) }
+  : Type { ($1, Nothing) }
+  | Type ':' Kind { ($1, Just $3) }
 
 TypeTestBlock :: { M.Module }
   : OPEN TypeTestDeclListPIPE Close { $2 }

@@ -21,7 +21,7 @@ spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
   "Normalisation yields WHNF tests" 
-  \(t,m) -> normYieldsWnnf m t `shouldBe` True
+  \(t, _, m) -> normYieldsWnnf m t `shouldBe` True
 
 normYieldsWnnf :: M.Module -> T.Type -> Bool
 normYieldsWnnf m t = isWhnf $ normalise (buildDataDecls m) t

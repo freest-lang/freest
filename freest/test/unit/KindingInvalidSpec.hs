@@ -13,6 +13,6 @@ spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingInvalid.test" 
   "Invalid kinding tests" 
-  \(t,m) -> case runSynth m t of 
+  \(t, _, m) -> case runSynth m t of 
     Left _ -> return ()
     Right _ -> expectationFailure "An error was expected but none was thrown."

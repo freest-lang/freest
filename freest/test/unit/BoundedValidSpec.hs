@@ -22,7 +22,7 @@ spec :: Spec
 spec = mkKindingSpec
   "test/unit/BoundedValid.test" 
   "Bounded types" 
-  \(t,m) -> isBounded m t `shouldBe` True
+  \(t, _, m) -> isBounded m t `shouldBe` True
 
 isBounded :: M.Module -> T.Type -> Bool
 isBounded m t = bounded dd $ normalise dd t

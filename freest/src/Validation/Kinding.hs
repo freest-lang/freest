@@ -15,6 +15,7 @@ module Validation.Kinding
   , KindingCtx
   , runKindModule
   , runSynth
+  , runCheck
   )
 where
 
@@ -44,6 +45,9 @@ runKindModule m = runValidation (buildValidationState m) (kindModule m)
 
 runSynth :: M.Module -> T.Type -> Either [Error] Kind
 runSynth m t = runValidation (buildValidationState m) (synth Map.empty t)
+
+runCheck :: M.Module -> T.Type -> Kind -> Either [Error] ()
+runCheck m t k = runValidation (buildValidationState m) (check Map.empty t k)
 
 kindModule :: M.Module -> Validation M.Module
 kindModule m = do

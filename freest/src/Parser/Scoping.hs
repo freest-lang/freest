@@ -16,6 +16,7 @@ module Parser.Scoping
   ,scopeModule
   ,scopeModule_
   ,scopeType
+  ,scopeKind
   )
 where
 
