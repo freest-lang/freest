@@ -4,6 +4,8 @@ Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 Minimal (or canonical) type renaming
+
+Absorbing - non-normed types == types w/ infinite normed
 -}
 
 module Validation.Rename
@@ -33,25 +35,25 @@ reachable = undefined
 
 -- Requires: the type is normalised,
 -- otherwise the function may diverge on non-contractive types
-bounded :: TypeDeclMap -> T.Type -> Bool
-bounded td = bound S.empty
+absorbing :: TypeDeclMap -> T.Type -> Bool
+absorbing td = absorb S.empty
   where
-    bound :: Visited -> T.Type -> Bool
-    bound v = \case
+    absorb :: Visited -> T.Type -> Bool
+    absorb v = \case
       -- Session types
       T.End{} -> True
-      T.AppSemi _ t u -> bound v t || bound v u
+      T.AppSemi _ t u -> absorb v t || absorb v u
       T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
       T.Choice _ K.Un _ _ -> True -- Unrestricted type
-      T.Choice _ _ _ its -> all (bound v . snd) its
+      T.Choice _ _ _ its -> all (absorb v . snd) its
       -- Polymorphism
-      T.Quant _ _ _ _ t -> bound v t
+      T.Quant _ _ _ _ t -> absorb v t
       -- Equations
       T.AppTName _ id ts
         | id `S.member` v -> True
-        | otherwise -> bound (S.insert id v) (snd (td M.! id)) -- TODO: Check
+        | otherwise -> absorb (S.insert id v) (snd (td M.! id)) -- TODO: Check
       -- Higher-order, including AppDual
-      T.App _ t ts -> all (bound v) (t:ts)
+      T.App _ t ts -> all (absorb v) (t:ts)
       -- Functional types, Skip, Message, DName, Var
       _ -> False
 

@@ -6,6 +6,10 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 Normalising types
 
 Weak reduction strategies do not reduce under lambda abstractions.
+
+Lemma: T whnf iff T does not reduce
+
+Teste: If T not whnf then T reduces
 -}
 
 module Validation.Normalisation
