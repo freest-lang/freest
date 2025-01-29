@@ -105,7 +105,7 @@ synth ctx = \case
   T.Choice s m p lts -> do
     forM_ lts \(_,t) -> checkSession ctx t
     pure (Proper s m Session)
-  T.End s _ -> pure (ls s)
+  T.End s _ -> pure (lb s)
   T.Skip s -> pure (us s)
   T.AppSemi s t u -> do
     -- k1 <- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))

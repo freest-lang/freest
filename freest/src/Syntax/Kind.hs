@@ -11,7 +11,7 @@ module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
-  , lt, ut, ls, us, la, ua, bot
+  , lt, ut, ls, us, lb, ub, bot
   , Subsort(..)
   , Join(..)
   , isStrictlyLin
@@ -72,13 +72,13 @@ instance Join Kind where
   join _ _ = internalError "join of non-proper kinds."
 
 -- | Abbreviations for the six proper kinds
-lt, ut, ls, us, la, ua :: Span -> Kind
+lt, ut, ls, us, lb, ub :: Span -> Kind
 lt s = Proper s Lin Top 
 ut s = Proper s Un  Top 
 ls s = Proper s Lin Session 
 us s = Proper s Un  Session
-la s = Proper s Lin Bounded
-ua s = Proper s Un  Bounded
+lb s = Proper s Lin Bounded
+ub s = Proper s Un  Bounded
 
 -- | Abbreviation for the bottom proper kind
 bot :: Span -> Kind
