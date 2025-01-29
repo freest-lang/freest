@@ -567,8 +567,8 @@ where
 --   type Convert : (1S -> 1S) -> 1S -> 1S
 --   type Convert a b = a b
 
--- System F-omega with Equirecursive Types for Datatype-Generic Programming
--- Yufei Cai Paolo G. Giarrusso Klaus Ostermann
+-- "System F-omega with Equirecursive Types for Datatype-Generic Programming",
+-- Yufei Cai, Paolo G. Giarrusso, Klaus Ostermann
 
 case Term
 where
@@ -602,7 +602,9 @@ where
   type TermF : *T -> *T
   type TermF t = TermBase String t t
   type Term : *T
-  type Term = TermBase String Term Term -- Mu TermF, what type is Mu?
+  -- type Term = Mu TermF, where Mu is a fixed point combinator which we cannot
+  -- write. Instead we expand the definition:
+  type Term = TermBase String Term Term
   type EvalCtx : *T -> *T
   type EvalCtx t = TermBase String Term t
   type VarTerm : *T -> *T

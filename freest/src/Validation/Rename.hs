@@ -5,7 +5,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 Minimal (or canonical) type renaming
 
-Absorbing - non-normed types == types w/ infinite normed
+Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
