@@ -103,24 +103,25 @@ synth ctx = \case
   -- Session types
   T.Message s m _ -> pure (Arrow s (lt s) (Proper s m Session))
   T.Choice s m p lts -> do
-    forM_ lts \(_,t) -> checkSession ctx t
-    pure (Proper s m Session)
+    pk <- foldM (\pk (_,t) -> meet pk . snd <$> checkSession ctx t) Session lts
+    pure (Proper s m pk)
   T.End s _ -> pure (lb s)
   T.Skip s -> pure (us s)
   T.AppSemi s t u -> do
     -- k1 <- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
     -- k2 <- catchE (check' ctx u (ls s)) (putErrorWithDefault (us s))
-    k1 <- checkSession ctx t
-    k2 <- checkSession ctx u
-    return (join k1 k2)
+    (m1, pk1) <- checkSession ctx t
+    (m2, pk2) <- checkSession ctx u
+    return $ Proper s (join m1 m2) (meet pk1 pk2) 
   T.AppDual s t -> do
     -- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
     synthCheck ctx t (ls s)
   -- Polymorphism
   T.Quant s p a k t -> do
     checkProper (Map.insert a k ctx) t
-    >>= \case (m,Session) -> pure (Proper s Lin Session)
-              (m,Top    ) -> pure (Proper s m Top      )
+    >>= \case (m, Bounded) -> pure (Proper s Lin Bounded)
+              (m, Session) -> pure (Proper s Lin Session)
+              (m, Top    ) -> pure (Proper s m   Top    )
   -- Equations (including built-ins)
   T.TName s i -> lookupKindSig i
   T.Tuple s ts -> Proper s <$> foldCheckProperJoin ctx Un ts <*> pure Top
@@ -169,12 +170,12 @@ checkProper ctx t =
     Proper _ m pk -> pure (m,pk)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
 
-checkSession :: KindingCtx -> T.Type -> Validation Kind
+checkSession :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkSession ctx t = do
-  k <- synth ctx t
-  unless (k <: ls (getSpan k)) $
-    throwE (SessionTypeMismatch (getSpan t) t k)
-  return k
+  (m,pk) <- checkProper ctx t
+  unless (pk <: Session) $
+    throwE (SessionTypeMismatch (getSpan t) t)
+  return (m,pk)
 
 checkSubkindOf :: T.Type -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k = 

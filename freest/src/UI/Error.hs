@@ -43,7 +43,7 @@ data Error
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
-  | SessionTypeMismatch Span T.Type K.Kind
+  | SessionTypeMismatch Span T.Type
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
@@ -78,7 +78,7 @@ instance Located Error where
     NonLinPat s _ _ -> s
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
-    SessionTypeMismatch s _ _ -> s
+    SessionTypeMismatch s _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
@@ -159,21 +159,21 @@ instance Show Error where
         KindMismatch s k1 t k2 ->
           "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
         ProperKindMismatch s t k -> 
-          "\n  Expected a proper kind for type "++show t++", but got kind "++show k
-        SessionTypeMismatch s t k -> 
-          "\n Expected a session type, but found type "++show t++" of kind "++show k
+          "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`"
+        SessionTypeMismatch s t -> 
+          "\n Expected a session type, but found type `"++show t++"`."
         GivenTooManyArgsK s t n m ->
-          "\n  Type "++show t++" expects "++show n++" arguments, but it was given "++show m++"."
+          "\n  Type `"++show t++"` expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->
-          "\n  Type "++show i++" expects too many arguments, it should have kind "++show k++"."
+          "\n  Type "++show i++" expects too many arguments, it should have kind `"++show k++"`."
         InvalidType s t ->
-          "\n  Invalid type: "++show t
+          "\n  Invalid type: `"++show t++"`"
         TypeMismatch s t u ep ->
-          "\n  Couldn't match expected type "++show t++" with actual type "++show u++" in the "++showExpPat ep++"."
+          "\n  Couldn't match expected type `"++show t++"` with actual type `"++show u++"` in the "++showExpPat ep++"."
         TypeMismatchList _ t ep ->
-          "\n  Couldn't match expected type "++show t++" with a list type in the "++showExpPat ep++"."
+          "\n  Couldn't match expected type `"++show t++"` with a list type in the "++showExpPat ep++"."
         TypeMismatchTuple _ n t ep ->
-          "\n  Couldn't match expected type "++show t++" with "++
+          "\n  Couldn't match expected type `"++show t++"` with "++
             (case n of 0 -> "actual type ()"
                        2 -> "a pair type"
                        n -> "a "++show n++"-tuple type.")
@@ -191,7 +191,7 @@ instance Show Error where
         LinVarAtEndOfScope _ x t -> 
           "\n  Variable `"++show x++"`, of linear type `"++show t++"`, was not consumed."
         ChoiceNotAllowed s i t ->
-          "\n  Choice `"++show i++"` is not allowed by type "++show t
+          "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
         UnsupportedError _ m ->
           "\n  " ++ m
 
