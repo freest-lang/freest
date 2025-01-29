@@ -33,6 +33,8 @@ rename td = ren S.empty
 reachable :: Visited -> T.Type -> S.Set Identifier
 reachable = undefined
 
+bounded = absorbing
+
 -- Requires: the type is normalised,
 -- otherwise the function may diverge on non-contractive types
 absorbing :: TypeDeclMap -> T.Type -> Bool
