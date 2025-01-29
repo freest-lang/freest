@@ -336,13 +336,13 @@ where
   type Bool : 1T
   data Bool = True | False
 
--- case *&{One}
+case *&{One}
 
--- case *&{One, Two}
+case *&{One, Two}
 
--- case *&{One}
+case *+{One}
 
--- case *!{One, Two}
+case *+{One, Two}
 
 case *!Int ; !Char
 
@@ -358,27 +358,40 @@ where
   type Bool : 1T
   data Bool = True | False
 
--- case *&{One} ; !Char
+case *&{One} ; !Char
 
--- case *&{One, Two} ; !Char
+case *&{One, Two} ; !Char
 
--- case *&{One} ; !Char
+case *&{One} ; !Char
 
--- case *!{One, Two} ; !Char
+case *+{One, Two} ; !Char
 
--- Polymorphic streams
+case Either
+where
+  type Either : *T -> *T -> *T
+  data Either a b = Left a | Right b
 
--- case PolyStream
--- where
---   type PolyStream : 1S
---   type PolyStream = forall a:*T . ?a ; PolyStream
+case Either (Int -> Char)
+where
+  type Either : *T -> *T -> *T
+  data Either a b = Left a | Right b
 
--- Dual of the above
+case Stream
+where
+  type Stream : 1S -> 1S
+  type Stream a = ?a ; Stream a
 
--- case PolyStream
--- where
---   type PolyStream : 1S
---   type PolyStream = exists a:*T . !a ; PolyStream
+-- Poly Streams
+
+case OutStream
+where
+  type OutStream : 1S
+  type OutStream = exists a:*T . !a ; OutStream
+
+case InStream
+where
+  type InStream : 1S
+  type InStream = forall a:*T . ?a ; InStream
 
 -- Same, with a function to consume the values
 
@@ -627,3 +640,122 @@ where
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
 
 case (!Int ; !Int) ; !Int
+
+-- Types with the Dual operator
+
+case Dual Close
+
+case Dual !Int
+
+case Dual Skip
+
+case Dual (Skip ; Skip)
+
+case Dual (Dual (Dual Wait))
+
+case Dual T
+where
+  type T : *S
+  type T = Skip
+
+case Dual T
+where
+  type T : *S
+  type T = Dual Skip
+
+case !(Dual ?Int) ; Close
+
+case Id
+where
+  type Id : 1S -> 1S
+  type Id a = a
+
+case Id (Int -> Char -> (Int, Char))
+where
+  type Id : *T -> *T
+  type Id a = a
+
+case Convert
+where
+  type Convert : (*T -> *T) -> *T -> *T
+  type Convert a b = a b
+
+case Convert Id
+where
+  type Convert : (1S -> 1S) -> 1S -> 1S
+  type Convert a b = a b
+  type Id : 1S -> 1S
+  type Id a = a
+
+case Convert Id Wait
+where
+  type Convert : (1S -> 1S) -> 1S -> 1S
+  type Convert a b = a b
+  type Id : 1S -> 1S
+  type Id a = a
+
+case Convert Id (Tree Int)
+where
+  type Convert : (1S -> 1S) -> 1S -> 1S
+  type Convert a b = a b
+  type Id : 1S -> 1S
+  type Id a = a
+  type Tree : *T -> 1S
+  type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+-- Dual, partially applied
+
+-- case Dual
+
+-- case Convert Dual
+-- where
+--   type Convert : (1S -> 1S) -> 1S -> 1S
+--   type Convert a b = a b
+
+-- case Convert Dual Wait
+-- where
+--   type Convert : (1S -> 1S) -> 1S -> 1S
+--   type Convert a b = a b
+
+-- System F-omega with Equirecursive Types for Datatype-Generic Programming
+-- Yufei Cai Paolo G. Giarrusso Klaus Ostermann
+
+case Term
+where
+  type Term : *T
+  data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
+  type String : *T
+  type String = [Char]
+
+case EvalCtx
+where
+  type EvalCtx : *T
+  data EvalCtx = LitC Int | AbsC String Term | VarC String | AppC EvalCtx Term
+  type Term : *T
+  data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
+  type String : *T
+  type String = [Char]
+
+case VarTerm String
+where
+  type VarTerm : *T -> *T
+  data VarTerm t = LitV Int | AbsV String Term | VarV t | AppV Term Term
+  type Term : *T
+  data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
+  type String : *T
+  type String = [Char]
+
+case EvalCtx
+where
+  type TermBase : *T -> *T -> *T -> *T
+  data TermBase r s t = Lit Int | Abs String s | Var r | App t s
+  type TermF : *T -> *T
+  type TermF t = TermBase String t t
+  type Term : *T
+  type Term = TermBase String Term Term -- Mu TermF, what type is Mu?
+  type EvalCtx : *T -> *T
+  type EvalCtx t = TermBase String Term t
+  type VarTerm : *T -> *T
+  type VarTerm t = TermBase t Term Term
+  type String : *T
+  type String = [Char]

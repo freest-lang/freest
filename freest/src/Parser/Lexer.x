@@ -125,8 +125,8 @@ $upper = [ A-Z ]
 <0> "*T" { token TkUnTopKind }
 <0> "1S" { token TkLinSessionKind }
 <0> "*S" { token TkUnSessionKind }
-<0> "1A" { token TkLinAbsorbKind }
-<0> "*A" { token TkUnAbsorbKind }
+<0> "1B" { token TkLinBoundedKind }
+<0> "*B" { token TkUnBoundedKind }
 
 -- Literals
 <0> @intLit    { emit TkIntLit }

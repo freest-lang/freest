@@ -11,7 +11,7 @@ module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
-  , lt, ut, ls, us, la, ua, bot
+  , lt, ut, ls, us, lb, ub, bot
   , Subsort(..)
   , Join(..)
   , isStrictlyLin
@@ -38,20 +38,20 @@ instance Join Multiplicity where
   join Un Un = Un
   join _  _  = Lin
 
-data Prekind = Top | Session | Absorb | VarPK Variable
+data Prekind = Top | Session | Bounded | VarPK Variable
   deriving (Eq, Ord)
 
 instance Subsort Prekind where
   Top     <: Session = False
-  Top     <: Absorb  = False
-  Session <: Absorb  = False
+  Top     <: Bounded  = False
+  Session <: Bounded  = False
   _       <: _       = True
 
 instance Join Prekind where
-  join Absorb  Absorb  = Absorb
+  join Bounded Bounded = Bounded
   join Session Session = Session
-  join Absorb  Session = Session
-  join Session Absorb  = Session  
+  join Bounded Session = Session
+  join Session Bounded = Session  
   join _       _       = Top
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind            
@@ -72,13 +72,13 @@ instance Join Kind where
   join _ _ = internalError "join of non-proper kinds."
 
 -- | Abbreviations for the six proper kinds
-lt, ut, ls, us, la, ua :: Span -> Kind
+lt, ut, ls, us, lb, ub :: Span -> Kind
 lt s = Proper s Lin Top 
 ut s = Proper s Un  Top 
 ls s = Proper s Lin Session 
 us s = Proper s Un  Session
-la s = Proper s Lin Absorb
-ua s = Proper s Un  Absorb
+lb s = Proper s Lin Bounded
+ub s = Proper s Un  Bounded
 
 -- | Abbreviation for the bottom proper kind
 bot :: Span -> Kind
@@ -98,7 +98,7 @@ instance Show Prekind where
   show = \case 
     Top     -> "T"
     Session -> "S"
-    Absorb  -> "A"
+    Bounded -> "A"
     VarPK ψ -> external ψ
 
 instance Show Kind where

@@ -1,0 +1,19 @@
+-- Dual
+
+case Dual Int
+
+case Dual (Int -> (Char, String) -> [Float])
+
+case Int -> (Char, Dual String) -> [Float]
+
+-- Higher-order recursion
+
+case T
+where
+  type T : (*T -> *T) -> (*T -> *T)
+  type T a = a
+
+case T
+where
+  type T : ((*T -> *T) -> (*T -> *T)) -> (*T -> *T) -> (*T -> *T)
+  type T a = a

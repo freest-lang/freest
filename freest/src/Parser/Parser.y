@@ -116,8 +116,8 @@ import Debug.Trace
   '*T'    { TkUnTopKind _ }
   '1S'    { TkLinSessionKind _ }
   '*S'    { TkUnSessionKind _ }
-  '1A'    { TkLinAbsorbKind _ }
-  '*A'    { TkUnAbsorbKind _ }
+  '1B'    { TkLinBoundedKind _ }
+  '*B'    { TkUnBoundedKind _ }
 
   -- Expression literals
   INT_LIT { TkIntLit _ _ }
@@ -199,15 +199,15 @@ LetDecl
 
 FnName :: { Variable }
   : LOWER_ID   { mkVarTk $1 }
-  | '(' Op ')' { $2 }
+  | '(' Op ')' { $2         }
 
 RHS(sep) :: { E.RHS }
-  : sep Exp Where { E.UnguardedRHS $2 $3 }
-  | GuardedExps(sep) Where { E.GuardedRHS $1 $2 }
+  : sep Exp Where          { E.UnguardedRHS $2 $3 }
+  | GuardedExps(sep) Where { E.GuardedRHS $1 $2   }
 
 GuardedExps(sep) :: { [(E.Exp, E.Exp)] }
   : '|' Exp sep Exp GuardedExps(sep) { ($2,$4) : $5 }
-  | '|' Exp sep Exp             { [($2,$4)] }
+  | '|' Exp sep Exp                  { [($2,$4)]    }
   -- otherwise is simply a variable defined as True
 
 Where :: { Maybe [E.LetDecl] }
@@ -224,14 +224,14 @@ FnNameListComma :: { [Variable] }
 
 DataConsListPipe :: { [(Identifier, [T.Type])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }
-  | DataCons                      { [$1] }
+  | DataCons                      { [$1]    }
 
 DataCons :: { (Identifier, [T.Type]) }
   : UPPER_ID TypePrimaryListWS { (mkIdTk $1, $2) }
 
 TypePrimaryListWS :: { [T.Type] }
   : TypePrimary TypePrimaryListWS { $1 : $2 }
-  | {- empty -}                   { [] }
+  | {- empty -}                   { []      }
 
 Kind :: { K.Kind }
   : Kind '->' Kind %prec ARROW { K.Arrow (spanFromTo $1 $3) $1 $3 }
@@ -239,21 +239,21 @@ Kind :: { K.Kind }
   | ProperKind                  { $1 }
 
 ProperKind :: { K.Kind }
-  : '1T' { K.Proper (getSpan $1) K.Lin K.Top }
-  | '*T' { K.Proper (getSpan $1) K.Un K.Top }
+  : '1T' { K.Proper (getSpan $1) K.Lin K.Top     }
+  | '*T' { K.Proper (getSpan $1) K.Un  K.Top     }
   | '1S' { K.Proper (getSpan $1) K.Lin K.Session }
-  | '*S' { K.Proper (getSpan $1) K.Un K.Session }
-  | '1A' { K.Proper (getSpan $1) K.Lin K.Absorb }
-  | '*A' { K.Proper (getSpan $1) K.Un K.Absorb }
+  | '*S' { K.Proper (getSpan $1) K.Un  K.Session }
+  | '1B' { K.Proper (getSpan $1) K.Lin K.Bounded }
+  | '*B' { K.Proper (getSpan $1) K.Un  K.Bounded }
 
 TypePrimary :: { T.Type }
   -- Builtins (necessary?)
-  : 'Int'    { T.Int (getSpan $1) }
-  | 'Float'  { T.Float (getSpan $1) }
-  | 'Char'   { T.Char (getSpan $1) }
-  | 'Skip'   { T.Skip (getSpan $1) }
-  | 'Close'  { T.End (getSpan $1) T.Out }
-  | 'Wait'   { T.End (getSpan $1) T.In }
+  : 'Int'    { T.Int   (getSpan $1)       }
+  | 'Float'  { T.Float (getSpan $1)       }
+  | 'Char'   { T.Char  (getSpan $1)       }
+  | 'Skip'   { T.Skip  (getSpan $1)       }
+  | 'Close'  { T.End   (getSpan $1) T.Out }
+  | 'Wait'   { T.End   (getSpan $1) T.In  }
   -- Unit, Tuples, Operators
   | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnitId (spanFromTo $1 $2)) }
   | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }
