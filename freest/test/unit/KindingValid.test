@@ -268,6 +268,162 @@ where
   type B_15 : 1S -> 1S -> 1S
   type B_15 a z = (Skip;((Skip;z);((B_15 a z;(a;a));(Skip;(Skip;!())))))
 
+case forall a: 1S . forall b: 1S . forall z: 1S . (Z a ;((a;&{B: (!Int;(?();b)), C: (Skip;(?();b))});((?Int;+{B: a, C: ?Int});!Int))) : 1T
+where
+  type Z : 1S -> 1S
+  type Z a = Skip;&{B: (+{A: (&{B: a, C: Skip};+{A: (?Int;Skip), B: (Z a ;Skip), C: (((?Int;&{A: ((((?();a); Z a);+{A: Z a, C: Skip});!Int), C: !Char});Z a);Skip)})};(+{A: !Char};(((?Int;&{A: ((((?();a);Z a);+{A: Z a, C: Skip});!Int), C: !Char}); Z a);(?Char;((?Int;&{A: ((((?();a);Z a);+{A: Z a, C: Skip});!Int), C: !Char});Z a))))), C: Skip}
+
+case forall a: 1S . forall b: 1S . forall z: 1S . B1 : 1T
+where
+  type B1 : 1S
+  type B1 = +{A: (B1;&{A: (Skip;A1), C: (B1;A2)}), B: (Skip;&{A: (Skip;A3), C: (B1;A4)}), C: (!Int;&{A: (Skip;A5), C: (B1;A6)})}
+  type A1 : 1S
+  type A1 = +{A: (B1;&{A: (Skip;A1), C:(B1;A1)}), B: (Skip;&{A: (Skip;A1), C: (B1;A1)}), C: (!Int;&{A: (Skip;A1),C: (B1;A1)})}
+  type A2 : 1S
+  type A2 = +{A: (B1;&{A: (Skip;A2), C: (B1;A2)}), B:(Skip;&{A: (Skip;A2), C: (B1;A2)}), C: (!Int;&{A: (Skip;A2), C:(B1;A2)})}
+  type A3 : 1S
+  type A3 = +{A: (B1;&{A: (Skip;A3), C:(B1;A3)}), B: (Skip;&{A: (Skip;A3), C: (B1;A3)}), C: (!Int;&{A: (Skip;A3),C: (B1;A3)})}
+  type A4 : 1S
+  type A4 = +{A: (B1;&{A: (Skip;A4), C: (B1;A4)}), B:(Skip;&{A: (Skip;A4), C: (B1;A4)}), C: (!Int;&{A: (Skip;A4), C:(B1;A4)})}
+  type A5 : 1S
+  type A5 = +{A: (B1;&{A: (Skip;A5), C:(B1;A5)}), B: (Skip;&{A: (Skip;A5), C: (B1;A5)}), C: (!Int;&{A: (Skip;A5),C: (B1;A5)})}
+  type A6 : 1S
+  type A6 = +{A: (B1;&{A: (Skip;A6), C: (B1;A6)}), B:(Skip;&{A: (Skip;A6), C: (B1;A6)}), C: (!Int;&{A: (Skip;A6), C:(B1;A6)})}
+  
+-- Forall
+
+-- Int type as Church Encoding
+case forall a . a -> a -> a : 1T
+
+case forall a : 1T . a : 1T
+
+case forall a : 1T . a : 1T
+
+case forall a : *T . a -> a : 1T
+
+case forall a : 1T . a 1-> Int : 1T
+
+case forall a : *T . a 1-> Int : 1T
+
+case forall a : *T . a -> Int : 1T
+
+case forall a : 1S . a -> Int : 1T
+
+case forall a : 1S . B a : 1T
+where
+  type B : 1S -> *T
+  type B a = a -> B a 
+
+case forall a : 1S . A -> a : 1T
+where
+  type A : 1S
+  type A = !Int;A
+
+case forall a : 1S . Skip : 1T
+
+case forall a : *T . a -> Int : 1T
+
+case Int -> forall a : *T . a : 1T
+
+case (Int, forall a : 1T . a) : 1T
+
+case Int -> forall a : 1S . A -> a : 1T
+where
+  type A : 1S
+  type A = !Int;A
+
+-- Dual
+
+case Dual Skip : *S
+
+case Dual (Skip; Skip) : 1S
+
+case Dual A : *S
+where 
+  type A : *T
+  type A = Skip
+
+case A : *S
+where
+  type A : *T
+  type A = Dual Skip
+
+case Y : 1S
+where
+  type Y : 1S
+  type Y = +{B: !(), C: !Int} ; (+{A: Y;!(), C: !()} ; Y)
+
+case X : 1S
+where
+  type X : 1S
+  type X = Y
+  type Y : 1S
+  type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
+
+-- Messages of kind other than ML
+
+case !(Int, Int) : 1S
+
+case !(!Int; ?Int) : 1S
+
+case A : 1S
+where
+  type A : 1S
+  type A = ?(!Int; A)
+
+-- Shared channels, special syntax
+
+case *!Int : *S
+
+case *?Int : *S
+
+case *?(X) : *S
+where
+  type X : 1S
+  type X = Y 
+  type Y : 1S
+  type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
+
+case *+{One, Two} : *S
+
+case *&{One, Two} : *S
+
+case *&{Mon, Tue, Wed, Thu, Fri, Sat, Sun} : *S
+
+case !Int ; *!Int : 1S
+
+-- Shared channels, raw syntax
+
+case A : *S
+where
+  type A : *S
+  type A = !Int; A
+
+case A : *S
+where
+  type A : *S
+  type A = ?Int; A
+
+case A : *S
+where
+  type A : *S
+  type A = +{One: A, Two: A} 
+
+case A : *S
+where
+  type A : *S
+  type A = &{One: A, Two: A}
+
+case !Int ; A : 1S
+where
+  type A : *S
+  type A = !Int ; A
+
+case !Int ; !Int ; !Int ; !Int ; A : 1S
+where
+  type A : *S
+  type A = !Int ; A
+
 -- Session types
 
 case !Int : 1S
