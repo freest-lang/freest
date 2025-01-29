@@ -4,71 +4,221 @@
 
 -- Simple types
 
-case Int
+case Int : *T
 
-case Char
+case Int : *T
 
-case Float
+case Float : *T
 
-case Int
+case Char : *T
 
-case ()
+case () : *T
 
-case (Int, Char)
+case [Int] : *T
 
-case (Int, Char, Float)
+case [(Int, Char, Float)] : *T
 
-case [Int]
+case ([Int], Char, Float) : *T
 
-case [(Int, Char, Float)]
+case [[Int]] : *T
 
-case ([Int], Char, Float)
+-- Pairs
 
-case [[Int]]
+case (Int,Int) : *T
+
+case (Int -> Int, Char -> (Int -> Char)) : *T
+
+case (Skip, Int) : *T
+
+case (Int, Skip) : *T
+
+case (Int, Int) : 1T
+
+case (Int -> Int, Char -> (Int -> Char)) : 1T
+
+case (Skip, Int) : 1T
+
+case (Int, Skip) : 1T
+
+case (!Int, ?Int) : 1T
+
+case (!Int, Int 1-> Char) : 1T
+
+case (Int, Char) : *T
+
+case (Int, Char, Float) : *T
+
+case (!Int 1-> Int 1-> Char, ?Int;&{A:Skip, B:!Int}) : 1T
+
+case (Int, ?Int) : 1T
+
+case (Skip, Skip 1-> Skip) : 1T
+
+case (Int -> Char -> Int, ?Int 1-> Int -> Int) : 1T
+
+case (!Int, Int) : 1T
+
+case (!Int, Skip) : 1T
+
+case (Int 1-> Char -> (Int -> ()), Int -> Skip -> ()) : 1T
+
+case Int -> Int : *T
+
+case Int 1-> Int : 1T
+
+case Char -> Skip : *T
+
+case Char 1-> Skip : 1T
+
+-- Recursive types
+case A : 1S
+where 
+  type A : 1S
+  type A = ?Int
+
+case A : 1S
+where
+  type A : 1S
+  type A = (!Int; Skip; ?Int)
+
+case Tree : 1S
+where
+  type Tree : 1S
+  type Tree = &{Leaf: Skip, Node: ?Int;Tree;Tree}
+
+case TreeChannel : 1S
+where
+  type TreeChannel : 1S
+  type TreeChannel = +{Leaf: Skip, Node: !Int;TreeChannel;TreeChannel}
+
+case forall a : 1S .  Alpha a : 1T
+where
+  type Alpha : 1S -> 1S
+  type Alpha a = !Int; TreeChannel1 a
+  type TreeChannel1 : 1S -> 1S
+  type TreeChannel1 a = +{Leaf:Skip, Node:!Int; TreeChannel1 a; TreeChannel1 a};TreeChannel2 a
+  type TreeChannel2 : 1S -> 1S
+  type TreeChannel2 a = +{Leaf:Skip, Node:!Int;TreeChannel2 a;TreeChannel2 a};a
+
+case forall a : 1S . Alpha a : 1T
+where
+  type Alpha : 1S -> 1S
+  type Alpha a = !Int; TreeChannel1 a
+  type TreeChannel1 : 1S -> 1S
+  type TreeChannel1 a = +{Leaf:Skip, Node:!Int; TreeChannel1 a; TreeChannel1 a};TreeChannel2 a
+  type TreeChannel2 : 1S -> 1S
+  type TreeChannel2 a = +{Leaf:Skip, Node:!Int;TreeChannel2 a;TreeChannel2 a};a
+
+case A : 1T
+where 
+  type A : *T
+  type A = (A, Int)
+
+case B : 1T
+where
+  type B : *T
+  type B = (B, Int -> Char)
+
+case A : 1T
+where
+  type A : 1T
+  type A = A 1-> A
+
+case forall b : 1S . b : 1T
+
+case forall a : 1S . B a : 1T
+where
+  type B : 1S -> 1S
+  type B a = a
+
+case forall b : 1S . A b : 1T
+where
+  type A : 1S -> 1S
+  type A b = b ; A b
+
+case forall a : 1S . D a : 1T
+where
+  type D : 1S -> 1S
+  type D a = C a
+  type C : 1S -> 1S
+  type C a = B a
+  type B : 1S -> 1S
+  type B a = a
+
+case A : 1T
+where
+  type A : *T
+  type A = (A,Int)
+
+case A : *T 
+where
+  type A : *T
+  type A = forall b : 1S . A
+
+case forall y : 1S . +{C: X1};(y;(X2 y;Skip))
+where
+  type X1 : *S
+  type X1 = Skip
+  type X2 : 1S -> 1S
+  type X2 y = y
+
+case forall y : 1S . +{C: (Skip;((y;X1 (X2 y));Skip))} : 1S
+where
+  type X1 : 1S -> 1S
+  type X1 y = X2 y
+  type X2 : 1S -> 1S
+  type X2 y = y
+
 
 -- Session types
 
-case !Int
+case !Int : 1S
 
-case ?Char
+case ?Char : 1S
 
-case !Int
+case !Char : 1S
 
-case ?()
+case !Float : 1S
 
-case Skip
+case !Int : 1S
 
-case Skip;!Int
+case ?() : 1S
 
-case !Int;Skip
+case Skip : *S
 
-case Skip;!Int;Skip
+case Skip;!Int : 1S
 
-case Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip
+case !Int;Skip : 1S
 
-case !Int;?Int
+case Skip;!Int;Skip : 1S
 
-case Skip;Skip
+case Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip : 1S
+
+case !Int;?Int : 1S
+
+case Skip;Skip : 1S
 
 -- Close 
 
-case Close
+case Close : 1B
 
-case Close;!Int
+case Close;!Int : 1B
 
-case Close;!Int
+case Close;!Int : 1B
 
-case Close;?Int
+case Close;?Int : 1B
 
-case !Char;Close;!Int 
+case !Char;Close;!Int : 1B
 
-case !Char;Close;?Int
+case !Char;Close;?Int : 1B
 
-case (!Int;Close;!Int);?Int 
+case (!Int;Close;!Int);?Int : 1B
 
-case !Int;Close;!Int
+case !Int;Close;!Int : 1B
 
-case T;!Int
+case Skip;+{S:Skip,I:!Int} : 1S
+
+case T;!Int : 1S
 where
   type T : 1S
   type T = +{A: !Int;T, B: Skip;Close;Skip}
