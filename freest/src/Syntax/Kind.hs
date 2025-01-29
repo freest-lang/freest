@@ -14,6 +14,7 @@ module Syntax.Kind
   , lt, ut, ls, us, lb, ub, bot
   , Subsort(..)
   , Join(..)
+  , Meet(..)
   , isStrictlyLin
   )
 where 
@@ -27,6 +28,9 @@ class Subsort a where
 class Join t where
   join :: t -> t -> t
 
+class Meet t where
+  meet :: t -> t -> t
+
 data Multiplicity = Lin | Un | VarM Variable 
   deriving (Eq, Ord)
 
@@ -37,6 +41,11 @@ instance Subsort Multiplicity where
 instance Join Multiplicity where
   join Un Un = Un
   join _  _  = Lin
+
+instance Meet Multiplicity where
+  meet Un _  = Un
+  meet _  Un = Un
+  meet _  _  = Lin
 
 data Prekind = Top | Session | Bounded | VarPK Variable
   deriving (Eq, Ord)
@@ -53,6 +62,17 @@ instance Join Prekind where
   join Bounded Session = Session
   join Session Bounded = Session  
   join _       _       = Top
+
+
+instance Meet Prekind where
+  meet Bounded _       = Bounded
+  meet _       Bounded = Bounded
+  meet Session _       = Session
+  meet _       Session = Session
+  meet _       _       = Top
+
+instance Meet Kind where
+  meet (Proper s m1 b1) (Proper _ m2 b2) = Proper s (meet m1 m2) (meet b1 b2)
 
 data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind            
   deriving (Ord)
