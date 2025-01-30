@@ -121,10 +121,11 @@ instance Show Prekind where
     Bounded -> "A"
     VarPK ψ -> external ψ
 
+-- TODO: unparse me!
 instance Show Kind where
   show = \case 
     Proper _ m pk -> show m++show pk 
-    Arrow _ k1 k2 -> show k1++" -> "++show k2 
+    Arrow _ k1 k2 -> "(" ++ show k1 ++ " -> " ++ show k2 ++ ")"
 
 instance Located Kind where
   getSpan = \case 
