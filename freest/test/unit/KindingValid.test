@@ -338,14 +338,14 @@ case Dual Skip : *S
 
 case Dual (Skip; Skip) : 1S
 
-case Dual A : *S
+case Dual A : *T
 where 
-  type A : *T
+  type A : *S
   type A = Skip
 
-case A : *S
+case A : *T
 where
-  type A : *T
+  type A : *S
   type A = Dual Skip
 
 case Y : 1S
@@ -479,14 +479,14 @@ where
   type U : 1S
   type U = +{A: !Int;U, B: Close;U}
 
-case U
+case U : 1S
 where
   type T : 1S
   type T = +{A: !Int;T, B: Skip;Close;Skip}
   type U : 1S
   type U = +{A: !Int;U, B: Close;U}
 
-case T
+case T : 1S
 where 
   type T : 1S
   type T = T'
@@ -497,7 +497,7 @@ where
   type U' : 1S
   type U' = +{A: !Int;U', B:Close;U'}
 
-case U
+case U : 1S
 where 
   type T : 1S
   type T = T'
@@ -508,21 +508,21 @@ where
   type U' : 1S
   type U' = +{A: !Int;U', B:Close;U'}
 
-case T
+case T : 1S
 where
   type T : 1S
   type T = &{N:!Int;!Int;T, L:Close};?Int
   type U : 1S
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
-case U
+case U : 1S
 where
   type T : 1S
   type T = &{N:!Int;!Int;T, L:Close};?Int
   type U : 1S
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
-case T
+case T : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
@@ -533,7 +533,7 @@ where
   type U' : 1S
   type U' = +{A: !Int;U', B: Close;U'}
 
-case U
+case U : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
@@ -544,15 +544,15 @@ where
   type U' : 1S
   type U' = +{A: !Int;U', B: Close;U'}
 
-case !(!Int;Close) 
+case !(!Int;Close) : 1S
 
-case !(!Int;Skip;Close;?Int) 
+case !(!Int;Skip;Close;?Int) : 1S 
 
-case forall a:1S. Close;a;!Int 
+case forall a:1S. Close;a;!Int : 1B
 
-case forall b:1S. (Close;b);Skip
+case forall b:1S. (Close;b);Skip : 1B
 
-case forall a:1S. T a
+case forall a:1S. T a : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -563,7 +563,7 @@ where
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
-case forall b: 1S . U b
+case forall b: 1S . U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -576,80 +576,80 @@ where
 
 -- Unrestricted session types
 
-case *!Int
+case *!Int : *S
 
-case *?Int
+case *?Int : *S
 
-case *!(!Int;?Bool;Close)
+case *!(!Int;?Bool;Close) : *S
 where
   type Bool : 1T
   data Bool = True | False
 
-case *?(!Int;?Bool;Close)
+case *?(!Int;?Bool;Close) : *S
 where
   type Bool : 1T
   data Bool = True | False
 
-case *&{One}
+case *&{One} : *S
 
-case *&{One, Two}
+case *&{One, Two} : *S
 
-case *+{One}
+case *+{One} : *S
 
-case *+{One, Two}
+case *+{One, Two} : *S
 
-case *!Int ; !Char
+case *!Int ; !Char : 1S
 
-case *?Int ; !Char
+case *?Int ; !Char : 1S
 
-case *!(!Int ; ?Bool ; Close) ; !Char
+case *!(!Int ; ?Bool ; Close) ; !Char : 1S
 where
   type Bool : 1T
   data Bool = True | False
 
-case *?(!Int ; ?Bool ; Close) ; !Char
+case *?(!Int ; ?Bool ; Close) ; !Char : 1S
 where
   type Bool : 1T
   data Bool = True | False
 
-case *&{One} ; !Char
+case *&{One} ; !Char : 1S
 
-case *&{One, Two} ; !Char
+case *&{One, Two} ; !Char : 1S
 
-case *&{One} ; !Char
+case *&{One} ; !Char : 1S
 
-case *+{One, Two} ; !Char
+case *+{One, Two} ; !Char : 1S
 
-case Either
+case Either : *T -> *T -> *T
 where
   type Either : *T -> *T -> *T
   data Either a b = Left a | Right b
 
-case Either (Int -> Char)
+case Either (Int -> Char) : *T -> *T
 where
   type Either : *T -> *T -> *T
   data Either a b = Left a | Right b
 
-case Stream
+case Stream : 1S -> 1S
 where
   type Stream : 1S -> 1S
   type Stream a = ?a ; Stream a
 
 -- Poly Streams
 
-case OutStream
+case OutStream : 1S
 where
   type OutStream : 1S
   type OutStream = exists a:*T . !a ; OutStream
 
-case InStream
+case InStream : 1S
 where
   type InStream : 1S
   type InStream = forall a:*T . ?a ; InStream
 
 -- Same, with a function to consume the values
 
-case PolyStream Bool
+case PolyStream Bool : 1S
 where
   type PolyStream : 1T -> 1S
   type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
@@ -658,7 +658,7 @@ where
 
 -- Dual of the above
 
-case PolyStream Bool
+case PolyStream Bool : 1S
 where
   type PolyStream : 1T -> 1S
   type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
@@ -667,19 +667,19 @@ where
 
 -- Noncontractive types are the big new valid types
 
-case B
+case B : 1S
 where 
   type B : 1S
   type B = Skip;B;?Char
 
-case Z
+case Z : 1S
 where 
   type Z : 1S
   type Z = +{A: Skip, C: Z} ; B
   type B : 1S
   type B = (Skip;B);?Char
 
-case Z1
+case Z1 : 1S
 where
   type Z1 : 1S
   type Z1 = Z2
@@ -695,7 +695,7 @@ where
   type Bool : *T
   data Bool = False | True
 
-case A
+case A : 1S
 where
   type A : 1S
   type A = (Skip;A);!Bool
@@ -703,12 +703,12 @@ where
   type Bool : *T
   data Bool = False | True
 
-case A
+case A : 1S
 where
   type A : 1S
   type A = A;!Int
 
-case A 
+case A : 1S
 where
   type A : 1S
   type A = B
@@ -719,7 +719,7 @@ where
   type D : 1S
   type D = A;!Char
 
-case A
+case A : 1S
 where
   type A : 1S
   type A = ((A; !Bool); !Int) ; ?Bool
@@ -727,7 +727,7 @@ where
   type Bool : *T
   data Bool = False | True
 
-case Z
+case Z : 1S
 where
   type Z : 1S
   type Z = Z'
@@ -743,7 +743,7 @@ where
   type A' = Z''';(Skip;!Char)
   -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
 
-case Z
+case Z : 1S
 where
   type Z : 1S
   type Z = A
@@ -753,7 +753,7 @@ where
   type Z' = (Z';Skip);!Char
   -- Expected kind *S for type Z'', but got kind 1S. (vv) Z'' seems 1S to me
 
-case A;!Bool 
+case A;!Bool : 1S
 where
   type A : 1S
   type A = A;!Bool
@@ -761,7 +761,7 @@ where
   type Bool : *T
   data Bool = False | True
 
-case A
+case A : 1S
 where
   type A : 1S
   type A = A;!Bool
@@ -769,7 +769,7 @@ where
   type Bool : *T
   data Bool = False | True
 
-case Z
+case Z : 1S
 where
   type Z : 1S
   type Z = A
@@ -778,7 +778,7 @@ where
   type Z' : 1S -> 1S
   type Z' b = (Z' b;Skip);b
 
-case Z
+case Z : 1S
 where
   type Z : 1S
   type Z = Z'
@@ -793,22 +793,22 @@ where
   type A' : 1S -> 1S
   type A' b = Z''';(Skip;b)
 
-case A
+case A : *T
 where
   type A : *T
   type A = A
 
-case A
+case A : 1T
 where
   type A : 1T
   type A = A
 
-case A
+case A : *S
 where
   type A : *S
   type A = A;A;A;A;A
 
-case A
+case A : *T
 where
   type A : *T
   type A = B
@@ -819,7 +819,7 @@ where
   type D : *T
   type D = A
 
-case A 
+case A : *S
 where
   type A : *S
   type A = A';A''
@@ -828,7 +828,7 @@ where
   type A'' : *S
   type A'' = Skip;A''
 
-case Skip;A
+case Skip;A : *S
 where
   type A : *S
   type A = (A'; A''); Skip; Skip
@@ -837,7 +837,7 @@ where
   type A'' : *S
   type A'' = Skip;A''
 
-case Int -> A
+case Int -> A : *T
 where
   type A : *T
   type A = B
@@ -848,7 +848,7 @@ where
   type D : *T
   type D = A
 
-case A -> Bool
+case A -> Bool : *T
 where
   type A : *T
   type A = B
@@ -862,7 +862,7 @@ where
   type Bool : *T
   data Bool = False | True
 
-case (A, Int)
+case (A, Int) : *T
 where 
   type A : *T
   type A = B
@@ -873,82 +873,82 @@ where
   type D : *T
   type D = A
 
-case A
+case A : *S
 where 
   type A : *S
   type A = Dual A
 
-case A 
+case A : *S
 where 
   type A : *S
   type A = Dual (Dual A)
 
-case A 
+case A : 1S
 where 
   type A : 1S
   type A = (Dual (Dual A));&{A: !Int, B: ?Int}
 
-case A 
+case A : *S
 where 
   type A : *S
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
 
-case (!Int ; !Int) ; !Int
+case (!Int ; !Int) ; !Int : 1S
 
 -- Types with the Dual operator
 
-case Dual Close
+case Dual Close : 1B
 
-case Dual !Int
+case Dual !Int : 1S
 
-case Dual Skip
+case Dual Skip : *S
 
-case Dual (Skip ; Skip)
+case Dual (Skip ; Skip) : *S
 
-case Dual (Dual (Dual Wait))
+case Dual (Dual (Dual Wait)) : 1B
 
-case Dual T
+case Dual T : *S
 where
   type T : *S
   type T = Skip
 
-case Dual T
+case Dual T : *S
 where
   type T : *S
   type T = Dual Skip
 
-case !(Dual ?Int) ; Close
+case !(Dual ?Int) ; Close : 1B
 
-case Id
+case Id : 1S -> 1S
 where
   type Id : 1S -> 1S
   type Id a = a
 
-case Id (Int -> Char -> (Int, Char))
+case Id (Int -> Char -> (Int, Char)) : *T
 where
   type Id : *T -> *T
   type Id a = a
 
-case Convert
+case Convert : (*T -> *T) -> *T -> *T
 where
   type Convert : (*T -> *T) -> *T -> *T
   type Convert a b = a b
 
-case Convert Id
+case Convert Id : 1S -> 1S
 where
   type Convert : (1S -> 1S) -> 1S -> 1S
   type Convert a b = a b
   type Id : 1S -> 1S
   type Id a = a
 
-case Convert Id Wait
+case Convert Id Wait : 1S
 where
   type Convert : (1S -> 1S) -> 1S -> 1S
   type Convert a b = a b
   type Id : 1S -> 1S
   type Id a = a
 
-case Convert Id (Tree Int)
+case Convert Id (Tree Int) : 1S
 where
   type Convert : (1S -> 1S) -> 1S -> 1S
   type Convert a b = a b
@@ -959,14 +959,14 @@ where
 
 -- Dual, partially applied
 
--- case Dual
+-- case Dual : 1S -> 1S
 
--- case Convert Dual
+-- case Convert Dual : 1S -> 1S
 -- where
 --   type Convert : (1S -> 1S) -> 1S -> 1S
 --   type Convert a b = a b
 
--- case Convert Dual Wait
+-- case Convert Dual Wait : 1S
 -- where
 --   type Convert : (1S -> 1S) -> 1S -> 1S
 --   type Convert a b = a b
@@ -974,14 +974,14 @@ where
 -- System F-omega with Equirecursive Types for Datatype-Generic Programming
 -- Yufei Cai Paolo G. Giarrusso Klaus Ostermann
 
-case Term
+case Term : *T
 where
   type Term : *T
   data Term = Lit Int | Abs String Term | Var [Char] | App Term Term
   type String : *T
   type String = [Char]
 
-case EvalCtx
+case EvalCtx : *T
 where
   type EvalCtx : *T
   data EvalCtx = LitC Int | AbsC String Term | VarC String | AppC EvalCtx Term
@@ -990,7 +990,7 @@ where
   type String : *T
   type String = [Char]
 
-case VarTerm String
+case VarTerm String : *T
 where
   type VarTerm : *T -> *T
   data VarTerm t = LitV Int | AbsV String Term | VarV t | AppV Term Term
@@ -999,7 +999,7 @@ where
   type String : *T
   type String = [Char]
 
-case EvalCtx
+case EvalCtx : *T -> *T
 where
   type TermBase : *T -> *T -> *T -> *T
   data TermBase r s t = Lit Int | Abs String s | Var r | App t s
