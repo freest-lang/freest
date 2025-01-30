@@ -29,8 +29,8 @@ import qualified Data.Set                      as S
 
 type Visited = S.Set T.Type
 
--- | The weak head normal form of a type. This function is guaranteed to
--- converge for well-formed types
+-- | The weak head normal form of a type. Big-step semantics. A total function
+-- for well-formed types.
 normalise :: TypeDeclMap -> T.Type -> T.Type
 normalise td = norm S.empty
   where
@@ -55,41 +55,37 @@ tNameRedex = \case
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
 isWhnf = \case
-  -- W-Const0 i)
+  -- W-Const0
   t | T.isConstant t -> True
-  -- W-Const0 ii)
-  T.Choice{} -> True
   -- W-Const1
   T.App _ t _
     | T.isConstant t && not (T.isSemi t) && not (T.isTName t) && not (T.isDual t) -> True
+  -- W-Const1
+  T.Choice{} -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isSemi t) {- needed? -} -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isSemi t) && not (T.isSkip t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have forall
   T.Quant{} -> True
-  -- W-Dual - I think this is the only case for well formed Dual types. TODO: check
+  -- W-Dual - I think this is the only case for well formed Dual types.
   T.AppDual _ T.Var{} -> True
   _ -> False
 
 -- | One step type reduction 
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
+  -- 1. Semicolon
   -- R-Neut
   T.AppSemi _ T.Skip{} t -> t
-  -- R-Assoc
+  -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-  -- R.Seq
+  -- R.SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
-  -- R-μ + R-β
-  -- Q: What if as and ts are of different lengths?
-  -- A: Should not happen with well-formed types
-  T.AppTName _ id ts -> subsAll as ts u
-    where (as, u) = td M.! id
-  -- Duality from here on
+  -- 2. Duality
   -- R-DSkip
-  T.AppDual s T.Skip{} -> T.Skip s
+  T.AppDual _ t@T.Skip{} -> t
   -- R-DWait, R-DClose
   T.AppDual s (T.End _ p) -> T.End s (T.dual p)
   -- R-D?, R-D!
@@ -102,6 +98,12 @@ reduce td = \case
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
   T.AppDual s t -> T.AppDual s (reduce td t)
+  -- 3. R-μ + R-β + TAppL
+  -- R-μ + R-β
+  -- Q: What if as and ts are of different lengths?
+  -- A: Should not happen with well-formed types
+  T.AppTName _ name ts -> subsAll as ts u
+    where (as, u) = td M.! name
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   t -> error $ "reduce " ++ show t

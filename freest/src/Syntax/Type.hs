@@ -149,11 +149,10 @@ isConstant :: Type -> Bool
 isConstant = \case
   Choice{} -> False
   Quant{}  -> False
-  TName{}  -> False
-  -- DName{} -> False -- Does not reduce
-  Var{}    -> False
-  App{}    -> False
-  _        -> True
+  TName{} -> False
+  Var{}   -> False
+  App{}   -> False
+  _       -> True
 
 isSkip, isSemi, isDual, isTName :: Type -> Bool
 isSkip  = \case Skip{}  -> True; _ -> False
