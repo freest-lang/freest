@@ -9,7 +9,7 @@ Weak reduction strategies do not reduce under lambda abstractions.
 
 Lemma: T whnf iff T does not reduce
 
-Teste: If T not whnf then T reduces
+Teste: If T not whnf then T one-step reduces
 -}
 
 module Validation.Normalisation
@@ -22,7 +22,7 @@ import           Syntax.Base
 import           Syntax.Kind (Kind)
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution           ( subsAll )
+import           Validation.Substitution       ( subsAll )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
