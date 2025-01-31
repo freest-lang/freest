@@ -19,6 +19,7 @@ default-extensions:
   - FlexibleContexts
   - NamedFieldPuns
   - BangPatterns
+  - ScopedTypeVariables
 
 extra-source-files:
   - README.md

@@ -1,5 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-module NotReducesOrWhnfSpec (spec) where
+module ReducesImpliesNotWhnfSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
@@ -9,7 +8,7 @@ import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
-import           Control.Exception             ( catch, PatternMatchFail )
+import           Control.Exception             ( catch, ErrorCall )
 
 -- This test should be called with well-formed types only
 
@@ -22,15 +21,14 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "A given type T is either a WHNF or reduces" 
-  \(t, _, m) -> whnfOrReduces m t `shouldBe` True
+  "Reduces implies not WHNF" 
+  \(t, _, m) -> reducesImpliesNotWhnf (buildDataDecls m) t >>= (`shouldBe` True)
 
-whnfOrReduces :: M.Module -> T.Type -> Bool
-whnfOrReduces m t = True -- not (reduces (buildDataDecls m) t) || isWhnf t
-
--- There is a type u s.t. reduce m t = u
-reduces :: TypeDeclMap -> T.Type -> IO Bool
-reduces m t = catch (let !_ = reduce m t in pure True) (\(x::PatternMatchFail) -> pure False)
+reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool
+reducesImpliesNotWhnf m t =
+  catch
+    (let !_ = reduce m t in pure (not (isWhnf t)))
+    (\(x::ErrorCall) -> pure True)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
