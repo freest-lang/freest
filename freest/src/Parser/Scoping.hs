@@ -38,7 +38,6 @@ import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import           Debug.Trace (trace)
 import           Control.Monad.Extra (ifM)
 
 data ScopingKey
@@ -135,9 +134,9 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
       | otherwise = do
         unless (ti `memberKSig` ctx) (insertError (LacksKindSig (getSpan ti) ti))
         as' <- mapM freshInternal as
-        let ctx'' = Map.union (fromTVarList as') ctx'
+        let ctx'' = insertDId ti $ Map.union (fromTVarList as') ctx'
         (ctx''',cds') <- scopeConsDecls ctx'' cds
-        return (insertDId ti ctx''', (ti, (as', cds')) : dds')
+        return (ctx''', (ti, (as', cds')) : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
       where
         scopeConsDecl (ctx',cds') (ci,ts)
@@ -159,7 +158,7 @@ scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
       | otherwise = do
         unless (ti `memberKSig` ctx') (insertError (LacksKindSig (getSpan ti) ti))
         as' <- mapM freshInternal as
-        t'  <- scopeType (fromTVarList as') t
+        t'  <- scopeType (insertTId ti $ fromTVarList as') t
         return (insertTId ti ctx', (ti, (as', t')) : tds')
 
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
@@ -273,6 +272,10 @@ scopeExp ctx = \case
         (p',) <$> scopeRHS ctx' rhs
   E.If s e1 e2 e3 ->
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
+  E.Channel s t ->
+    E.Channel s <$> scopeType ctx t
+  E.Select s i e ->
+    E.Select s i <$> scopeExp ctx e
   e -> pure e
 
 -- | Scopes a pattern. This function takes two contexts: the first being the main
@@ -288,15 +291,12 @@ scopePat ctx ictx = \case
   E.VarPat s x  -> case lookupEVar x ictx of
     Just internal -> pure (deleteEVar x ictx, E.VarPat s x{internal})
     Nothing -> (ictx,) . E.VarPat s <$> freshInternal x
-  p@(E.DConsPat s c ps)
-    | memberCId c ctx -> do
-        (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
-                                (ictx''', p') <- scopePat ctx ictx'' p
-                                return (ictx''', ps''++[p]))
-                              (Map.empty, [])
-                              ps
-        return (ictx', E.DConsPat s c ps')
-    | otherwise -> pure (ictx, p) -- leaving this error for the typechecker
+  E.DConsPat s c ps -> do
+    (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
+        (ictx''', p') <- scopePat ctx ictx'' p
+        return (ictx''', ps''++[p']))
+      (Map.empty, []) ps
+    return (ictx', E.DConsPat s c ps')
   E.AsPat s x p -> case lookupEVar x ictx of
     Nothing -> do
       x' <- freshInternal x

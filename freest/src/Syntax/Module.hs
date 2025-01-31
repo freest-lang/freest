@@ -30,7 +30,6 @@ import qualified Syntax.Type as T
 
 import           Data.List (intercalate)
 import           Data.Maybe (fromMaybe)
-import                                     Debug.Trace (trace)
 
 -- Datatype constructor declaration list, e.g.,
 --   Leaf | Node (Tree a) a (Tree a)
@@ -104,17 +103,12 @@ empty = Module{ name        = Nothing
 
 instance Show Module where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
-    intercalate "\n"
-      [case name of Nothing -> "\n" ; Just n -> "\nmodule "++intercalate "." n++" where"
-      ,"-- imports"
+    intercalate "\n" $ filter (not . null)
+      [case name of Nothing -> "" ; Just n -> "module "++intercalate "." n++" where"
       ,intercalate "\n" (map showImport imports)
-      ,"-- kind signatures"
       ,intercalate "\n" (map showKindSig kindSigs)
-      ,"-- type declarations"
       ,intercalate "\n" (map showTypeDecl typeDecls)
-      ,"-- data declarations"
       ,intercalate "\n" (map showDataDecl dataDecls)
-      ,"-- definitions"
       ,intercalate "\n" (map show definitions)
       ]
     where showImport ss = "import "++intercalate "." ss

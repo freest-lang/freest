@@ -12,10 +12,13 @@ import Parser.Lexer
 import Parser.Token
 import Control.Monad.RWS
 import UI.CLI
+import UI.Error
 import Parser.Parser
 import Syntax.Module
 import Parser.Scoping (runScoping, scopeModule_)
+import Validation.Base
 import Validation.Kinding
+import Validation.Typing
 
 
 import Control.Monad.State (runState)
@@ -33,11 +36,13 @@ freest :: RunOpts -> IO ()
 freest RunOpts{file=f} = do
   source <- readFile f
   runLexer parseModule f source 
-    >>= runScoping scopeModule_
-    >>= runKindModule
-    & \case 
-      Left es -> mapM_ print es >> exitFailure
-      Right m -> print m        >> exitSuccess
+    >>= runScoping scopeModule_ & \case 
+      Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
+      Right m -> do 
+        putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+        -- runValidate m & \case 
+        --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+        --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
 
 lexAll :: Lexer ()
 lexAll = do
@@ -45,5 +50,4 @@ lexAll = do
   case tok of
     TkEOF _ -> pure ()
     x -> do
-      traceM (show x)
       lexAll
