@@ -23,7 +23,8 @@ import qualified Data.Map.Strict as Map
 data Error 
   = LexicalError Span Char 
   | ParseError Span (Token, [String])
-  | OutOfScope Span Variable
+  | VarOutOfScope Span Variable
+  | TypeVarOutOfScope Span Variable
   | ConsOutOfScope Span Identifier
   | TypeOutOfScope Span Identifier
   | ConflictingDefs (Map.Map (Level String String) [Span])
@@ -61,7 +62,8 @@ instance Located Error where
   getSpan = \case 
     LexicalError s _ -> s
     ParseError s _ -> s
-    OutOfScope s _ -> s
+    VarOutOfScope s _ -> s
+    TypeVarOutOfScope s _ -> s
     ConsOutOfScope s _ -> s
     TypeOutOfScope s _ -> s
     ConflictingDefs xss -> foldr1 spanFromTo $ concat $ Map.elems xss
@@ -70,11 +72,14 @@ instance Located Error where
     MultipleTypeDecls s _ -> s
     MultipleKindSigs s _ -> s
     LacksKindSig s _ -> s
+    LacksTypeSig s _ -> s
     GivenTooManyArgs s _ _ _ _ -> s
+    ExpectsTooManyArgs s _ -> s
     LinVarsConsumedInUnFun s _ _ -> s
     LinVarsCreatedInUnFun s _ _ -> s
     ExposeError s _ _ _ -> s
     UnexpectedArg s _ _ _ _ -> s
+    UnexpectedParam s _ _ _ _ -> s
     NonLinPat s _ _ -> s
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
@@ -102,8 +107,10 @@ instance Show Error where
           "\n  Lexical error on input `"++show inp++"`"
         ParseError _ (_,ss) -> 
           "\n  Parse error, expected: `"++intercalate "`, `" ss++"`"
-        OutOfScope _ x -> 
-          "\n  Not in scope: variable `"++external x++"`"
+        VarOutOfScope _ x -> 
+          "\n  Not in scope: variable `"++show x++"`"
+        TypeVarOutOfScope _ x -> 
+          "\n  Not in scope: type variable `"++show x++"`"
         ConsOutOfScope _ i -> 
           "\n  Not in scope: constructor `"++show i++"`"
         TypeOutOfScope _ i ->
@@ -134,6 +141,8 @@ instance Show Error where
           "\n Function `"++show x++"` lacks an accompanying type signature."
         GivenTooManyArgs _ f t expected actual ->
           "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
+        ExpectsTooManyArgs _ f ->
+          "\n  Function `"++show f++"` expects too many arguments."
         LinVarsConsumedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
@@ -196,5 +205,5 @@ instance Show Error where
           "\n  " ++ m
 
       showExpPat = \case 
-        Left  p -> "pattern `"++show p++"`"
-        Right e -> "expression `"++show e++"`"
+        Left  e -> "expression `"++show e++"`"
+        Right p -> "pattern `"++show p++"`"

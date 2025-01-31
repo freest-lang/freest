@@ -27,6 +27,7 @@ module Syntax.Type
   , isConstant
   , isSkip
   , isSemi
+  , isAppSemi
   , isDual
   , isTName
   )
@@ -154,9 +155,10 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isSemi, isDual, isTName :: Type -> Bool
+isSkip, isSemi, isAppSemi, isDual, isTName :: Type -> Bool
 isSkip  = \case Skip{}  -> True; _ -> False
 isSemi  = \case Semi{}  -> True; _ -> False
+isAppSemi = \case AppSemi{} -> True; _ -> False
 isDual  = \case Dual{}  -> True; _ -> False
 isTName = \case TName{} -> True; _ -> False
 
@@ -192,8 +194,8 @@ instance Show Type where
     Var _ a    -> show a
     App _ t ts -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
     -- Equations
-    TName _ i -> show i
-    DName _ i -> show i
+    TName _ i -> show i++"#type"
+    DName _ i -> show i++"#data"
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool

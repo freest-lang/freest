@@ -48,4 +48,5 @@ internalChoice e t i = do
         case lookup i ts of
             Just t' -> return t'
             Nothing -> throwE (ChoiceNotAllowed s i t)
-    _ -> throwE (ExposeError (getSpan e) "an internal choice channel" (Left e) t)
+    t' -> do
+      throwE (ExposeError (getSpan e) "an internal choice" (Left e) t)
