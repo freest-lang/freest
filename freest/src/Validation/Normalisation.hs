@@ -14,7 +14,8 @@ Teste: If T not whnf then T one-step reduces
 
 module Validation.Normalisation
   ( normalise
-  , isWhnf
+  , isWhnf -- for testing
+  , reduce -- for testing
   )
 where
 
@@ -76,15 +77,6 @@ isWhnf = \case
 -- | One step type reduction 
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
-  T.AppDual s t -> T.AppDual s (reduce td t)
-  -- 3. R-μ + R-β + TAppL
-  -- R-μ + R-β
-  -- Q: What if as and ts are of different lengths?
-  -- A: Should not happen with well-formed types
-  T.AppTName _ name ts -> subsAll as ts u
-    where (as, u) = td M.! name
-  -- R-TAppL
-  T.App s t ts -> T.App s (reduce td t) ts
   -- 1. Semicolon
   -- R-Neut
   T.AppSemi _ T.Skip{} t -> t
@@ -106,4 +98,13 @@ reduce td = \case
   -- R-D;
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
+  T.AppDual s t -> T.AppDual s (reduce td t)
+  -- 3. R-μ + R-β + TAppL
+  -- R-μ + R-β
+  -- Q: What if as and ts are of different lengths?
+  -- A: Should not happen with well-formed types
+  T.AppTName _ name ts -> subsAll as ts u
+    where (as, u) = td M.! name
+  -- R-TAppL
+  T.App s t ts -> T.App s (reduce td t) ts
   t -> error $ "reduce " ++ show t
