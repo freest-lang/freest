@@ -30,6 +30,7 @@ module Syntax.Type
   , isAppSemi
   , isDual
   , isTName
+  , isChoice
   )
 where
 
@@ -155,12 +156,13 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isSemi, isAppSemi, isDual, isTName :: Type -> Bool
+isSkip, isSemi, isAppSemi, isDual, isTName, isChoice :: Type -> Bool
 isSkip  = \case Skip{}  -> True; _ -> False
 isSemi  = \case Semi{}  -> True; _ -> False
 isAppSemi = \case AppSemi{} -> True; _ -> False
 isDual  = \case Dual{}  -> True; _ -> False
 isTName = \case TName{} -> True; _ -> False
+isChoice = \case Choice{} -> True; _ -> False
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"

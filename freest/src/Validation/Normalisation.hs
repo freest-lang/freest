@@ -60,17 +60,15 @@ isWhnf = \case
   t | T.isConstant t -> True
   -- W-Const1
   T.App _ t _
-    | T.isConstant t && not (T.isSemi t) && not (T.isTName t) && not (T.isDual t) -> True
+    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isChoice t) -> True
   -- W-Const1
   T.Choice{} -> True
-  -- W-Const1
-  -- T.DName{} -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isSemi t) && not (T.isSkip t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t) -> True
   -- W-Var
   T.AppVar{} -> True
-  -- W-Abs _ we do not have abstractions, but we have forall
+  -- W-Abs _ we do not have abstractions, but we have quantifiers
   T.Quant{} -> True
   -- W-Dual - I think this is the only case for well formed Dual types.
   T.AppDual _ T.Var{} -> True
@@ -84,20 +82,26 @@ reduce td = \case
   T.AppSemi _ T.Skip{} t -> t
   -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
+  -- R.Dist
+  T.AppSemi s (T.Choice s' m p idts) u -> T.Choice s m p (map (\(id, t) -> (id, T.AppSemi s' t u)) idts)
   -- R.SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- 2. Duality
   -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
-  -- R-DWait, R-DClose
+  -- R-DEnd
   T.AppDual s (T.End _ p) -> T.End s (T.dual p)
-  -- R-D?, R-D!
+  -- R-DMsg
   T.AppDual s (T.AppMessage _ m p t) -> T.AppMessage s m (T.dual p) t
-  -- R-D&, – R-D⊕
+  -- R-DChoice
   T.AppDual s (T.Choice _ m p lts) -> T.Choice s m (T.dual p) lts
-  -- R-DDual
+  -- R-DQuant
+  T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
+  -- -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
-  -- R-D;
+  -- R-DDVar - redundant in face of the above; alone seems not enough (something diverges)
+  -- T.AppDual s (T.AppDual _ t@T.AppVar{}) -> t
+  -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
   -- R-DCtx
   T.AppDual s t -> T.AppDual s (reduce td t)
@@ -105,8 +109,11 @@ reduce td = \case
   -- R-μ + R-β
   -- Q: What if as and ts are of different lengths?
   -- A: Should not happen with well-formed types
-  T.AppTName _ name ts -> subsAll as ts u
-    where (as, u) = td M.! name
+  T.AppTName _ name ts -> case td M.!? name of
+    Just (as, u) -> subsAll as ts u
+    Nothing -> error  $ "reduce: name not in type declaration map: " ++ show name ++ " " ++ show ts
+  -- T.AppTName _ name ts -> subsAll as ts u
+  --   where (as, u) = td M.! name
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
-  t -> error $ "reduce " ++ show t
+  t -> error $ "reduce: non-exhaustive pattern: " ++ show t
