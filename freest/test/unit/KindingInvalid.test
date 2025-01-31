@@ -24,5 +24,5 @@ where
 
 case Tree
 where
-  type Tree : (*T -> *T) -> (*T -> *T)
+  type Tree : (*T -> *T) -> *T
   data Tree a = One a | Two Tree (a, a)
