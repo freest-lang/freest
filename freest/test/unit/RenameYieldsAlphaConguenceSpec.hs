@@ -17,7 +17,7 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "rename(t) == t" 
+  "rename t == t" 
   \(t,_,m) -> renameYieldsEq (buildDataDecls m) t `shouldBe` True
 
 renameYieldsEq :: TypeDeclMap -> T.Type -> Bool

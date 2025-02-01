@@ -18,7 +18,7 @@ import           Syntax.Base
 import qualified Syntax.Kind                   as K
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution       ( subs )
+import           Validation.Substitution       ( subs, freeVars )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
@@ -32,17 +32,16 @@ rename td = \case
   t@T.TName{} -> t
   T.Choice s m p lts -> T.Choice s m p (map (\(l,u) -> (l, rename td u)) lts)
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a bt u))
-    where b = a
-          bt = T.mkVarType b -- first (free t) a
+  t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a (T.fromVariable b) u))
+    where freet = freeReachable t
+          freeu = freeReachable u
+          b = if a `elem` freeu then firstVar a freet else nullVar a
 
-freeReachable :: Variable -> S.Set Variable
-freeReachable = freeReach S.empty
-  where freeReach :: S.Set Variable -> Variable -> S.Set Variable
-        freeReach _ a = S.singleton a
-
--- first :: S.Set Variable -> Variable
--- first s = head $ filter (\n -> `S.notMember` s)) [-1, -2 ..]
+freeReachable :: T.Type -> S.Set Variable
+freeReachable = freeVars
+-- freeReachable = freeReach S.empty
+--   where freeReach :: S.Set Variable -> Variable -> S.Set Variable
+--         freeReach _ a = S.singleton a
 
 bounded = absorbing
 

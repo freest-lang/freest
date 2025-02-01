@@ -132,6 +132,9 @@ nullInternal = 0
 defaultInternal :: Int
 defaultInternal = -1
 
+nullVar :: Located a => a -> Variable
+nullVar x = Variable (getSpan x) "_unreachable" nullInternal
+
 -- | Construct a variable given its external representation and a Located value
 -- to extract the span from. The internal representation is the default.
 mkDefaultVar :: Located a => String -> a -> Variable
