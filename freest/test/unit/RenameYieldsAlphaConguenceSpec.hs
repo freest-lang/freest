@@ -1,12 +1,12 @@
-module RenameIsIdempotentSpec (spec) where
+module RenameYieldsAlphaConguenceSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.Rename
+import qualified Data.Map.Strict               as Map
 import           UnitSpecUtils
 
-import qualified Data.Map.Strict               as Map
 import           Test.Hspec
 
 -- Requires: This test should be called with well-formed types only
@@ -17,11 +17,11 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "rename(t) == rename(rename(t))" 
-  \(t,_,m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
+  "rename(t) == t" 
+  \(t,_,m) -> renameYieldsEq (buildDataDecls m) t `shouldBe` True
 
-renameIsIdempotent :: TypeDeclMap -> T.Type -> Bool
-renameIsIdempotent td t = rename td t == rename td (rename td t)
+renameYieldsEq :: TypeDeclMap -> T.Type -> Bool
+renameYieldsEq td t = rename td t == t
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap

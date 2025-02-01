@@ -7,9 +7,6 @@ Normalising types
 
 Weak reduction strategies do not reduce under lambda abstractions.
 
-Lemma: T whnf iff T does not reduce
-
-Teste: If T not whnf then T one-step reduces
 -}
 
 module Validation.Normalisation
@@ -30,8 +27,8 @@ import qualified Data.Set                      as S
 
 type Visited = S.Set T.Type
 
--- | The weak head normal form of a type. Big-step semantics. A total function
--- for well-formed types.
+-- The weak head normal form of a type. Big-step semantics. A total function for
+-- well-formed types.
 normalise :: TypeDeclMap -> T.Type -> T.Type
 normalise td = norm S.empty
   where
@@ -53,7 +50,7 @@ tNameRedex = \case
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
--- | Is a given type a weak head normal form?
+-- Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
 isWhnf = \case
   -- W-Const0
@@ -74,7 +71,8 @@ isWhnf = \case
   T.AppDual _ T.Var{} -> True
   _ -> False
 
--- | One step type reduction 
+-- One step type reduction
+-- Requires: not (isWhnf t) ?
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
   -- 1. Semicolon
@@ -113,5 +111,8 @@ reduce td = \case
     Just (as, u) -> subsAll as ts u
     Nothing -> error $ "reduce: name not in type declaration map: " ++ show name ++ " " ++ show ts
   -- R-TAppL
-  T.App s t ts | not (T.isDName t || T.isMsg t) -> T.App s (reduce td t) ts
+  T.App s t ts -> T.App s (reduce td t) ts
+  -- This last rule must be restricted if we don't want the proviso "Requires:
+  -- not (isWhnf t)". Below are only a couple of cases
+  -- T.App s t ts | not (T.isDName t || T.isMsg t) -> T.App s (reduce td t) ts
   t -> error $ "reduce: non-exhaustive pattern: " ++ show t

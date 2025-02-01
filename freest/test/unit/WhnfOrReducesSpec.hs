@@ -19,7 +19,7 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "A given type T is either a WHNF or reduces" 
+  "A given type T is either a whnf or reduces" 
   \(t, _, m) -> whnfOrReduces m t `shouldBe` True
 
 whnfOrReduces :: M.Module -> T.Type -> Bool
