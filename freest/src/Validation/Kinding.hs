@@ -93,7 +93,7 @@ synth ctx = \case
     checkArgs _ _ _ _ [] ks' kn =
           pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
     checkArgs s t nargs npars _ [] _ =
-      throwE (GivenTooManyArgsK s t nargs npars)
+      throwE (GivenTooManyArgsK s t npars nargs)
     checkArgs s t nargs npars (t' : ts') (k' : ks') kn =
       check ctx t' k' >> checkArgs s t nargs npars ts' ks' kn
 
