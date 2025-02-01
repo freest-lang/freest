@@ -21,7 +21,7 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "Reduces implies not WHNF" 
+  "If T reduces then T is not a WHNF" 
   \(t, _, m) -> reducesImpliesNotWhnf (buildDataDecls m) t >>= (`shouldBe` True)
 
 reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool

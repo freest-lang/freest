@@ -19,7 +19,8 @@ module Syntax.Type
         , Tuple
         , List
         , AppDName
-        , AppVar)
+        , AppVar
+        )
   , smartApp
   , variadicQuant
   , bool
@@ -30,7 +31,9 @@ module Syntax.Type
   , isAppSemi
   , isDual
   , isTName
+  , isDName
   , isChoice
+  , isMsg
   )
 where
 
@@ -156,13 +159,15 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isSemi, isAppSemi, isDual, isTName, isChoice :: Type -> Bool
+isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isChoice, isMsg :: Type -> Bool
 isSkip  = \case Skip{}  -> True; _ -> False
 isSemi  = \case Semi{}  -> True; _ -> False
 isAppSemi = \case AppSemi{} -> True; _ -> False
 isDual  = \case Dual{}  -> True; _ -> False
 isTName = \case TName{} -> True; _ -> False
+isDName = \case DName{} -> True; _ -> False
 isChoice = \case Choice{} -> True; _ -> False
+isMsg = \case Message{} -> True; _ -> False
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"

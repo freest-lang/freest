@@ -65,7 +65,7 @@ isWhnf = \case
   T.Choice{} -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t|| T.isChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have quantifiers
@@ -108,12 +108,10 @@ reduce td = \case
   -- 3. R-μ + R-β + TAppL
   -- R-μ + R-β
   -- Q: What if as and ts are of different lengths?
-  -- A: Should not happen with well-formed types
+   -- A: Should not happen with well-formed types
   T.AppTName _ name ts -> case td M.!? name of
     Just (as, u) -> subsAll as ts u
-    Nothing -> error  $ "reduce: name not in type declaration map: " ++ show name ++ " " ++ show ts
-  -- T.AppTName _ name ts -> subsAll as ts u
-  --   where (as, u) = td M.! name
+    Nothing -> error $ "reduce: name not in type declaration map: " ++ show name ++ " " ++ show ts
   -- R-TAppL
-  T.App s t ts -> T.App s (reduce td t) ts
+  T.App s t ts | not (T.isDName t || T.isMsg t) -> T.App s (reduce td t) ts
   t -> error $ "reduce: non-exhaustive pattern: " ++ show t
