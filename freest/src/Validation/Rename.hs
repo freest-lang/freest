@@ -22,6 +22,7 @@ import           Validation.Substitution       ( subs, freeVars )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
+import           Data.Bifunctor                ( second )
 
 type Visited = S.Set Identifier
 
@@ -30,7 +31,7 @@ rename td = \case
   t | T.isConstant t -> t
   t@T.Var{} -> t
   t@T.TName{} -> t
-  T.Choice s m p lts -> T.Choice s m p (map (\(l,u) -> (l, rename td u)) lts)
+  T.Choice s m p lts -> T.Choice s m p (map (second (rename td)) lts)
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
   t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a (T.fromVariable b) u))
     where freet = freeReachable t

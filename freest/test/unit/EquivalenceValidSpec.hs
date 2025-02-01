@@ -3,10 +3,10 @@ module EquivalenceValidSpec (spec) where
 import qualified Syntax.Module                 as M
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.TypeEquivalence.TypeEquivalence (equivalent)
+import           UnitSpecUtils                 (mkEquivalenceSpec)
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
-import           UnitSpecUtils                   (mkEquivalenceSpec)
 
 main :: IO ()
 main = hspec spec
