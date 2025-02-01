@@ -1,10 +1,10 @@
-module NormalisationPreservesReductionSpec (spec) where
+module RenamePreservesWhnfSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.Rename
-import           Validation.Normalisation      ( normalise, isWhnf )
+import           Validation.Normalisation      ( isWhnf )
 import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
@@ -18,13 +18,11 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "If T normalises to U, then rename T normalises to rename U" 
-  \(t,_,m) -> renamePreservesNormalisation (buildDataDecls m) t `shouldBe` True
+  "T is a whnf iff rename T is a whnf" 
+  \(t,_,m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
 
-renamePreservesNormalisation :: TypeDeclMap -> T.Type -> Bool
-renamePreservesNormalisation td t = isWhnf t || u == u'
-  where u  = normalise td t
-        u' = normalise td (rename td t)
+renamePreservesWhnf :: TypeDeclMap -> T.Type -> Bool
+renamePreservesWhnf td t = isWhnf t == isWhnf (rename td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
