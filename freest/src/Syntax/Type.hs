@@ -34,6 +34,7 @@ module Syntax.Type
   , isDName
   , isChoice
   , isMsg
+  , mkVarType
   )
 where
 
@@ -168,6 +169,9 @@ isTName = \case TName{} -> True; _ -> False
 isDName = \case DName{} -> True; _ -> False
 isChoice = \case Choice{} -> True; _ -> False
 isMsg = \case Message{} -> True; _ -> False
+
+mkVarType :: Variable -> Type
+mkVarType a = Var (varSpan a) a
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"

@@ -18,6 +18,7 @@ import           Syntax.Base
 import qualified Syntax.Kind                   as K
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
+import           Validation.Substitution       ( subs )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
@@ -25,13 +26,23 @@ import qualified Data.Set                      as S
 type Visited = S.Set Identifier
 
 rename :: TypeDeclMap -> T.Type -> T.Type
-rename td = ren S.empty
-  where
-    ren :: Visited -> T.Type -> T.Type
-    ren _ = id
+rename td = \case
+  t | T.isConstant t -> t
+  t@T.Var{} -> t
+  t@T.TName{} -> t
+  T.Choice s m p lts -> T.Choice s m p (map (\(l,u) -> (l, rename td u)) lts)
+  T.App s t us -> T.App s (rename td t) (map (rename td) us)
+  t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a bt u))
+    where b = a
+          bt = T.mkVarType b -- first (free t) a
 
-reachable :: Visited -> T.Type -> S.Set Identifier
-reachable = undefined
+freeReachable :: Variable -> S.Set Variable
+freeReachable = freeReach S.empty
+  where freeReach :: S.Set Variable -> Variable -> S.Set Variable
+        freeReach _ a = S.singleton a
+
+-- first :: S.Set Variable -> Variable
+-- first s = head $ filter (\n -> `S.notMember` s)) [-1, -2 ..]
 
 bounded = absorbing
 
@@ -59,5 +70,3 @@ absorbing td = absorb S.empty
       -- Functional types, Skip, Message, DName, Var
       _ -> False
 
--- first :: S.Set Variable -> Variable -> Variable
--- first s a = head $ filter (\n -> `S.notMember` s)) [-1, -2 ..]

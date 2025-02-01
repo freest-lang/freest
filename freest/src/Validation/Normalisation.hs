@@ -109,7 +109,7 @@ reduce td = \case
    -- A: Should not happen with well-formed types
   T.AppTName _ name ts -> case td M.!? name of
     Just (as, u) -> subsAll as ts u
-    Nothing -> error $ "reduce: name not in type declaration map: " ++ show name ++ " " ++ show ts
+    Nothing -> error $ "reduce: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   -- This last rule must be restricted if we don't want the proviso "Requires:
