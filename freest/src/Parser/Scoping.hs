@@ -125,17 +125,18 @@ scopeKindSigs = foldM scopeKindSig
       return (insertKSig i ctx)
 
 scopeDataDecls :: ScopingCtx -> M.DataDeclList -> Scoping (ScopingCtx, M.DataDeclList)
-scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
+scopeDataDecls ctx dds = do
+  ctx' <- foldM (\ctx'' (ti, _) -> do
+      when (memberTId ti ctx'' || memberDId ti ctx'') 
+        do insertError (MultipleTypeDecls (getSpan ti) ti)
+      return $ insertDId ti ctx'')
+    ctx dds
+  foldM scopeDataDecl (ctx', []) dds
   where
-    scopeDataDecl (ctx',dds') dd@(ti, (as, cds))
-      | memberTId ti ctx' || memberDId ti ctx' = do
-        insertError (MultipleTypeDecls (getSpan ti) ti)
-        return (ctx', dds')
-      | otherwise = do
+    scopeDataDecl (ctx',dds') dd@(ti, (as, cds)) = do
         unless (ti `memberKSig` ctx) (insertError (LacksKindSig (getSpan ti) ti))
-        as' <- mapM freshInternal as
-        let ctx'' = insertDId ti $ Map.union (fromTVarList as') ctx'
-        (ctx''',cds') <- scopeConsDecls ctx'' cds
+        as' <- mapM freshInternal as 
+        (ctx''',cds') <- scopeConsDecls (Map.union (fromTVarList as') ctx') cds
         return (ctx''', (ti, (as', cds')) : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
       where
@@ -149,17 +150,19 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
             return (ctx'', (ci, ts') : cds')
 
 scopeTypeDecls :: ScopingCtx -> M.TypeDeclList -> Scoping (ScopingCtx, M.TypeDeclList)
-scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
+scopeTypeDecls ctx tds = do
+  ctx' <- foldM (\ctx'' (ti, _) -> do 
+      when (ti `memberTId` ctx'' || ti `memberDId` ctx'') 
+        do insertError (MultipleTypeDecls (getSpan ti) ti)
+      return $ insertTId ti ctx'') 
+    ctx tds
+  foldM scopeTypeDecl (ctx', []) tds
   where
-    scopeTypeDecl (ctx', tds') td@(ti, (as, t))
-      | ti `memberTId` ctx' || ti `memberDId` ctx' = do
-        insertError (MultipleTypeDecls (getSpan ti) ti)
-        return (ctx',td:tds')
-      | otherwise = do
-        unless (ti `memberKSig` ctx') (insertError (LacksKindSig (getSpan ti) ti))
-        as' <- mapM freshInternal as
-        t'  <- scopeType (insertTId ti $ fromTVarList as') t
-        return (insertTId ti ctx', (ti, (as', t')) : tds')
+    scopeTypeDecl (ctx', tds') td@(ti, (as, t)) = do
+      unless (ti `memberKSig` ctx') (insertError (LacksKindSig (getSpan ti) ti))
+      as' <- mapM freshInternal as
+      t'  <- scopeType (fromTVarList as' `Map.union` ctx') t
+      return (ctx', (ti, (as', t')) : tds')
 
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
 scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
