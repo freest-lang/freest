@@ -26,7 +26,7 @@ import           Prelude                       hiding ( Word, words )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts = G.Grammar w (productions s)
-  where (w, s) = runState (mapM (word {- . rename td -}) ts) (initial td)
+  where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word
 word t =
@@ -73,9 +73,9 @@ wordWhnf = \case
     where showView T.In = "&"; showView T.Out = "+"
   T.AppVar _ α ts -> do -- α T1...Tm
     ws <- mapM word ts
-    let words = map (++ [bottom]) ws
-    let terminals = map (\n -> show α ++ show n) [1..]
-    getLHS $ M.insert (show α ++ show 0) [] (M.fromList (zip terminals words))
+    let words = [] : map (++ [bottom]) ws
+    let terminals = map (\n -> label α ++ show n) [0..]
+    getLHS $ M.fromList (zip terminals words)
   T.AppDName _ id ts -> do -- D T1...Tm, as in α T1...Tm?
     ws <- mapM word ts
     let words = map (++ [bottom]) ws
@@ -83,7 +83,7 @@ wordWhnf = \case
     getLHS $ M.insert (show id ++ show 0) [] (M.fromList (zip terminals words))
   T.Quant _ p α k t -> do
     w <- word t
-    getLHS $ M.singleton (showView p ++ show α ++ ":" ++ show k) (w ++ [bottom])
+    getLHS $ M.singleton (showView p ++ label α ++ ":" ++ show k) (w ++ [bottom])
     where showView T.In = "∀"; showView T.Out = "∃"
   T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm)
     w <- word u
@@ -92,6 +92,9 @@ wordWhnf = \case
       (label ++ "1", w),
       (label ++ "2", [])]
   t -> error $ "wordWhnf " ++ show t
+
+label :: Variable -> String
+label α = "#" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 

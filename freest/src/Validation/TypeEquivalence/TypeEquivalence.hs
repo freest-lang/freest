@@ -16,12 +16,13 @@ import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.TypeEquivalence.FromType ( fromType )
 import           Validation.TypeEquivalence.Bisimulation.Bisimulation ( bisimilar )
-import           Debug.Trace                   (trace)
+import           Debug.Trace                   ( trace )
+import           Validation.Rename             ( rename )
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
   t == u ||
-  -- trace ("\nThe types: " ++ show [t, u] ++ "\nand the grammar: " ++ show (fromType td [t, u])) True
+  trace ("\nRenamed types: " ++ show [rename td t, rename td u])
   bisimilar (fromType td [t, u])
 
 
