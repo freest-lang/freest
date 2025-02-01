@@ -230,11 +230,10 @@ instance Congruence Type where
     m1 == m2 && p1 == p2 && congruent m lts1 lts2
   -- Polymorphism
   congruent m (Quant _ p1 a k1 t) (Quant _ p2 b k2 u) =
-    p1 == p2 && a == b && k1 == k2 && congruent m t u
+    p1 == p2 && k1 == k2 && congruent (M.insert a b m) m t u
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
-    v1 == v2 ||              -- free variables              -- free variables
-                  -- free variables
+    v1 == v2 ||              -- free variables
     Just v2 == M.lookup v1 m -- bound variables
   congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
   -- Equations
