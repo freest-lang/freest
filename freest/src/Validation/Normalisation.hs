@@ -65,7 +65,7 @@ isWhnf = \case
   T.Choice{} -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t|| T.isChoice t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t {-|| T.isChoice t-}) -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have quantifiers
@@ -82,9 +82,9 @@ reduce td = \case
   T.AppSemi _ T.Skip{} t -> t
   -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-  -- R.Dist
-  T.AppSemi s (T.Choice s' m p idts) u -> T.Choice s m p (map (\(id, t) -> (id, T.AppSemi s' t u)) idts)
-  -- R.SemiL
+  -- R-Dist
+  -- T.AppSemi s (T.Choice s' m p idts) u -> T.Choice s m p (map (\(id, t) -> (id, T.AppSemi s' t u)) idts)
+  -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- 2. Duality
   -- R-DSkip
