@@ -78,9 +78,9 @@ wordWhnf = \case
     getLHS $ M.fromList (zip terminals words)
   T.AppDName _ id ts -> do -- D T1...Tm, as in α T1...Tm?
     ws <- mapM word ts
-    let words = map (++ [bottom]) ws
-    let terminals = map (\n -> show id ++ show n) [1..]
-    getLHS $ M.insert (show id ++ show 0) [] (M.fromList (zip terminals words))
+    let words = [] : map (++ [bottom]) ws
+    let terminals = map (\n -> show id ++ show n) [0..]
+    getLHS $ M.fromList (zip terminals words)
   T.Quant _ p α k t -> do
     w <- word t
     getLHS $ M.singleton (showView p ++ label α ++ ":" ++ show k) (w ++ [bottom])

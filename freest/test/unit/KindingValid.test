@@ -491,6 +491,16 @@ where
 
 case (!Int ; !Int) ; !Int
 
+case T
+where
+  type T : 1S
+  type T = &{N: T} ; Skip
+
+case T
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+
 -- Types with the Dual operator
 
 case Dual Close

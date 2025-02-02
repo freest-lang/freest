@@ -24,6 +24,8 @@ import           Validation.Substitution       ( subsAll )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
+import           Data.Bifunctor                ( second )
+-- import           Debug.Trace
 
 type Visited = S.Set T.Type
 
@@ -36,7 +38,7 @@ normalise td = norm S.empty
     norm visited t
       | isWhnf t = t
       | reappears = T.Skip (getSpan t)
-      | otherwise = norm insert (reduce td t)
+      | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`S.member` visited) u
@@ -62,7 +64,7 @@ isWhnf = \case
   T.Choice{} -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t {-|| T.isChoice t-}) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have quantifiers
@@ -78,10 +80,12 @@ reduce td = \case
   -- 1. Semicolon
   -- R-Neut
   T.AppSemi _ T.Skip{} t -> t
+  -- New rule
+  T.AppSemi _ t T.Skip{} -> t
   -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-  -- R-Dist
-  -- T.AppSemi s (T.Choice s' m p idts) u -> T.Choice s m p (map (\(id, t) -> (id, T.AppSemi s' t u)) idts)
+  -- R-Dist (must come before R.SemiL)
+  T.AppSemi s1 (T.Choice s2 m p lts) u -> T.Choice s1 m p (map (\(id, t) -> (id, T.AppSemi s2 t u)) lts)
   -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- 2. Duality
@@ -97,7 +101,7 @@ reduce td = \case
   T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
   -- -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
-  -- R-DDVar - redundant in face of the above; alone seems not enough (something diverges)
+  -- R-DDVar - redundant in face of the above; alone seems not enough (normalisation diverges)
   -- T.AppDual s (T.AppDual _ t@T.AppVar{}) -> t
   -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)

@@ -1,19 +1,15 @@
-module NormalisationYieldsWhnfSpec (spec) where
+module NormalisationIsIdempotentSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Normalisation      ( normalise, isWhnf )
+import           Validation.Normalisation      ( normalise )
 import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
-import           Debug.Trace
 
 -- This test should be called with well-formed types only
-
--- Note: this spec tests very little. As it is, the normalise function returns a
--- whnf, if it returns at all.
 
 main :: IO ()
 main = hspec spec
@@ -21,11 +17,11 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "If T normalises to U, then U is a whnf" 
-  \(t, _, m) -> normYieldsWnnf (buildDataDecls m) t `shouldBe` True
+  "normalise t == normalise (normalise t)" 
+  \(t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
 
-normYieldsWnnf :: TypeDeclMap -> T.Type -> Bool
-normYieldsWnnf td t = isWhnf $ trace (show $ normalise td t) (normalise td t)
+normalisationIsIdempotent :: TypeDeclMap -> T.Type -> Bool
+normalisationIsIdempotent td t = normalise td t == normalise td (normalise td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
