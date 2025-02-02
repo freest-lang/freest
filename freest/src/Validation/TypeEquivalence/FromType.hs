@@ -30,28 +30,28 @@ fromType td ts = G.Grammar w (productions s)
 
 word :: T.Type -> TransState Word
 word t =
-  case fatTerminal t of
-    -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
-    -- for the variables must come with the internal representation only
-  Just t' ->  getLHS $ M.singleton (show t') []
-  Nothing ->
+  -- case fatTerminal t of
+  --   -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
+  --   -- for the variables must come with the internal representation only
+  -- Just t' ->  getLHS $ M.singleton (show t') []
+  -- Nothing ->
     if isWhnf t then wordWhnf t
     else do
-        td <- gets typeDecls
-        let u = {-trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t))-} (normalise td t)
-        case u of
-          T.Skip{} -> pure []
-          _ -> wasVisited t >>= \case
-            Just y -> pure [y]
-            Nothing -> do
-              y <- nextNonTerminal
-              addVisited t y
-              ~(z:δ) <- wordWhnf u
-              γ <- getTransitions z
-              addProductions y (M.map (++ δ) γ)
-              pure [y]
+      td <- gets typeDecls
+      let u = trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) (normalise td t)
+      case u of
+        T.Skip{} -> pure []
+        _ -> wasVisited t >>= \case
+          Just y -> pure [y]
+          Nothing -> do
+            y <- nextNonTerminal
+            addVisited t y
+            ~(z:δ) <- wordWhnf u
+            γ <- getTransitions z
+            addProductions y (M.map (++ δ) γ)
+            pure [y]
 
--- | Requires whnf t.
+-- | Requires whnf t
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
   T.AppVar _ α ts -> do -- α T1...Tm
@@ -69,7 +69,7 @@ wordWhnf = \case
     w <- word t
     getLHS $ M.singleton (showView p ++ varTerminal α ++ ":" ++ show k) (w ++ [bottom])
     where showView T.In = "∀"; showView T.Out = "∃"
-  T.AppDName _ name ts -> do  -- ι T1···Tm with ι = (|lᵢ|)
+  T.AppDName _ name ts -> do  -- ι T1···Tm with ι = (|lᵢ|) and other datatypes (variants)
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
     let terminals = map (\n -> show name ++ show n) [0..]
@@ -90,17 +90,12 @@ wordWhnf = \case
       (show m ++ show p ++ "2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
-  T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm)
+  T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm); TODO: m=0 for well formed types
     w <- word u
     let label = show $ T.Dual s
     getLHS $ M.fromList [
       (label ++ "1", w),
       (label ++ "2", [])]
-  -- T.App _ ts -> do
-  --   ws <- mapM word ts
-  --   let words = [] : map (++ [bottom]) ws
-  --   let terminals = map (\n -> show id ++ show n) [0..]
-  --   getLHS $ M.fromList (zip terminals words)
   t -> error $ "wordWhnf " ++ show t
 
 varTerminal :: Variable -> Terminal

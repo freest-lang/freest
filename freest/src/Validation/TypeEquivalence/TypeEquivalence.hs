@@ -16,15 +16,10 @@ import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.TypeEquivalence.FromType ( fromType )
 import           Validation.TypeEquivalence.Bisimulation.Bisimulation ( bisimilar )
-import           Validation.Rename             ( rename )
-
-import           Debug.Trace                   ( trace )
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
   t == u ||
-  -- trace ("\nRenamed types: " ++ show [rename td t, rename td u])
   bisimilar (fromType td [t, u])
-
 
 -- TODO: Move this code to module Bisimulation.Bisimulation

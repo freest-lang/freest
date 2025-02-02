@@ -67,6 +67,7 @@ isWhnf = \case
   T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t {-|| T.isChoice t-}) -> True
   -- W-Var
   T.AppVar{} -> True
+  -- T.Var{} -> True -- Needed?
   -- W-Abs _ we do not have abstractions, but we have quantifiers
   T.Quant{} -> True
   -- W-Dual - I think this is the only case for well formed Dual types.
