@@ -30,7 +30,7 @@ typeArrow e t = do
   ds <- gets typeDecls
   case normalise ds t of
     t'@T.AppArrow{} -> pure t'
-    t'@(T.Quant _ T.In _ _ _) -> pure t'
+    t'@(T.Quant _ T.In _ _ _) -> pure t' -- TODO: Why T.In only?
     _ -> throwE (ExposeError (getSpan e) "a function" (Left e) t)
 
 dataCons :: E.Pat -> T.Type -> Validation (Identifier, [T.Type])

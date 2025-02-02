@@ -8,7 +8,7 @@ import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
-import           Debug.Trace
+-- import           Debug.Trace
 
 -- This test should be called with well-formed types only
 
@@ -25,7 +25,7 @@ spec = mkKindingSpec
   \(t, _, m) -> normYieldsWnnf (buildDataDecls m) t `shouldBe` True
 
 normYieldsWnnf :: TypeDeclMap -> T.Type -> Bool
-normYieldsWnnf td t = isWhnf $ trace (show $ normalise td t) (normalise td t)
+normYieldsWnnf td t = isWhnf {-$ trace (show $ normalise td t)-} (normalise td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
