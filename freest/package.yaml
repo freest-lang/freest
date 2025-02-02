@@ -60,6 +60,8 @@ library:
     - Validation.Rename
     - Validation.Substitution
     - Validation.TypeEquivalence.TypeEquivalence
+    - Validation.TypeEquivalence.FromType
+    - Validation.TypeEquivalence.Grammar
     - Validation.Typing
     - Utils
 executables:

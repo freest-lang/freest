@@ -22,7 +22,7 @@ import           Validation.Base               ( TypeDeclMap )
 import           Control.Monad.State
 import qualified Data.Map.Strict               as M
 import           Prelude                       hiding ( Word, words )
--- import           Debug.Trace                   ( trace )
+import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts = G.Grammar w (productions s)
@@ -31,14 +31,14 @@ fromType td ts = G.Grammar w (productions s)
 word :: T.Type -> TransState Word
 word t =
   case fatTerminal t of
-    -- Optimisation; not strictly necessary. TODO: one can't simply (show t') for
-    -- the variables must come with the internal representation only
+    -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
+    -- for the variables must come with the internal representation only
   Just t' ->  getLHS $ M.singleton (show t') []
   Nothing ->
     if isWhnf t then wordWhnf t
     else do
         td <- gets typeDecls
-        let u = normalise td t
+        let u = {-trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t))-} (normalise td t)
         case u of
           T.Skip{} -> pure []
           _ -> wasVisited t >>= \case
@@ -54,48 +54,57 @@ word t =
 -- | Requires whnf t.
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
-  T.Skip{} ->
+  T.AppVar _ α ts -> do -- α T1...Tm
+    ws <- mapM word ts
+    let words = [] : map (++ [bottom]) ws
+    let terminals = map (\n -> varTerminal α ++ show n) [0..]
+    getLHS $ M.fromList (zip terminals words)
+  T.Skip{} -> -- Skip
     pure []
-  t@T.End{} ->
+  t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
-  t | T.isConstant t ->
+  t | T.isConstant t ->  -- ι ≠ Skip, End
     getLHS $ M.singleton (show t) []
-  T.AppMessage _ mult p u -> do
-    w <- word u
-    getLHS $ M.fromList [
-      (show mult ++ show p ++ "1", w ++ [bottom]),
-      (show mult ++ show p ++ "2", [bottom | mult /= Lin])]
-  T.AppSemi _ t u ->
-    liftM2 (++) (word t) (word u)
-  T.Choice _ m p its -> do
+  T.Quant _ p α k t -> do -- ∀α:κ.T, since we do not have explicit λ types
+    w <- word t
+    getLHS $ M.singleton (showView p ++ varTerminal α ++ ":" ++ show k) (w ++ [bottom])
+    where showView T.In = "∀"; showView T.Out = "∃"
+  T.AppDName _ name ts -> do  -- ι T1···Tm with ι = (|lᵢ|)
+    ws <- mapM word ts
+    let words = [] : map (++ [bottom]) ws
+    let terminals = map (\n -> show name ++ show n) [0..]
+    getLHS $ M.fromList (zip terminals words)
+  T.AppArrow _ m t1 t2 -> do  -- ι T1···Tm with ι = →
+    w1 <- word t1
+    w2 <- word t2
+    getLHS $ M.fromList [(show m ++ "->1", w1) , (show m ++ "->2", w2)]
+  T.Choice _ m p its -> do  -- ι T1···Tm with ι = &{lᵢ} or +{lᵢ}
     let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
     ws <-           mapM (word                                     . snd) its
     getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
-  T.AppVar _ α ts -> do -- α T1...Tm
-    ws <- mapM word ts
-    let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> varLabel α ++ show n) [0..]
-    getLHS $ M.fromList (zip terminals words)
-  T.AppDName _ id ts -> do -- D T1...Tm, as in α T1...Tm?
-    ws <- mapM word ts
-    let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> show id ++ show n) [0..]
-    getLHS $ M.fromList (zip terminals words)
-  T.Quant _ p α k t -> do
-    w <- word t
-    getLHS $ M.singleton (showView p ++ varLabel α ++ ":" ++ show k) (w ++ [bottom])
-    where showView T.In = "∀"; showView T.Out = "∃"
+  T.AppMessage _ m p u -> do -- #T
+    w <- word u
+    getLHS $ M.fromList [
+      (show m ++ show p ++ "1", w ++ [bottom]),
+      (show m ++ show p ++ "2", [bottom | m /= Lin])]
+  T.AppSemi _ t u -> -- T ; U
+    liftM2 (++) (word t) (word u)
   T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm)
     w <- word u
     let label = show $ T.Dual s
     getLHS $ M.fromList [
       (label ++ "1", w),
       (label ++ "2", [])]
+  -- T.App _ ts -> do
+  --   ws <- mapM word ts
+  --   let words = [] : map (++ [bottom]) ws
+  --   let terminals = map (\n -> show id ++ show n) [0..]
+  --   getLHS $ M.fromList (zip terminals words)
   t -> error $ "wordWhnf " ++ show t
 
-varLabel :: Variable -> String
-varLabel α = "#" ++ show (internal α)
+varTerminal :: Variable -> Terminal
+varTerminal α = "#" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 

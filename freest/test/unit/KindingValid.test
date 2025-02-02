@@ -623,12 +623,14 @@ where
   type String = [Char]
 
 -- The two types below are equivalent
-case T
-where
-  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
-  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
 
 case U
 where
   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+
+-- case T
+-- where
+--   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+--   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+
