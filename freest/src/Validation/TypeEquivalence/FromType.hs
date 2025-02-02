@@ -31,7 +31,8 @@ fromType td ts = G.Grammar w (productions s)
 word :: T.Type -> TransState Word
 word t =
   case fatTerminal t of
-    -- Optimisation; not strictly necessary
+    -- Optimisation; not strictly necessary. TODO: one can't simply (show t') for
+    -- the variables must come with the internal representation only
   Just t' ->  getLHS $ M.singleton (show t') []
   Nothing ->
     if isWhnf t then wordWhnf t
@@ -74,7 +75,7 @@ wordWhnf = \case
   T.AppVar _ α ts -> do -- α T1...Tm
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> label α ++ show n) [0..]
+    let terminals = map (\n -> varLabel α ++ show n) [0..]
     getLHS $ M.fromList (zip terminals words)
   T.AppDName _ id ts -> do -- D T1...Tm, as in α T1...Tm?
     ws <- mapM word ts
@@ -83,7 +84,7 @@ wordWhnf = \case
     getLHS $ M.fromList (zip terminals words)
   T.Quant _ p α k t -> do
     w <- word t
-    getLHS $ M.singleton (showView p ++ label α ++ ":" ++ show k) (w ++ [bottom])
+    getLHS $ M.singleton (showView p ++ varLabel α ++ ":" ++ show k) (w ++ [bottom])
     where showView T.In = "∀"; showView T.Out = "∃"
   T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm)
     w <- word u
@@ -93,8 +94,8 @@ wordWhnf = \case
       (label ++ "2", [])]
   t -> error $ "wordWhnf " ++ show t
 
-label :: Variable -> String
-label α = "#" ++ show (internal α)
+varLabel :: Variable -> String
+varLabel α = "#" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 
