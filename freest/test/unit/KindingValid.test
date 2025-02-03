@@ -629,6 +629,11 @@ where
   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
 
+-- case T -- Diverges, !Int is unreachable
+-- where
+--   type T : 1S -> 1S
+--   type T a1 = a1 ; T a1 ; !Int
+
 -- case T -- Diverges, a2 is unreachable
 -- where
 --   type T : 1S -> 1S -> 1S
