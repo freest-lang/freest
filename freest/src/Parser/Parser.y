@@ -23,7 +23,6 @@ import UI.Error
 import Control.Monad.Except
 import Data.Bifunctor
 import qualified Data.List.NonEmpty as NE
-import Debug.Trace
 }
 
 %name parseExp Exp
@@ -130,6 +129,7 @@ import Debug.Trace
   QUALIFIED_UPPER_ID { TkQualifiedUpperId _ _ }
   WILDCARD { TkWildcard _ _ }
   LOWER_ID { TkLowerId _ _ }
+  LOWER_ID_AT { TkLowerIdAt _ _ }
 
 %right    'in' 'else' 'case'
 %right    '.'
@@ -468,7 +468,7 @@ PatPrimary :: { E.Pat }
   | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
-  | LOWER_ID '&' PatPrimary { E.AsPat (spanFromTo $1 $3) (mkVarTk $1) $3 }
+  | LOWER_ID_AT PatPrimary { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }

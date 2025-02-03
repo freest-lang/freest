@@ -3,11 +3,12 @@ module NormalisationYieldsWhnfSpec (spec) where
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Normalisation   ( normalise, isWhnf )
+import           Validation.Normalisation      ( normalise, isWhnf )
+import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
-import           UnitSpecUtils
+-- import           Debug.Trace
 
 -- This test should be called with well-formed types only
 
@@ -20,11 +21,11 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "Normalisation yields a WHNF" 
-  \(t, _, m) -> normYieldsWnnf m t `shouldBe` True
+  "If T normalises to U, then U is a whnf" 
+  \(t, _, m) -> normYieldsWnnf (buildDataDecls m) t `shouldBe` True
 
-normYieldsWnnf :: M.Module -> T.Type -> Bool
-normYieldsWnnf m t = isWhnf $ normalise (buildDataDecls m) t
+normYieldsWnnf :: TypeDeclMap -> T.Type -> Bool
+normYieldsWnnf td t = isWhnf {-$ trace (show $ normalise td t)-} (normalise td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap

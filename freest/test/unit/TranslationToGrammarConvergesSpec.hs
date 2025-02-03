@@ -1,15 +1,19 @@
-module RenameIsIdempotentSpec (spec) where
+module TranslationToGrammarConvergesSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Rename
+import           Validation.TypeEquivalence.FromType ( fromType )
+import           Validation.TypeEquivalence.Grammar
 import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
+import           Debug.Trace
 
 -- Requires: This test should be called with well-formed types only
+
+-- Test success is simply termination
 
 main :: IO ()
 main = hspec spec
@@ -17,12 +21,13 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "rename(t) == rename(rename(t))" 
-  \(t,_,m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
+  "Type translation to grammar converges" 
+  \(t,_,m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
 
-renameIsIdempotent :: TypeDeclMap -> T.Type -> Bool
-renameIsIdempotent td t = rename td t == rename td (rename td t)
+translateToGrammar :: TypeDeclMap -> T.Type -> Bool
+translateToGrammar td t = let !_ = trace ("\n" ++ show (fromType td [t])) () in True
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
 buildDataDecls = Map.fromList . M.typeDecls
+

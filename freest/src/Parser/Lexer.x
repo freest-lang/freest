@@ -34,6 +34,7 @@ $digit = [ 0-9 ]
 $lower = [ a-z ]
 $upper = [ A-Z ]
 @lowerId = $lower [ $lower $upper $digit _ ' ]*
+@lowerIdAt = @lowerId \@
 @upperId = $upper [ $lower $upper $digit _ ' ]*
 @qualifiedUpperId = @upperId (\. @upperId)+
 @wildcard = _ [ $lower $upper $digit _ ' ]*
@@ -137,6 +138,7 @@ $upper = [ A-Z ]
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }
 <0> @lowerId          { emit TkLowerId }
+<0> @lowerIdAt        { emit TkLowerIdAt . init }
 <0> @upperId          { emit TkUpperId }
 <0> @qualifiedUpperId { emit TkQualifiedUpperId }
 

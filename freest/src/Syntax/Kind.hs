@@ -52,8 +52,8 @@ data Prekind = Top | Session | Bounded | VarPK Variable
 
 instance Subsort Prekind where
   Top     <: Session = False
-  Top     <: Bounded  = False
-  Session <: Bounded  = False
+  Top     <: Bounded = False
+  Session <: Bounded = False
   _       <: _       = True
 
 instance Join Prekind where

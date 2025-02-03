@@ -895,6 +895,16 @@ where
 
 case (!Int ; !Int) ; !Int : 1S
 
+case T
+where
+  type T : 1S
+  type T = &{N: T} ; Skip
+
+case T
+where
+  type T : 1S
+  type T = &{N:!Int;!Int;T, L:Close};?Int
+
 -- Types with the Dual operator
 
 case Dual Close : 1B
@@ -1015,3 +1025,26 @@ where
   type VarTerm t = TermBase t Term Term
   type String : *T
   type String = [Char]
+
+-- The two types below are equivalent
+
+case U
+where
+  type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+
+-- case T -- Diverges, !Int is unreachable
+-- where
+--   type T : 1S -> 1S
+--   type T a1 = a1 ; T a1 ; !Int
+
+-- case T -- Diverges, a2 is unreachable
+-- where
+--   type T : 1S -> 1S -> 1S
+--   type T a1 a2 = a1 ; (T a1 a2) ; a2
+
+-- case T
+-- where
+--   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+--   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+

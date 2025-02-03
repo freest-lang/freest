@@ -132,6 +132,12 @@ nullInternal = 0
 defaultInternal :: Int
 defaultInternal = -1
 
+firstRenamed :: Int
+firstRenamed = -2
+
+nullVar :: Located a => a -> Variable
+nullVar x = Variable (getSpan x) "_unreachable" nullInternal
+
 -- | Construct a variable given its external representation and a Located value
 -- to extract the span from. The internal representation is the default.
 mkDefaultVar :: Located a => String -> a -> Variable
@@ -150,7 +156,7 @@ freshVar = unusedVar [firstInternal..]
 -- | The first variable not in a given set of variables, counting downwards. Used
 -- in the renaming process, prior to translation to simple grammar.
 firstVar :: Variable -> Set.Set Variable -> Variable
-firstVar = unusedVar [defaultInternal, defaultInternal - 1 ..]
+firstVar = unusedVar [firstRenamed, firstRenamed - 1 ..]
 
 
 -- Levels

@@ -15,6 +15,7 @@ import Data.List (intercalate)
 data Token
   -- Identifiers
   = TkLowerId Span String 
+  | TkLowerIdAt Span String
   | TkUpperId Span String 
   | TkQualifiedUpperId Span String
   | TkWildcard Span String
@@ -66,16 +67,17 @@ data Token
 -- Identifiers
 getText = \case
   -- Identifiers
-  TkLowerId _ s -> s
-  TkUpperId _ s -> s
-  TkQualifiedUpperId _ s -> s
-  TkWildcard _ s -> s
+  TkLowerId _ t -> t
+  TkLowerIdAt _ t -> t
+  TkUpperId _ t -> t
+  TkQualifiedUpperId _ t -> t
+  TkWildcard _ t -> t
   -- Literals 
-  TkIntLit _ s -> s
-  TkFloatLit _ s -> s
-  TkCharLit _ s -> s
-  TkStringLit _ s -> s
-  TkCmp _ s -> s
+  TkIntLit _ t -> t
+  TkFloatLit _ t -> t
+  TkCharLit _ t -> t
+  TkStringLit _ t -> t
+  TkCmp _ t -> t
   -- Keywords
   _ -> error "Parser.Token.getText: no text"
 
@@ -84,6 +86,7 @@ instance Located Token where
   getSpan = \case 
     -- Identifiers
     TkLowerId s _ -> s
+    TkLowerIdAt s _ -> s
     TkUpperId s _ -> s
     TkQualifiedUpperId s _ -> s
     TkWildcard s _ -> s
@@ -174,6 +177,7 @@ instance Located Token where
   -- Identifiers
   setSpan s  = \case
     TkLowerId _ i -> TkLowerId s i
+    TkLowerIdAt _ i -> TkLowerIdAt s i
     TkUpperId _ i -> TkUpperId s i
     TkQualifiedUpperId _ i -> TkQualifiedUpperId s i
     TkWildcard _ i -> TkWildcard s i

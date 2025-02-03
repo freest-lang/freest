@@ -1,9 +1,10 @@
-module RenameIsIdempotentSpec (spec) where
+module RenamePreservesReductionSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.Rename
+import           Validation.Normalisation      ( reduce, isWhnf )
 import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
@@ -17,11 +18,13 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "rename(t) == rename(rename(t))" 
-  \(t,_,m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
+  "If T reduces to U, then rename T reduces to rename U" 
+  \(t,_,m) -> renamePreservesReduction (buildDataDecls m) t `shouldBe` True
 
-renameIsIdempotent :: TypeDeclMap -> T.Type -> Bool
-renameIsIdempotent td t = rename td t == rename td (rename td t)
+renamePreservesReduction :: TypeDeclMap -> T.Type -> Bool
+renamePreservesReduction td t = isWhnf t || u == u'
+  where u  = reduce td t
+        u' = reduce td (rename td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap

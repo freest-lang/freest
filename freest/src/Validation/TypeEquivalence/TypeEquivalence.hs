@@ -16,13 +16,10 @@ import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.TypeEquivalence.FromType ( fromType )
 import           Validation.TypeEquivalence.Bisimulation.Bisimulation ( bisimilar )
-import           Debug.Trace                   (trace)
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
   t == u ||
-  -- trace ("\nThe types: " ++ show [t, u] ++ "\nand the grammar: " ++ show (fromType td [t, u])) True
   bisimilar (fromType td [t, u])
-
 
 -- TODO: Move this code to module Bisimulation.Bisimulation

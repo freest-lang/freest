@@ -18,7 +18,8 @@ default-extensions:
   - BlockArguments
   - FlexibleContexts
   - NamedFieldPuns
-
+  - BangPatterns
+  - ScopedTypeVariables
 
 extra-source-files:
   - README.md
@@ -59,6 +60,8 @@ library:
     - Validation.Rename
     - Validation.Substitution
     - Validation.TypeEquivalence.TypeEquivalence
+    - Validation.TypeEquivalence.FromType
+    - Validation.TypeEquivalence.Grammar
     - Validation.Typing
     - Utils
 executables:

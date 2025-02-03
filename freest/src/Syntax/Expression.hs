@@ -163,12 +163,16 @@ instance Show Pat where
     IntPat _ i     -> show i
     FloatPat _ f   -> show f
     CharPat _ c    -> show c
-    AsPat _ x p    -> show x++"&"++show p -- TODO: change to @
+    AsPat _ x p    -> show x++"@"++show p
 
 instance Show LetDecl where
   show = \case
     ValDef p rhs   -> show p++show rhs
-    FnDef x psrhss -> intercalate "\n" $ map (\(ps,rhs) -> show x++" "++unwords (map show ps)++show rhs) psrhss
+    FnDef x psrhss -> 
+      intercalate "\n" $ map (\(ps,rhs) -> 
+        show x++" "++unwords (map showParam ps)++show rhs) psrhss
+      where showParam = \case TypeLevel a -> "@"++show a
+                              ExpLevel  p -> show p
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
 
 instance Show RHS where

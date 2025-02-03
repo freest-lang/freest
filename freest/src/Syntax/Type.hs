@@ -19,7 +19,8 @@ module Syntax.Type
         , Tuple
         , List
         , AppDName
-        , AppVar)
+        , AppVar
+        )
   , smartApp
   , variadicQuant
   , bool
@@ -27,8 +28,13 @@ module Syntax.Type
   , isConstant
   , isSkip
   , isSemi
+  , isAppSemi
   , isDual
   , isTName
+  , isDName
+  , isChoice
+  , isMsg
+  , fromVariable
   )
 where
 
@@ -149,17 +155,23 @@ isConstant :: Type -> Bool
 isConstant = \case
   Choice{} -> False
   Quant{}  -> False
-  TName{}  -> False
-  -- DName{} -> False -- Does not reduce
-  Var{}    -> False
-  App{}    -> False
-  _        -> True
+  TName{} -> False
+  Var{}   -> False
+  App{}   -> False
+  _       -> True
 
-isSkip, isSemi, isDual, isTName :: Type -> Bool
+isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isChoice, isMsg :: Type -> Bool
 isSkip  = \case Skip{}  -> True; _ -> False
 isSemi  = \case Semi{}  -> True; _ -> False
+isAppSemi = \case AppSemi{} -> True; _ -> False
 isDual  = \case Dual{}  -> True; _ -> False
 isTName = \case TName{} -> True; _ -> False
+isDName = \case DName{} -> True; _ -> False
+isChoice = \case Choice{} -> True; _ -> False
+isMsg = \case Message{} -> True; _ -> False
+
+fromVariable :: Variable -> Type
+fromVariable a = Var (varSpan a) a
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"
@@ -193,8 +205,8 @@ instance Show Type where
     Var _ a    -> show a
     App _ t ts -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
     -- Equations
-    TName _ i -> show i
-    DName _ i -> show i
+    TName _ i -> show i++"#type"
+    DName _ i -> show i++"#data"
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -217,12 +229,11 @@ instance Congruence Type where
   congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) =
     m1 == m2 && p1 == p2 && congruent m lts1 lts2
   -- Polymorphism
-  congruent m (Quant _ p1 a k1 t) (Quant _ p2 b k2 u) =
-    p1 == p2 && a == b && k1 == k2 && congruent m t u
+  congruent m (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) =
+    p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u
   -- Higher-order
   congruent m (Var _ v1) (Var _ v2) =
-    v1 == v2 ||              -- free variables              -- free variables
-                  -- free variables
+    v1 == v2 ||              -- free variables
     Just v2 == M.lookup v1 m -- bound variables
   congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
   -- Equations

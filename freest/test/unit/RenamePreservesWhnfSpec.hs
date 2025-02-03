@@ -1,9 +1,10 @@
-module RenameIsIdempotentSpec (spec) where
+module RenamePreservesWhnfSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.Rename
+import           Validation.Normalisation      ( isWhnf )
 import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
@@ -17,11 +18,11 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
-  "rename(t) == rename(rename(t))" 
-  \(t,_,m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
+  "T is a whnf iff rename T is a whnf" 
+  \(t,_,m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
 
-renameIsIdempotent :: TypeDeclMap -> T.Type -> Bool
-renameIsIdempotent td t = rename td t == rename td (rename td t)
+renamePreservesWhnf :: TypeDeclMap -> T.Type -> Bool
+renamePreservesWhnf td t = isWhnf t == isWhnf (rename td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
