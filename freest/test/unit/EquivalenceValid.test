@@ -1,67 +1,67 @@
 -- Simple types
 
-case Int == Int
+case Int == Int : *T
 
-case Char == Char
+case Char == Char : *T
 
-case Float == Float
+case Float == Float : *T
 
-case Int == Int
+case Int == Int : *T
 
-case () == ()
+case () == () : *T
 
 -- Session types
 
-case !Int == !Int
+case !Int == !Int : 1S
 
-case ?Char == ?Char
+case ?Char == ?Char : 1S
 
-case !Int == !Int
+case !Int == !Int : 1S
 
-case ?() == ?()
+case ?() == ?() : 1S
 
-case Skip == Skip
+case Skip == Skip : 1S
 
-case !Int == Skip;!Int
+case !Int == Skip;!Int : 1S
 
-case !Int == !Int;Skip
+case !Int == !Int;Skip : 1S
 
-case !Int == Skip;!Int;Skip
+case !Int == Skip;!Int;Skip : 1S
 
-case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip
+case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip : 1S
 
-case !Int;Skip;?Int == !Int;?Int
+case !Int;Skip;?Int == !Int;?Int : 1S
 
-case Skip;!Int == !Int;Skip
+case Skip;!Int == !Int;Skip : 1S
 
-case !Int;Skip == Skip;!Int
+case !Int;Skip == Skip;!Int : 1S
 
-case Skip == Skip;Skip
+case Skip == Skip;Skip : *S
 
 -- Close 
 
-case Close == Close
+case Close == Close : 1B
 
-case Close == Close;!Int
+case Close == Close;!Int : 1B
 
-case Close;!Int == Close;?Int
+case Close;!Int == Close;?Int : 1B
 
-case Close;!Int == Close;?Int
+case Close;!Int == Close;?Int : 1B
 
 case !Char;Close;!Int 
-  == !Char;Close;?Int
+  == !Char;Close;?Int : 1B
 
 case (!Int;Close;!Int);?Int 
-  == !Int;Close;!Int
+  == !Int;Close;!Int : 1B
 
-case T;!Int == U
+case T;!Int == U : 1S
 where
   type T : 1S
   type T = +{A: !Int;T, B: Skip;Close;Skip}
   type U : 1S
   type U = +{A: !Int;U, B: Close;U}
 
-case T == U
+case T == U : 1S
 where 
   type T : 1S
   type T = T'
@@ -72,21 +72,21 @@ where
   type U' : 1S
   type U' = +{A: !Int;U', B:Close;U'}
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = &{N:T};Skip
   type U : 1S
   type U = &{N:U}
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = &{N:!Int;!Int;T, L:Close};?Int
   type U : 1S
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
@@ -98,16 +98,16 @@ where
   type U' = +{A: !Int;U', B: Close;U'}
 
 case !(!Int;Close) 
-  == !(!Int;Skip;Close;?Int) 
+  == !(!Int;Skip;Close;?Int) : 1S 
 
 case forall a:1S. Close ; a ; !Int 
-  == forall a:1S. (Close ; a) ; Skip
+  == forall a:1S. (Close ; a) ; Skip : 1B
 
 case forall a:1S. Close;a;!Int 
-  == forall b:1S. (Close;b);Skip
+  == forall b:1S. (Close;b);Skip : 1B
 
 case forall a:1S. T a
-  == forall b: 1S . U b
+  == forall b: 1S . U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -120,27 +120,27 @@ where
 
 -- Unrestricted sessions
 
-case *!Int == *!Int ; ?Char
+case *!Int == *!Int ; ?Char : *S
 
-case *!Int ; ?Char == *!Int
+case *!Int ; ?Char == *!Int : *S
 
-case *!Int == *!Int ; Wait
+case *!Int == *!Int ; Wait : *S
 
-case *!Int ; Wait == *!Int
+case *!Int ; Wait == *!Int : *S
 
-case *?Int == *?Int ; ?Char
+case *?Int == *?Int ; ?Char : *S
 
-case *?Int ; ?Char == *?Int
+case *?Int ; ?Char == *?Int : *S
 
-case *?Int == *?Int ; Close
+case *?Int == *?Int ; Close : *S
 
-case *?Int ; Close == *?Int
+case *?Int ; Close == *?Int : *S
 
 -- Choices
 
-case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip}
+case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
 
-case T == U
+case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 where
   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
