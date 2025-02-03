@@ -14,7 +14,7 @@ import           Validation.Kinding (runKindModule)
 import Syntax.Base
 import System.Directory.Internal.Prelude (exitFailure)
 
-mkKindingSpec :: FilePath -> String -> ((T.Type, Maybe K.Kind, M.Module) -> Expectation) -> Spec
+mkKindingSpec :: FilePath -> String -> ((T.Type, K.Kind, M.Module) -> Expectation) -> Spec
 mkKindingSpec testPath testDesc testFun = do
   source <- runIO $ readFile testPath
   case runLexer parseKindingTests testPath source of
@@ -31,26 +31,27 @@ mkKindingSpec testPath testDesc testFun = do
     scopeKindingTest ctx (t, k, m) = do
       (ctx,m') <- scopeModule ctx m
       t' <- scopeType ctx t
-      k' <- mapM scopeKind k
+      k' <- scopeKind k
       return (t', k', m')
 
-mkEquivalenceSpec :: FilePath -> String -> ((T.Type, T.Type, M.Module) -> Expectation) -> Spec
+mkEquivalenceSpec :: FilePath -> String -> ((T.Type, T.Type, K.Kind, M.Module) -> Expectation) -> Spec
 mkEquivalenceSpec testPath testDesc testFun = do
   source <- runIO $ readFile testPath
   case runLexer parseEquivalenceTests testPath source of
     Left es  -> runIO $ mapM_ print es
     Right ts -> describe testDesc $ 
-      forM_ ts \((t, u), m) ->
-        case do (t', u', m') <- runScoping scopeEquivalenceTest (t, u, m)
+      forM_ ts \((t, u, k), m) ->
+        case do (t', u', k', m') <- runScoping scopeEquivalenceTest (t, u, k, m)
                 runKindModule m'
-                return (t', u', m') of
-          Left es      -> it (show t++" ~ "++show u) $ 
+                return (t', u',k', m') of
+          Left es      -> it (show t++" ~ "++show u++" : "++show k) $ 
             expectationFailure (unlines $ map show es)
-          Right (t', u', m') -> it (show t' ++ " ~ " ++ show u') $ 
-            testFun (t', u', m')
+          Right (t', u', k', m') -> it (show t'++" ~ "++show u'++" : "++show k') $ 
+            testFun (t', u', k', m')
   where
-    scopeEquivalenceTest ctx (t, u, m) = do
+    scopeEquivalenceTest ctx (t, u, k, m) = do
       (ctx',m') <- scopeModule ctx m
       t' <- scopeType ctx' t
       u' <- scopeType ctx' u
-      return (t',u',m')
+      k' <- scopeKind k
+      return (t', u', k', m')
