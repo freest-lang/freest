@@ -29,14 +29,14 @@ fromType td ts = G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word
-word t | isWhnf t = wordWhnf t
+word t | isWhnf t || T.isAppSemi t = wordWhnf t
        | otherwise = wasVisited t >>= \case
           Just y -> pure [y]
           Nothing -> do
             y <- nextNonTerminal
             addVisited t y
             td <- gets typeDecls
-            let u = trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) (normalise td t)
+            let u = {-trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) $-} normalise td t
             case u of
               T.Skip{} -> pure []
               _ -> do
@@ -49,7 +49,7 @@ word t | isWhnf t = wordWhnf t
 --   --   -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
 --   --   -- for the variables must come with the internal representation only
 
--- | Requires whnf t
+-- | Requires whnf t. Not exactly, arbitrary T;U will also do
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
   T.AppVar _ α ts -> do -- α T1...Tm
@@ -127,15 +127,9 @@ nextNonTerminal = do
   pure n
 
 wasVisited :: T.Type -> TransState (Maybe NonTerminal)
--- wasVisited t@(T.AppSemi _ u _)= do
---   v <- gets visited
---   pure $ liftA2 const (v M.!? u) (v M.!? t)
 wasVisited t = do
   v <- gets visited
   pure $ v M.!? t
-
-liftA2 :: Applicative f => (a -> b -> c) -> f a -> f b -> f c
-liftA2 f a b = fmap f a <*> b
 
 addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
 addVisited t y = do

@@ -64,7 +64,7 @@ isWhnf = \case
   T.Choice{} -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t {-|| T.isChoice t-}) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- T.Var{} -> True -- Needed?
@@ -84,7 +84,7 @@ reduce td = \case
   -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
   -- R-Dist (must come before R.SemiL) -- The translation to grammar diverges on this one
-  -- T.AppSemi s1 (T.Choice s2 m p lts) u -> T.Choice s1 m p (map (\(id, t) -> (id, T.AppSemi s2 t u)) lts)
+  T.AppSemi s1 (T.Choice s2 m p lts) u -> T.Choice s1 m p (map (\(id, t) -> (id, T.AppSemi s2 t u)) lts)
   -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- 2. Duality

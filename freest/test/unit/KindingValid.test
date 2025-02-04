@@ -634,28 +634,28 @@ where
   type T : 1S
   type T = !T ; !Int
 
--- case T -- Diverges, !Int is unreachable
--- where
---   type T : 1S
---   type T = !Float ; T ; !Int
+case T -- Diverges, !Int is unreachable
+where
+  type T : 1S
+  type T = !Float ; T ; !Int
 
--- case T -- Diverges, !Int is unreachable
--- where
---   type T : 1S
---   type T = !Float ; T ; !Int
+case T -- Diverges, !Int is unreachable
+where
+  type T : 1S
+  type T = !Float ; T ; !Int
 
--- case T -- Diverges, !Int is unreachable
--- where
---   type T : 1S -> 1S
---   type T a1 = a1 ; T a1 ; !Int
+case T -- Diverges, !Int is unreachable
+where
+  type T : 1S -> 1S
+  type T a1 = a1 ; T a1 ; !Int
 
--- case T -- Diverges, a2 is unreachable
--- where
---   type T : 1S -> 1S -> 1S
---   type T a1 a2 = a1 ; (T a1 a2) ; a2
+case T -- Diverges, a2 is unreachable
+where
+  type T : 1S -> 1S -> 1S
+  type T a1 a2 = a1 ; (T a1 a2) ; a2
 
--- case T
--- where
---   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+case T
+where
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
 
