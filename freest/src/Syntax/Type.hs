@@ -189,8 +189,8 @@ instance Show Type where
     Dual{}            -> "Dual"
     End _ In          -> "Wait"
     End _ Out         -> "Close"
-    Message _ K.Un p  -> "(*"++ show p++")"
-    Message _ _ p     -> "("++show p++")"
+    Message _ K.Un p  -> "*" ++ show p
+    Message _ _ p     -> show p
     Choice  _ m p lts ->
       showMult m ++ showView p
       ++ "{" ++ intercalate "," (map (\(l, t) -> show l ++ ": " ++ show t) lts)
@@ -203,6 +203,7 @@ instance Show Type where
             showQuant Out = "exists"
     -- Higher-order
     Var _ a    -> show a
+    AppSemi _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
     App _ t ts -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
     -- Equations
     TName _ i -> show i++"#type"
