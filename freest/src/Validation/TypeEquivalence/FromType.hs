@@ -25,7 +25,10 @@ import           Prelude                       hiding ( Word, words )
 import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
-fromType td ts = G.Grammar w (productions s)
+fromType td ts =
+  trace ("\n" ++ show (G.Grammar w (productions s))) $
+  -- trace ("\nRenamed " ++ show (map (rename td) ts)) $
+  G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word

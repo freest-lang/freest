@@ -622,7 +622,7 @@ where
   type String : *T
   type String = [Char]
 
--- The two types below are equivalent
+-- When there is (unreachable) life past noncontractive (rec) types
 
 case U
 where
