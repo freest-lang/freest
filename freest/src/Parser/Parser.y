@@ -189,7 +189,7 @@ TypeDecl :: { M.Module -> M.Module }
   : 'type' UPPER_ID VarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
 KindSig :: { M.Module -> M.Module }
-  : 'type' UPPER_ID ':' Kind { M.insertKindSig (mkIdTk $2) $4 }
+  : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
 
 LetDecl
   : Pat RHS('=') { E.ValDef $1 $2 }
@@ -221,6 +221,10 @@ Where :: { Maybe [E.LetDecl] }
 FnNameListComma :: { [Variable] }
   : FnName ',' FnNameListComma { $1 : $3 }
   | FnName                     { [$1] }
+
+UpperIdListComma :: { [Identifier] }
+  : UPPER_ID ',' UpperIdListComma { mkIdTk $1 : $3 }
+  | UPPER_ID                      { [mkIdTk $1] }
 
 DataConsListPipe :: { [(Identifier, [T.Type])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }

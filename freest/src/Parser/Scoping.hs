@@ -120,9 +120,12 @@ scopeModule_ ctx m = snd <$> scopeModule ctx m
 scopeKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
 scopeKindSigs = foldM scopeKindSig
   where
-    scopeKindSig ctx (i, k) = do
-      when (memberKSig i ctx) (insertError (MultipleKindSigs (getSpan i) i))
-      return (insertKSig i ctx)
+    scopeKindSig ctx (is, k) = 
+      foldM (\ctx i -> do 
+          when (memberKSig i ctx) 
+            (insertError (MultipleKindSigs (getSpan i) i))
+          return (insertKSig i ctx)) 
+        ctx is
 
 scopeDataDecls :: ScopingCtx -> M.DataDeclList -> Scoping (ScopingCtx, M.DataDeclList)
 scopeDataDecls ctx dds = do
