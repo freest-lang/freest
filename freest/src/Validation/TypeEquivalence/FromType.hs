@@ -27,7 +27,7 @@ import           Debug.Trace                   ( trace )
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
   trace ("\n" ++ show (G.Grammar w (productions s))) $
-  -- trace ("\nRenamed " ++ show (map (rename td) ts)) $
+  trace ("\nBefore " ++ show ts ++ "\nAfter  " ++ show (map (rename td) ts)) $
   G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
@@ -100,7 +100,7 @@ wordWhnf = \case
   t -> error $ "wordWhnf " ++ show t
 
 varTerminal :: Variable -> Terminal
-varTerminal α = "#" ++ show (internal α)
+varTerminal α = "α" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 

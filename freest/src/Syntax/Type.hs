@@ -230,18 +230,17 @@ instance Eq Type where
 instance Congruence Type where
   -- Functional types
   congruent m = \cases
-    Int{}   Int{} -> True
+    Int{} Int{} -> True
     Float{} Float{} -> True
-    Char{}  Char{}  -> True
+    Char{} Char{}  -> True
     (Arrow _ m1) (Arrow _ m2) -> m1 == m2
   -- Session types
     Skip{} Skip{} -> True
     Semi{} Semi{} -> True
     Dual{} Dual{} -> True
     (End _ p1) (End _ p2) -> p1 == p2
-    (Message _ m1 p1)    (Message _ m2 p2) -> m1 == m2 && p1 == p2
-    (Choice _ m1 p1 ls1) (Choice _ m2 p2 ls2) ->
-      m1 == m2 && p1 == p2 && ls1 == ls2
+    (Message _ m1 p1) (Message _ m2 p2) -> m1 == m2 && p1 == p2
+    (Choice _ m1 p1 is1) (Choice _ m2 p2 is2) -> m1 == m2 && p1 == p2 && is1 == is2
   -- Polymorphism
     (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) ->
       p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u

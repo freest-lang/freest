@@ -101,7 +101,7 @@ showProductions = M.foldrWithKey showTransitions ""
 
     showTransition :: NonTerminal -> Terminal -> Word -> String -> String
     showTransition x l xs s =
-      s ++ "\n" ++ showNonTerminal x ++ " -" ++ l ++ "-> " ++ showWord xs
+      s ++ "\n" ++ showNonTerminal x ++ " -> (" ++ l ++ ") " ++ showWord xs
 
 showWord :: Word -> String
 showWord w = intercalate " " (map showNonTerminal w)
