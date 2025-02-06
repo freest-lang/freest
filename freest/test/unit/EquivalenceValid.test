@@ -140,9 +140,84 @@ case *?Int ; Close == *?Int : *S
 
 case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
 
-case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+-- Poly Streams
+
+case OutStream == Dual InStream : 1S
 where
-  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
-  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
-  type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
-  type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+  type OutStream : 1S
+  type OutStream = exists a:*T . !a ; OutStream
+  type InStream : 1S
+  type InStream = forall a:*T . ?a ; InStream
+
+-- When there is (unreachable) life past noncontractive (rec) types
+
+case T == U : 1S
+where
+  type T : 1S
+  type T = !T ; !Int
+  type U : 1S
+  type U = !U ; !Int
+
+case T == U : 1S
+where
+  type T : 1S
+  type T = !T ; !Int
+  type U : 1S
+  type U = !T ; !Int
+
+case T == U : 1S
+where
+  type T : 1S
+  type T = !T ; !Int
+  type U : 1S
+  type U = T
+
+case T !Int == U !Int : 1S
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+case Maybe !Int == Maybe (Skip ; !Int) : 1T
+where
+  type Maybe : 1S -> 1T
+  data Maybe a = Nothing | Just a
+
+case forall a:1S . Maybe a == forall b:1S . Maybe b : 1T
+where
+  type Maybe : 1S -> 1T
+  data Maybe a = Nothing | Just a
+
+case Either !Int == Either (Skip ; !Int) : 1S -> 1T
+where
+  type Either : 1S -> 1S -> 1T
+  data Either a b = Left a | Right b
+
+case T !Int == U !Int : 1S -- First order
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+case T == U : 1S -> 1S -- Higher order
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+-- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+-- where
+--   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+--   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+--   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+--   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5) ; a2 ; a4
+
+-- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+-- where
+--   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+--   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+--   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+--   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)

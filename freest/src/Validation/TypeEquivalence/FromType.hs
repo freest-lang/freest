@@ -25,33 +25,34 @@ import           Prelude                       hiding ( Word, words )
 import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
-fromType td ts = G.Grammar w (productions s)
+fromType td ts =
+  trace ("\n" ++ show (G.Grammar w (productions s))) $
+  trace ("\nBefore " ++ show ts ++ "\nAfter  " ++ show (map (rename td) ts)) $
+  G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word
-word t =
-  -- case fatTerminal t of
-  --   -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
-  --   -- for the variables must come with the internal representation only
-  -- Just t' ->  getLHS $ M.singleton (show t') []
-  -- Nothing ->
-    if isWhnf t then wordWhnf t
-    else do
-      td <- gets typeDecls
-      let u = trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) (normalise td t)
-      case u of
-        T.Skip{} -> pure []
-        _ -> wasVisited t >>= \case
+word t | isWhnf t || T.isAppSemi t = wordWhnf t
+       | otherwise = wasVisited t >>= \case
           Just y -> pure [y]
           Nothing -> do
             y <- nextNonTerminal
             addVisited t y
-            ~(z:δ) <- wordWhnf u
-            γ <- getTransitions z
-            addProductions y (M.map (++ δ) γ)
-            pure [y]
+            td <- gets typeDecls
+            let u = {-trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) $-} normalise td t
+            case u of
+              T.Skip{} -> pure []
+              _ -> do
+                ~(z:δ) <- wordWhnf u
+                γ <- getTransitions z
+                addProductions y (M.map (++ δ) γ)
+                pure [y]
+-- word t =
+--   -- case fatTerminal t of
+--   --   -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
+--   --   -- for the variables must come with the internal representation only
 
--- | Requires whnf t
+-- | Requires whnf t. Not exactly, arbitrary T;U will also do
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
   T.AppVar _ α ts -> do -- α T1...Tm
@@ -78,9 +79,9 @@ wordWhnf = \case
     w1 <- word t1
     w2 <- word t2
     getLHS $ M.fromList [(show m ++ "->1", w1) , (show m ++ "->2", w2)]
-  T.Choice _ m p its -> do  -- ι T1···Tm with ι = &{lᵢ} or +{lᵢ}
-    let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
-    ws <-           mapM (word                                     . snd) its
+  T.AppLinChoice _ p its -> do  -- ι T1···Tm with ι = &{lᵢ} or +{lᵢ}
+    let terminals = map  ((\id -> showView p ++ show id) . fst) its
+    ws <-           mapM (word                           . snd) its
     getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
   T.AppMessage _ m p u -> do -- #T
@@ -99,7 +100,7 @@ wordWhnf = \case
   t -> error $ "wordWhnf " ++ show t
 
 varTerminal :: Variable -> Terminal
-varTerminal α = "#" ++ show (internal α)
+varTerminal α = "α" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 
@@ -181,7 +182,7 @@ fatTerminal = \case
   -- t@T.End{} -> Just t
   -- t@T.Dual{} -> Just t
   -- t@T.Message{} -> Just t
-  -- T.Choice s m p its ->
+  -- T.AppLinChoice s m p its ->
   --   Just (T.Choice s m p) <*> mapM fat its
   --   where fat (id, t) = case fatTerminal t of
   --           Just u -> Just (id, u)

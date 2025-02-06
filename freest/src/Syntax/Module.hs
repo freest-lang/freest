@@ -57,7 +57,7 @@ type TypeDeclList = [(Identifier, ([Variable], T.Type))]
 --   type Stream : 1T -> 1S
 -- represented as
 --   [(Tree, *T -> *T), (Stream, 1T -> 1S)]
-type KindSigList = [(Identifier, K.Kind)]
+type KindSigList = [([Identifier], K.Kind)]
 
 data Module
   = Module { name        :: Maybe [String]
@@ -81,13 +81,13 @@ insertImport :: [String] -> Module -> Module
 insertImport i m = m{imports = i : imports m}
 
 insertDataDecl ::  Identifier -> [Variable] -> ConsDeclList -> Module -> Module
-insertDataDecl n as b m = m{dataDecls = (n, (as, b)) : dataDecls m}
+insertDataDecl i as b m = m{dataDecls = (i, (as, b)) : dataDecls m}
 
 insertTypeDecl :: Identifier -> [Variable] -> T.Type -> Module -> Module
-insertTypeDecl n as t m = m{typeDecls = (n, (as, t)) : typeDecls m}
+insertTypeDecl i as t m = m{typeDecls = (i, (as, t)) : typeDecls m}
 
-insertKindSig :: Identifier -> K.Kind -> Module -> Module
-insertKindSig n k m = m{kindSigs = (n, k) : kindSigs m}
+insertKindSig :: [Identifier] -> K.Kind -> Module -> Module
+insertKindSig is k m = m{kindSigs = (is, k) : kindSigs m}
 
 insertDef :: E.LetDecl -> Module -> Module
 insertDef d m = m{definitions = d : definitions m}
@@ -112,7 +112,7 @@ instance Show Module where
       ,intercalate "\n" (map show definitions)
       ]
     where showImport ss = "import "++intercalate "." ss
-          showKindSig (i, k) = "type "++show i++" : "++show k
+          showKindSig (is, k) = "type "++intercalate "," (map show is)++" : "++show k
           showDataDecl (i, (as,cds)) =
             "data "++show i++" "++unwords (map show as)++" = "++intercalate " | " (map showConsDecl cds)
             where showConsDecl (cn,ts) = show cn ++" "++ unwords (map show ts)

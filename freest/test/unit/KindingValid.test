@@ -967,7 +967,7 @@ where
   type Tree : *T -> 1S
   type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
 
--- Dual, partially applied
+-- Dual, partially applied, not well formed
 
 -- case Dual : 1S -> 1S
 
@@ -1026,25 +1026,45 @@ where
   type String : *T
   type String = [Char]
 
--- The two types below are equivalent
+
+-- When there is (unreachable) life past noncontractive (rec) types
 
 case U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 where
   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
 
--- case T : 1S -> 1S -- Diverges, !Int is unreachable
--- where
---   type T : 1S -> 1S
---   type T a1 = a1 ; T a1 ; !Int
+case T : 1S
+where
+  type T : 1S
+  type T = !T ; !Int
 
--- case T : 1S -> 1S -> 1S -- Diverges, a2 is unreachable
--- where
---   type T : 1S -> 1S -> 1S
---   type T a1 a2 = a1 ; (T a1 a2) ; a2
+case T : 1S
+where
+  type T : 1S
+  type T = !Float ; T ; !Int
 
--- case T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
--- where
---   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+case T : 1S
+where
+  type T : 1S
+  type T = !Float ; T ; !Int
 
+case T : 1S -> 1S
+where
+  type T : 1S -> 1S
+  type T a1 = a1 ; T a1 ; !Int
+
+case T : 1S -> 1S -> 1S
+where
+  type T : 1S -> 1S -> 1S
+  type T a1 a2 = a1 ; (T a1 a2) ; a2
+
+case T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+where
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+
+case Either !Int : 1S -> 1T
+where
+  type Either : 1S -> 1S -> 1T
+  data Either a b = Left a | Right b

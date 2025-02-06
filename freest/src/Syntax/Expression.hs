@@ -80,7 +80,10 @@ data Exp
   | Select Span Identifier Exp
 
 pattern Tuple :: Span -> [Exp] -> Exp
-pattern Tuple s es <- App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_))
+pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
+                             e@(DCons s i@(isTupleId -> True)) -> App s e []
+                             e -> e
+                      -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_)))
   where Tuple s es =  App s (DCons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
 
 pattern Nil :: Span -> Type -> Exp

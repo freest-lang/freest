@@ -59,12 +59,10 @@ isWhnf = \case
   t | T.isConstant t -> True
   -- W-Const1
   T.App _ t _
-    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isChoice t) -> True
-  -- W-Const1
-  T.Choice{} -> True
+    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t {-|| T.isChoice t-}) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- T.Var{} -> True -- Needed?
@@ -83,8 +81,9 @@ reduce td = \case
   T.AppSemi _ T.Skip{} t -> t
   -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-  -- R-Dist (must come before R.SemiL) -- The translation to grammar diverges on this one
-  -- T.AppSemi s1 (T.Choice s2 m p lts) u -> T.Choice s1 m p (map (\(id, t) -> (id, T.AppSemi s2 t u)) lts)
+  -- R-Dist (must come before R.SemiL)
+  T.AppSemi s1 (T.AppLinChoice s2 p lts) u -> 
+    T.AppLinChoice s1 p (map (\(id, t) -> (id, T.AppSemi s2 t u)) lts)
   -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- 2. Duality
@@ -95,7 +94,7 @@ reduce td = \case
   -- R-DMsg
   T.AppDual s (T.AppMessage _ m p t) -> T.AppMessage s m (T.dual p) t
   -- R-DChoice
-  T.AppDual s (T.Choice _ m p lts) -> T.Choice s m (T.dual p) lts
+  T.AppDual s (T.Choice _ m p ls) -> T.Choice s m (T.dual p) ls
   -- R-DQuant
   T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
   -- -- R-DDual

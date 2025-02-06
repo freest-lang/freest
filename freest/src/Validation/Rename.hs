@@ -31,7 +31,6 @@ rename td = \case
   t | T.isConstant t -> t
   t@T.Var{} -> t
   t@T.TName{} -> t
-  T.Choice s m p lts -> T.Choice s m p (map (second (rename td)) lts)
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
   t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a (T.fromVariable b) u))
     where freet = freeReachable t
@@ -57,8 +56,8 @@ absorbing td = absorb S.empty
       T.End{} -> True
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
-      T.Choice _ K.Un _ _ -> True -- Unrestricted type
-      T.Choice _ _ _ its -> all (absorb v . snd) its
+      T.SharedChoice{} -> True -- Unrestricted type
+      T.AppLinChoice _ _ its -> all (absorb v . snd) its
       -- Polymorphism
       T.Quant _ _ _ _ t -> absorb v t
       -- Equations
