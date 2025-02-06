@@ -31,7 +31,6 @@ freeVars = \case
     T.Quant _ _ a _ t  -> Set.delete a $ freeVars t
     T.Var _ a          -> Set.singleton a
     T.App _ t ts       -> Set.unions (freeVars t : map freeVars ts)
-    T.Choice _ _ _ lts -> Set.unions $ map (freeVars . snd) lts
     _                  -> Set.empty
 
 allVars :: T.Type -> Set.Set Variable
@@ -39,7 +38,6 @@ allVars = \case
     T.Quant _ _ _ _ t  -> allVars t
     T.Var _ a          -> Set.singleton a
     T.App _ t ts       -> Set.unions (allVars t : map allVars ts)
-    T.Choice _ _ _ lts -> Set.unions $ map (allVars . snd) lts
     _                  -> Set.empty
 
 -- [a -> u] t
@@ -57,7 +55,6 @@ subs a u = \case
     | b == a    -> u
     | otherwise -> t
   T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)
-  T.Choice s m p lts -> T.Choice s m p (map (second (subs a u)) lts)
   t -> t
 
 subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type

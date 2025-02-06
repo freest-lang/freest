@@ -29,6 +29,7 @@ data Error
   | TypeOutOfScope Span Identifier
   | ConflictingDefs (Map.Map (Level String String) [Span])
   | MultipleVarDecls Span Variable
+  | MultipleFieldDecls Span Identifier
   | MultipleConsDecls Span Identifier
   | MultipleTypeDecls Span Identifier
   | MultipleKindSigs Span Identifier
@@ -68,6 +69,7 @@ instance Located Error where
     TypeOutOfScope s _ -> s
     ConflictingDefs xss -> foldr1 spanFromTo $ concat $ Map.elems xss
     MultipleVarDecls s _ -> s
+    MultipleFieldDecls s _ -> s
     MultipleConsDecls s _ -> s
     MultipleTypeDecls s _ -> s
     MultipleKindSigs s _ -> s
@@ -129,6 +131,8 @@ instance Show Error where
           "" vos
         MultipleVarDecls _ i ->
           "\n  Multiple declarations of variable `"++show i++"`"
+        MultipleFieldDecls _ i ->
+          "\n  Multiple declarations of field `"++show i++"`"
         MultipleConsDecls _ i ->
           "\n  Multiple declarations of constructor `"++show i++"`"
         MultipleTypeDecls _ i ->

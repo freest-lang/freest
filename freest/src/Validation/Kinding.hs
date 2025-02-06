@@ -54,20 +54,18 @@ synth ctx = \case
   T.Char s   -> pure (ut s)
   T.Arrow s m -> pure (Arrow s (lt s) (Arrow s (lt s) (Proper s m Top)))
   -- Session types
-  T.Message s m _ -> pure (Arrow s (lt s) (Proper s m Session))
-  T.Choice s m p lts -> do
+  T.Message s m _ -> pure (Arrow s (lt s) (if m == Lin then ls s else ub s))
+  T.SharedChoice s p ls -> pure (ub s)
+  T.AppLinChoice s p lts -> do
     pk <- foldM (\pk (_,t) -> meet pk . snd <$> checkSession ctx t) Session lts
-    pure (Proper s m pk)
+    pure (Proper s Lin pk)
   T.End s _ -> pure (lb s)
   T.Skip s -> pure (us s)
   T.AppSemi s t u -> do
-    -- k1 <- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
-    -- k2 <- catchE (check' ctx u (ls s)) (putErrorWithDefault (us s))
     (m1, pk1) <- checkSession ctx t
     (m2, pk2) <- checkSession ctx u
-    return $ Proper s (join m1 m2) (meet pk1 pk2) 
+    return $ Proper s (if pk1 == Bounded then m1 else join m1 m2) (meet pk1 pk2) 
   T.AppDual s t -> do
-    -- catchE (check' ctx t (ls s)) (putErrorWithDefault (us s))
     synthCheck ctx t (ls s)
   -- Polymorphism
   T.Quant s p a k t -> do

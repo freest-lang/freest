@@ -345,9 +345,11 @@ scopeType ctx = \case
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity m
   -- Session types
   T.Message s m p -> T.Message s <$> scopeMultiplicity m <*> pure p
-  T.Choice  s m p lts ->
-    let lts' = mapM (\(l,t) -> (l,) <$> scopeType ctx t) lts
-    in T.Choice s <$> scopeMultiplicity m <*> pure p <*> lts'
+  T.Choice  s m p ls ->
+    T.Choice s <$> scopeMultiplicity m <*> pure p <*>
+      foldM (\ls' l -> do 
+        when (l `elem` ls') (insertError (MultipleFieldDecls (getSpan l) l))
+        return $ ls' ++ [l]) [] ls
   -- Polymorphism
   T.Quant s p a k t -> do
     a' <- freshInternal a
