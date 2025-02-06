@@ -79,7 +79,7 @@ lookupDConsDecl i = do
 -- linear variable it encounters. To be used at the end of a scope.
 typeCtxDifference :: KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
 typeCtxDifference kctx tctx1 tctx2 = do
-  foldM (\tctx1' x -> case tctx2 Map.!? x of
+  foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just t  -> do
         whenM (K.isStrictlyLin <$> Kinding.synth kctx t) $
           throwE (LinVarAtEndOfScope (getSpan x) x t)
@@ -115,13 +115,13 @@ synth kctx tctx = \case
     (t, tctx') <- synth kctx tctx f
     t' <- Expose.typeArrow f t
     checkArgs f kctx tctx' t' (as, t')
-  e'@(E.Abs s ps m e)  -> do
+  E.Abs s ps m e'  -> do
     -- TODO: detect incomplete patterns
     (kctxps, tctxps) <- synthParams kctx ps
     let kctx' = kctxps `Map.union` kctx
-    (t, tctxe) <- synth kctx' (tctxps `Map.union` tctx) e
+    (t, tctxe) <- synth kctx' (tctxps `Map.union` tctx) e'
     tctx' <- typeCtxDifference kctx' tctxe tctxps
-    unless (m /= K.Un) $ checkEquivTypeCtxs e tctx' tctx
+    unless (m /= K.Un) $ checkEquivTypeCtxs e' tctx' tctx
     return (foldr (\case ExpLevel  (_,u) -> T.AppArrow s m u
                          TypeLevel (a,k) -> T.Forall s a k) t ps
            ,tctx')
@@ -234,8 +234,8 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Abs s ps m e'  -> do
     (u, kctxps, tctxps) <- checkParams e t kctx tctx (prepareParams ps) t
     let kctx' = kctxps `Map.union` kctx
-    tctxe <- check kctx' (tctxps `Map.union` tctx) e u
-    tctx' <- typeCtxDifference kctx' tctxe tctxps
+    tctxe' <- check kctx' (tctxps `Map.union` tctx) e' u
+    tctx' <- typeCtxDifference kctx' tctxe' tctxps
     unless (m /= K.Un) $ checkEquivTypeCtxs e tctx' tctx
     return tctx'
     where
@@ -295,8 +295,8 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
         (t,tctx'') <- synthRHS kctx tctx' rhs
         ptctx <- checkPat kctx p t
         forM_ (Map.assocs ptctx) \case
-          (Left x,t) -> forM_ (tctx Map.!? Left x) 
-            (checkEquivTypes (Left (E.Var (getSpan x) x)) t)              
+          (Left x,t) -> forM_ (tctx' Map.!? Left x) 
+              (checkEquivTypes (Left (E.Var (getSpan x) x)) t)              
           _ -> return ()
         return (ptctx `Map.union` tctxds, ptctx `Map.union` tctx'')
       E.FnDef x ((ps1,rhs1):psrhss) -> do

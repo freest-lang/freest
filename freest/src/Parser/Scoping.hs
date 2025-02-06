@@ -335,9 +335,9 @@ patVars = \case
 
 freshKVar :: Located a => a -> Scoping K.Kind
 freshKVar l = do
-  phi <- incCounter >>= \i -> return (Variable (getSpan l) ("φ"++show i) i)
-  psi <- incCounter >>= \i -> return (Variable (getSpan l) ("ψ"++show i) i)
-  return $ K.Proper (getSpan l) (K.VarM phi) (K.VarPK psi)
+  φ <- incCounter >>= \i -> return (Variable (getSpan l) ("φ"++show i) i)
+  ψ <- incCounter >>= \i -> return (Variable (getSpan l) ("ψ"++show i) i)
+  return $ K.Proper (getSpan l) (K.VarM φ) (K.VarPK ψ)
 
 scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeType ctx = \case

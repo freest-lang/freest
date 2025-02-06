@@ -201,8 +201,10 @@ instance Show Error where
           "\n  \t(is there a variable with different types in the two contexts?)"
         ConstructorArgumentMismatch _ i n m ->
           "\n  The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
-        LinVarAtEndOfScope _ x t -> 
-          "\n  Variable `"++show x++"`, of linear type `"++show t++"`, was not consumed."
+        LinVarAtEndOfScope _ xi t -> 
+          "\n  "++showVarCons xi++", of linear type `"++show t++"`, was not consumed."
+          where showVarCons = \case Left x  -> "Variable `"    ++show x++"`" 
+                                    Right i -> "Constructor `"++show i++"`"
         ChoiceNotAllowed s i t ->
           "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
         UnsupportedError _ m ->

@@ -354,7 +354,7 @@ ExpPrimary :: { E.Exp }
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
-  | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkNegateVar (spanFromTo $1 $3))}
+  | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkMinusVar (spanFromTo $1 $3))}
   -- | '(' Op Exp ')' { setSpan (spanFromTo $1 $4) (leftSection $2 $3) } -- TODO: waiting for type inference
   | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) $3) $2) }
   | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
@@ -411,22 +411,22 @@ ExpApp :: { E.Exp }
   | ExpPrimary        { $1 }
 
 Op :: { Variable }
-   : CMP  { mkCmpVar (getText $1) $1 }
-   | '||' { mkOrVar $1 }
-   | '&&' { mkAndVar $1 }
-   | '+'  { mkPlusVar $1 }
-   | '*'  { mkTimesVar $1 }
-   | '/'  { mkDivVar $1 }
-   | '^'  { mkPowerVar $1 }
-   | '+.' { mkPlusDotVar $1 }
-   | '*.' { mkTimesDotVar $1 }
-   | '/.' { mkDivDotVar $1 }
-   | '**' { mkTimesTimesVar $1 }
-   | '++' { mkPlusPlusVar $1 }
-   | '^^' { mkCaretCaretVar $1 }
-   | '|>' { mkRTriangleVar $1 }
-   | '$'  { mkDollarVar $1 }
-   | ';'  { mkSemiVar $1 }
+  : CMP  { mkCmpVar (getText $1) $1 }
+  | '||' { mkOrVar $1 }
+  | '&&' { mkAndVar $1 }
+  | '+'  { mkPlusVar $1 }
+  | '*'  { mkTimesVar $1 }
+  | '/'  { mkDivVar $1 }
+  | '^'  { mkPowerVar $1 }
+  | '+.' { mkPlusDotVar $1 }
+  | '*.' { mkTimesDotVar $1 }
+  | '/.' { mkDivDotVar $1 }
+  | '**' { mkTimesTimesVar $1 }
+  | '++' { mkPlusPlusVar $1 }
+  | '^^' { mkCaretCaretVar $1 }
+  | '|>' { mkRTriangleVar $1 }
+  | '$'  { mkDollarVar $1 }
+  | ';'  { mkSemiVar $1 }
 
 ConsOp :: { Identifier }
   : '::' { mkConsId $1 }
