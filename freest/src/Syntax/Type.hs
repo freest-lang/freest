@@ -13,6 +13,8 @@ module Syntax.Type
         , Exists
         , AppArrow
         , AppMessage
+        , AppLinChoice
+        , SharedChoice
         , AppSemi
         , AppDual
         , AppTName
@@ -32,7 +34,6 @@ module Syntax.Type
   , isDual
   , isTName
   , isDName
-  , isChoice
   , isMsg
   , fromVariable
   )
@@ -43,8 +44,9 @@ import qualified Syntax.Kind                   as K
 import           Syntax.Names
 import           Utils ( internalError )
 
-import           Data.List                     (intercalate, sort)
 import           Data.Bifunctor
+import           Data.Function (on)
+import           Data.List                     (intercalate, sort, sortBy)
 import qualified Data.Map.Strict               as M
 
 data Polarity = In | Out
@@ -69,7 +71,7 @@ data Type
   | Dual Span
   | End Span Polarity
   | Message Span K.Multiplicity Polarity
-  | Choice Span K.Multiplicity Polarity [(Identifier, Type)]
+  | Choice Span K.Multiplicity Polarity [Identifier]
   -- Polymorphism
   | Quant Span Polarity Variable K.Kind Type
   -- Higher-order
@@ -99,6 +101,15 @@ pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
 pattern AppMessage s m p t <- App s (Message _ m p) [t]
   where AppMessage s m p t  = App s (Message s m p) [t]
 
+pattern AppLinChoice :: Span -> Polarity -> [(Identifier, Type)] -> Type
+pattern AppLinChoice s p lts <- App s (Choice _ K.Lin p ls) (zip ls -> lts)
+  where AppLinChoice s p lts =  App s (Choice s K.Lin p ls) ts
+          where (ls, ts) = unzip $ sortBy (compare `on` fst) lts
+
+pattern SharedChoice :: Span -> Polarity -> [Identifier] -> Type
+pattern SharedChoice s p ls <- Choice s K.Un p ls
+  where SharedChoice s p ls = Choice s K.Un p (sort ls)
+
 pattern AppSemi :: Span -> Type -> Type -> Type
 pattern AppSemi s t u <- App s (Semi _) [t,u]
   where AppSemi s t u  = App s (Semi s) [t,u]
@@ -117,7 +128,9 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
 
 pattern Tuple :: Span -> [Type] -> Type
 pattern Tuple s ts <- AppDName s i@(isTupleId -> True) ts
-  where Tuple s ts =  AppDName s (mkTupleId (length ts - 1) s) ts
+  where Tuple s = \case 
+          [_] -> internalError "cannot construct a 1-tuple type."
+          ts  -> AppDName s (mkTupleId (length ts - 1) s) ts
 
 pattern List :: Span -> Type -> Type
 pattern List s t <- AppDName s i@((== mkListId s) -> True) [t]
@@ -153,21 +166,19 @@ bool s = DName (getSpan s) (mkBoolId s)
 
 isConstant :: Type -> Bool
 isConstant = \case
-  Choice{} -> False
   Quant{}  -> False
   TName{} -> False
   Var{}   -> False
   App{}   -> False
   _       -> True
 
-isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isChoice, isMsg :: Type -> Bool
+isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isMsg :: Type -> Bool
 isSkip  = \case Skip{}  -> True; _ -> False
 isSemi  = \case Semi{}  -> True; _ -> False
 isAppSemi = \case AppSemi{} -> True; _ -> False
 isDual  = \case Dual{}  -> True; _ -> False
 isTName = \case TName{} -> True; _ -> False
 isDName = \case DName{} -> True; _ -> False
-isChoice = \case Choice{} -> True; _ -> False
 isMsg = \case Message{} -> True; _ -> False
 
 fromVariable :: Variable -> Type
@@ -191,12 +202,12 @@ instance Show Type where
     End _ Out         -> "Close"
     Message _ K.Un p  -> "*" ++ show p
     Message _ _ p     -> show p
-    Choice  _ m p lts ->
-      showMult m ++ showView p
-      ++ "{" ++ intercalate "," (map (\(l, t) -> show l ++ ": " ++ show t) lts)
+    SharedChoice _ p ls   -> 
+      "*" ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
+    AppLinChoice  _ p lts -> showView p ++ "{" 
+      ++ intercalate ", " (map showField lts)
       ++ "}"
-      where showMult = \case K.Lin -> "" ; K.Un -> "*"
-            showView = \case In    -> "&"; Out  -> "+"
+      where showField (l, t) = show l ++ ": " ++ show t
     -- Polymorphism
     Quant _ p a k t -> "(" ++showQuant p++" "++show a++":"++show k++". "++show t++")"
       where showQuant In  = "forall"
@@ -208,6 +219,7 @@ instance Show Type where
     -- Equations
     TName _ i -> show i++"#type"
     DName _ i -> show i++"#data"
+    where showView = \case In    -> "&"; Out  -> "+"
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -217,30 +229,31 @@ instance Eq Type where
 
 instance Congruence Type where
   -- Functional types
-  congruent _ Int{}   Int{}   = True
-  congruent _ Float{} Float{} = True
-  congruent _ Char{}  Char{}  = True
-  congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
+  congruent m = \cases
+    Int{}   Int{} -> True
+    Float{} Float{} -> True
+    Char{}  Char{}  -> True
+    (Arrow _ m1) (Arrow _ m2) -> m1 == m2
   -- Session types
-  congruent _ Skip{} Skip{} = True
-  congruent _ Semi{} Semi{} = True
-  congruent _ Dual{} Dual{} = True
-  congruent _ (End _ p1) (End _ p2) = p1 == p2
-  congruent m (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
-  congruent m (Choice _ m1 p1 lts1) (Choice _ m2 p2 lts2) =
-    m1 == m2 && p1 == p2 && congruent m lts1 lts2
+    Skip{} Skip{} -> True
+    Semi{} Semi{} -> True
+    Dual{} Dual{} -> True
+    (End _ p1) (End _ p2) -> p1 == p2
+    (Message _ m1 p1)    (Message _ m2 p2) -> m1 == m2 && p1 == p2
+    (Choice _ m1 p1 ls1) (Choice _ m2 p2 ls2) ->
+      m1 == m2 && p1 == p2 && ls1 == ls2
   -- Polymorphism
-  congruent m (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) =
-    p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u
+    (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) ->
+      p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u
   -- Higher-order
-  congruent m (Var _ v1) (Var _ v2) =
-    v1 == v2 ||              -- free variables
-    Just v2 == M.lookup v1 m -- bound variables
-  congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
+    (Var _ v1) (Var _ v2) ->
+      v1 == v2 ||              -- free variables
+      Just v2 == M.lookup v1 m -- bound variables
+    (App _ t ts) (App _ u us) -> congruent m t u && congruent m ts us
   -- Equations
-  congruent _ (TName _ i1) (TName _ i2) = i1 == i2
-  congruent _ (DName _ i1) (DName _ i2) = i1 == i2
-  congruent _ _ _ = False
+    (TName _ i1) (TName _ i2) -> i1 == i2
+    (DName _ i1) (DName _ i2) -> i1 == i2
+    _ _ -> False
 
 instance Congruence [Type] where
   congruent m ts us =
@@ -284,7 +297,7 @@ instance Located Type where
     Arrow _ m         -> Arrow s m
     -- Session types
     Message _ m p     -> Message s m p
-    Choice  _ m p lts -> Choice s m p lts
+    Choice  _ m p ls -> Choice s m p ls
     End _ p           -> End s p
     Skip _            -> Skip s
     Semi _            -> Semi s

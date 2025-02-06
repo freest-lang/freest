@@ -22,6 +22,8 @@ import UI.Error
 
 import Control.Monad.Except
 import Data.Bifunctor
+import Data.Function (on)
+import Data.List (sortBy)
 import qualified Data.List.NonEmpty as NE
 }
 
@@ -189,7 +191,7 @@ TypeDecl :: { M.Module -> M.Module }
   : 'type' UPPER_ID VarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
 KindSig :: { M.Module -> M.Module }
-  : 'type' UPPER_ID ':' Kind { M.insertKindSig (mkIdTk $2) $4 }
+  : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
 
 LetDecl
   : Pat RHS('=') { E.ValDef $1 $2 }
@@ -221,6 +223,10 @@ Where :: { Maybe [E.LetDecl] }
 FnNameListComma :: { [Variable] }
   : FnName ',' FnNameListComma { $1 : $3 }
   | FnName                     { [$1] }
+
+UpperIdListComma :: { [Identifier] }
+  : UPPER_ID ',' UpperIdListComma { mkIdTk $1 : $3 }
+  | UPPER_ID                      { [mkIdTk $1] }
 
 DataConsListPipe :: { [(Identifier, [T.Type])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }
@@ -270,9 +276,8 @@ TypePrimary :: { T.Type }
   | Polarity TypePrimary %prec MSG     { T.AppMessage (spanFromTo (fst $1) $2) K.Lin (snd $1) $2 }
   | '*' Polarity TypePrimary %prec MSG { T.AppMessage (spanFromTo $1 $3) K.Un  (snd $2) $3 }
   -- Choices
-  | View '{' LabelTypeListComma '}'     { T.Choice (spanFromTo (fst $1) $4) K.Lin (snd $1) $3 }
-  | '*' View '{' LabelListComma '}'     { T.Choice (spanFromTo $1       $5) K.Un  (snd $2) 
-                                            (map (\i -> (i, T.Skip (getSpan i))) $4) }
+  | View '{' LabelTypeListComma '}'     { T.AppLinChoice (spanFromTo (fst $1) $4) (snd $1) $3 } -- sorted by AppLinChoice
+  | '*' View '{' LabelListComma '}'     { T.SharedChoice (spanFromTo $1 $5) (snd $2) $4 }       -- sorted by SharedChoice
   -- Variables and constructors
   | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
   | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }

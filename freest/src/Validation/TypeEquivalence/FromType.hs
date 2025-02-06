@@ -25,7 +25,10 @@ import           Prelude                       hiding ( Word, words )
 import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
-fromType td ts = G.Grammar w (productions s)
+fromType td ts =
+  trace ("\n" ++ show (G.Grammar w (productions s))) $
+  -- trace ("\nRenamed " ++ show (map (rename td) ts)) $
+  G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word
@@ -76,9 +79,9 @@ wordWhnf = \case
     w1 <- word t1
     w2 <- word t2
     getLHS $ M.fromList [(show m ++ "->1", w1) , (show m ++ "->2", w2)]
-  T.Choice _ m p its -> do  -- ι T1···Tm with ι = &{lᵢ} or +{lᵢ}
-    let terminals = map  ((\id -> show m ++ showView p ++ show id) . fst) its
-    ws <-           mapM (word                                     . snd) its
+  T.AppLinChoice _ p its -> do  -- ι T1···Tm with ι = &{lᵢ} or +{lᵢ}
+    let terminals = map  ((\id -> showView p ++ show id) . fst) its
+    ws <-           mapM (word                           . snd) its
     getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
   T.AppMessage _ m p u -> do -- #T
@@ -179,7 +182,7 @@ fatTerminal = \case
   -- t@T.End{} -> Just t
   -- t@T.Dual{} -> Just t
   -- t@T.Message{} -> Just t
-  -- T.Choice s m p its ->
+  -- T.AppLinChoice s m p its ->
   --   Just (T.Choice s m p) <*> mapM fat its
   --   where fat (id, t) = case fatTerminal t of
   --           Just u -> Just (id, u)

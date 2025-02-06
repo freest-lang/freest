@@ -622,7 +622,8 @@ where
   type String : *T
   type String = [Char]
 
--- Stuff after a rec absorbing type
+
+-- When there is (unreachable) life past noncontractive (rec) types
 
 case U
 where

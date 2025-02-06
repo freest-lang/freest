@@ -42,7 +42,7 @@ emptyValidationState = ValidationState
 buildValidationState :: M.Module -> ValidationState
 buildValidationState m = ValidationState -- TODO: traverse module once.
   { errors    = []
-  , kindSigs  = Map.fromList (M.kindSigs m)
+  , kindSigs  = Map.fromList (concatMap (\(is,k) -> map (,k) is) $ M.kindSigs m)
   , typeDecls = Map.fromList (M.typeDecls m)
   , dataDecls = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
   , consDecls = Map.fromList (concatMap (\(i,(as,cds)) -> map (second (i,as,)) cds) $ M.dataDecls m)
