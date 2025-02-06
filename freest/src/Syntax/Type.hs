@@ -128,7 +128,9 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
 
 pattern Tuple :: Span -> [Type] -> Type
 pattern Tuple s ts <- AppDName s i@(isTupleId -> True) ts
-  where Tuple s ts =  AppDName s (mkTupleId (length ts - 1) s) ts
+  where Tuple s = \case 
+          [_] -> internalError "cannot construct a 1-tuple type."
+          ts  -> AppDName s (mkTupleId (length ts - 1) s) ts
 
 pattern List :: Span -> Type -> Type
 pattern List s t <- AppDName s i@((== mkListId s) -> True) [t]

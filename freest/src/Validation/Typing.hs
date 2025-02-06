@@ -32,6 +32,7 @@ import Control.Monad.Extra ( ifM, whenM )
 import Control.Applicative ()
 import Control.Monad.Trans.Except ( catchE, throwE )
 import Data.Foldable (foldrM)
+import Debug.Trace (traceM)
 
 
 -- Type context. It keeps track of the variables and constructors in scope and 
@@ -51,6 +52,15 @@ lookupType kctx tctx xi = case tctx Map.!? xi of
   Just t -> do
     k <- Kinding.synth kctx t
     return (t, if K.isStrictlyLin k then Map.delete xi tctx else tctx)
+  Nothing -> case xi of
+    Left  x -> throwE (VarOutOfScope (getSpan x) x)
+    Right i -> throwE (ConsOutOfScope (getSpan i) i)
+
+-- | Looks up the type of a variable or identifier in a type context without
+-- changing it, even if the type of the variable is linear. Use with caution.
+lookupType_ :: TypeCtx -> Either Variable Identifier -> Validation T.Type
+lookupType_ tctx xi = case tctx Map.!? xi of
+  Just t -> return t
   Nothing -> case xi of
     Left  x -> throwE (VarOutOfScope (getSpan x) x)
     Right i -> throwE (ConsOutOfScope (getSpan i) i)
@@ -85,8 +95,6 @@ synth kctx tctx = \case
   E.Int s _       -> pure (T.Int s   , tctx)
   E.Float s _     -> pure (T.Float s , tctx)
   E.Char s _      -> pure (T.Char s  , tctx)
-  E.DCons s i     -> lookupType kctx tctx (Right i)
-  E.Var s x       -> lookupType kctx tctx (Left  x)
   -- Tuples, (e1 ... , en)
   E.Tuple s es -> do
     first (T.Tuple s) <$>
@@ -101,6 +109,8 @@ synth kctx tctx = \case
     (t', tctx') <- synth kctx tctx e1
     let t = T.List s t'
     (t,) <$> check kctx tctx' e2 t
+  E.DCons s i     -> lookupType kctx tctx (Right i)
+  E.Var s x       -> lookupType kctx tctx (Left  x)
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
     t' <- Expose.typeArrow f t
@@ -183,14 +193,6 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Int s _   -> checkEquivTypes (Left e) t (T.Int s)   >> pure tctx
   E.Float s _ -> checkEquivTypes (Left e) t (T.Float s) >> pure tctx
   E.Char s _  -> checkEquivTypes (Left e) t (T.Char s)  >> pure tctx
-  E.DCons s i      -> do
-    (u,tctx') <- lookupType kctx tctx (Right i)
-    checkEquivTypes (Left e) t u
-    return tctx'
-  E.Var s x       -> do
-    (u, tctx') <- lookupType kctx tctx (Left x)
-    checkEquivTypes (Left e) t u
-    return tctx'
   -- Tuples, (e1 ... , en)
   E.Tuple s es ->
     case normalise tds t of
@@ -216,6 +218,14 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
+  E.DCons s i      -> do
+    (u,tctx') <- lookupType kctx tctx (Right i)
+    checkEquivTypes (Left e) t u
+    return tctx'
+  E.Var s x       -> do
+    (u, tctx') <- lookupType kctx tctx (Left x)
+    checkEquivTypes (Left e) t u
+    return tctx'
   E.App s f as -> do
     (u, tctx') <- synth kctx tctx f
     (v, tctx'') <- checkArgs f kctx tctx' u (as, u)
@@ -291,15 +301,15 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
         return (ptctx `Map.union` tctxds, ptctx `Map.union` tctx'')
       E.FnDef x ((ps1,rhs1):psrhss) -> do
         let e = E.Var (getSpan x) x
-        (t,tctx'') <- lookupType kctx tctx' (Left x)
-        (t1, kctxps1, tctxps1) <- checkParams e t kctx tctx'' (prepareParams ps1) t
+        t <- lookupType_ tctx' (Left x)
+        (t1, kctxps1, tctxps1) <- checkParams e t kctx tctx' (prepareParams ps1) t
         let kctx1 = kctxps1 `Map.union` kctx
-        tctxrhs1 <- checkRHS kctx1 (tctxps1 `Map.union` tctx'') rhs1 t1
+        tctxrhs1 <- checkRHS kctx1 (tctxps1 `Map.union` tctx') rhs1 t1
         tctx1 <- typeCtxDifference kctx1 tctxrhs1 tctxps1
         forM_ psrhss \(psi,rhsi) -> do
-            (ti, kctxpsi, tctxpsi) <- checkParams e t kctx tctx'' (prepareParams psi) t
+            (ti, kctxpsi, tctxpsi) <- checkParams e t kctx tctx' (prepareParams psi) t
             let kctxi = kctxpsi `Map.union` kctx
-            tctxrhsi <- checkRHS kctxi (tctxpsi `Map.union` tctx'') rhsi ti
+            tctxrhsi <- checkRHS kctxi (tctxpsi `Map.union` tctx') rhsi ti
             tctxi <- typeCtxDifference kctxi tctxrhsi tctxpsi
             checkEquivTypeCtxs e tctxi tctx1
         return (tctxds, tctx1)
