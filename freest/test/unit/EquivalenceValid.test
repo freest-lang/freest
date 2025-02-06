@@ -153,3 +153,12 @@ where
   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+
+-- Poly Streams
+
+case OutStream == Dual InStream
+where
+  type OutStream : 1S
+  type OutStream = exists a:*T . !a ; OutStream
+  type InStream : 1S
+  type InStream = forall a:*T . ?a ; InStream

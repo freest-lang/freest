@@ -563,7 +563,7 @@ where
   type Tree : *T -> 1S
   type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
 
--- Dual, partially applied
+-- Dual, partially applied, not well formed
 
 -- case Dual
 
@@ -622,7 +622,7 @@ where
   type String : *T
   type String = [Char]
 
--- The two types below are equivalent
+-- Stuff after a rec absorbing type
 
 case U
 where
@@ -634,22 +634,22 @@ where
   type T : 1S
   type T = !T ; !Int
 
-case T -- Diverges, !Int is unreachable
+case T
 where
   type T : 1S
   type T = !Float ; T ; !Int
 
-case T -- Diverges, !Int is unreachable
+case T
 where
   type T : 1S
   type T = !Float ; T ; !Int
 
-case T -- Diverges, !Int is unreachable
+case T
 where
   type T : 1S -> 1S
   type T a1 = a1 ; T a1 ; !Int
 
-case T -- Diverges, a2 is unreachable
+case T
 where
   type T : 1S -> 1S -> 1S
   type T a1 a2 = a1 ; (T a1 a2) ; a2
