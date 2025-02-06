@@ -227,30 +227,31 @@ instance Eq Type where
 
 instance Congruence Type where
   -- Functional types
-  congruent _ Int{}   Int{}   = True
-  congruent _ Float{} Float{} = True
-  congruent _ Char{}  Char{}  = True
-  congruent _ (Arrow _ m1) (Arrow _ m2) = m1 == m2
+  congruent m = \cases
+    Int{}   Int{} -> True
+    Float{} Float{} -> True
+    Char{}  Char{}  -> True
+    (Arrow _ m1) (Arrow _ m2) -> m1 == m2
   -- Session types
-  congruent _ Skip{} Skip{} = True
-  congruent _ Semi{} Semi{} = True
-  congruent _ Dual{} Dual{} = True
-  congruent _ (End _ p1) (End _ p2) = p1 == p2
-  congruent m (Message _ m1 p1) (Message _ m2 p2) = m1 == m2 && p1 == p2
-  congruent m (Choice _ m1 p1 ls1) (Choice _ m2 p2 ls2) =
-    m1 == m2 && p1 == p2 && ls1 == ls2
+    Skip{} Skip{} -> True
+    Semi{} Semi{} -> True
+    Dual{} Dual{} -> True
+    (End _ p1) (End _ p2) -> p1 == p2
+    (Message _ m1 p1)    (Message _ m2 p2) -> m1 == m2 && p1 == p2
+    (Choice _ m1 p1 ls1) (Choice _ m2 p2 ls2) ->
+      m1 == m2 && p1 == p2 && ls1 == ls2
   -- Polymorphism
-  congruent m (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) =
-    p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u
+    (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) ->
+      p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u
   -- Higher-order
-  congruent m (Var _ v1) (Var _ v2) =
-    v1 == v2 ||              -- free variables
-    Just v2 == M.lookup v1 m -- bound variables
-  congruent m (App _ t ts) (App _ u us) = congruent m t u && congruent m ts us
+    (Var _ v1) (Var _ v2) ->
+      v1 == v2 ||              -- free variables
+      Just v2 == M.lookup v1 m -- bound variables
+    (App _ t ts) (App _ u us) -> congruent m t u && congruent m ts us
   -- Equations
-  congruent _ (TName _ i1) (TName _ i2) = i1 == i2
-  congruent _ (DName _ i1) (DName _ i2) = i1 == i2
-  congruent _ _ _ = False
+    (TName _ i1) (TName _ i2) -> i1 == i2
+    (DName _ i1) (DName _ i2) -> i1 == i2
+    _ _ -> False
 
 instance Congruence [Type] where
   congruent m ts us =
