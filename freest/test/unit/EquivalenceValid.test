@@ -172,7 +172,36 @@ where
   type U : 1S
   type U = T
 
-case T == U
+case T !Int == U !Int
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+case Maybe !Int == Maybe (Skip ; !Int)
+where
+  type Maybe : 1S -> 1T
+  data Maybe a = Nothing | Just a
+
+case forall a:1S . Maybe a == forall b:1S . Maybe b
+where
+  type Maybe : 1S -> 1T
+  data Maybe a = Nothing | Just a
+
+case Either !Int == Either (Skip ; !Int)
+where
+  type Either : 1S -> 1S -> 1T
+  data Either a b = Left a | Right b
+
+case T !Int == U !Int -- First order
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+case T == U -- Higher order
 where
   type T : 1S -> 1S
   type T a = a ; (T a) ; !Int
