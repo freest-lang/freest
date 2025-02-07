@@ -20,6 +20,8 @@ import Validation.Base
 import Validation.Kinding
 import Validation.Typing
 
+import LeaST.Parser (parseLeaST)
+import LeaST.Interpreter ( interpret )
 
 import Control.Monad.State (runState)
 import Data.Function ((&))
@@ -33,16 +35,22 @@ main = do
   execParser opts >>= freest
 
 freest :: RunOpts -> IO ()
-freest RunOpts{file=f} = do
+freest RunOpts{file=f, least=l} = do
   source <- readFile f
-  runLexer parseModule f source 
-    >>= runScoping scopeModule_ & \case 
-      Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
-      Right m -> do 
-        putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-        -- runValidate m & \case 
-        --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-        --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
+  if l then case runLexer parseLeaST f source of
+    Right leastAST -> do
+      print leastAST
+      print $ interpret leastAST
+    Left err -> print err
+  else
+    runLexer parseModule f source 
+      >>= runScoping scopeModule_ & \case 
+        Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
+        Right m -> do 
+          putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+          -- runValidate m & \case 
+          --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+          --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
 
 lexAll :: Lexer ()
 lexAll = do

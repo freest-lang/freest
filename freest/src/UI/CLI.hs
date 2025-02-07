@@ -10,7 +10,7 @@ module UI.CLI where
 
 import Options.Applicative
 
-data RunOpts = RunOpts{file :: FilePath}
+data RunOpts = RunOpts{file :: FilePath, least :: Bool}
 
 freestOpts :: Parser RunOpts
 freestOpts = RunOpts
@@ -18,6 +18,9 @@ freestOpts = RunOpts
     ( help "FreeST (.fst) file"
     <> metavar "FILEPATH"
     )
+  <*> switch
+    ( long "least" 
+    <> help "Parse file as a LeaST file" )
 
 opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper)
