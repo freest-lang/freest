@@ -10,8 +10,7 @@ module UI.CLI where
 
 import Options.Applicative
 
--- | The command line options accepted by the FreeST compiler.
-data RunOpts = RunOpts{file :: FilePath}
+data RunOpts = RunOpts{file :: FilePath, least :: Bool}
 
 -- | The parser for the command line options.
 freestOpts :: Parser RunOpts
@@ -20,6 +19,9 @@ freestOpts = RunOpts
     ( help "FreeST (.fst) file"
     <> metavar "FILEPATH"
     )
+  <*> switch
+    ( long "least" 
+    <> help "Parse file as a LeaST file" )
 
 -- | The man page of the FreeST compiler.
 opts :: ParserInfo RunOpts
