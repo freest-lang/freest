@@ -25,7 +25,7 @@ import           Validation.Substitution       ( subsAll )
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
 import           Data.Bifunctor                ( second )
--- import           Debug.Trace
+import           Debug.Trace
 
 type Visited = S.Set T.Type
 
@@ -94,7 +94,8 @@ reduce td = \case
   -- R-DMsg
   T.AppDual s (T.AppMessage _ m p t) -> T.AppMessage s m (T.dual p) t
   -- R-DChoice
-  T.AppDual s (T.Choice _ m p ls) -> T.Choice s m (T.dual p) ls
+  T.AppDual s (T.AppLinChoice _ p lts) -> 
+    T.AppLinChoice s (T.dual p) $ map (\(l,t) -> (l,T.AppDual (getSpan t) t)) lts
   -- R-DQuant
   T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
   -- -- R-DDual

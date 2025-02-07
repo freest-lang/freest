@@ -196,12 +196,12 @@ KindSig :: { M.Module -> M.Module }
 LetDecl
   : Pat RHS('=') { E.ValDef $1 $2 }
   | FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
-  | PatPrimary Op PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
+  | PatPrimary OpOrMinus PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
   | FnNameListComma ':' Type { E.TypeSig $1 $3 }
 
 FnName :: { Variable }
   : LOWER_ID   { mkVarTk $1 }
-  | '(' Op ')' { $2         }
+  | '(' OpOrMinus ')' { $2 }
 
 RHS(sep) :: { E.RHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
@@ -428,6 +428,10 @@ Op :: { Variable }
   | '$'  { mkDollarVar $1 }
   | ';'  { mkSemiVar $1 }
 
+OpOrMinus :: { Variable }
+  : Op  { $1 }
+  | '-' { mkMinusVar $1 }
+
 ConsOp :: { Identifier }
   : '::' { mkConsId $1 }
 
@@ -477,6 +481,7 @@ PatPrimary :: { E.Pat }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
+  | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
   | Pat '::' Pat { E.ConsPat (spanFromTo $1 $3) $1 $3 }
   | PatPrimary { $1 }
 

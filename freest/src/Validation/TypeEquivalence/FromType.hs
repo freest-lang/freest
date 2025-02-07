@@ -26,8 +26,8 @@ import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
-  trace ("\n" ++ show (G.Grammar w (productions s))) $
-  trace ("\nBefore " ++ show ts ++ "\nAfter  " ++ show (map (rename td) ts)) $
+  trace ("\nTypes: " ++ show ts ++ "\n"++show (G.Grammar w (productions s))) $
+  -- trace ("\nBefore " ++ show ts ++ "\nAfter  " ++ show (map (rename td) ts)) $
   G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
@@ -39,7 +39,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             y <- nextNonTerminal
             addVisited t y
             td <- gets typeDecls
-            let u = {-trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) $-} normalise td t
+            let u = {- trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) $-} normalise td t
             case u of
               T.Skip{} -> pure []
               _ -> do

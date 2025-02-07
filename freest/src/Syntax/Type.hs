@@ -204,8 +204,9 @@ instance Show Type where
     End _ Out         -> "Close"
     Message _ K.Un p  -> "*" ++ show p
     Message _ _ p     -> show p
-    SharedChoice _ p ls   -> 
-      "*" ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
+    Choice _ m p ls   -> 
+      (if m == K.Un then "*" else "") 
+      ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
     AppLinChoice  _ p lts -> showView p ++ "{" 
       ++ intercalate ", " (map showField lts)
       ++ "}"

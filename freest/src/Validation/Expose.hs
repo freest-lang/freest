@@ -47,6 +47,5 @@ internalChoice e t i = do
     T.AppLinChoice s T.Out ts -> 
         case lookup i ts of
             Just t' -> return t'
-            Nothing -> throwE (ChoiceNotAllowed s i t)
-    t' -> do
-      throwE (ExposeError (getSpan e) "an internal choice" (Left e) t')
+            Nothing -> throwE (IllegalChoice s i t)
+    _ -> throwE (ExposeError (getSpan e) "an internal choice" (Left e) t)

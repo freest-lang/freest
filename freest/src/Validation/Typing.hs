@@ -29,7 +29,6 @@ import Data.List.Extra (snoc)
 import qualified Data.Map.Strict as Map
 import Control.Monad.State
 import Control.Monad.Extra ( ifM, whenM )
-import Control.Applicative ()
 import Control.Monad.Trans.Except ( catchE, throwE )
 import Data.Foldable (foldrM)
 import Debug.Trace (traceM)
@@ -398,44 +397,44 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
 checkPat :: KindCtx -> E.Pat -> T.Type -> Validation TypeCtx
 checkPat kctx p t = gets typeDecls >>= \tds -> case p of
   -- 0
-  p@(E.IntPat    s _)  -> do
+  E.IntPat    s _   -> do
     checkEquivTypes (Right p) t (T.Int s)
     pure Map.empty
   -- 0.0
-  p@(E.FloatPat  s _)  -> do
+  E.FloatPat  s _   -> do
     checkEquivTypes (Right p) t (T.Float s)
     pure Map.empty
   -- 'a'
-  p@(E.CharPat   s _)  -> do
+  E.CharPat   s _   -> do
     checkEquivTypes (Right p) t (T.Char s)
     pure Map.empty
   -- x
-  E.VarPat    s x  -> pure $ Map.singleton (Left x) t
-  p@(E.WildPat  s _ ) -> do
+  E.VarPat    s x   -> pure $ Map.singleton (Left x) t
+  E.WildPat  s _    -> do
     k <- Kinding.synth kctx t
     when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
     return Map.empty
   -- []
-  p@(E.NilPat s) ->
+  E.NilPat s        ->
     case normalise tds t of
       T.List _ _ -> return Map.empty
       t' -> throwE (TypeMismatchList (getSpan p) t (Right p))
   -- (p1 :: p2)
-  p@(E.ConsPat s p1 p2) ->
+  E.ConsPat s p1 p2 ->
     case normalise tds t of
       t'@(T.List s t'') -> do
         tctx <- checkPat kctx p1 t''
         tctx' <- checkPat kctx p2 t'
         return (Map.union tctx tctx')
       t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
-    -- (p1 ... , pn)
-  p@(E.TuplePat s ps) ->
+  -- (p1 ... , pn)
+  E.TuplePat s ps   ->
     case normalise tds t of
       t'@(T.Tuple s ts) -> do
         foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts)
       t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
-    -- (C p1 ... pn)
-  p@(E.DConsPat s i ps) -> do
+  -- (C p1 ... pn)
+  E.DConsPat s i ps -> do
     (i',as,ts) <- lookupDConsDecl i
     case normalise tds t of
       T.AppDName _ i'' us | i' == i'' -> do
@@ -444,8 +443,21 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
         when (lus /= lps) (throwE (ConstructorArgumentMismatch (getSpan p) i lus lps))
         foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps us)
       t' -> throwE (TypeMismatch (getSpan p) t (T.AppDName (getSpan i) i' (map (T.Var (getSpan i)) as)) (Right p))
-    -- x@p
-  p@(E.AsPat s x p') -> do
+  -- (&C p)
+  E.ChoicePat s i p' -> do 
+    case normalise tds t of
+      T.AppLinChoice _ T.In lts -> case lookup i lts of
+        Just ti -> checkPat kctx p' ti
+        Nothing -> throwE (IllegalChoice (getSpan i) i t)
+      t'@(T.SharedChoice _ T.In ls) 
+        | i `elem` ls -> checkPat kctx p' t'
+        | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
+      (T.AppSemi _ t'@(T.SharedChoice _ T.In ls) u) 
+        | i `elem` ls -> checkPat kctx p' t'
+        | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
+      _ -> throwE (ExposeError (getSpan p) "an internal choice" (Right p) t)
+  -- x@p
+  E.AsPat s x p'     -> do
     k <- Kinding.synth kctx t
     when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
     Map.insert (Left x) t <$> checkPat kctx p' t

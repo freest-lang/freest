@@ -303,6 +303,8 @@ scopePat ctx ictx = \case
         return (ictx''', ps''++[p']))
       (Map.empty, []) ps
     return (ictx', E.DConsPat s c ps')
+  E.ChoicePat s c p -> do
+    second (E.ChoicePat s c) <$> scopePat ctx ictx p
   E.AsPat s x p -> case lookupEVar x ictx of
     Nothing -> do
       x' <- freshInternal x
@@ -328,10 +330,11 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
 
 patVars :: E.Pat -> Set.Set Variable
 patVars = \case
-  E.VarPat _ x     -> Set.singleton x
+  E.VarPat _ x      -> Set.singleton x
   E.DConsPat s _ ps -> Set.unions (map patVars ps)
-  E.AsPat _ x p    -> Set.insert x (patVars p)
-  _                -> Set.empty
+  E.ChoicePat _ _ p -> patVars p
+  E.AsPat _ x p     -> Set.insert x (patVars p)
+  _                 -> Set.empty
 
 freshKVar :: Located a => a -> Scoping K.Kind
 freshKVar l = do

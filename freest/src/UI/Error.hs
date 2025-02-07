@@ -55,7 +55,7 @@ data Error
   | TypeCtxMismatch Span E.Exp [(Either Variable Identifier, T.Type)] 
                                [(Either Variable Identifier, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
-  | ChoiceNotAllowed Span Identifier T.Type
+  | IllegalChoice Span Identifier T.Type
   | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
   | UnsupportedError Span String
 
@@ -95,7 +95,7 @@ instance Located Error where
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
-    ChoiceNotAllowed s _ _ -> s
+    IllegalChoice s _ _ -> s
     UnsupportedError s _ -> s
 
   setSpan = internalError "span not settable for Error type."
@@ -205,7 +205,7 @@ instance Show Error where
           "\n  "++showVarCons xi++", of linear type `"++show t++"`, was not consumed."
           where showVarCons = \case Left x  -> "Variable `"    ++show x++"`" 
                                     Right i -> "Constructor `"++show i++"`"
-        ChoiceNotAllowed s i t ->
+        IllegalChoice s i t ->
           "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
         UnsupportedError _ m ->
           "\n  " ++ m
