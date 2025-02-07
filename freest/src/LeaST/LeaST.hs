@@ -10,8 +10,9 @@ data Exp
   | Lit Literal
   | Abs B.Variable T.Type Exp
   | App Exp Exp
+  | Con B.Identifier
   -- | Type B.Type
-  -- | Case Exp [(Alt, [B.Variable], Exp)]
+  | Case Exp [(Alt, [B.Variable], Exp)]
   -- | Source B.Span Exp
   -- TODO Mutual recursive migh need fix point
   -- TODO uma abstração de tipos 
@@ -23,8 +24,9 @@ data Literal = LInt Int
   | LChar Char
   deriving Show
 
-data Alt = Con B.Identifier
-  | Literal Literal
-  | Default
+data Alt = ACon B.Identifier
+  | ALit Literal
+  | ADefault
+  deriving Show
 
 -- type Bind = B.Level (B.Variable T.Type Exp) (B.Variable K.Kind Exp)
