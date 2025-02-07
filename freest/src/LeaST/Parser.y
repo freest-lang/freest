@@ -159,16 +159,30 @@ LExpPrimary :: { L.Exp }
   | FLOAT_LIT { L.Lit $ L.LFloat (read $ getText $1) }
   | CHAR_LIT { L.Lit $ L.LChar (read $ getText $1) }
   | LOWER_ID { L.Var (mkVarTk $1) }
+  | UPPER_ID { L.Con (mkIdTk $1) }
   | '(' LExp ')' { $2 }
   | '(' Op ')' { L.Var $2 }
 
 LExp :: { L.Exp }
   : '\\' LOWER_ID '@' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
+  | 'case' LExp '{' LAlternatives '}' { L.Case $2 $4 }
   | LExpApp               { $1 }
 
 LExpApp :: { L.Exp }
   : LExpApp LExpPrimary { L.App $1 $2 }
   | LExpPrimary        { $1 }
+
+LAlternatives :: { [(L.Alt, [Variable], L.Exp)] }
+  : LAlt '->' LExp ',' LAlternatives { (fst $1, snd $1, $3):$5 }
+  | LAlt '->' LExp ',' { [(fst $1, snd $1, $3)] } 
+  | LAlt '->' LExp { [(fst $1, snd $1, $3)] }
+
+LAlt :: { (L.Alt, [Variable]) }
+  : INT_LIT { (L.ALit (L.LInt (read $ getText $1)), []) }
+  | FLOAT_LIT { (L.ALit (L.LFloat (read $ getText $1)), []) }
+  | CHAR_LIT { (L.ALit (L.LChar (read $ getText $1)), []) }
+  | WILDCARD { (L.ADefault, []) }
+  | UPPER_ID VarListWS { (L.ACon $ mkIdTk $1, $2)} 
 
 Module :: { M.Module }
   : 'module' ModuleName 'where' ImportModuleDeclBlock { M.setName (split '.' $ getText $2) $4 }
