@@ -189,6 +189,12 @@ fromVariable a = Var (varSpan a) a
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"
 
+-- Defined only for session type constants: close/wait, message and choice constants
+instance Dual Type where
+  dual (End s p) = End s (dual p)
+  dual (Message s m p) = Message s m (dual p)
+  dual (Choice s m p ids) = Choice s m (dual p) ids
+
 instance Show Type where
   show = \case
    -- Functional types

@@ -136,6 +136,8 @@ case *?Int == *?Int ; Close
 
 case *?Int ; Close == *?Int
 
+case Dual (*&{A, B}) == *+{A, B}
+
 -- Choices
 
 case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip}
