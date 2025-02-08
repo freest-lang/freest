@@ -161,7 +161,7 @@ LExpPrimary :: { L.Exp }
   | LOWER_ID { L.Var (mkVarTk $1) }
   | UPPER_ID { L.Con (mkIdTk $1) }
   | '(' LExp ')' { $2 }
-  | '(' Op ')' { L.Var $2 }
+  | Op { L.Var $1 }
 
 LExp :: { L.Exp }
   : '\\' LOWER_ID '@' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
@@ -447,10 +447,12 @@ Op :: { Variable }
    | '||' { mkOrVar $1 }
    | '&&' { mkAndVar $1 }
    | '+'  { mkPlusVar $1 }
+   | '-'  {mkMinusVar $1 }
    | '*'  { mkTimesVar $1 }
    | '/'  { mkDivVar $1 }
    | '^'  { mkPowerVar $1 }
    | '+.' { mkPlusDotVar $1 }
+   | '-.'  {mkMinusDotVar $1 }
    | '*.' { mkTimesDotVar $1 }
    | '/.' { mkDivDotVar $1 }
    | '**' { mkTimesTimesVar $1 }
