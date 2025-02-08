@@ -7,6 +7,8 @@ import Data.List ( find )
 import Data.Char (chr, ord)
 import GHC.Float
 import Control.Concurrent.Chan as C
+import Data.Functor ( ($>), (<&>), void )
+import System.IO ( Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose )
 
 interpret :: L.Exp -> IO Value
 interpret exp = eval builtins exp
@@ -159,8 +161,8 @@ builtins = [
   -- ("readInt", VBuiltin (\(VString x) -> VInt (read x))),
   -- ("readInt", VBuiltin (\(VString c) -> VChar (read c))),
 
-  -- ("putStrOut", VBuiltin (\val -> VIO $ putStr (show val) $> VUnit)),
-  -- ("putStrErr", VBuiltin (\val -> VIO $ hPutStr stderr (show val) $> VUnit)),
+  ("putStrOut", VBuiltin (\val -> VIO $ putStr (show val) $> VCon "()" [])),
+  ("putStrErr", VBuiltin (\val -> VIO $ hPutStr stderr (show val) $> VCon "()" [])),
   -- ("getChar", VIO $ getChar <&> VChar),
   -- ("getLine", VIO $ getLine <&> VString),
   -- ("getContents", VIO $ getContents <&> VString),

@@ -21,7 +21,7 @@ import Validation.Kinding
 import Validation.Typing
 
 import LeaST.Parser (parseLeaST)
-import LeaST.Interpreter ( interpret )
+import LeaST.Interpreter ( interpret, Value(VIO) )
 
 import Control.Monad.State (runState)
 import Data.Function ((&))
@@ -41,7 +41,10 @@ freest RunOpts{file=f, least=l} = do
     Right leastAST -> do
       print leastAST
       res <- interpret leastAST
-      print res
+      case res of
+        VIO io -> do io2 <- io
+                     print io2
+        res -> print res
     Left err -> print err
   else
     runLexer parseModule f source 
