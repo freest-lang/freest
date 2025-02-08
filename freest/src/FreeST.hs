@@ -43,7 +43,8 @@ freest RunOpts{file=f, least=l} = do
   if l then case runLexer parseLeaST f source of
     Right leastAST -> do
       print leastAST
-      print $ interpret leastAST
+      res <- interpret leastAST
+      print res
     Left err -> print err
   else
     runLexer parseModule f source 
