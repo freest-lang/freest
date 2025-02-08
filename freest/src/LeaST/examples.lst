@@ -1,0 +1,31 @@
+-- abstraction
+-- (\x @Int -> + x x)
+
+-- aplication
+-- (\x @Int -> + x x) 2
+
+-- higher-order function
+-- (\f @(Int -> Int) -> (\x @Int -> f x)) (\x @Int -> + x x) 2
+
+-- Fixed point combinator - Y Combinator (Desde que adicionei o IO que não funciona)
+-- (\f @A -> (\x @B -> f (x x)) (\x @C -> f (x x)))
+
+-- Fixed point combinator for strict languages - Z Combinator
+-- (\f @A -> (\x @B -> f (\v @C -> x x v)) (\x @D -> f (\v @E -> x x v)))
+
+-- factorial
+-- (\f @A -> (\x @B -> f (x x)) (\x @C -> f (x x))) (\fac @(Int -> Int) -> (\n @Int -> case n { 0 -> 1, _ -> (* n (fac (- n 1)))})) 5
+-- (\f @A -> (\x @B -> f (\v @C -> x x v)) (\x @D -> f (\v @E -> x x v))) (\fac @(Int -> Int) -> (\n @Int -> case n { 0 -> 1, _ -> (* n (fac (- n 1)))})) 5
+
+-- fibonacci
+-- (\f @A -> (\x @B -> f (x x)) (\x @C -> f (x x))) (\fib @(Int -> Int) -> (\n @Int -> case n { 0 -> 0, 1 -> 1, _ -> + (fib (- n 1)) (fib (- n 2))})) 1
+-- (\f @A -> (\x @B -> f (\v @C -> x x v)) (\x @D -> f (\v @E -> x x v))) (\fib @(Int -> Int) -> (\n @Int -> case n { 0 -> 0, 1 -> 1, _ -> + (fib (- n 1)) (fib (- n 2))})) 10
+
+-- create a channel
+-- chan ()
+
+-- tuples
+-- (1, 2)
+
+-- deconstruct constructors
+-- case A 1 2 {A x y -> x}
