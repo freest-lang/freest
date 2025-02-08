@@ -162,6 +162,8 @@ LExpPrimary :: { L.Exp }
   | UPPER_ID { L.Con (mkIdTk $1) }
   | '(' LExp ')' { $2 }
   | Op { L.Var $1 }
+  | '(' ')' { L.Con (mkTupleId 0 (spanFromTo $1 $2)) }
+  | '(' LExp ',' LExpListComma ')' { tupleLExp (spanFromTo $1 $5) (length $4) (reverse ($2 : $4)) }
 
 LExp :: { L.Exp }
   : '\\' LOWER_ID '@' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
@@ -183,6 +185,10 @@ LAlt :: { (L.Alt, [Variable]) }
   | CHAR_LIT { (L.ALit (L.LChar (read $ getText $1)), []) }
   | WILDCARD { (L.ADefault, []) }
   | UPPER_ID VarListWS { (L.ACon $ mkIdTk $1, $2)} 
+
+LExpListComma :: { [L.Exp] }
+  : LExp ',' LExpListComma { $1 : $3 }
+  | LExp                  { [$1] }
 
 Module :: { M.Module }
   : 'module' ModuleName 'where' ImportModuleDeclBlock { M.setName (split '.' $ getText $2) $4 }
@@ -602,4 +608,7 @@ prefixTupleExpConsError :: Token -> Token -> Lexer a
 prefixTupleExpConsError tk1 tk2 = 
   throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported. Consider using a tuple expression."] 
 
+tupleLExp :: Span -> Int -> [L.Exp] -> L.Exp
+tupleLExp s n [e] = L.App (L.Con (mkTupleId n s)) e
+tupleLExp s n (e:es) = L.App (tupleLExp s n es) e
 }
