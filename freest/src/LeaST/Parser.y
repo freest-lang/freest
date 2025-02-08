@@ -185,6 +185,8 @@ LAlt :: { (L.Alt, [Variable]) }
   | CHAR_LIT { (L.ALit (L.LChar (read $ getText $1)), []) }
   | WILDCARD { (L.ADefault, []) }
   | UPPER_ID VarListWS { (L.ACon $ mkIdTk $1, $2)} 
+-- TODO: allow tuple cons ((,) a b -> ...)
+  | '(' Commas ')' VarListWS{ (L.ACon $ mkTupleId $2 (spanFromTo $1 $3), $4)}
 
 LExpListComma :: { [L.Exp] }
   : LExp ',' LExpListComma { $1 : $3 }
