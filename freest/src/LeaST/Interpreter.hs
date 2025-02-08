@@ -6,9 +6,12 @@ import qualified Syntax.Base as B
 import Data.List ( find )
 import Data.Char (chr, ord)
 import GHC.Float
+import Control.Concurrent ( forkIO )
 import Control.Concurrent.Chan as C
 import Data.Functor ( ($>), (<&>), void )
 import System.IO ( Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose )
+
+import Debug.Trace
 
 interpret :: L.Exp -> IO Value
 interpret exp = eval builtins exp
@@ -23,6 +26,7 @@ data Value = VInt Int
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
   | VChan ChannelEnd
+  | VFork
 
 instance Show Value where
   show (VInt int) = show int
@@ -35,19 +39,24 @@ instance Show Value where
   show (VChan chanEnd) = "<channel end>"
  
 eval :: Context -> L.Exp -> IO Value
-eval ctx (L.Var var ) = return $ getVar ctx (getStringFromVariable var)
+eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="fork"})) = return VFork
+eval ctx (L.Var var) = return $ getVar ctx (getStringFromVariable var)
 eval _ (L.Lit (L.LInt int)) = return $ VInt int
 eval _ (L.Lit (L.LFloat float)) = return $ VFloat float
 eval _ (L.Lit (L.LChar char)) = return $ VChar char
 eval ctx (L.Abs var _ exp) = return $ VClosure ctx var exp
 eval ctx (L.App lExp rExp) = do
-  rVal <- eval ctx rExp
   lVal <- eval ctx lExp
   case lVal of
-    VCon iden consArgs -> return $ VCon iden (consArgs++[rVal])
-    VClosure cctx var cExp -> eval ((getStringFromVariable var, rVal):cctx) cExp
-    VBuiltin builtin -> return $ builtin rVal
-    VIO vio -> do vio
+    VFork -> forkIO (void $ eval ctx (unpackAbs rExp)) $> VCon "()" []
+    _ -> do rVal <- eval ctx rExp
+            case lVal of
+              VCon iden consArgs -> return $ VCon iden (consArgs++[rVal])
+              VClosure cctx var cExp -> eval ((getStringFromVariable var, rVal):cctx) cExp
+              VBuiltin builtin -> case builtin rVal of
+                VIO vio -> do vio
+                res -> return res
+              VIO vio -> do vio
 eval _ (L.Con iden) = return $ VCon (getStringFromIdentifier iden) []
 eval ctx (L.Case exp alts) = do
   val <- eval ctx exp
@@ -67,6 +76,9 @@ getStringFromVariable (B.Variable { B.varSpan=_, B.internal=_, B.external=var}) 
 
 getStringFromIdentifier :: B.Identifier -> String
 getStringFromIdentifier (B.Identifier _ str) = str
+
+unpackAbs :: L.Exp -> L.Exp
+unpackAbs (L.Abs _ _ exp) = exp
 
 type Context = [(String, Value)]
 

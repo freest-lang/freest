@@ -29,3 +29,10 @@
 
 -- deconstruct constructors
 -- case A 1 2 {A x y -> x}
+
+-- deconstruct a tuple
+-- case (1, 2, 3) {(,,) a b c -> b}
+
+-- fork, close and wait
+--case chan () {
+--	(,) cL cR -> (\x @A -> (\y @B -> y)) (fork (\a @C -> (\x @A -> (\y @B -> y)) (putStrOut 1) (close cR))) ((\x @A -> (\y @B -> y)) (putStrOut 2) (wait cL))}
