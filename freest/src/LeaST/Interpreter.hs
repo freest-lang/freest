@@ -43,7 +43,7 @@ eval ctx (L.App lExp rExp) = do
   lVal <- eval ctx lExp
   case lVal of
     VCon iden consArgs -> return $ VCon iden (consArgs++[rVal])
-    VClosure cctx var cExp -> eval ((getStrinFromVariable var, rVal):cctx) cExp
+    VClosure cctx var cExp -> eval ((getStringFromVariable var, rVal):cctx) cExp
     VBuiltin builtin -> return $ builtin rVal
     VIO vio -> do vio
 eval _ (L.Con iden) = return $ VCon (getStringFromIdentifier iden) []
