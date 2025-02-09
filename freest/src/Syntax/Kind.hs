@@ -129,14 +129,10 @@ instance Show Prekind where
   show = \case 
     Top     -> "T"
     Session -> "S"
-    Bounded -> "A"
+    Bounded -> "B"
     VarPK ψ -> external ψ
 
--- TODO: unparse me!
-instance Show Kind where
-  show = \case 
-    Proper _ m pk -> show m++show pk 
-    Arrow _ k1 k2 -> "(" ++ show k1 ++ " -> " ++ show k2 ++ ")"
+
 
 instance Located Kind where
   getSpan = \case 
