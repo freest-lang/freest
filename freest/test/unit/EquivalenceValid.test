@@ -203,12 +203,26 @@ where
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
-case T == U -- Higher order
+-- Higher order
+
+case T == U
 where
-  type T : 1S -> 1S
-  type T a = a ; (T a) ; !Int
-  type U : 1S -> 1S
-  type U b = b ; (U b) ; !Int
+  type T, U : 1S -> 1S
+  type T a = a
+  type U b = b
+
+-- case T == U
+-- where
+--   type T, U : 1S -> 1S
+--   type T a = !a ; T a
+--   type U b = !b ; U b
+
+-- case T == U
+-- where
+--   type T : 1S -> 1S
+--   type T a = a ; (T a) ; !Int
+--   type U : 1S -> 1S
+--   type U b = b ; (U b) ; !Int
 
 -- case T == U
 -- where
