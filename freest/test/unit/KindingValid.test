@@ -6,8 +6,6 @@
 
 case Int : *T
 
-case Int : *T
-
 case Float : *T
 
 case Char : *T
@@ -156,7 +154,7 @@ where
   type A : *T
   type A = forall b : 1S . A
 
-case forall y : 1S . +{C: X1};(y;(X2 y;Skip))
+case forall y : 1S . +{C: X1};(y;(X2 y;Skip)) : 1S
 where
   type X1 : *S
   type X1 = Skip
@@ -179,7 +177,7 @@ where
 
 case A : *S
 where
-  type A : 1S
+  type A : *S
   type A = Skip
 
 case A : 1S
@@ -211,18 +209,18 @@ where
   type A : *S
   type A = Skip; Skip
 
-case Skip; A : 1S
+case Skip; A : *S
 where
   type A : *S
   type A = B
-  type B : 1S
+  type B : *S
   type B = Skip
 
-case Skip; Skip; A : 1S
+case Skip; Skip; A : *S
 where
   type A : *S
   type A = Skip; B
-  type B : 1S
+  type B : *S
   type B = Skip
 
 case Y1 : *S
@@ -394,34 +392,34 @@ case !Int ; *!Int : 1S
 
 -- Shared channels, raw syntax
 
-case A : *S
+case A : 1B
 where
-  type A : *S
+  type A : 1B
   type A = !Int; A
 
-case A : *S
+case A : 1B
 where
-  type A : *S
+  type A : 1B
   type A = ?Int; A
 
-case A : *S
+case A : 1B
 where
-  type A : *S
+  type A : 1B
   type A = +{One: A, Two: A} 
 
-case A : *S
+case A : 1B
 where
-  type A : *S
+  type A : 1B
   type A = &{One: A, Two: A}
 
-case !Int ; A : 1S
+case !Int ; A : 1B
 where
-  type A : *S
+  type A : 1B
   type A = !Int ; A
 
-case !Int ; !Int ; !Int ; !Int ; A : 1S
+case !Int ; !Int ; !Int ; !Int ; A : 1B
 where
-  type A : *S
+  type A : 1B
   type A = !Int ; A
 
 -- Session types
@@ -895,14 +893,14 @@ where
 
 case (!Int ; !Int) ; !Int : 1S
 
-case T
+case T : 1B
 where
-  type T : 1S
+  type T : 1B
   type T = &{N: T} ; Skip
 
-case T
+case T : 1B
 where
-  type T : 1S
+  type T : 1B
   type T = &{N:!Int;!Int;T, L:Close};?Int
 
 -- Types with the Dual operator
