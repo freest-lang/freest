@@ -54,22 +54,22 @@ case !Char;Close;!Int
 case (!Int;Close;!Int);?Int 
   == !Int;Close;!Int : 1B
 
-case T;!Int == U : 1S
+case T;!Int == U : 1B
 where
-  type T : 1S
+  type T : 1B
   type T = +{A: !Int;T, B: Skip;Close;Skip}
-  type U : 1S
+  type U : 1B
   type U = +{A: !Int;U, B: Close;U}
 
-case T == U : 1S
+case T == U : 1B
 where 
-  type T : 1S
+  type T : 1B
   type T = T'
-  type T' : 1S
+  type T' : 1B
   type T' = +{A: !Int;T', B:Close;T}
-  type U : 1S
+  type U : 1B
   type U = U'
-  type U' : 1S
+  type U' : 1B
   type U' = +{A: !Int;U', B:Close;U'}
 
 case T == U : 1S
@@ -79,22 +79,22 @@ where
   type U : 1S
   type U = &{N:U}
 
-case T == U : 1S
+case T == U : 1B
 where
-  type T : 1S
+  type T : 1B
   type T = &{N:!Int;!Int;T, L:Close};?Int
-  type U : 1S
+  type U : 1B
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
 case T == U : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
-  type T' : 1S
+  type T' : 1B
   type T' = +{A: !Int;T', B: Skip;Close;Skip}
   type U : 1S
   type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
-  type U' : 1S
+  type U' : 1B
   type U' = +{A: !Int;U', B: Close;U'}
 
 case !(!Int;Close) 
@@ -120,21 +120,21 @@ where
 
 -- Unrestricted sessions
 
-case *!Int == *!Int ; ?Char : *S
+case *!Int == *!Int ; ?Char : *B
 
-case *!Int ; ?Char == *!Int : *S
+case *!Int ; ?Char == *!Int : *B
 
-case *!Int == *!Int ; Wait : *S
+case *!Int == *!Int ; Wait : *B
 
-case *!Int ; Wait == *!Int : *S
+case *!Int ; Wait == *!Int : *B
 
-case *?Int == *?Int ; ?Char : *S
+case *?Int == *?Int ; ?Char : *B
 
-case *?Int ; ?Char == *?Int : *S
+case *?Int ; ?Char == *?Int : *B
 
-case *?Int == *?Int ; Close : *S
+case *?Int == *?Int ; Close : *B
 
-case *?Int ; Close == *?Int : *S
+case *?Int ; Close == *?Int : *B
 
 -- Choices
 
@@ -142,11 +142,11 @@ case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
 
 -- Poly Streams
 
-case OutStream == Dual InStream : 1S
+case OutStream == Dual InStream : 1B
 where
-  type OutStream : 1S
+  type OutStream : 1B
   type OutStream = exists a:*T . !a ; OutStream
-  type InStream : 1S
+  type InStream : 1B
   type InStream = forall a:*T . ?a ; InStream
 
 -- When there is (unreachable) life past noncontractive (rec) types
