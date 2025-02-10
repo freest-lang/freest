@@ -1,6 +1,5 @@
-module Parser.Unparser where
+module Parser.Unparser() where
 import qualified Syntax.Kind as K -- needed for Associativity
-import Prelude hiding (Left, Right)
 
 data Precedence
   = PMin
@@ -8,7 +7,7 @@ data Precedence
   | PMax
   deriving (Eq, Ord, Bounded)
 
-data Associativity = Left | Right | NonAssoc deriving (Eq)
+data Associativity = LeftAssoc | RightAssoc | NonAssoc deriving (Eq)
 
 type Rator = (Precedence, Associativity)
 
@@ -16,7 +15,7 @@ type Fragment = (Rator, String)
 
 -- newRator,
 minRator, arrowRator, maxRator :: Rator
-arrowRator = (PArrow, Right)
+arrowRator = (PArrow, RightAssoc)
 minRator = (minBound, NonAssoc)
 maxRator = (maxBound, NonAssoc)
 
@@ -39,5 +38,5 @@ instance Unparse K.Kind where
   unparse (K.Proper _ m pk) = (maxRator, show m ++ show pk)
   unparse (K.Arrow _ lkind rkind) = (arrowRator, l ++ " -> " ++ r)
     where
-      l = bracket (unparse lkind) Left arrowRator
-      r = bracket (unparse rkind) Right arrowRator
+      l = bracket (unparse lkind) LeftAssoc arrowRator
+      r = bracket (unparse rkind) RightAssoc arrowRator
