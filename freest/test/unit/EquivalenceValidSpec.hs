@@ -13,7 +13,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkEquivalenceSpec
-  "test/unit/EquivalenceValid.test" 
+  ["test/unit/EquivalenceValid.test"]
   "Valid type equivalence tests" 
   \(t,u,m) -> equivalent (buildDataDecls m) t u `shouldBe` True
 

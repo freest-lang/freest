@@ -20,7 +20,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  ["test/unit/KindingValid.test"] 
   "If T normalises to U, then U is a whnf" 
   \(t, _, m) -> normYieldsWnnf (buildDataDecls m) t `shouldBe` True
 

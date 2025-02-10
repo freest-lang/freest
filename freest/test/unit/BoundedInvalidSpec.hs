@@ -20,7 +20,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/BoundedInvalid.test" 
+  ["test/unit/BoundedInvalid.test"] 
   "Unbounded types" 
   \(t, _, m) -> isBounded m t `shouldBe` False
 

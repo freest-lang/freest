@@ -14,7 +14,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  ["test/unit/KindingValid.test"]
   "Valid kinding tests" 
   \(t, mk, m) ->
     mk & \case Just  k -> maybeLeft (runCheck m t k)

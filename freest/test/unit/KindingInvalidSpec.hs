@@ -11,7 +11,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingInvalid.test" 
+  ["test/unit/KindingInvalid.test" ]
   "Invalid kinding tests" 
   \(t, _, m) -> case runSynth m t of 
     Left _ -> return ()

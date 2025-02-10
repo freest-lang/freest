@@ -14,7 +14,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkEquivalenceSpec
-  "test/unit/EquivalenceInvalid.test" 
+  ["test/unit/EquivalenceInvalid.test"]
   "Invalid equivalence tests" 
   \(t,u,m) -> equivalent (buildDataDecls m) t u `shouldBe` False
 
