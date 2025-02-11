@@ -166,7 +166,7 @@ LExpPrimary :: { L.Exp }
   | '(' LExp ',' LExpListComma ')' { tupleLExp (spanFromTo $1 $5) (length $4) (reverse ($2 : $4)) }
 
 LExp :: { L.Exp }
-  : '\\' LOWER_ID '@' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
+  : '\\' LOWER_ID ':' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
   | 'case' LExp '{' LAlternatives '}' { L.Case $2 $4 }
   | LExpApp               { $1 }
 
