@@ -67,7 +67,7 @@ eval ctx (L.TApp lExp rExp) = do
   lVal <- eval ctx lExp
   rVal <- eval ctx rExp
   case lVal of
-    VClosure cctx var cExp -> eval ((getStringFromVariable var, rVal):cctx) cExp
+    VClosure cctx _ cExp -> eval cctx cExp
     _ -> undefined
 eval _ (L.Type _) = return $ VCon "()" []
 
