@@ -167,12 +167,14 @@ LExpPrimary :: { L.Exp }
 
 LExp :: { L.Exp }
   : '\\' LOWER_ID ':' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
+  | '\\' '@' LOWER_ID ':' Kind '->' LExp { L.TAbs (mkVarTk $3) $5 $7 }
   | 'case' LExp '{' LAlternatives '}' { L.Case $2 $4 }
-  | LExpApp               { $1 }
+  | LExpApp { $1 }
 
 LExpApp :: { L.Exp }
   : LExpApp LExpPrimary { L.App $1 $2 }
-  | LExpPrimary        { $1 }
+  | LExpApp '@' TypePrimary { L.TApp $1 (L.Type $3) }
+  | LExpPrimary { $1 }
 
 LAlternatives :: { [(L.Alt, [Variable], L.Exp)] }
   : LAlt '->' LExp ',' LAlternatives { (fst $1, snd $1, $3):$5 }
@@ -185,7 +187,6 @@ LAlt :: { (L.Alt, [Variable]) }
   | CHAR_LIT { (L.ALit (L.LChar (read $ getText $1)), []) }
   | WILDCARD { (L.ADefault, []) }
   | UPPER_ID VarListWS { (L.ACon $ mkIdTk $1, $2)} 
--- TODO: allow tuple cons ((,) a b -> ...)
   | '(' Commas ')' VarListWS{ (L.ACon $ mkTupleId $2 (spanFromTo $1 $3), $4)}
 
 LExpListComma :: { [L.Exp] }

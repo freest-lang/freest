@@ -62,6 +62,14 @@ eval ctx (L.Case exp alts) = do
   val <- eval ctx exp
   let (nextCtx, nextExp) = patternMatch ctx val alts in
     eval nextCtx nextExp
+eval ctx (L.TAbs var _ exp) = return $ VClosure ctx var exp
+eval ctx (L.TApp lExp rExp) = do
+  lVal <- eval ctx lExp
+  rVal <- eval ctx rExp
+  case lVal of
+    VClosure cctx var cExp -> eval ((getStringFromVariable var, rVal):cctx) cExp
+    _ -> undefined
+eval _ (L.Type _) = return $ VCon "()" []
 
 patternMatch :: Context -> Value -> [(L.Alt, [B.Variable], L.Exp)] -> (Context, L.Exp)
 patternMatch _ _ [] = error "Pattern matching was not exhaustive"

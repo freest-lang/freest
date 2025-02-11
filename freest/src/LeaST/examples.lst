@@ -36,3 +36,7 @@
 -- fork, close and wait
 --case chan () {
 --	(,) cL cR -> (\x:A -> (\y:B -> y)) (fork (\a:C -> (\x:A -> (\y:B -> y)) (putStrOut 1) (close cR))) ((\x:A -> (\y:B -> y)) (putStrOut 2) (wait cL))}
+
+
+-- id function with type abstraction and type application
+-- (\@a:*T -> (\x:B -> x)) @Int 1

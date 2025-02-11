@@ -11,12 +11,11 @@ data Exp
   | Abs B.Variable T.Type Exp
   | App Exp Exp
   | Con B.Identifier
-  -- | Type B.Type
   | Case Exp [(Alt, [B.Variable], Exp)]
+  | Type T.Type
+  | TAbs B.Variable K.Kind Exp
+  | TApp Exp Exp
   -- | Source B.Span Exp
-  -- TODO Mutual recursive migh need fix point
-  -- TODO uma abstração de tipos 
-  -- TODO uma aplicação de tipos
   deriving Show
 
 data Literal = LInt Int
