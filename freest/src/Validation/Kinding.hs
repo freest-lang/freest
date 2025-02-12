@@ -115,7 +115,7 @@ checkSession :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkSession ctx t = do
   (m,pk) <- checkProper ctx t
   unless (pk <: Session) $
-    throwE (SessionTypeMismatch (getSpan t) t)
+    throwE (SessionTypeMismatch (getSpan t) t (Proper (getSpan t) m pk))
   return (m,pk)
 
 checkSubkindOf :: T.Type -> Kind -> Kind -> Validation ()

@@ -349,7 +349,7 @@ ExpPrimary :: { E.Exp }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
                 -- { let s = spanFromTo $1 $3 in E.DCons s (mkTupleId $2 s) } -- TODO: multiplicities
-  | '(' Exp ',' ExpListComma ')' { tupleExp (spanFromTo $1 $5) ($2 : $4) }
+  | '(' Exp ',' ExpListComma ')' { E.Tuple (spanFromTo $1 $5) ($2 : $4) }
   -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
@@ -360,6 +360,7 @@ ExpPrimary :: { E.Exp }
   | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
+  | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
 Exp :: { E.Exp }
@@ -406,7 +407,6 @@ ExpApp :: { E.Exp }
   | 'select' UPPER_ID ExpPrimary { E.Select (spanFromTo $1 $2) (mkIdTk $2) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
-  | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
 
@@ -559,7 +559,7 @@ parseError (tk,ss) = throwError [ParseError (getSpan tk) (tk, ss)]
 
 listMissingTypeAppError :: Token -> Token -> Lexer a
 listMissingTypeAppError tk1 tk2 =
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "Lists expressions require a type application. Please add `@TYPE` after this expression, where TYPE is the type of the elements of the list."]
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "List expressions require a type application. Please add `@TYPE` after this expression, where TYPE is the type of the elements of the list."]
 
 prefixListConsError :: Token -> Token -> Lexer a
 prefixListConsError tk1 tk2 =
