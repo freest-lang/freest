@@ -528,14 +528,15 @@ TypeTestCase(t)
 EquivalenceTestCases :: { [((T.Type, T.Type, K.Kind), M.Module)] }
   : TypeTestCases(EquivalenceTest) { $1 }
 
-KindingTestCases :: {[((T.Type, K.Kind), M.Module)]}
+KindingTestCases :: {[((T.Type, Maybe K.Kind), M.Module)]}
   : TypeTestCases(KindingTest) {$1}
 
 EquivalenceTest :: { (T.Type, T.Type, K.Kind) }
   : Type CMP Type ':' Kind { ($1, $3, $5) }
 
-KindingTest :: { (T.Type, K.Kind) }
-  : Type ':' Kind { ($1, $3) }
+KindingTest :: { (T.Type, Maybe K.Kind) }
+  : Type ':' Kind { ($1, Just $3) }
+  | Type { ($1, Nothing) }
 
 TypeTestBlock :: { M.Module }
   : OPEN TypeTestDeclListPIPE Close { $2 }

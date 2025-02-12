@@ -14,7 +14,7 @@ import           Validation.Kinding (runKindModule)
 import Syntax.Base
 import System.Directory.Internal.Prelude (exitFailure)
 
-mkKindingSpec :: FilePath -> String -> ((T.Type, K.Kind, M.Module) -> Expectation) -> Spec
+mkKindingSpec :: FilePath -> String -> ((T.Type, Maybe K.Kind, M.Module) -> Expectation) -> Spec
 mkKindingSpec testPath testDesc testFun = do
   source <- runIO $ readFile testPath
   case runLexer parseKindingTests testPath source of
@@ -22,16 +22,14 @@ mkKindingSpec testPath testDesc testFun = do
     Right ts -> describe testDesc $ 
       forM_ ts \((t, k), m) -> it
         (show (getSpan t))
-        case do (t', k', m') <- runScoping scopeKindingTest (t, k, m) 
-                runKindModule m'
-                return (t', k', m') of
+        case runScoping scopeKindingTest (t, k, m) of
           Left es      -> expectationFailure (unlines $ map show es)
           Right (t, k, m)  -> testFun (t, k, m) 
   where 
     scopeKindingTest ctx (t, k, m) = do
       (ctx,m') <- scopeModule ctx m
       t' <- scopeType ctx t
-      k' <- scopeKind k
+      k' <- mapM scopeKind k
       return (t', k', m')
 
 mkEquivalenceSpec :: FilePath -> String -> ((T.Type, T.Type, K.Kind, M.Module) -> Expectation) -> Spec
@@ -40,14 +38,12 @@ mkEquivalenceSpec testPath testDesc testFun = do
   case runLexer parseEquivalenceTests testPath source of
     Left es  -> runIO $ mapM_ print es
     Right ts -> describe testDesc $ 
-      forM_ ts \((t, u, k), m) ->
+      forM_ ts \((t, u, k), m) -> it (show (spanFromTo t u))
         case do (t', u', k', m') <- runScoping scopeEquivalenceTest (t, u, k, m)
                 runKindModule m'
                 return (t', u',k', m') of
-          Left es      -> it (show t++" ~ "++show u++" : "++show k) $ 
-            expectationFailure (unlines $ map show es)
-          Right (t', u', k', m') -> it (show t'++" ~ "++show u'++" : "++show k') $ 
-            testFun (t', u', k', m')
+          Left es      -> expectationFailure (unlines $ map show es)
+          Right (t', u', k', m') -> testFun (t', u', k', m')
   where
     scopeEquivalenceTest ctx (t, u, k, m) = do
       (ctx',m') <- scopeModule ctx m

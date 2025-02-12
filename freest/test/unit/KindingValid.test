@@ -291,7 +291,7 @@ where
 -- Forall
 
 -- Int type as Church Encoding
-case forall a . a -> a -> a : 1T
+case forall a : 1T . a -> a -> a : 1T
 
 case forall a : 1T . a : 1T
 

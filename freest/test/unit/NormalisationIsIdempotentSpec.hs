@@ -8,6 +8,7 @@ import           UnitSpecUtils
 
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
+import Validation.Kinding (runKindModule)
 
 -- This test should be called with well-formed types only
 

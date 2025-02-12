@@ -16,6 +16,10 @@ spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingValid.test" 
   "Valid kinding tests" 
-  \(t, k, m) -> case runCheck m t k of 
-    Left es -> expectationFailure (unlines $ map show es)
-    _       -> return ()
+  \case
+    (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 
+      Left es -> expectationFailure (unlines $ map show es)
+      _       -> return ()
+    (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of 
+      Left es -> expectationFailure (unlines $ map show es)
+      _       -> return ()
