@@ -204,10 +204,10 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Nil s u -> do
     Kinding.checkProper kctx u
     case (normalise tds t, normalise tds u) of
-      (T.List _ t', T.List _ u') -> do
+      (T.List _ t', u') -> do
         checkEquivTypes (Left e) t' u'
         return tctx
-      _ -> throwE (TypeMismatch s t u (Left e))
+      _ -> throwE (TypeMismatch s t (T.List (getSpan u) u) (Left e))
     -- Cons, (::) @a e1 e2
   E.Cons s e1 e2 ->
     case normalise tds t of
