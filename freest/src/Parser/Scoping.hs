@@ -303,6 +303,8 @@ scopePat ctx ictx = \case
         return (ictx''', ps''++[p']))
       (Map.empty, []) ps
     return (ictx', E.DConsPat s c ps')
+  E.ChoicePat s c p -> do
+    second (E.ChoicePat s c) <$> scopePat ctx ictx p
   E.AsPat s x p -> case lookupEVar x ictx of
     Nothing -> do
       x' <- freshInternal x
@@ -328,16 +330,17 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
 
 patVars :: E.Pat -> Set.Set Variable
 patVars = \case
-  E.VarPat _ x     -> Set.singleton x
+  E.VarPat _ x      -> Set.singleton x
   E.DConsPat s _ ps -> Set.unions (map patVars ps)
-  E.AsPat _ x p    -> Set.insert x (patVars p)
-  _                -> Set.empty
+  E.ChoicePat _ _ p -> patVars p
+  E.AsPat _ x p     -> Set.insert x (patVars p)
+  _                 -> Set.empty
 
 freshKVar :: Located a => a -> Scoping K.Kind
 freshKVar l = do
-  phi <- incCounter >>= \i -> return (Variable (getSpan l) ("φ"++show i) i)
-  psi <- incCounter >>= \i -> return (Variable (getSpan l) ("ψ"++show i) i)
-  return $ K.Proper (getSpan l) (K.VarM phi) (K.VarPK psi)
+  φ <- incCounter >>= \i -> return (Variable (getSpan l) ("φ"++show i) i)
+  ψ <- incCounter >>= \i -> return (Variable (getSpan l) ("ψ"++show i) i)
+  return $ K.Proper (getSpan l) (K.VarM φ) (K.VarPK ψ)
 
 scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeType ctx = \case

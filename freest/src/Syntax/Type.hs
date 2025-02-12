@@ -31,6 +31,7 @@ module Syntax.Type
   , isSkip
   , isSemi
   , isAppSemi
+  , isAppLinChoice
   , isDual
   , isTName
   , isDName
@@ -172,20 +173,27 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isMsg :: Type -> Bool
-isSkip  = \case Skip{}  -> True; _ -> False
-isSemi  = \case Semi{}  -> True; _ -> False
-isAppSemi = \case AppSemi{} -> True; _ -> False
-isDual  = \case Dual{}  -> True; _ -> False
-isTName = \case TName{} -> True; _ -> False
-isDName = \case DName{} -> True; _ -> False
-isMsg = \case Message{} -> True; _ -> False
+isSkip, isSemi, isAppSemi, isAppLinChoice, isDual, isTName, isDName, isMsg :: Type -> Bool
+isSkip         = \case Skip{}         -> True; _ -> False
+isSemi         = \case Semi{}         -> True; _ -> False
+isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
+isDual         = \case Dual{}         -> True; _ -> False
+isTName        = \case TName{}        -> True; _ -> False
+isDName        = \case DName{}        -> True; _ -> False
+isMsg          = \case Message{}      -> True; _ -> False
 
 fromVariable :: Variable -> Type
 fromVariable a = Var (varSpan a) a
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"
+
+-- Defined only for session type constants: close/wait, message and choice constants
+instance Dual Type where
+  dual (End s p) = End s (dual p)
+  dual (Message s m p) = Message s m (dual p)
+  dual (Choice s m p ids) = Choice s m (dual p) ids
 
 instance Show Type where
   show = \case
@@ -202,8 +210,9 @@ instance Show Type where
     End _ Out         -> "Close"
     Message _ K.Un p  -> "*" ++ show p
     Message _ _ p     -> show p
-    SharedChoice _ p ls   -> 
-      "*" ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
+    Choice _ m p ls   -> 
+      (if m == K.Un then "*" else "") 
+      ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
     AppLinChoice  _ p lts -> showView p ++ "{" 
       ++ intercalate ", " (map showField lts)
       ++ "}"

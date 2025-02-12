@@ -196,12 +196,12 @@ KindSig :: { M.Module -> M.Module }
 LetDecl
   : Pat RHS('=') { E.ValDef $1 $2 }
   | FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
-  | PatPrimary Op PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
+  | PatPrimary OpOrMinus PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
   | FnNameListComma ':' Type { E.TypeSig $1 $3 }
 
 FnName :: { Variable }
   : LOWER_ID   { mkVarTk $1 }
-  | '(' Op ')' { $2         }
+  | '(' OpOrMinus ')' { $2 }
 
 RHS(sep) :: { E.RHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
@@ -354,7 +354,7 @@ ExpPrimary :: { E.Exp }
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
-  | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkNegateVar (spanFromTo $1 $3))}
+  | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkMinusVar (spanFromTo $1 $3))}
   -- | '(' Op Exp ')' { setSpan (spanFromTo $1 $4) (leftSection $2 $3) } -- TODO: waiting for type inference
   | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) $3) $2) }
   | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
@@ -411,22 +411,26 @@ ExpApp :: { E.Exp }
   | ExpPrimary        { $1 }
 
 Op :: { Variable }
-   : CMP  { mkCmpVar (getText $1) $1 }
-   | '||' { mkOrVar $1 }
-   | '&&' { mkAndVar $1 }
-   | '+'  { mkPlusVar $1 }
-   | '*'  { mkTimesVar $1 }
-   | '/'  { mkDivVar $1 }
-   | '^'  { mkPowerVar $1 }
-   | '+.' { mkPlusDotVar $1 }
-   | '*.' { mkTimesDotVar $1 }
-   | '/.' { mkDivDotVar $1 }
-   | '**' { mkTimesTimesVar $1 }
-   | '++' { mkPlusPlusVar $1 }
-   | '^^' { mkCaretCaretVar $1 }
-   | '|>' { mkRTriangleVar $1 }
-   | '$'  { mkDollarVar $1 }
-   | ';'  { mkSemiVar $1 }
+  : CMP  { mkCmpVar (getText $1) $1 }
+  | '||' { mkOrVar $1 }
+  | '&&' { mkAndVar $1 }
+  | '+'  { mkPlusVar $1 }
+  | '*'  { mkTimesVar $1 }
+  | '/'  { mkDivVar $1 }
+  | '^'  { mkPowerVar $1 }
+  | '+.' { mkPlusDotVar $1 }
+  | '*.' { mkTimesDotVar $1 }
+  | '/.' { mkDivDotVar $1 }
+  | '**' { mkTimesTimesVar $1 }
+  | '++' { mkPlusPlusVar $1 }
+  | '^^' { mkCaretCaretVar $1 }
+  | '|>' { mkRTriangleVar $1 }
+  | '$'  { mkDollarVar $1 }
+  | ';'  { mkSemiVar $1 }
+
+OpOrMinus :: { Variable }
+  : Op  { $1 }
+  | '-' { mkMinusVar $1 }
 
 ConsOp :: { Identifier }
   : '::' { mkConsId $1 }
@@ -477,6 +481,7 @@ PatPrimary :: { E.Pat }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
+  | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
   | Pat '::' Pat { E.ConsPat (spanFromTo $1 $3) $1 $3 }
   | PatPrimary { $1 }
 

@@ -1,4 +1,6 @@
-module Validation.Base where
+module Validation.Base
+  -- TODO: explicit export list
+where
 
 import Syntax.Base
 import qualified Syntax.Expression as E

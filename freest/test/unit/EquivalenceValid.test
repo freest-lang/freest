@@ -136,6 +136,8 @@ case *?Int == *?Int ; Close : *B
 
 case *?Int ; Close == *?Int : *B
 
+case Dual (*&{A, B}) == *+{A, B}
+
 -- Choices
 
 case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
@@ -201,12 +203,24 @@ where
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
-case T == U : 1S -> 1S -- Higher order
+case T == U : 1S -> 1S 
 where
-  type T : 1S -> 1S
-  type T a = a ; (T a) ; !Int
-  type U : 1S -> 1S
-  type U b = b ; (U b) ; !Int
+  type T, U : 1S -> 1S
+  type T a = a
+  type U b = b
+
+-- case T == U : 1S -> 1S
+-- where
+--   type T, U : 1S -> 1S
+--   type T a = !a ; T a
+--   type U b = !b ; U b
+
+-- case T == U : 1S -> 1S
+-- where
+--   type T : 1S -> 1S
+--   type T a = a ; (T a) ; !Int
+--   type U : 1S -> 1S
+--   type U b = b ; (U b) ; !Int
 
 -- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 -- where

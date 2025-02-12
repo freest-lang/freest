@@ -14,7 +14,8 @@ import Syntax.Base
   mkPlusVar, mkMinusVar, mkTimesVar, mkDivVar, mkPowerVar, mkNegateVar,
   mkPlusDotVar, mkMinusDotVar, mkTimesDotVar, mkDivDotVar, mkTimesTimesVar,
   mkDollarVar, mkRTriangleVar, mkSemiVar,
-  mkPlusPlusVar, mkCaretCaretVar
+  mkPlusPlusVar, mkCaretCaretVar,
+  mkUndefinedVar
   :: Located a => a -> Variable
 mkOrVar = mkDefaultVar "(||)"
 mkAndVar = mkDefaultVar "(&&)"
@@ -34,6 +35,7 @@ mkRTriangleVar = mkDefaultVar "(|>)"
 mkSemiVar = mkDefaultVar "(;)"
 mkPlusPlusVar = mkDefaultVar "(++)"
 mkCaretCaretVar = mkDefaultVar "(^^)"
+mkUndefinedVar = mkDefaultVar "undefined"
 
 mkCmpVar :: Located a => String -> a -> Variable
 mkCmpVar s = mkDefaultVar $ "("++s++")"

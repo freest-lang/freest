@@ -37,6 +37,7 @@ data Pat
   | WildPat Span Variable
   | VarPat Span Variable
   | DConsPat Span Identifier [Pat]
+  | ChoicePat Span Identifier Pat
   | AsPat Span Variable Pat
 
 pattern NilPat :: Span -> Pat
@@ -96,22 +97,24 @@ pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, 
 
 instance Located Pat where
   getSpan = \case
-    WildPat s _   -> s
-    VarPat s _    -> s
-    DConsPat s _ _ -> s
-    IntPat s _    -> s
-    FloatPat s _  -> s
-    CharPat s _   -> s
-    AsPat s _ _   -> s
+    IntPat s _      -> s
+    FloatPat s _    -> s
+    CharPat s _     -> s
+    WildPat s _     -> s
+    VarPat s _      -> s
+    DConsPat s _ _  -> s
+    ChoicePat s _ _ -> s
+    AsPat s _ _     -> s
 
   setSpan s = \case
-    WildPat _ x    -> WildPat s x
-    VarPat _ x     -> VarPat s x
+    IntPat _ i      -> IntPat s i
+    FloatPat _ f    -> FloatPat s f
+    CharPat _ c     -> CharPat s c
+    WildPat _ x     -> WildPat s x
+    VarPat _ x      -> VarPat s x
     DConsPat _ c ps -> DConsPat s c ps
-    IntPat _ i     -> IntPat s i
-    FloatPat _ f   -> FloatPat s f
-    CharPat _ c    -> CharPat s c
-    AsPat _ x p    -> AsPat s x p
+    ChoicePat _ l p -> ChoicePat s l p
+    AsPat _ x p     -> AsPat s x p
 
 instance Located LetDecl where 
   getSpan = \case
@@ -160,13 +163,14 @@ instance Located RHS where
 
 instance Show Pat where
   show = \case
-    WildPat _ x    -> show x
-    VarPat _ x     -> show x
+    IntPat _ i      -> show i
+    FloatPat _ f    -> show f
+    CharPat _ c     -> show c
+    WildPat _ x     -> show x
+    VarPat _ x      -> show x
     DConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
-    IntPat _ i     -> show i
-    FloatPat _ f   -> show f
-    CharPat _ c    -> show c
-    AsPat _ x p    -> show x++"@"++show p
+    ChoicePat _ l p -> "(&"++show l++" "++show p++")"
+    AsPat _ x p     -> show x++"@"++show p
 
 instance Show LetDecl where
   show = \case

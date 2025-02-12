@@ -44,9 +44,8 @@ internalChoice :: E.Exp -> T.Type -> Identifier -> Validation T.Type
 internalChoice e t i = do
   ds <- gets typeDecls
   case normalise ds t of
-    T.AppLinChoice s T.In ts -> 
+    T.AppLinChoice s T.Out ts -> 
         case lookup i ts of
             Just t' -> return t'
-            Nothing -> throwE (ChoiceNotAllowed s i t)
-    t' -> do
-      throwE (ExposeError (getSpan e) "an internal choice" (Left e) t)
+            Nothing -> throwE (IllegalChoice s i t)
+    _ -> throwE (ExposeError (getSpan e) "an internal choice" (Left e) t)

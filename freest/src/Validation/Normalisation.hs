@@ -25,7 +25,7 @@ import           Validation.Substitution       ( subsAll )
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
 import           Data.Bifunctor                ( second )
--- import           Debug.Trace
+import           Debug.Trace
 
 type Visited = S.Set T.Type
 
@@ -62,7 +62,7 @@ isWhnf = \case
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
   -- W-Seq1 _ does not apply; semicolon must be fully applied
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- T.Var{} -> True -- Needed?
@@ -82,19 +82,19 @@ reduce td = \case
   -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
   -- R-Dist (must come before R.SemiL)
-  T.AppSemi s1 (T.AppLinChoice s2 p lts) u -> 
-    T.AppLinChoice s1 p (map (\(id, t) -> (id, T.AppSemi s2 t u)) lts)
+  T.AppSemi _ (T.App s t@T.Choice{} us) v -> T.App s t (map (\u -> T.AppSemi (getSpan u) u v) us)
   -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
   -- 2. Duality
   -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
   -- R-DEnd
-  T.AppDual s (T.End _ p) -> T.End s (T.dual p)
+  T.AppDual _ t@T.End{}  -> T.dual t
   -- R-DMsg
-  T.AppDual s (T.AppMessage _ m p t) -> T.AppMessage s m (T.dual p) t
+  T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
   -- R-DChoice
-  T.AppDual s (T.Choice _ m p ls) -> T.Choice s m (T.dual p) ls
+  T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
+  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (reduce td) ts)
   -- R-DQuant
   T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
   -- -- R-DDual

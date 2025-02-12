@@ -35,14 +35,19 @@ data Multiplicity = Lin | Un | VarM Variable
   deriving (Eq, Ord)
 
 instance Subsort Multiplicity where
-  Lin <: Un = False
-  _   <: _  = True
+  Un <: Lin           = True
+  m1 <: m2 | m1 == m2 = True
+  _   <: _            = False
 
 instance Join Multiplicity where
+  join φ@VarM{} _  = internalError ("join of multiplicity variable "++show φ)
+  join _ φ@VarM{}  = internalError ("join of multiplicity variable "++show φ)
   join Un Un = Un
   join _  _  = Lin
 
 instance Meet Multiplicity where
+  meet φ@VarM{} _  = internalError ("meet of multiplicity variable "++show φ)
+  meet _ φ@VarM{}  = internalError ("meet of multiplicity variable "++show φ)
   meet Un _  = Un
   meet _  Un = Un
   meet _  _  = Lin
@@ -51,12 +56,16 @@ data Prekind = Top | Session | Bounded | VarPK Variable
   deriving (Eq, Ord)
 
 instance Subsort Prekind where
-  Top     <: Session = False
-  Top     <: Bounded = False
-  Session <: Bounded = False
-  _       <: _       = True
+  Session <: Top     = True
+  Bounded <: Top     = True
+  Bounded <: Session = True
+  pk1     <: pk2     
+    | pk1 == pk2     = True
+  _       <: _       = False
 
-instance Join Prekind where
+instance Join Prekind where  
+  join ψ@VarPK{} _  = internalError ("join of prekind variable "++show ψ)
+  join _ ψ@VarPK{}  = internalError ("join of prekind variable "++show ψ)
   join Bounded Bounded = Bounded
   join Session Session = Session
   join Bounded Session = Session
@@ -65,6 +74,8 @@ instance Join Prekind where
 
 
 instance Meet Prekind where
+  meet ψ@VarPK{} _  = internalError ("meet of prekind variable "++show ψ)
+  meet _ ψ@VarPK{}  = internalError ("meet of prekind variable "++show ψ)
   meet Bounded _       = Bounded
   meet _       Bounded = Bounded
   meet Session _       = Session
