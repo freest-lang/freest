@@ -11,7 +11,7 @@ data Exp
   | Abs B.Variable T.Type Exp
   | App Exp Exp
   | Con B.Identifier
-  | Case Exp [(Alt, [B.Variable], Exp)]
+  | Case Exp [(Alt, Exp)]
   | Type T.Type
   | TAbs B.Variable K.Kind Exp
   | TApp Exp Exp
@@ -23,7 +23,7 @@ data Literal = LInt Int
   | LChar Char
   deriving Show
 
-data Alt = ACon B.Identifier
+data Alt = ACon B.Identifier [B.Variable]
   | ALit Literal
   | ADefault
   deriving Show

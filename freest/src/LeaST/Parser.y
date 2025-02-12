@@ -176,18 +176,18 @@ LExpApp :: { L.Exp }
   | LExpApp '@' TypePrimary { L.TApp $1 (L.Type $3) }
   | LExpPrimary { $1 }
 
-LAlternatives :: { [(L.Alt, [Variable], L.Exp)] }
-  : LAlt '->' LExp ',' LAlternatives { (fst $1, snd $1, $3):$5 }
-  | LAlt '->' LExp ',' { [(fst $1, snd $1, $3)] } 
-  | LAlt '->' LExp { [(fst $1, snd $1, $3)] }
+LAlternatives :: { [(L.Alt, L.Exp)] }
+  : LAlt '->' LExp ',' LAlternatives { ($1, $3):$5 }
+  | LAlt '->' LExp ',' { [($1, $3)] } 
+  | LAlt '->' LExp { [($1, $3)] }
 
-LAlt :: { (L.Alt, [Variable]) }
-  : INT_LIT { (L.ALit (L.LInt (read $ getText $1)), []) }
-  | FLOAT_LIT { (L.ALit (L.LFloat (read $ getText $1)), []) }
-  | CHAR_LIT { (L.ALit (L.LChar (read $ getText $1)), []) }
-  | WILDCARD { (L.ADefault, []) }
-  | UPPER_ID VarListWS { (L.ACon $ mkIdTk $1, $2)} 
-  | '(' Commas ')' VarListWS{ (L.ACon $ mkTupleId $2 (spanFromTo $1 $3), $4)}
+LAlt :: { L.Alt }
+  : INT_LIT { L.ALit (L.LInt (read $ getText $1)) }
+  | FLOAT_LIT { L.ALit (L.LFloat (read $ getText $1)) }
+  | CHAR_LIT { L.ALit (L.LChar (read $ getText $1)) }
+  | WILDCARD { L.ADefault }
+  | UPPER_ID VarListWS { (L.ACon (mkIdTk $1) $2)} 
+  | '(' Commas ')' VarListWS{ L.ACon (mkTupleId $2 (spanFromTo $1 $3)) $4 }
 
 LExpListComma :: { [L.Exp] }
   : LExp ',' LExpListComma { $1 : $3 }
