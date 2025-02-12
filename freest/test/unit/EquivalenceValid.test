@@ -1,113 +1,113 @@
 -- Simple types
 
-case Int == Int
+case Int == Int : *T
 
-case Char == Char
+case Char == Char : *T
 
-case Float == Float
+case Float == Float : *T
 
-case Int == Int
+case Int == Int : *T
 
-case () == ()
+case () == () : *T
 
 -- Session types
 
-case !Int == !Int
+case !Int == !Int : 1S
 
-case ?Char == ?Char
+case ?Char == ?Char : 1S
 
-case !Int == !Int
+case !Int == !Int : 1S
 
-case ?() == ?()
+case ?() == ?() : 1S
 
-case Skip == Skip
+case Skip == Skip : 1S
 
-case !Int == Skip;!Int
+case !Int == Skip;!Int : 1S
 
-case !Int == !Int;Skip
+case !Int == !Int;Skip : 1S
 
-case !Int == Skip;!Int;Skip
+case !Int == Skip;!Int;Skip : 1S
 
-case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip
+case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip : 1S
 
-case !Int;Skip;?Int == !Int;?Int
+case !Int;Skip;?Int == !Int;?Int : 1S
 
-case Skip;!Int == !Int;Skip
+case Skip;!Int == !Int;Skip : 1S
 
-case !Int;Skip == Skip;!Int
+case !Int;Skip == Skip;!Int : 1S
 
-case Skip == Skip;Skip
+case Skip == Skip;Skip : *S
 
 -- Close 
 
-case Close == Close
+case Close == Close : 1B
 
-case Close == Close;!Int
+case Close == Close;!Int : 1B
 
-case Close;!Int == Close;?Int
+case Close;!Int == Close;?Int : 1B
 
-case Close;!Int == Close;?Int
+case Close;!Int == Close;?Int : 1B
 
 case !Char;Close;!Int 
-  == !Char;Close;?Int
+  == !Char;Close;?Int : 1B
 
 case (!Int;Close;!Int);?Int 
-  == !Int;Close;!Int
+  == !Int;Close;!Int : 1B
 
-case T;!Int == U
+case T;!Int == U : 1B
 where
-  type T : 1S
+  type T : 1B
   type T = +{A: !Int;T, B: Skip;Close;Skip}
-  type U : 1S
+  type U : 1B
   type U = +{A: !Int;U, B: Close;U}
 
-case T == U
+case T == U : 1B
 where 
-  type T : 1S
+  type T : 1B
   type T = T'
-  type T' : 1S
+  type T' : 1B
   type T' = +{A: !Int;T', B:Close;T}
-  type U : 1S
+  type U : 1B
   type U = U'
-  type U' : 1S
+  type U' : 1B
   type U' = +{A: !Int;U', B:Close;U'}
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = &{N:T};Skip
   type U : 1S
   type U = &{N:U}
 
-case T == U
+case T == U : 1B
 where
-  type T : 1S
+  type T : 1B
   type T = &{N:!Int;!Int;T, L:Close};?Int
-  type U : 1S
+  type U : 1B
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
-  type T' : 1S
+  type T' : 1B
   type T' = +{A: !Int;T', B: Skip;Close;Skip}
   type U : 1S
   type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
-  type U' : 1S
+  type U' : 1B
   type U' = +{A: !Int;U', B: Close;U'}
 
 case !(!Int;Close) 
-  == !(!Int;Skip;Close;?Int) 
+  == !(!Int;Skip;Close;?Int) : 1S 
 
 case forall a:1S. Close ; a ; !Int 
-  == forall a:1S. (Close ; a) ; Skip
+  == forall a:1S. (Close ; a) ; Skip : 1B
 
 case forall a:1S. Close;a;!Int 
-  == forall b:1S. (Close;b);Skip
+  == forall b:1S. (Close;b);Skip : 1B
 
 case forall a:1S. T a
-  == forall b: 1S . U b
+  == forall b: 1S . U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -120,118 +120,116 @@ where
 
 -- Unrestricted sessions
 
-case *!Int == *!Int ; ?Char
+case *!Int == *!Int ; ?Char : *B
 
-case *!Int ; ?Char == *!Int
+case *!Int ; ?Char == *!Int : *B
 
-case *!Int == *!Int ; Wait
+case *!Int == *!Int ; Wait : *B
 
-case *!Int ; Wait == *!Int
+case *!Int ; Wait == *!Int : *B
 
-case *?Int == *?Int ; ?Char
+case *?Int == *?Int ; ?Char : *B
 
-case *?Int ; ?Char == *?Int
+case *?Int ; ?Char == *?Int : *B
 
-case *?Int == *?Int ; Close
+case *?Int == *?Int ; Close : *B
 
-case *?Int ; Close == *?Int
+case *?Int ; Close == *?Int : *B
 
 case Dual (*&{A, B}) == *+{A, B}
 
 -- Choices
 
-case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip}
+case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
 
 -- Poly Streams
 
-case OutStream == Dual InStream
+case OutStream == Dual InStream : 1B
 where
-  type OutStream : 1S
+  type OutStream : 1B
   type OutStream = exists a:*T . !a ; OutStream
-  type InStream : 1S
+  type InStream : 1B
   type InStream = forall a:*T . ?a ; InStream
 
 -- When there is (unreachable) life past noncontractive (rec) types
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !T ; !Int
   type U : 1S
   type U = !U ; !Int
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !T ; !Int
   type U : 1S
   type U = !T ; !Int
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !T ; !Int
   type U : 1S
   type U = T
 
-case T !Int == U !Int
+case T !Int == U !Int : 1S
 where
   type T : 1S -> 1S
   type T a = a ; (T a) ; !Int
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
-case Maybe !Int == Maybe (Skip ; !Int)
+case Maybe !Int == Maybe (Skip ; !Int) : 1T
 where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
 
-case forall a:1S . Maybe a == forall b:1S . Maybe b
+case forall a:1S . Maybe a == forall b:1S . Maybe b : 1T
 where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
 
-case Either !Int == Either (Skip ; !Int)
+case Either !Int == Either (Skip ; !Int) : 1S -> 1T
 where
   type Either : 1S -> 1S -> 1T
   data Either a b = Left a | Right b
 
-case T !Int == U !Int -- First order
+case T !Int == U !Int : 1S -- First order
 where
   type T : 1S -> 1S
   type T a = a ; (T a) ; !Int
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
--- Higher order
-
-case T == U
+case T == U : 1S -> 1S 
 where
   type T, U : 1S -> 1S
   type T a = a
   type U b = b
 
--- case T == U
+-- case T == U : 1S -> 1S
 -- where
 --   type T, U : 1S -> 1S
 --   type T a = !a ; T a
 --   type U b = !b ; U b
 
--- case T == U
+-- case T == U : 1S -> 1S
 -- where
 --   type T : 1S -> 1S
 --   type T a = a ; (T a) ; !Int
 --   type U : 1S -> 1S
 --   type U b = b ; (U b) ; !Int
 
--- case T == U
+-- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 -- where
 --   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 --   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
 --   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 --   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5) ; a2 ; a4
 
--- case T == U
+-- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 -- where
 --   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 --   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4

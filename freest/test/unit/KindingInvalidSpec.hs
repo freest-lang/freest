@@ -1,6 +1,6 @@
 module KindingInvalidSpec (spec) where
 
-import           Validation.Kinding (runSynth)
+import           Validation.Kinding (runCheck)
 import           Test.Hspec
 import           UnitSpecUtils (mkKindingSpec)
 import           Data.Either (isRight)
@@ -13,6 +13,6 @@ spec :: Spec
 spec = mkKindingSpec
   "test/unit/KindingInvalid.test" 
   "Invalid kinding tests" 
-  \(t, _, m) -> case runSynth m t of 
+  \(t, k, m) -> case runCheck m t k of 
     Left _ -> return ()
     Right _ -> expectationFailure "An error was expected but none was thrown."
