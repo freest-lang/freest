@@ -246,11 +246,11 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Case s e' ((p1,rhs1):psrhss) -> do
     (u,tctx') <- synth kctx tctx e'
     tctxp1 <- checkPat kctx p1 u
-    tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx) rhs1 t
+    tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx') rhs1 t
     tctx1 <- typeCtxDifference kctx tctxrhs1 tctxp1
     forM_ psrhss \(pi,rhsi) -> do
       tctxpi <- checkPat kctx pi u
-      tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx) rhsi t
+      tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx') rhsi t
       tctxi <- typeCtxDifference kctx tctxrhsi tctxpi
       checkEquivTypeCtxs e tctxi tctx1
     return tctx1

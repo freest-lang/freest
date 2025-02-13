@@ -94,7 +94,7 @@ reduce td = \case
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
   -- R-DChoice
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
-  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (reduce td) ts)
+  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
   -- R-DQuant
   T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
   -- -- R-DDual
