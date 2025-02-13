@@ -196,7 +196,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Tuple s es ->
     case normalise tds t of
       T.Tuple _ ts | length es == length ts ->
-        foldM (\tctx' (ei,ti) -> check kctx tctx ei ti) tctx (zip es ts)
+        foldM (\tctx' (ei,ti) -> check kctx tctx' ei ti) tctx (zip es ts)
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
