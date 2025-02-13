@@ -1,9 +1,9 @@
 module RecPair where
 
 type InfinitePair : *T -> *T
-type InfinitePair a = (a, Int)
+type InfinitePair a = (InfinitePair a, Int)
 
-f : Int -> InfinitePair
+f : Int -> InfinitePair Int
 f x = (f x, x + 1)
 
 main : Int
