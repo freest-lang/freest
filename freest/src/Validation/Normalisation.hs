@@ -60,7 +60,8 @@ isWhnf = \case
   -- W-Const1
   T.App _ t _
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
-  -- W-Seq1 _ does not apply; semicolon must be fully applied
+  -- W-Seq1 _ does not apply, presently; semicolon must be fully applied
+  T.App _ T.Semi{} [t] -> True
   -- W-Seq2
   T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Var
