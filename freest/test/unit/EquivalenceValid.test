@@ -218,7 +218,7 @@ where
   type U b = b ; (U b) ; !Int
 
 
--- Unreachable type vars, no TName
+-- Unreachable type vars
 
 case forall a:1S. Wait ; a == forall b:1S. Wait : 1S
 
@@ -259,7 +259,35 @@ case forall a:1S. forall b:1S. Wait ; a ;!Int ; Close ; b ==
      forall a:1S. forall a:1S. Wait : 1S
 
 case forall a:1S. *!Int ; a == forall b:1S. *!Int : 1S
+
 case forall a:1S. *+{A,B} ; a == forall b:1S. *+{B,A} : 1S
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T : 1S
+  type T = !Int ; T
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T, U : 1S
+  type T = !Int ; U
+  type U = ?Char ; T
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T, U : 1S
+  type T = !Int ; U
+  type U = ?Char ; U
+
+case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+where
+  type T : *S -> 1S
+  type T c = !c ; T c
+
+case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+where
+  type T : *S -> 1S
+  type T c = !c ; T c
 
 -- The test cases below require renaming TName
 
