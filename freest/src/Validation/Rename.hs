@@ -30,25 +30,20 @@ rename td = \case
   t@T.Var{} -> t
   t@T.TName{} -> t
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a (T.fromVariable b) u))
-    where freet = freeReachable td t
-          freeu = freeReachable td u
-          b = if a `elem` freeu then firstVar a freet else nullVar a
-  t -> internalError $ "rename: non-exhaustive pattern: " ++ show t
+  T.Quant s p a k t -> T.Quant s p b k (rename td (subs a (T.fromVariable b) t))
+    where reach = reachable td t
+          b = if a `elem` reach then firstVar a reach else nullVar a
 
-freeReachable :: TypeDeclMap -> T.Type -> S.Set Variable
-freeReachable td = freeReach
-  where
-    freeReach :: T.Type -> S.Set Variable
-    freeReach = \case
-      t | T.isConstant t -> S.empty
-      T.TName{} -> S.empty
-      T.Var _ a -> S.singleton a
-      T.Quant _ _ _ _ t -> freeReach t
-      T.AppSemi _ t u | absorbing td t -> freeReach t
-                      | otherwise -> freeReach t `S.union` freeReach u
-      T.App _ t us -> S.unions (map freeReach (t:us))
-      t -> internalError $ "freeReachable: non-exhaustive pattern: " ++ show t
+-- The set of free variables reachable in a type
+reachable :: TypeDeclMap -> T.Type -> S.Set Variable
+reachable td = \case
+  t | T.isConstant t -> S.empty
+  T.TName{} -> S.empty
+  T.Var _ a -> S.singleton a
+  T.Quant _ _ a _ t -> S.delete a $ reachable td t
+  T.AppSemi _ t u | absorbing td t -> reachable td t
+                  | otherwise -> reachable td t `S.union` reachable td u
+  T.App _ t us -> S.unions (map (reachable td) (t:us))
 
 -- Requires: the type is a session type
 absorbing :: TypeDeclMap -> T.Type -> Bool
