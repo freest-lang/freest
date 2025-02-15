@@ -44,8 +44,9 @@ freeReachable = freeReach S.empty
       T.Var _ a | a `S.member` v -> S.empty
                 | otherwise -> S.singleton a
       T.Quant _ _ a _ t -> freeReach (S.delete a v) t
-      T.App _ t us | absorbing M.empty t -> freeReach v t
-                   | otherwise -> freeReach v t `S.union` S.unions (map (freeReach v) us)
+      T.AppSemi _ t u | absorbing M.empty t -> freeReach v t
+                      | otherwise -> freeReach v t `S.union` freeReach v u
+      T.App _ t us -> S.unions (map (freeReach v) (t:us))
       T.TName{} -> S.empty
 
 -- Requires: the type is in whnf (i.e., normalised)
