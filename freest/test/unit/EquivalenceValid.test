@@ -10,6 +10,7 @@ case Int == Int : *T
 
 case () == () : *T
 
+
 -- Session types
 
 case !Int == !Int : 1S
@@ -52,11 +53,10 @@ case !Char;Close;!Int
 case (!Int;Close;!Int);?Int 
   == !Int;Close;!Int : 1B
 
-case T;!Int == U : 1B
+case T ; !Int == U : 1B
 where
-  type T : 1B
+  type T, U : 1B
   type T = +{A: !Int;T, B: Skip;Close;Skip}
-  type U : 1B
   type U = +{A: !Int;U, B: Close;U}
 
 case T == U : 1B
@@ -115,6 +115,28 @@ where
   type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+
+-- Dual
+
+case Dual (Dual !Int) == !Int : 1S
+
+case Dual (exists a:1S. a) == forall b:1S. (Dual b) : 1S
+
+case exists a:1S. exists b:1S. Dual (a ; b) ==
+     exists a:1S. exists b:1S. Dual a ; Dual b :1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. forall b:1S. Dual a ; Dual b : 1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+
+case Dual (exists a:1S. Dual a) == forall b:1S. b : 1S
+
 
 -- Unrestricted sessions
 
@@ -194,6 +216,7 @@ where
   type T a = a ; (T a) ; !Int
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
+
 
 -- Unreachable type vars, no TName
 
@@ -279,6 +302,4 @@ case forall a:1S. *+{A,B} ; a == forall b:1S. *+{B,A} : 1S
 --   type OutStream = exists a:*T. !a ; OutStream
 --   type InStream : 1B
 --   type InStream = forall a:*T. ?a ; InStream
-
-case Dual (exists a:1S. a) == forall b:1S. (Dual b) : 1S
 
