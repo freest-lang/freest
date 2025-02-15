@@ -26,8 +26,9 @@ import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
-  trace ("\nTypes: " ++ show ts ++ "\n"++show (G.Grammar w (productions s))) $
-  -- trace ("\nBefore " ++ show ts ++ "\nAfter  " ++ show (map (rename td) ts)) $
+  trace ("\nTypes:   " ++ show ts ++
+         "\nRenamed: " ++ show (map (rename td) ts) ++ 
+         "\n"++show (G.Grammar w (productions s))) $
   G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
@@ -55,12 +56,14 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
 -- | Requires whnf t. Not exactly, arbitrary T;U will also do
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
+  -- Special cases for constants
   T.Skip{} -> -- Skip
     pure []
   t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
-  t@T.Choice{} -> getLHS $ M.singleton (show t) [bottom]
-  t | T.isConstant t ->  -- ι ≠ Skip, End
+  t@T.Choice{} -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
+  -- Constants
+  t | T.isConstant t ->  -- ι ≠ Skip, End, +#{}
     getLHS $ M.singleton (show t) []
   T.AppVar _ α ts -> do -- α T1...Tm
     ws <- mapM word ts
@@ -85,7 +88,7 @@ wordWhnf = \case
     ws <-           mapM (word                           . snd) its
     getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
-  T.AppMessage _ m p u -> do -- #T, both lin and un?
+  T.AppMessage _ m p u -> do -- #T
     w <- word u
     getLHS $ M.fromList [
       (show m ++ show p ++ "1", w ++ [bottom]),
