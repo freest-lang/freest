@@ -10,7 +10,7 @@ Absorbing - non-normed types == types w/ infinite norm
 
 module Validation.Rename
   ( rename
-  , bounded -- for testing purposes
+  -- , bounded -- use absorbing, if needed
   )
 where
 
@@ -24,8 +24,6 @@ import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
 import           Data.Bifunctor                ( second )
 
-type Visited = S.Set Identifier
-
 rename :: TypeDeclMap -> T.Type -> T.Type
 rename td = \case
   t | T.isConstant t -> t
@@ -38,34 +36,39 @@ rename td = \case
           b = if a `elem` freeu then firstVar a freet else nullVar a
 
 freeReachable :: T.Type -> S.Set Variable
-freeReachable = freeVars
--- freeReachable = freeReach S.empty
---   where freeReach :: S.Set Variable -> Variable -> S.Set Variable
---         freeReach _ a = S.singleton a
+freeReachable = freeReach S.empty
+  where
+    freeReach :: S.Set Variable -> T.Type -> S.Set Variable
+    freeReach v = \case
+      t | T.isConstant t -> S.empty
+      T.Var _ a | a `S.member` v -> S.empty
+                | otherwise -> S.singleton a
+      T.Quant _ _ a _ t -> freeReach (S.delete a v) t
+      T.App _ t us | absorbing M.empty t -> freeReach v t
+                   | otherwise -> freeReach v t `S.union` S.unions (map (freeReach v) us)
+      T.TName{} -> S.empty
 
-bounded = absorbing
-
--- Requires: the type is normalised,
+-- Requires: the type is in whnf (i.e., normalised)
 -- otherwise the function may diverge on non-contractive types
 absorbing :: TypeDeclMap -> T.Type -> Bool
 absorbing td = absorb S.empty
   where
-    absorb :: Visited -> T.Type -> Bool
+    absorb :: S.Set Variable -> T.Type -> Bool
     absorb v = \case
       -- Session types
       T.End{} -> True
+      T.Var _ a -> a `elem` v
       T.AppSemi _ t u -> absorb v t || absorb v u
-      T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
+      T.AppDual _ t -> absorb v t
       T.SharedChoice{} -> True -- Unrestricted type
-      T.AppLinChoice _ _ its -> all (absorb v . snd) its
-      -- Polymorphism
-      T.Quant _ _ _ _ t -> absorb v t
-      -- Equations
-      T.AppTName _ id ts
-        | id `S.member` v -> True
-        | otherwise -> absorb (S.insert id v) (snd (td M.! id)) -- TODO: Check
-      -- Higher-order, including AppDual
-      T.App _ t ts -> all (absorb v) (t:ts)
-      -- Functional types, Skip, Message, DName, Var
+      T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
+      T.App _ T.Choice{} ts -> all (absorb v) ts
+      T.Quant _ _ a _ t -> absorb (S.delete a v) t
+      -- -- Equations
+      -- T.AppTName _ id ts
+      --   | id `S.member` v -> True
+      --   | otherwise -> absorb (S.insert id v) (snd (td M.! id)) -- TODO: Check
+      -- -- Higher-order, including AppDual
+      -- T.App _ t ts -> all (absorb v) (t:ts)
+      -- -- Functional types, Skip, Message, DName, Var
       _ -> False
-

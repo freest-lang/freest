@@ -62,26 +62,26 @@ instance Dual Polarity where
   dual In = Out
 
 data Type
-  -- Functional types
+  -- Constants
+  --   Functional types
   = Int Span
   | Float Span
   | Char Span
   | Arrow Span K.Multiplicity
-  -- Session types
+  --   Session types
   | Skip Span
-  | Semi Span
-  | Dual Span
   | End Span Polarity
   | Message Span K.Multiplicity Polarity
   | Choice Span K.Multiplicity Polarity [Identifier]
-  -- Polymorphism
-  | Quant Span Polarity Variable K.Kind Type
-  -- Higher-order
-  | Var Span Variable
-  | App Span Type [Type]
-  -- Equations
+  | Semi Span
+  | Dual Span
+  --   Equations
   | TName Span Identifier
   | DName Span Identifier
+  -- Non-constants
+  | Var Span Variable
+  | Quant Span Polarity Variable K.Kind Type -- TODO: make it Abs
+  | App Span Type [Type]
   deriving Ord
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html

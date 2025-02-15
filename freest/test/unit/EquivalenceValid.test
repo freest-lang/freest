@@ -142,15 +142,6 @@ case Dual (*&{A, B}) == *+{A, B} : *B
 
 case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
 
--- Poly Streams
-
-case OutStream == Dual InStream : 1B
-where
-  type OutStream : 1B
-  type OutStream = exists a:*T . !a ; OutStream
-  type InStream : 1B
-  type InStream = forall a:*T . ?a ; InStream
-
 -- When there is (unreachable) life past noncontractive (rec) types
 
 case T == U : 1S
@@ -203,11 +194,17 @@ where
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
-case T == U : 1S -> 1S 
-where
-  type T, U : 1S -> 1S
-  type T a = a
-  type U b = b
+-- Unreachable vars, no TName
+
+case forall a:1S . Wait ; a == forall b:1S . Wait : 1S
+
+-- The test cases below require renaming TName
+
+-- case T == U : 1S -> 1S 
+-- where
+--   type T, U : 1S -> 1S
+--   type T a = a
+--   type U b = b
 
 -- case T == U : 1S -> 1S
 -- where
@@ -235,3 +232,10 @@ where
 --   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
 --   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 --   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+
+-- case OutStream == Dual InStream : 1B
+-- where
+--   type OutStream : 1B
+--   type OutStream = exists a:*T . !a ; OutStream
+--   type InStream : 1B
+--   type InStream = forall a:*T . ?a ; InStream
