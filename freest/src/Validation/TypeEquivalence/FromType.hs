@@ -55,17 +55,18 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
 -- | Requires whnf t. Not exactly, arbitrary T;U will also do
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
+  T.Skip{} -> -- Skip
+    pure []
+  t@T.End{} -> -- End
+    getLHS $ M.singleton (show t) [bottom]
+  t@T.Choice{} -> getLHS $ M.singleton (show t) [bottom]
+  t | T.isConstant t ->  -- ι ≠ Skip, End
+    getLHS $ M.singleton (show t) []
   T.AppVar _ α ts -> do -- α T1...Tm
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
     let terminals = map (\n -> varTerminal α ++ show n) [0..]
     getLHS $ M.fromList (zip terminals words)
-  T.Skip{} -> -- Skip
-    pure []
-  t@T.End{} -> -- End
-    getLHS $ M.singleton (show t) [bottom]
-  t | T.isConstant t ->  -- ι ≠ Skip, End
-    getLHS $ M.singleton (show t) []
   T.Quant _ p α k t -> do -- ∀α:κ.T, since we do not have explicit λ types
     w <- word t
     getLHS $ M.singleton (showView p ++ varTerminal α ++ ":" ++ show k) (w ++ [bottom])
@@ -84,7 +85,7 @@ wordWhnf = \case
     ws <-           mapM (word                           . snd) its
     getLHS $ M.fromList (zip terminals ws)
     where showView T.In = "&"; showView T.Out = "+"
-  T.AppMessage _ m p u -> do -- #T
+  T.AppMessage _ m p u -> do -- #T, both lin and un?
     w <- word u
     getLHS $ M.fromList [
       (show m ++ show p ++ "1", w ++ [bottom]),

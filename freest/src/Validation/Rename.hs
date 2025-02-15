@@ -49,8 +49,7 @@ freeReachable = freeReach S.empty
       T.App _ t us -> S.unions (map (freeReach v) (t:us))
       T.TName{} -> S.empty
 
--- Requires: the type is in whnf (i.e., normalised)
--- otherwise the function may diverge on non-contractive types
+-- Requires: the type is a session type
 absorbing :: TypeDeclMap -> T.Type -> Bool
 absorbing td = absorb S.empty
   where

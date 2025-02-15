@@ -138,9 +138,11 @@ case *?Int ; Close == *?Int : *B
 
 case Dual (*&{A, B}) == *+{A, B} : *B
 
--- Choices
+case *&{A, B} ; !Int == *&{B, A} : *S
 
-case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
+case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
+
+case (?Char ; *&{A, B} ; !Int) 1-> Char == (?Char ; *&{A, B}) 1-> Char : 1T
 
 -- When there is (unreachable) life past noncontractive (rec) types
 
@@ -194,7 +196,7 @@ where
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
--- Unreachable vars, no TName
+-- Unreachable type vars, no TName
 
 case forall a:1S . Wait ; a == forall b:1S . Wait : 1S
 
@@ -233,6 +235,9 @@ case forall a:1S . Wait ; !Int ; Close ; a == forall b:1S . Wait : 1S
 
 case forall a:1S . forall b:1S . Wait ; a ;!Int ; Close ; b ==
      forall a:1S . forall a:1S . Wait : 1S
+
+case forall a:1S . *!Int ; a == forall b:1S . *!Int : 1S
+case forall a:1S . *+{A,B} ; a == forall b:1S . *+{B,A} : 1S
 
 -- The test cases below require renaming TName
 
