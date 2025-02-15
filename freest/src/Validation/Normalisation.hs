@@ -25,7 +25,6 @@ import           Utils                         ( internalError )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
-import           Data.Bifunctor                ( second )
 import           Debug.Trace
 
 type Visited = S.Set T.Type

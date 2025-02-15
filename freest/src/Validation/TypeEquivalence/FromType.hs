@@ -41,7 +41,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             y <- nextNonTerminal
             addVisited t y
             td <- gets typeDecls
-            let u = {- trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) $-} normalise td t
+            let u = normalise td t
             case u of
               T.Skip{} -> pure []
               _ -> do
@@ -62,7 +62,7 @@ wordWhnf = \case
     pure []
   t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
-  t@T.Choice{} -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
+  t@(T.Choice _ Un _ _) -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
   -- Remaining constants
   t | T.isConstant t ->  -- ι ≠ Skip, End, *#{}
     getLHS $ M.singleton (show t) []
@@ -82,15 +82,15 @@ wordWhnf = \case
       (show m ++ show p ++ "2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
+  T.App _ t@T.Semi{} [u] -> do -- We may have partially applied Semi in the future
+    w <- word u
+    getLHS $ M.singleton (show t ++ "1") []
   T.AppDual s u -> do -- Dual u. type u is α, for types in whnf
     w <- word u
     let label = show $ T.Dual s
     getLHS $ M.fromList [
       (label ++ "1", w),
       (label ++ "2", [])]
-  T.App _ t@T.Semi{} [u] -> do -- We may have partially applied Semi in the future
-    w <- word u
-    getLHS $ M.singleton (show t ++ "1") []
   T.App _ t us -> do  -- ι T1···Tm with ι = -> , #{}, (|lᵢ|) and other datatypes (variants)
     let terminals = map (\n -> show t ++ show n) [0..]
     ws <- mapM word us
