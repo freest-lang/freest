@@ -60,7 +60,8 @@ isWhnf = \case
   -- W-Const1
   T.App _ t _
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
-  -- W-Seq1 _ does not apply; semicolon must be fully applied
+  -- W-Seq1 _ does not apply, presently; semicolon must be fully applied
+  T.App _ T.Semi{} [t] -> True
   -- W-Seq2
   T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Var
@@ -94,7 +95,7 @@ reduce td = \case
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
   -- R-DChoice
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
-  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (reduce td) ts)
+  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
   -- R-DQuant
   T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
   -- -- R-DDual

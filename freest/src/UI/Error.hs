@@ -45,7 +45,7 @@ data Error
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
-  | SessionTypeMismatch Span T.Type
+  | SessionTypeMismatch Span T.Type K.Kind
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
@@ -85,7 +85,7 @@ instance Located Error where
     NonLinPat s _ _ -> s
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
-    SessionTypeMismatch s _ -> s
+    SessionTypeMismatch s _ _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
@@ -157,24 +157,24 @@ instance Show Error where
           "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
           "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
-          "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
+          "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
           "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
-          "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
+          "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
           "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
-          "\n  In the "++show n {- TODO: use numerals-}++"th parameter of function `"++show f++"`."
+          "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f -> 
           "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++
-          "\n  In the "++show n {- TODO: use numerals-}++"th parameter of function `"++show f++"`."
+          "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
           "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
         ProperKindMismatch s t k -> 
           "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`"
-        SessionTypeMismatch s t -> 
-          "\n Expected a session type, but found type `"++show t++"`."
+        SessionTypeMismatch s t k -> 
+          "\n Expected a session type, but found type `"++show t++"` of kind `"++show k++"`."
         GivenTooManyArgsK s t n m ->
           "\n  Type `"++show t++"` expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->

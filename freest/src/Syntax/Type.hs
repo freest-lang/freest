@@ -41,6 +41,7 @@ module Syntax.Type
 where
 
 import           Syntax.Base
+import           Parser.Unparser
 import qualified Syntax.Kind                   as K
 import           Syntax.Names
 import           Utils ( internalError )

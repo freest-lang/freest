@@ -22,10 +22,10 @@ spec :: Spec
 spec = mkKindingSpec
   ["test/unit/KindingValid.test"] 
   "If T normalises to U, then U is a whnf" 
-  \(t, _, m) -> normYieldsWnnf (buildDataDecls m) t `shouldBe` True
+  \(t, _, m) -> normYieldsWhnf (buildDataDecls m) t `shouldBe` True
 
-normYieldsWnnf :: TypeDeclMap -> T.Type -> Bool
-normYieldsWnnf td t = isWhnf {-$ trace (show $ normalise td t)-} (normalise td t)
+normYieldsWhnf :: TypeDeclMap -> T.Type -> Bool
+normYieldsWhnf td t = isWhnf {-$ trace (show $ normalise td t)-} (normalise td t)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap

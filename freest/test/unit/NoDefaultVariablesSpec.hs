@@ -1,0 +1,46 @@
+module NoDefaultVariablesSpec (spec) where
+
+import           Syntax.Base
+import qualified Syntax.Module                 as M
+import qualified Syntax.Type                   as T
+import           Validation.Base               ( TypeDeclMap, DataDeclMap )
+
+import qualified Data.Map.Strict               as Map
+import           Test.Hspec
+import           UnitSpecUtils
+
+-- This test should be called with well-formed types only
+
+main :: IO ()
+main = hspec spec
+
+spec :: Spec
+spec = mkKindingSpec
+  "test/unit/KindingValid.test" 
+  "Only proper internal numbers for variables" 
+  \(t, _, m) -> noDefault t && noDefault (buildTypeDecls m) && noDefault (buildDataDecls m) `shouldBe` True
+
+class NoDefaultVariables a where
+  noDefault :: a-> Bool
+
+instance NoDefaultVariables Variable where
+  noDefault a = internal a >= firstInternal
+
+instance NoDefaultVariables T.Type where
+  noDefault = \case
+    T.Quant _ _ a _ t -> noDefault a && noDefault t
+    T.Var _ a -> noDefault a
+    T.App _ t us -> all noDefault (t:us)
+    _ -> True
+
+instance NoDefaultVariables TypeDeclMap where
+  noDefault = Map.foldr (\(as, t) b -> b && all noDefault as && noDefault t) True
+
+instance NoDefaultVariables DataDeclMap where
+  noDefault m = True -- TODO: complete me!
+
+-- Warning: code also in from Validation.Base
+buildTypeDecls :: M.Module -> TypeDeclMap
+buildTypeDecls = Map.fromList . M.typeDecls
+buildDataDecls :: M.Module -> DataDeclMap
+buildDataDecls m = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)

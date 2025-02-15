@@ -22,7 +22,7 @@ where
 -- Equirecursive Types for Datatype-Generic Programming", Yufei Cai, Paolo G.
 -- Giarrusso, Klaus Ostermann
 
-case Tree
+case Tree : (*T -> *T) -> *T
 where
   type Tree : (*T -> *T) -> *T
   data Tree a = One a | Two Tree (a, a)

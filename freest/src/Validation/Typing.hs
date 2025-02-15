@@ -196,7 +196,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Tuple s es ->
     case normalise tds t of
       T.Tuple _ ts | length es == length ts ->
-        foldM (\tctx' (ei,ti) -> check kctx tctx ei ti) tctx (zip es ts)
+        foldM (\tctx' (ei,ti) -> check kctx tctx' ei ti) tctx (zip es ts)
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
@@ -204,10 +204,10 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Nil s u -> do
     Kinding.checkProper kctx u
     case (normalise tds t, normalise tds u) of
-      (T.List _ t', T.List _ u') -> do
+      (T.List _ t', u') -> do
         checkEquivTypes (Left e) t' u'
         return tctx
-      _ -> throwE (TypeMismatch s t u (Left e))
+      _ -> throwE (TypeMismatch s t (T.List (getSpan u) u) (Left e))
     -- Cons, (::) @a e1 e2
   E.Cons s e1 e2 ->
     case normalise tds t of
@@ -246,11 +246,11 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Case s e' ((p1,rhs1):psrhss) -> do
     (u,tctx') <- synth kctx tctx e'
     tctxp1 <- checkPat kctx p1 u
-    tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx) rhs1 t
+    tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx') rhs1 t
     tctx1 <- typeCtxDifference kctx tctxrhs1 tctxp1
     forM_ psrhss \(pi,rhsi) -> do
       tctxpi <- checkPat kctx pi u
-      tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx) rhsi t
+      tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx') rhsi t
       tctxi <- typeCtxDifference kctx tctxrhsi tctxpi
       checkEquivTypeCtxs e tctxi tctx1
     return tctx1

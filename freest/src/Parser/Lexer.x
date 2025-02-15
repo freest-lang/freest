@@ -85,6 +85,7 @@ $upper = [ A-Z ]
 <0> "]"    { token TkRSquare }
 
 -- Operators
+<0> "::"  { token TkColonColon }
 <0> ";"   { token TkSemi }
 <0> "$"   { token TkDollar }
 <0> "||"  { token TkPipePipe }
