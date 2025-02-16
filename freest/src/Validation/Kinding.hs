@@ -17,8 +17,8 @@ module Validation.Kinding
   , runKindModule
   , runSynth
   , runCheck
-  , isAbsorbingM
-  , isAbsorbing
+  -- , isAbsorbingM
+  -- , isAbsorbing
   )
 where
 

@@ -10,7 +10,7 @@ Absorbing - non-normed types == types w/ infinite norm
 
 module Validation.Rename
   ( rename
-  -- , bounded -- use absorbing, if needed
+  , isAbsorbing -- for testing purposes
   )
 where
 
@@ -41,13 +41,13 @@ reachable td = \case
   T.TName{} -> S.empty
   T.Var _ a -> S.singleton a
   T.Quant _ _ a _ t -> S.delete a $ reachable td t
-  T.AppSemi _ t u | absorbing td t -> reachable td t
+  T.AppSemi _ t u | isAbsorbing td t -> reachable td t
                   | otherwise -> reachable td t `S.union` reachable td u
   T.App _ t us -> S.unions (map (reachable td) (t:us))
 
 -- Requires: the type is a session type
-absorbing :: TypeDeclMap -> T.Type -> Bool
-absorbing td = absorb S.empty
+isAbsorbing :: TypeDeclMap -> T.Type -> Bool
+isAbsorbing td = absorb S.empty
   where
     absorb :: S.Set Identifier -> T.Type -> Bool
     absorb v = \case
@@ -56,8 +56,8 @@ absorbing td = absorb S.empty
       T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.App _ T.Choice{} ts -> all (absorb v) ts
-      T.Quant _ _ _ _ t -> absorb v t
       T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
         Just (_, u) -> absorb (S.insert name v) u
-        Nothing -> internalError $ "absorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
+        Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
+      T.Quant _ _ _ _ t -> absorb v t
       _ -> False
