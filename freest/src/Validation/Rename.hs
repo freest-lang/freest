@@ -56,6 +56,7 @@ isAbsorbing td = absorb S.empty
       T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.App _ T.Choice{} ts -> all (absorb v) ts
+      T.AppDual _ t -> absorb v t
       T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
         Just (_, u) -> absorb (S.insert name v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts

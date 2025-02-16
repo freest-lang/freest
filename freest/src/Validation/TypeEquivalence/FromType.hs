@@ -69,7 +69,7 @@ wordWhnf = \case
   T.AppVar _ α ts -> do -- α T1...Tm
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> varTerminal α ++ show n) [0..]
+    let terminals = map (\n -> varTerminal α ++ "_" ++ show n) [0..]
     getLHS $ M.fromList (zip terminals words)
   T.Quant _ p α k t -> do -- ∀α:κ.T, since we do not have explicit λ types
     w <- word t
@@ -78,21 +78,21 @@ wordWhnf = \case
   T.AppMessage _ m p u -> do -- #T
     w <- word u
     getLHS $ M.fromList [
-      (show m ++ show p ++ "1", w ++ [bottom]),
-      (show m ++ show p ++ "2", [bottom | m /= Lin])]
+      (show m ++ show p ++ "_1", w ++ [bottom]),
+      (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
   T.App _ t@T.Semi{} [u] -> do -- We may have partially applied Semi in the future
     w <- word u
-    getLHS $ M.singleton (show t ++ "1") []
+    getLHS $ M.singleton (show t ++ "_1") []
   T.AppDual s u -> do -- Dual u. type u is α, for types in whnf
     w <- word u
     let label = show $ T.Dual s
     getLHS $ M.fromList [
-      (label ++ "1", w),
-      (label ++ "2", [])]
+      (label ++ "_1", w),
+      (label ++ "_2", [])]
   T.App _ t us -> do  -- ι T1···Tm with ι = -> , #{}, (|lᵢ|) and other datatypes (variants)
-    let terminals = map (\n -> show t ++ show n) [0..]
+    let terminals = map (\n -> show t ++ "_" ++ show n) [0..]
     ws <- mapM word us
     let words = map (++ [bottom]) ws
     getLHS $ M.fromList (zip terminals words)

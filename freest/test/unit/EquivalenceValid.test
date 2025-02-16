@@ -289,6 +289,10 @@ where
   type T : *S -> 1S
   type T c = !c ; T c
 
+case exists a:1S. Dual Close ; a == exists a:1S. Dual Close : 1S
+
+case exists a:1S. Dual Close ; a == exists a:1S. Wait : 1S
+
 -- The test cases below require renaming TName
 
 -- case T == U : 1S -> 1S 
