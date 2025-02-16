@@ -18,7 +18,7 @@ module Validation.Kinding
   , runSynth
   , runCheck
   -- , isAbsorbingM
-  -- , isAbsorbing
+  , isAbsorbing
   )
 where
 
@@ -182,8 +182,11 @@ isAbsorbingM kctx t =
     Proper _ _ pk -> return $ pk <: Bounded
     _             -> return False
 
-isAbsorbing :: ValidationState -> KindingCtx -> T.Type -> Bool
-isAbsorbing s kctx t =
-  case evalState (runExceptT $ isAbsorbingM kctx t) s of
-    Right b  -> b
-    Left  es -> internalError $ "isAbsorbing: got errors "++show es
+isAbsorbing :: M.Module -> T.Type -> Bool
+isAbsorbing m = isAbsorb (buildValidationState m) Map.empty
+  where
+    isAbsorb :: ValidationState -> KindingCtx -> T.Type -> Bool
+    isAbsorb s kctx t =
+      case evalState (runExceptT $ isAbsorbingM kctx t) s of
+        Right b  -> b
+        Left  es -> internalError $ "isAbsorbing: got errors "++show es

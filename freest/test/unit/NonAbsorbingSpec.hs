@@ -19,7 +19,7 @@ spec = mkKindingSpec
   "Non absorbing types"
   \case
     (t, Just k, m) | K.isStrictlySession k && R.isAbsorbing (buildDataDecls m) t -> K.isStrictlyAbsorbing k `shouldBe` True
-    _ -> return ()
+    _ -> error "Ill formed test case: missing kind annotation"
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
