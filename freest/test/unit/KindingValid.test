@@ -739,16 +739,23 @@ where
 
 case !Close : 1S
 
-case A : 1B
+case A : *S
 where
-  type A : 1B
+  type A : *S
   type A = &{B: Z !Char}
   type Z : 1S -> 1B
   type Z b = Z b ; Skip ; b
 
-case Z : 1S -- This is a non-absorbing type
+case W : *B -- 
 where
-  type Z, Z', A, Z'', Z''' : 1S
+  type W : *B
+  type W = Z ?Char
+  type Z : 1S -> 1S
+  type Z b = W ; b
+
+case Z : *B
+where
+  type Z, Z', A, Z'', Z''' : *B
   type Z = Z'
   type Z' = Skip;A
   type A = Z''
@@ -833,24 +840,24 @@ where
   type D : *T
   type D = A
 
-case A : *S
+case A : *B 
 where 
-  type A : *S
+  type A : *B
   type A = Dual A
 
-case A : *S
+case A : *B
 where 
-  type A : *S
+  type A : *B
   type A = Dual (Dual A)
 
-case A : 1S
+case A : *B
 where 
-  type A : 1S
+  type A : *B
   type A = (Dual (Dual A));&{A: !Int, B: ?Int}
 
-case A : *S
+case A : *B
 where 
-  type A : *S
+  type A : *B
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
 
 case (!Int ; !Int) ; !Int : 1S
