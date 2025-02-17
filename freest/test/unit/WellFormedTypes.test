@@ -739,23 +739,33 @@ where
 
 case !Close : 1S
 
-case A : *S
+case T : 1S
 where
-  type A : *S
-  type A = &{B: Z !Char}
-  type Z : 1S -> 1B
-  type Z b = Z b ; Skip ; b
+  type T : 1S
+  type T = !T
 
-case W : *B -- 
+case Z : 1S
 where
-  type W : *B
+  type Z : 1S -> 1S
+  type Z b = Z ?Char
+
+case W : 1S
+where
+  type W : 1S
   type W = Z ?Char
   type Z : 1S -> 1S
   type Z b = W ; b
 
-case Z : *B
+case A : 1S
 where
-  type Z, Z', A, Z'', Z''' : *B
+  type A : 1S
+  type A = &{B: Z !Char}
+  type Z : 1S -> 1B
+  type Z b = Z b ; Skip ; b
+
+case Z : 1S
+where
+  type Z, Z', A, Z'', Z''' : 1S
   type Z = Z'
   type Z' = Skip;A
   type A = Z''

@@ -18,7 +18,10 @@ spec = mkKindingSpec
   "test/unit/WellFormedTypes.test" 
   "Non absorbing types"
   \case
-    (t, Just k, m) -> not (K.isStrictlySession k && R.isAbsorbing (buildDataDecls m) t) || K.isStrictlyAbsorbing k `shouldBe` True
+    (t, Just k, m) ->
+      not (K.isStrictlySession k) ||
+      not (R.isAbsorbing (buildDataDecls m) t) ||
+      K.isStrictlyAbsorbing k `shouldBe` True
     _ -> error "Ill formed test case: missing kind annotation"
 
 -- Warning: code also in from Validation.Base

@@ -45,7 +45,6 @@ reachable td = \case
                   | otherwise -> reachable td t `S.union` reachable td u
   T.App _ t us -> S.unions (map (reachable td) (t:us))
 
--- Requires: the type is a session type
 isAbsorbing :: TypeDeclMap -> T.Type -> Bool
 isAbsorbing td = absorb S.empty
   where
@@ -57,6 +56,7 @@ isAbsorbing td = absorb S.empty
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.App _ T.Choice{} ts -> all (absorb v) ts
       T.AppDual _ t -> absorb v t
+-- TODO: Fix the case with recursion on the argument to a TName. Showd be non-absorbing
       T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
         Just (_, u) -> absorb (S.insert name v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts

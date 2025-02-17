@@ -293,6 +293,13 @@ case exists a:1S. Dual Close ; a == exists a:1S. Dual Close : 1S
 
 case exists a:1S. Dual Close ; a == exists a:1S. Wait : 1S
 
+case W == Skip ; W : 1S -- Recursion on the argument of a type constructor
+where
+  type W : 1S
+  type W = Z ?Char
+  type Z : 1S -> 1S
+  type Z b = W ; b
+
 -- The test cases below require renaming TName
 
 -- case T == U : 1S -> 1S 
