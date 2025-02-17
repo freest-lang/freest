@@ -11,7 +11,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingInvalid.test" 
+  "test/unit/IllFormedTypes.test" 
   "Invalid kinding tests" 
   \case
     (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of

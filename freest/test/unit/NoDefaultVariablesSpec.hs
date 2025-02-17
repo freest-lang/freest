@@ -16,7 +16,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  "test/unit/WellFormedTypes.test" 
   "Only proper internal numbers for variables" 
   \(t, _, m) -> noDefault t && noDefault (buildTypeDecls m) && noDefault (buildDataDecls m) `shouldBe` True
 

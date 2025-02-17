@@ -9,7 +9,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  "test/unit/WellFormedTypes.test" 
   "Valid kinding tests" 
   \case
     (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 

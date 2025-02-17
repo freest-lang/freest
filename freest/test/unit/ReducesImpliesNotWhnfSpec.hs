@@ -20,7 +20,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  "test/unit/WellFormedTypes.test" 
   "If T reduces, then T is not a whnf" 
   \(t, _, m) -> reducesImpliesNotWhnf (buildDataDecls m) t >>= (`shouldBe` True)
 

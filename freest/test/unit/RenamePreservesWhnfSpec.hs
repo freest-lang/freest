@@ -17,7 +17,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  "test/unit/WellFormedTypes.test" 
   "T is a whnf iff rename T is a whnf" 
   \(t,_,m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
 

@@ -15,7 +15,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  "test/unit/WellFormedTypes.test" 
   "Non absorbing types"
   \case
     (t, Just k, m) -> not (K.isStrictlySession k && R.isAbsorbing (buildDataDecls m) t) || K.isStrictlyAbsorbing k `shouldBe` True
