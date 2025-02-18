@@ -10,7 +10,7 @@ Absorbing - non-normed types == types w/ infinite norm
 
 module Validation.Rename
   ( rename
-  , bounded -- for testing purposes
+  , isAbsorbing -- for testing purposes
   )
 where
 
@@ -18,13 +18,11 @@ import           Syntax.Base
 import qualified Syntax.Kind                   as K
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution       ( subs, freeVars )
+import           Validation.Substitution       ( subs )
+import           Utils                         ( internalError )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
-import           Data.Bifunctor                ( second )
-
-type Visited = S.Set Identifier
 
 rename :: TypeDeclMap -> T.Type -> T.Type
 rename td = \case
@@ -32,40 +30,35 @@ rename td = \case
   t@T.Var{} -> t
   t@T.TName{} -> t
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a (T.fromVariable b) u))
-    where freet = freeReachable t
-          freeu = freeReachable u
-          b = if a `elem` freeu then firstVar a freet else nullVar a
+  T.Quant s p a k t -> T.Quant s p b k (rename td (subs a (T.fromVariable b) t))
+    where reach = reachable td t
+          b = if a `elem` reach then firstVar a reach else nullVar a
 
-freeReachable :: T.Type -> S.Set Variable
-freeReachable = freeVars
--- freeReachable = freeReach S.empty
---   where freeReach :: S.Set Variable -> Variable -> S.Set Variable
---         freeReach _ a = S.singleton a
+-- The set of free variables reachable in a type
+reachable :: TypeDeclMap -> T.Type -> S.Set Variable
+reachable td = \case
+  t | T.isConstant t -> S.empty
+  T.TName{} -> S.empty
+  T.Var _ a -> S.singleton a
+  T.Quant _ _ a _ t -> S.delete a $ reachable td t
+  T.AppSemi _ t u | isAbsorbing td t -> reachable td t
+                  | otherwise -> reachable td t `S.union` reachable td u
+  T.App _ t us -> S.unions (map (reachable td) (t:us))
 
-bounded = absorbing
-
--- Requires: the type is normalised,
--- otherwise the function may diverge on non-contractive types
-absorbing :: TypeDeclMap -> T.Type -> Bool
-absorbing td = absorb S.empty
+isAbsorbing :: TypeDeclMap -> T.Type -> Bool
+isAbsorbing td = absorb S.empty
   where
-    absorb :: Visited -> T.Type -> Bool
+    absorb :: S.Set Identifier -> T.Type -> Bool
     absorb v = \case
-      -- Session types
       T.End{} -> True
+      T.SharedChoice{} -> True -- Unrestricted choice
+      T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
       T.AppSemi _ t u -> absorb v t || absorb v u
-      T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
-      T.SharedChoice{} -> True -- Unrestricted type
-      T.AppLinChoice _ _ its -> all (absorb v . snd) its
-      -- Polymorphism
+      T.App _ T.Choice{} ts -> all (absorb v) ts
+      T.AppDual _ t -> absorb v t
+-- TODO: Fix the case with recursion on the argument to a TName. Showd be non-absorbing
+      T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
+        Just (_, u) -> absorb (S.insert name v) u
+        Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
       T.Quant _ _ _ _ t -> absorb v t
-      -- Equations
-      T.AppTName _ id ts
-        | id `S.member` v -> True
-        | otherwise -> absorb (S.insert id v) (snd (td M.! id)) -- TODO: Check
-      -- Higher-order, including AppDual
-      T.App _ t ts -> all (absorb v) (t:ts)
-      -- Functional types, Skip, Message, DName, Var
       _ -> False
-

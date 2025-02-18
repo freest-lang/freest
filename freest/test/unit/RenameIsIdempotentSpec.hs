@@ -16,7 +16,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  ["test/unit/KindingValid.test"] 
+  ["test/unit/WellFormedTypes.test"] 
   "rename(t) == rename(rename(t))" 
   \(t,_,m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
 

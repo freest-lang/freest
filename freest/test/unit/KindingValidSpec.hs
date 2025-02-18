@@ -1,20 +1,15 @@
 module KindingValidSpec (spec) where
 
 import           Validation.Kinding
-import           Test.Hspec
 import           UnitSpecUtils
-import           Utils
-import           Data.Either (isRight)
-import           Data.Function ((&))
-import qualified Data.Map as Map
-import Parser.Scoping (runScoping)
+import           Test.Hspec
 
 main :: IO ()
 main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  ["test/unit/KindingValid.test"]
+  ["test/unit/WellFormedTypes.test"]
   "Valid kinding tests" 
   \case
     (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 

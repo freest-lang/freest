@@ -17,7 +17,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  ["test/unit/KindingValid.test"] 
+  ["test/unit/WellFormedTypes.test"] 
   "normalise t == normalise (normalise t)" 
   \(t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
 

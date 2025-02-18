@@ -21,10 +21,10 @@ import           Syntax.Kind (Kind)
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
 import           Validation.Substitution       ( subsAll )
+import           Utils                         ( internalError )
 
 import qualified Data.Map.Strict               as M
 import qualified Data.Set                      as S
-import           Data.Bifunctor                ( second )
 import           Debug.Trace
 
 type Visited = S.Set T.Type
@@ -112,10 +112,10 @@ reduce td = \case
    -- A: Should not happen with well-formed types
   T.AppTName _ name ts -> case td M.!? name of
     Just (as, u) -> subsAll as ts u
-    Nothing -> error $ "reduce: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
+    Nothing -> internalError $ "reduce: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   -- This last rule must be restricted if we don't want the proviso "Requires:
   -- not (isWhnf t)". Below are only a couple of cases
   -- T.App s t ts | not (T.isDName t || T.isMsg t) -> T.App s (reduce td t) ts
-  t -> error $ "reduce: non-exhaustive pattern: " ++ show t
+  t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t

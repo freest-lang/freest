@@ -1,4 +1,4 @@
-module ReducesImpliesNotWhnfSpec (spec) where
+module ReduceImpliesNotWhnfSpec (spec) where
 
 import qualified Syntax.Module                 as M
 import qualified Syntax.Type                   as T
@@ -20,15 +20,15 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  ["test/unit/KindingValid.test"] 
+  ["test/unit/WellFormedTypes.test"] 
   "If T reduces, then T is not a whnf" 
   \(t, _, m) -> reducesImpliesNotWhnf (buildDataDecls m) t >>= (`shouldBe` True)
 
 reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool
-reducesImpliesNotWhnf m t = pure True
-  -- catch
-  --   (let !_ = reduce m t in pure (not (isWhnf t)))
-  --   (\(x::ErrorCall) -> pure True)
+reducesImpliesNotWhnf m t = -- pure True
+  catch
+    (let !_ = reduce m t in pure (not (isWhnf t)))
+    (\(x::ErrorCall) -> pure True)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap

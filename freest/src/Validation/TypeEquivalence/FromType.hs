@@ -18,6 +18,7 @@ import           Validation.TypeEquivalence.Grammar         as G
 import           Validation.Normalisation
 import           Validation.Rename
 import           Validation.Base               ( TypeDeclMap )
+import           Utils                         ( internalError )
 
 import           Control.Monad.State
 import qualified Data.Map.Strict               as M
@@ -26,8 +27,9 @@ import           Debug.Trace                   ( trace )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
-  trace ("\nTypes: " ++ show ts ++ "\n"++show (G.Grammar w (productions s))) $
-  -- trace ("\nBefore " ++ show ts ++ "\nAfter  " ++ show (map (rename td) ts)) $
+  trace ("\nTypes:   " ++ show ts ++
+         "\nRenamed: " ++ show (map (rename td) ts) ++ 
+         "\n"++show (G.Grammar w (productions s))) $
   G.Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
@@ -39,7 +41,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             y <- nextNonTerminal
             addVisited t y
             td <- gets typeDecls
-            let u = {- trace ("\nType     " ++ show t ++ "\nnorms to " ++ show (normalise td t)) $-} normalise td t
+            let u = normalise td t
             case u of
               T.Skip{} -> pure []
               _ -> do
@@ -55,49 +57,46 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
 -- | Requires whnf t. Not exactly, arbitrary T;U will also do
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
-  T.AppVar _ α ts -> do -- α T1...Tm
-    ws <- mapM word ts
-    let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> varTerminal α ++ show n) [0..]
-    getLHS $ M.fromList (zip terminals words)
+  -- Special cases for constants
   T.Skip{} -> -- Skip
     pure []
   t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
-  t | T.isConstant t ->  -- ι ≠ Skip, End
+  t@(T.Choice _ Un _ _) -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
+  -- Remaining constants
+  t | T.isConstant t ->  -- ι ≠ Skip, End, *#{}
     getLHS $ M.singleton (show t) []
+  T.AppVar _ α ts -> do -- α T1...Tm
+    ws <- mapM word ts
+    let words = [] : map (++ [bottom]) ws
+    let terminals = map (\n -> varTerminal α ++ "_" ++ show n) [0..]
+    getLHS $ M.fromList (zip terminals words)
   T.Quant _ p α k t -> do -- ∀α:κ.T, since we do not have explicit λ types
     w <- word t
     getLHS $ M.singleton (showView p ++ varTerminal α ++ ":" ++ show k) (w ++ [bottom])
     where showView T.In = "∀"; showView T.Out = "∃"
-  T.AppDName _ name ts -> do  -- ι T1···Tm with ι = (|lᵢ|) and other datatypes (variants)
-    ws <- mapM word ts
-    let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> show name ++ show n) [0..]
-    getLHS $ M.fromList (zip terminals words)
-  T.AppArrow _ m t1 t2 -> do  -- ι T1···Tm with ι = →
-    w1 <- word t1
-    w2 <- word t2
-    getLHS $ M.fromList [(show m ++ "->1", w1) , (show m ++ "->2", w2)]
-  T.AppLinChoice _ p its -> do  -- ι T1···Tm with ι = &{lᵢ} or +{lᵢ}
-    let terminals = map  ((\id -> showView p ++ show id) . fst) its
-    ws <-           mapM (word                           . snd) its
-    getLHS $ M.fromList (zip terminals ws)
-    where showView T.In = "&"; showView T.Out = "+"
   T.AppMessage _ m p u -> do -- #T
     w <- word u
     getLHS $ M.fromList [
-      (show m ++ show p ++ "1", w ++ [bottom]),
-      (show m ++ show p ++ "2", [bottom | m /= Lin])]
+      (show m ++ show p ++ "_1", w ++ [bottom]),
+      (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
-  T.AppDual s u@T.AppVar{} -> do -- Dual(α T1...Tm); TODO: m=0 for well formed types
+  T.App _ t@T.Semi{} [u] -> do -- We may have partially applied Semi in the future
+    w <- word u
+    getLHS $ M.singleton (show t ++ "_1") []
+  T.AppDual s u -> do -- Dual u. type u is α, for types in whnf
     w <- word u
     let label = show $ T.Dual s
     getLHS $ M.fromList [
-      (label ++ "1", w),
-      (label ++ "2", [])]
-  t -> error $ "wordWhnf " ++ show t
+      (label ++ "_1", w),
+      (label ++ "_2", [])]
+  T.App _ t us -> do  -- ι T1···Tm with ι = -> , #{}, (|lᵢ|) and other datatypes (variants)
+    let terminals = map (\n -> show t ++ "_" ++ show n) [0..]
+    ws <- mapM word us
+    let words = map (++ [bottom]) ws
+    getLHS $ M.fromList (zip terminals words)
+  t -> internalError $ "wordWhnf " ++ show t
 
 varTerminal :: Variable -> Terminal
 varTerminal α = "α" ++ show (internal α)

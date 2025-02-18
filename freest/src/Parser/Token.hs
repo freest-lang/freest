@@ -110,6 +110,7 @@ instance Located Token where
     TkElse s -> s
     TkSelect s -> s
     TkForall s -> s
+    TkExists s -> s
     TkRec s -> s
     TkChannel s -> s
     -- Punctuation

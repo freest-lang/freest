@@ -17,7 +17,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  ["test/unit/KindingValid.test"] 
+  ["test/unit/WellFormedTypes.test"] 
   "Only renamed internal numbers for variables in renamed types" 
   \(t, _, m) ->
     let td = buildTypeDecls m

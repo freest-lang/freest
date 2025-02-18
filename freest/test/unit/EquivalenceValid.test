@@ -10,6 +10,7 @@ case Int == Int : *T
 
 case () == () : *T
 
+
 -- Session types
 
 case !Int == !Int : 1S
@@ -38,8 +39,6 @@ case !Int;Skip == Skip;!Int : 1S
 
 case Skip == Skip;Skip : *S
 
--- Close 
-
 case Close == Close : 1B
 
 case Close == Close;!Int : 1B
@@ -54,11 +53,10 @@ case !Char;Close;!Int
 case (!Int;Close;!Int);?Int 
   == !Int;Close;!Int : 1B
 
-case T;!Int == U : 1B
+case T ; !Int == U : 1B
 where
-  type T : 1B
+  type T, U : 1B
   type T = +{A: !Int;T, B: Skip;Close;Skip}
-  type U : 1B
   type U = +{A: !Int;U, B: Close;U}
 
 case T == U : 1B
@@ -107,7 +105,7 @@ case forall a:1S. Close;a;!Int
   == forall b:1S. (Close;b);Skip : 1B
 
 case forall a:1S. T a
-  == forall b: 1S . U b : 1S
+  == forall b: 1S. U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -117,6 +115,28 @@ where
   type U  b = !(U' b);Skip;?(U b;Skip;!(Close);Close;b;!b)
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
+
+
+-- Dual
+
+case Dual (Dual !Int) == !Int : 1S
+
+case Dual (exists a:1S. a) == forall b:1S. (Dual b) : 1S
+
+case exists a:1S. exists b:1S. Dual (a ; b) ==
+     exists a:1S. exists b:1S. Dual a ; Dual b :1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. forall b:1S. Dual a ; Dual b : 1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+
+case Dual (exists a:1S. Dual a) == forall b:1S. b : 1S
+
 
 -- Unrestricted sessions
 
@@ -138,18 +158,12 @@ case *?Int ; Close == *?Int : *B
 
 case Dual (*&{A, B}) == *+{A, B} : *B
 
--- Choices
+case *&{A, B} ; !Int == *&{B, A} : *S
 
-case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip} : 1S
+case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
 
--- Poly Streams
+case (?Char ; *&{A, B} ; !Int) 1-> Char == (?Char ; *&{A, B}) 1-> Char : 1T
 
-case OutStream == Dual InStream : 1B
-where
-  type OutStream : 1B
-  type OutStream = exists a:*T . !a ; OutStream
-  type InStream : 1B
-  type InStream = forall a:*T . ?a ; InStream
 
 -- When there is (unreachable) life past noncontractive (rec) types
 
@@ -186,7 +200,7 @@ where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
 
-case forall a:1S . Maybe a == forall b:1S . Maybe b : 1T
+case forall a:1S. Maybe a == forall b:1S. Maybe b : 1T
 where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
@@ -203,11 +217,96 @@ where
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
-case T == U : 1S -> 1S 
+
+-- Unreachable type vars
+
+case forall a:1S. Wait ; a == forall b:1S. Wait : 1S
+
+case !Int ; forall a:1S. Wait ; a == !Int ; forall b:1S. Wait : 1S
+
+case forall a:1S. ?Char ; Wait ; a == forall b:1S. ?Char ; Wait : 1S
+
+case forall a:1S. Wait ; a == forall b:1S. Dual Close : 1S
+
+case forall a:1S. forall b:1S. Wait ; a ; b == forall a:1S. forall b:1S. Wait : 1S
+
+case forall a:1S. forall b:*T. !b ; Wait ; a == forall a:1S. forall c:*T. !c ; Wait : 1S
+
+case forall a:1S. NC ; Wait ; a == forall b:1S. Wait : 1S
 where
-  type T, U : 1S -> 1S
-  type T a = a
-  type U b = b
+  type NC : *S
+  type NC = NC
+
+case ?(forall a:1S. Wait ; a) == ?(forall b:1S. Wait) : 1S
+
+case forall a:1S. Wait ; a -> Char == forall b:1S. Wait -> Char : *T
+
+case (forall a:1S. Wait ; a) -> (forall b:1S. Wait    ) ==
+     (forall b:1S. Wait    ) -> (forall a:1S. Wait ; a) : *T
+
+case &{A: forall a:1S. Wait ; a, B: Skip} == &{A: forall b:1S. Wait, B: Skip} : 1S
+
+case +{A: forall a:1S. Wait ; a, B: forall b:1S. Wait    } ==
+     +{A: forall b:1S. Wait,     B: forall a:1S. Wait ; a} : 1S
+
+case forall a:1S. Wait ; forall b:1S. a ; b == forall b:1S. Wait : 1S
+
+case forall a:1S. Wait ; Close ; a == forall b:1S. Wait : 1S
+
+case forall a:1S. Wait ; !Int ; Close ; a == forall b:1S. Wait : 1S
+
+case forall a:1S. forall b:1S. Wait ; a ;!Int ; Close ; b ==
+     forall a:1S. forall a:1S. Wait : 1S
+
+case forall a:1S. *!Int ; a == forall b:1S. *!Int : 1S
+
+case forall a:1S. *+{A,B} ; a == forall b:1S. *+{B,A} : 1S
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T : 1S
+  type T = !Int ; T
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T, U : 1S
+  type T = !Int ; U
+  type U = ?Char ; T
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T, U : 1S
+  type T = !Int ; U
+  type U = ?Char ; U
+
+case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+where
+  type T : *S -> 1S
+  type T c = !c ; T c
+
+case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+where
+  type T : *S -> 1S
+  type T c = !c ; T c
+
+case exists a:1S. Dual Close ; a == exists a:1S. Dual Close : 1S
+
+case exists a:1S. Dual Close ; a == exists a:1S. Wait : 1S
+
+case W == Skip ; W : 1S -- Recursion on the argument of a type constructor
+where
+  type W : 1S
+  type W = Z ?Char
+  type Z : 1S -> 1S
+  type Z b = W ; b
+
+-- The test cases below require renaming TName
+
+-- case T == U : 1S -> 1S 
+-- where
+--   type T, U : 1S -> 1S
+--   type T a = a
+--   type U b = b
 
 -- case T == U : 1S -> 1S
 -- where
@@ -235,3 +334,11 @@ where
 --   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
 --   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
 --   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+
+-- case OutStream == Dual InStream : 1B
+-- where
+--   type OutStream : 1B
+--   type OutStream = exists a:*T. !a ; OutStream
+--   type InStream : 1B
+--   type InStream = forall a:*T. ?a ; InStream
+

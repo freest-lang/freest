@@ -20,7 +20,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  ["test/unit/KindingValid.test"] 
+  ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges" 
   \(t,_,m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
 

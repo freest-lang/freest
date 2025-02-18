@@ -16,6 +16,8 @@ module Syntax.Kind
   , Join(..)
   , Meet(..)
   , isStrictlyLin
+  , isStrictlySession
+  , isStrictlyAbsorbing
   )
 where 
 
@@ -115,9 +117,16 @@ ub s = Proper s Un  Bounded
 bot :: Span -> Kind
 bot = us -- (ua later)
 
-isStrictlyLin :: Kind -> Bool
+isStrictlyLin, isStrictlyAbsorbing, isStrictlySession :: Kind -> Bool
+
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
+
+isStrictlyAbsorbing (Proper _ _ Bounded) = True
+isStrictlyAbsorbing _ = False
+
+isStrictlySession (Proper _ _ Session) = True
+isStrictlySession _ = False
 
 instance Show Multiplicity where
   show = \case 
@@ -129,10 +138,8 @@ instance Show Prekind where
   show = \case 
     Top     -> "T"
     Session -> "S"
-    Bounded -> "B"
+    Bounded -> "C"
     VarPK ψ -> external ψ
-
-
 
 instance Located Kind where
   getSpan = \case 
