@@ -27,20 +27,7 @@ mkKindingSpec testPaths testDesc testFun = do
         case runScoping scopeKindingTest (t, k, m) of
           Left es      -> expectationFailure (unlines $ map show es)
           Right (t, k, m)  -> testFun (t, k, m) 
-  where 
-    mkKindingFileSpec testPath testDesc testFun = do
-      source <- runIO $ readFile testPath
-      case runLexer parseKindingTests testPath source of
-        Left es  -> runIO $ mapM_ print es >> exitFailure
-        Right ts -> describe testDesc $ 
-          forM_ ts \((t, k), m) -> it
-            (show (getSpan t))
-            case do (t', k', m') <- runScoping scopeKindingTest (t, k, m) 
-                    runKindModule m'
-                    return (t', k', m') of
-              Left es      -> expectationFailure (unlines $ map show es)
-              Right (t, k, m)  -> testFun (t, k, m)
-
+  where
     scopeKindingTest ctx (t, k, m) = do
       (ctx,m') <- scopeModule ctx m
       t' <- scopeType ctx t
