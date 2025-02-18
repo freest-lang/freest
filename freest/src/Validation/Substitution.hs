@@ -57,5 +57,6 @@ subs a u = \case
   T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)
   t -> t
 
+-- [as -> us]t, consider only the shortest between as and us
 subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
 subsAll as us t = foldr (uncurry subs) t (zip as us)

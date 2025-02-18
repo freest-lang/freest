@@ -168,9 +168,8 @@ bool s = DName (getSpan s) (mkBoolId s)
 
 isConstant :: Type -> Bool
 isConstant = \case
-  TName{} -> False
   Var{}   -> False
-  Quant{}  -> False
+  Quant{} -> False -- make it Abs
   App{}   -> False
   _       -> True
 

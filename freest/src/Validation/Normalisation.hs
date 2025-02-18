@@ -61,15 +61,13 @@ isWhnf = \case
   T.App _ t _
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
   -- W-Seq1 _ does not apply, presently; semicolon must be fully applied
-  T.App _ T.Semi{} [t] -> True
+  T.App _ T.Semi{} [_] -> True
   -- W-Seq2
   T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
-  -- T.Var{} -> True -- Needed?
   -- W-Abs _ we do not have abstractions, but we have quantifiers
   T.Quant{} -> True
-  -- W-Dual - I think this is the only case for well formed Dual types.
   T.AppDual _ T.Var{} -> True
   _ -> False
 
@@ -109,7 +107,7 @@ reduce td = \case
   -- 3. R-μ + R-β + TAppL
   -- R-μ + R-β
   -- Q: What if as and ts are of different lengths?
-   -- A: Should not happen with well-formed types
+  -- A: Then subsAll considers only the shortest between as and ts
   T.AppTName _ name ts -> case td M.!? name of
     Just (as, u) -> subsAll as ts u
     Nothing -> internalError $ "reduce: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts

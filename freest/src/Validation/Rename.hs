@@ -40,7 +40,7 @@ reachable td = \case
   t | T.isConstant t -> S.empty
   T.TName{} -> S.empty
   T.Var _ a -> S.singleton a
-  T.Quant _ _ a _ t -> S.delete a $ reachable td t
+  T.Quant _ _ a _ t -> S.delete a (reachable td t)
   T.AppSemi _ t u | isAbsorbing td t -> reachable td t
                   | otherwise -> reachable td t `S.union` reachable td u
   T.App _ t us -> S.unions (map (reachable td) (t:us))
@@ -56,7 +56,7 @@ isAbsorbing td = absorb S.empty
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.App _ T.Choice{} ts -> all (absorb v) ts
       T.AppDual _ t -> absorb v t
--- TODO: Fix the case with recursion on the argument to a TName. Showd be non-absorbing
+-- TODO: Fix the case with recursion on the argument to a TName. Should be non-absorbing
       T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
         Just (_, u) -> absorb (S.insert name v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
