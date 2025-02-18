@@ -15,7 +15,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/WellFormedTypes.test" 
+  ["test/unit/WellFormedTypes.test"] 
   "Non absorbing types"
   \case
     (t, Just k, m) ->

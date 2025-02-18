@@ -13,11 +13,13 @@ import           Test.Hspec
 import           Validation.Kinding (runKindModule)
 import Syntax.Base
 import System.Directory.Internal.Prelude (exitFailure)
+import Data.Foldable (foldlM)
+import Control.Monad.Extra (concatMapM)
 
-mkKindingSpec :: FilePath -> String -> ((T.Type, Maybe K.Kind, M.Module) -> Expectation) -> Spec
-mkKindingSpec testPath testDesc testFun = do
-  source <- runIO $ readFile testPath
-  case runLexer parseKindingTests testPath source of
+mkKindingSpec :: [FilePath] -> String -> ((T.Type, Maybe K.Kind, M.Module) -> Expectation) -> Spec
+mkKindingSpec testPaths testDesc testFun = do
+  sources <- zip testPaths <$> runIO (mapM readFile testPaths)
+  case concatMapM (uncurry $ runLexer parseKindingTests) sources of
     Left es  -> runIO $ mapM_ print es >> exitFailure
     Right ts -> describe testDesc $ 
       forM_ ts \((t, k), m) -> it
@@ -25,17 +27,17 @@ mkKindingSpec testPath testDesc testFun = do
         case runScoping scopeKindingTest (t, k, m) of
           Left es      -> expectationFailure (unlines $ map show es)
           Right (t, k, m)  -> testFun (t, k, m) 
-  where 
+  where
     scopeKindingTest ctx (t, k, m) = do
       (ctx,m') <- scopeModule ctx m
       t' <- scopeType ctx t
       k' <- mapM scopeKind k
       return (t', k', m')
 
-mkEquivalenceSpec :: FilePath -> String -> ((T.Type, T.Type, K.Kind, M.Module) -> Expectation) -> Spec
-mkEquivalenceSpec testPath testDesc testFun = do
-  source <- runIO $ readFile testPath
-  case runLexer parseEquivalenceTests testPath source of
+mkEquivalenceSpec :: [FilePath] -> String -> ((T.Type, T.Type, K.Kind, M.Module) -> Expectation) -> Spec
+mkEquivalenceSpec testPaths testDesc testFun = do
+  sources <- zip testPaths <$> runIO (mapM readFile testPaths)
+  case concatMapM (uncurry $ runLexer parseEquivalenceTests) sources of
     Left es  -> runIO $ mapM_ print es
     Right ts -> describe testDesc $ 
       forM_ ts \((t, u, k), m) -> it (show (spanFromTo t u))

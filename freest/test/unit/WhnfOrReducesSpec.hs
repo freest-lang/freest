@@ -18,7 +18,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/WellFormedTypes.test" 
+  ["test/unit/WellFormedTypes.test"] 
   "A given type T is either a whnf or reduces" 
   \(t, _, m) -> whnfOrReduces m t `shouldBe` True
 

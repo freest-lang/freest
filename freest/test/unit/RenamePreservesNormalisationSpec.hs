@@ -17,7 +17,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/WellFormedTypes.test" 
+  ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then rename T normalises to rename U" 
   \(t,_,m) -> renamePreservesNormalisation (buildDataDecls m) t `shouldBe` True
 

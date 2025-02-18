@@ -15,7 +15,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkEquivalenceSpec
-  "test/unit/EquivalenceInvalid.test" 
+  ["test/unit/EquivalenceInvalid.test"]
   "Invalid equivalence tests" 
   \(t,u,k,m) -> case runCheck m t k >> runCheck m u k of
     Left es -> expectationFailure (unlines $ map show es)
