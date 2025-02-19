@@ -1,7 +1,3 @@
--- TODO: This test file could be replaced by two:
---   BoundedValid.test and
---   BoundedInvalid.test
-
 -- Simple types
 
 case Int : *T
@@ -744,26 +740,31 @@ where
   type T : 1S
   type T = !T
 
-case Z : 1S
+case Z : 1S -> 1S
 where
   type Z : 1S -> 1S
   type Z b = Z ?Char
 
-case W : 1S
+case Z !Char : 1S -- Absorbing?
 where
-  type W : 1S
-  type W = Z ?Char
   type Z : 1S -> 1S
-  type Z b = W ; b
+  type Z b = Z b
 
-case A : 1S
+case A : 1S -- Absorbing?
 where
   type A : 1S
   type A = &{B: Z !Char}
   type Z : 1S -> 1B
   type Z b = Z b ; Skip ; b
 
-case Z : 1S
+case W : 1S -- Absorbing?
+where
+  type W : 1S
+  type W = Z ?Char
+  type Z : 1S -> 1S
+  type Z b = W ; b
+
+case Z : 1S -- Absorbing?
 where
   type Z, Z', A, Z'', Z''' : 1S
   type Z = Z'

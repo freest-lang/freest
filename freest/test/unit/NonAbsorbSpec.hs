@@ -1,4 +1,4 @@
-module NonAbsorbingSpec (spec) where
+module NonAbsorbSpec (spec) where
 
 import qualified Syntax.Kind                   as K
 import qualified Validation.Rename             as R
