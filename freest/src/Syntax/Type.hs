@@ -171,6 +171,9 @@ isConstant = \case
   Var{}   -> False
   Quant{} -> False -- make it Abs
   App{}   -> False
+  -- Given a declaration 'type A a1 ... an = U', type A stands for
+  -- λa1...λan.μλA.U. Type A is then a non value.
+  TName{} -> False
   _       -> True
 
 isSkip, isSemi, isAppSemi, isAppLinChoice, isDual, isTName, isDName, isMsg :: Type -> Bool

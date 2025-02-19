@@ -68,6 +68,7 @@ isWhnf = \case
   T.AppVar{} -> True
   -- W-Abs _ we do not have abstractions, but we have quantifiers
   T.Quant{} -> True
+  -- W-Dual
   T.AppDual _ T.Var{} -> True
   _ -> False
 
@@ -105,12 +106,11 @@ reduce td = \case
   -- R-DCtx
   T.AppDual s t -> T.AppDual s (reduce td t)
   -- 3. R-μ + R-β + TAppL
-  -- R-μ + R-β
   -- Q: What if as and ts are of different lengths?
   -- A: Then subsAll considers only the shortest between as and ts
   T.AppTName _ name ts -> case td M.!? name of
     Just (as, u) -> subsAll as ts u
-    Nothing -> internalError $ "reduce: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
+    Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   -- This last rule must be restricted if we don't want the proviso "Requires:
