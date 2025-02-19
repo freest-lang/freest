@@ -342,3 +342,25 @@ where
 --   type InStream : 1B
 --   type InStream = forall a:*T. ?a ; InStream
 
+case Stream Skip == Stream (Skip; Skip) : 1S
+where
+  type Stream : 1T -> 1S
+  type Stream a = !a ; Stream a
+
+-- Polymorphic datatype recursion, https://stackoverflow.com/questions/40247339/polymorphic-recursion-syntax-and-uses
+
+case Nested Skip == Nested (Skip ; Skip) : 1T
+where
+  type Nested : 1T -> 1T
+  data Nested a = NestedCons a (Nested [a]) | Epsilon
+
+case Tree Close == Tree (Close; Wait) : 1T
+where
+  type Tree: 1T -> 1T
+  data Tree a = Leaf a | Node (Tree (a, a))
+
+-- Polymorphic type recursion, translation to grammar hangs
+-- case CTree Close == CTree (Close; Wait): 1S
+-- where
+--   type CTree : 1T -> 1S
+--   type CTree a = +{Leaf: !a, Node: CTree (a, a)}

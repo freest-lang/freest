@@ -1041,3 +1041,42 @@ case Either !Int : 1S -> 1T
 where
   type Either : 1S -> 1S -> 1T
   data Either a b = Left a | Right b
+
+-- kind polymorphism, https://downloads.haskell.org/~ghc/9.12-latest/docs/users_guide/exts/poly_kinds.html
+
+case App : (1T -> *T) -> 1T -> *T
+where
+  type App : (1T -> *T) -> 1T -> *T
+  data App f a = MkApp (f a)
+
+case App : ((1S -> 1S) -> *T) -> (1S -> 1S) -> *T
+where
+  type App : ((1S -> 1S) -> *T) -> (1S -> 1S) -> *T
+  data App f a = MkApp (f a)
+
+case App : (((1S -> *T) -> 1T) -> *T) -> ((1S -> *T) -> 1T) -> *T
+where
+  type App : (((1S -> *T) -> 1T) -> *T) -> ((1S -> *T) -> 1T) -> *T
+  data App f a = MkApp (f a)
+
+-- Polymorphic recursion, https://stackoverflow.com/questions/40247339/polymorphic-recursion-syntax-and-uses
+
+case Nested : *T -> *T
+where
+  type Nested : *T -> *T
+  data Nested a = NestedCons a (Nested [a]) | Epsilon
+
+-- Perfect trees are symmetric and complete. They have exactly 2^n leaf values,
+-- where n is the height of the tree.
+-- https://www.cis.upenn.edu/~plclub/blog/2020-12-04-nested-datatypes/
+
+case Tree : 1T -> 1T
+where
+  type Tree: 1T -> 1T
+  data Tree a = Leaf a | Node (Tree (a, a))
+
+-- Polymorphic type recursion
+-- case CTree : 1T -> 1S
+-- where
+--   type CTree : 1T -> 1S
+--   type CTree a = +{Leaf: !a, Node: CTree (a, a)}
