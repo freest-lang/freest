@@ -1,4 +1,4 @@
-module KindingInvalidSpec (spec) where
+module KindInvalidSpec (spec) where
 
 import           Validation.Kinding (runSynth, runCheck, runKindModule)
 import           Test.Hspec

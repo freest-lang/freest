@@ -16,13 +16,8 @@ where
   type Y : (*T -> *T) -> *T
   type Y f = (G f) (G f)
 
--- Higher-order recursion
-
--- Perfect binary trees (nested datatypes). As in "System F-omega with
--- Equirecursive Types for Datatype-Generic Programming", Yufei Cai, Paolo G.
--- Giarrusso, Klaus Ostermann
-
-case Tree : (*T -> *T) -> *T
+-- Polymorphic type recursion
+case CTree : 1T -> 1S
 where
-  type Tree : (*T -> *T) -> *T
-  data Tree a = One a | Two Tree (a, a)
+  type CTree : 1T -> 1S
+  type CTree a = +{Leaf: !a, Node: CTree (a, a)}

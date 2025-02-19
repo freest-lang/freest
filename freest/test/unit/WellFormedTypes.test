@@ -1074,9 +1074,3 @@ case Tree : 1T -> 1T
 where
   type Tree: 1T -> 1T
   data Tree a = Leaf a | Node (Tree (a, a))
-
--- Polymorphic type recursion
--- case CTree : 1T -> 1S
--- where
---   type CTree : 1T -> 1S
---   type CTree a = +{Leaf: !a, Node: CTree (a, a)}
