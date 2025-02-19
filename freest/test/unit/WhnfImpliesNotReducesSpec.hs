@@ -9,6 +9,7 @@ import           UnitSpecUtils
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
 import           Control.Exception             ( catch, ErrorCall )
+import           Debug.Trace
 
 -- This test should be called with well-formed types only
 
@@ -26,7 +27,7 @@ spec = mkKindingSpec
 whnfImpliesNotReduces :: TypeDeclMap -> T.Type -> IO Bool
 whnfImpliesNotReduces m t
   | isWhnf t = catch
-      (let !_ = reduce m t in pure False)
+      (let !u= reduce m t in trace ("\n" ++ show t ++ " --> " ++ show u) (pure False))
       (\(x::ErrorCall) -> pure True)
   | otherwise = pure True
 
