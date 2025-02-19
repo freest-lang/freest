@@ -9,10 +9,11 @@ import           UnitSpecUtils
 import qualified Data.Map.Strict               as Map
 import           Test.Hspec
 import           Control.Exception             ( catch, ErrorCall )
+import           Debug.Trace
 
 -- This test should be called with well-formed types only
 
--- If type T reduces then T is not a whnf.
+-- If T reduces then T is not a whnf.
 
 main :: IO ()
 main = hspec spec
@@ -26,8 +27,9 @@ spec = mkKindingSpec
 reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool
 reducesImpliesNotWhnf m t =
   catch
-    (let !_ = reduce m t in pure (not (isWhnf t))) -- t reduces and is not in whnf
-    (\(x::ErrorCall) -> pure True) -- t does not reduce
+    -- The trace forces the evaluation of reduce
+    (trace ("\n" ++ show t ++ " reduces to " ++ show (reduce m t)) (pure (not (isWhnf t))))
+    (\(x::ErrorCall) -> pure True)
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap

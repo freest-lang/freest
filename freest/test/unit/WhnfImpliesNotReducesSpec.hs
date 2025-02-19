@@ -13,7 +13,7 @@ import           Debug.Trace
 
 -- This test should be called with well-formed types only
 
--- If type T reduces then T is not a whnf.
+-- If T reduces then T is not a whnf.
 
 main :: IO ()
 main = hspec spec
@@ -27,7 +27,8 @@ spec = mkKindingSpec
 whnfImpliesNotReduces :: TypeDeclMap -> T.Type -> IO Bool
 whnfImpliesNotReduces m t
   | isWhnf t = catch
-      (let !u= reduce m t in trace ("\n" ++ show t ++ " --> " ++ show u) (pure False))
+    -- The trace forces the evaluation of reduce
+      (trace ("\n" ++ show t ++ " reduces to " ++ show (reduce m t)) (pure False))
       (\(x::ErrorCall) -> pure True)
   | otherwise = pure True
 
