@@ -302,45 +302,45 @@ where
 
 -- The test cases below require renaming TName
 
--- case T == U : 1S -> 1S 
--- where
---   type T, U : 1S -> 1S
---   type T a = a
---   type U b = b
+case T == U : 1S -> 1S 
+where
+  type T, U : 1S -> 1S
+  type T a = a
+  type U b = b
 
--- case T == U : 1S -> 1S
--- where
---   type T, U : 1S -> 1S
---   type T a = !a ; T a
---   type U b = !b ; U b
+case T == U : 1S -> 1S
+where
+  type T, U : 1S -> 1S
+  type T a = !a ; T a
+  type U b = !b ; U b
 
--- case T == U : 1S -> 1S
--- where
---   type T : 1S -> 1S
---   type T a = a ; (T a) ; !Int
---   type U : 1S -> 1S
---   type U b = b ; (U b) ; !Int
+case T == U : 1S -> 1S
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
 
--- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
--- where
---   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
---   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5) ; a2 ; a4
+case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+where
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+  type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5) ; a2 ; a4
 
--- case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
--- where
---   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
---   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+where
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+  type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
 
--- case OutStream == Dual InStream : 1B
--- where
---   type OutStream : 1B
---   type OutStream = exists a:*T. !a ; OutStream
---   type InStream : 1B
---   type InStream = forall a:*T. ?a ; InStream
+case OutStream == Dual InStream : 1B
+where
+  type OutStream : 1B
+  type OutStream = exists a:*T. !a ; OutStream
+  type InStream : 1B
+  type InStream = forall a:*T. ?a ; InStream
 
 case Stream Skip == Stream (Skip; Skip) : 1S
 where

@@ -1070,7 +1070,7 @@ where
 -- where n is the height of the tree.
 -- https://www.cis.upenn.edu/~plclub/blog/2020-12-04-nested-datatypes/
 
-case Tree : 1T -> 1T
+case PTree : 1T -> 1T
 where
-  type Tree: 1T -> 1T
-  data Tree a = Leaf a | Node (Tree (a, a))
+  type PTree: 1T -> 1T
+  data PTree a = Leaf a | Node (PTree (a, a))

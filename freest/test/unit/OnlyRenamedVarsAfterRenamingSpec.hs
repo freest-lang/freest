@@ -21,14 +21,13 @@ spec = mkKindingSpec
   "Only renamed internal numbers for variables in renamed types" 
   \(t, _, m) ->
     let td = buildTypeDecls m
-        (t', td') = (rename td t, td) -- TODO: fix me!
-    in onlyRenamed t' && onlyRenamed td' `shouldBe` True
+    in onlyRenamed (rename td t) && onlyRenamed td `shouldBe` True
 
 class OnlyRenamedVars a where
-  onlyRenamed :: a-> Bool
+  onlyRenamed :: a -> Bool
 
 instance OnlyRenamedVars Variable where
-  onlyRenamed a = internal a <= firstRenamed
+  onlyRenamed a = internal a /= defaultInternal
 
 instance OnlyRenamedVars T.Type where
   onlyRenamed = \case

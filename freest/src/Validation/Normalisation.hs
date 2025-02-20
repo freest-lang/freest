@@ -107,7 +107,7 @@ reduce td = \case
   T.AppDual s t -> T.AppDual s (reduce td t)
   -- 3. R-μ + R-β + TAppL
   -- Q: What if as and ts are of different lengths?
-  -- A: Then subsAll considers only the shortest between as and ts
+  -- A: In that case, subsAll considers only the shortest between as and ts
   T.AppTName _ name ts -> case td M.!? name of
     Just (map fst -> as, u) -> subsAll as ts u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts

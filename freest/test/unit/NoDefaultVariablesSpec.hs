@@ -24,7 +24,7 @@ class NoDefaultVariables a where
   noDefault :: a -> Bool
 
 instance NoDefaultVariables Variable where
-  noDefault a = internal a >= firstInternal
+  noDefault a = internal a /= defaultInternal
 
 instance NoDefaultVariables T.Type where
   noDefault = \case
