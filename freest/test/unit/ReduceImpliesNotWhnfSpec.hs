@@ -27,8 +27,8 @@ spec = mkKindingSpec
 reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool
 reducesImpliesNotWhnf m t =
   catch
-    -- The trace forces the evaluation of reduce
-    (trace ("\n" ++ show t ++ " reduces to " ++ show (reduce m t)) (pure (not (isWhnf t))))
+    -- Force the deep evaluation of reduce
+    (length (show (reduce m t)) `seq` pure (not (isWhnf t)))
     (\(x::ErrorCall) -> pure True)
 
 -- Warning: code also in from Validation.Base
