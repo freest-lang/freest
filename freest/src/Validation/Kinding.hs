@@ -68,8 +68,8 @@ synth ctx = \case
   T.AppDual s t -> do
     synthCheck ctx t (ls s)
   -- Polymorphism
-  T.Quant s p a k t -> do
-    checkProper (Map.insert a k ctx) t
+  T.AppQuant s p aks t -> do
+    checkProper (Map.fromList aks `Map.union` ctx) t
     >>= \case (m, Bounded) -> pure (Proper s Lin Bounded)
               (m, Session) -> pure (Proper s Lin Session)
               (m, Top    ) -> pure (Proper s m   Top    )
@@ -135,8 +135,8 @@ kindModule m = do
   forM_ (M.dataDecls m) kindDataDecl
   return m
   where 
-    kindTypeDecl :: (Identifier, ([Variable], T.Type)) -> Validation ()
-    kindTypeDecl (i, (as, t)) = do
+    kindTypeDecl :: (Identifier, T.Lambda T.Type) -> Validation ()
+    kindTypeDecl (i, (map fst -> as, t)) = do
       k <- lookupKindSig i
       checkTypeDecl k Map.empty as k
       where
@@ -147,8 +147,8 @@ kindModule m = do
         checkTypeDecl k ctx (a : as) (Arrow s k1 k2) =
           checkTypeDecl k (Map.insert a k1 ctx) as k2
 
-    kindDataDecl :: (Identifier, ([Variable], M.ConsDeclList)) -> Validation ()
-    kindDataDecl (i, (as, t)) = do
+    kindDataDecl :: (Identifier, T.Lambda M.ConsDeclList) -> Validation ()
+    kindDataDecl (i, (map fst -> as, t)) = do
       k <- lookupKindSig i
       checkDataDecl k id Map.empty as k
       where

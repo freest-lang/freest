@@ -66,7 +66,7 @@ lookupType_ tctx xi = case tctx Map.!? xi of
 
 -- | Looks up the declaration of a data constructor, throwing an error if it
 -- has not been declared.
-lookupDConsDecl :: Identifier -> Validation (Identifier, [Variable], [T.Type])
+lookupDConsDecl :: Identifier -> Validation (Identifier, [(Variable, K.Kind)], [T.Type])
 lookupDConsDecl i = do
     dds <- gets consDecls
     case dds Map.!? i of
@@ -121,8 +121,11 @@ synth kctx tctx = \case
     (t, tctxe) <- synth kctx' (tctxps `Map.union` tctx) e'
     tctx' <- typeCtxDifference kctx' tctxe tctxps
     unless (m /= K.Un) $ checkEquivTypeCtxs e' tctx' tctx
-    return (foldr (\case ExpLevel  (_,u) -> T.AppArrow s m u
-                         TypeLevel (a,k) -> T.Forall s a k) t ps
+    return (foldr (\cases (ExpLevel  (_, u)) t' -> T.AppArrow s m u t'
+                          (TypeLevel (a, k)) (T.AppForall s aks t') -> 
+                            T.AppForall s ((a, k) : aks) t'
+                          (TypeLevel (a, k)) t' -> T.AppForall s [(a, k)] t')
+                  t ps
            ,tctx')
     where
       synthParams :: KindCtx -> [Level (E.Pat, T.Type) (Variable, K.Kind)] -> Validation (KindCtx, TypeCtx)
@@ -331,9 +334,9 @@ checkArgs = checkArgs' 1
   where
     checkArgs' n f kctx tctx t0 (as, t) = gets typeDecls >>= \tds -> case (as, t) of
       -- regular cases first
-      (TypeLevel t:as, normalise tds -> T.Forall s' a k u) -> do
+      (TypeLevel t:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         Kinding.check kctx t k
-        checkArgs' (n+1) f kctx tctx t0 (as, subs a t u)
+        checkArgs' (n+1) f kctx tctx t0 (as, T.AppForall s' aks (subs a t u))
       (ExpLevel  e:as, normalise tds -> T.AppArrow s' m u v) -> do
         tctx' <- check kctx tctx e u
         checkArgs' (n+1) f kctx tctx' t0 (as,v)
@@ -341,7 +344,7 @@ checkArgs = checkArgs' 1
       (TypeLevel t:as, normalise tds -> T.AppArrow s' m u v) -> do
         throwE (UnexpectedArg (getSpan t) (ExpLevel u) (TypeLevel t) n f)
       -- expected type, given expression (to be inferred...)
-      (ExpLevel  e:as, normalise tds -> T.Forall s' a k u) -> do
+      (ExpLevel  e:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         throwE (UnexpectedArg (getSpan e) (TypeLevel k) (ExpLevel e) n f)
       -- no more arguments, return type
       ([], t) -> return (t, tctx)
@@ -366,11 +369,12 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
   where
     checkParams' n kctx' tctx' ps t' = gets typeDecls >>= \tds -> case (ps, t') of
     -- regular cases first
-      (TypeLevel (a',mk'):as, normalise tds -> T.Forall s' a k u) -> do
+      (TypeLevel (a',mk'):as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         case mk' of
           Just k' -> Kinding.checkSubkindOf (T.Var (getSpan a') a') k' k
           Nothing -> return () -- catchE (...) putError_
-        checkParams' (n+1) (Map.insert a' k kctx') tctx' as (subs a (T.Var (getSpan a') a') u)
+        checkParams' (n+1) (Map.insert a' k kctx') tctx' as 
+          ((if null aks then id else T.AppForall s' aks) $ subs a (T.Var (getSpan a') a') u)
       (ExpLevel  (p,mu'):as, normalise tds -> T.AppArrow s' m u v) -> do
         case mu' of
           Just u' -> do
@@ -383,7 +387,7 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
       (TypeLevel (a,k):as, normalise tds -> T.AppArrow s' m u v) -> do
         throwE (UnexpectedParam (getSpan a) (ExpLevel u) (TypeLevel a) n e)
       -- expected type, given expression
-      (ExpLevel  (p,t):as, normalise tds -> T.Forall s' a k u) -> do
+      (ExpLevel  (p,t):as, normalise tds -> T.AppForall s' ((a, k):aks) u) -> do
         throwE (UnexpectedParam (getSpan p) (TypeLevel k) (ExpLevel p) n e)
       -- no more arguments, return type
       ([], t') -> return (t', kctx' Map.\\ kctx, tctx' Map.\\ tctx)
@@ -431,11 +435,11 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
   E.TuplePat s ps   ->
     case normalise tds t of
       t'@(T.Tuple s ts) -> do
-        foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts)
+        foldM (\tctx (p', u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts)
       t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
   -- (C p1 ... pn)
   E.DConsPat s i ps -> do
-    (i',as,ts) <- lookupDConsDecl i
+    (i', map fst -> as, ts) <- lookupDConsDecl i
     case normalise tds t of
       T.AppDName _ i'' us | i' == i'' -> do
         let us = map (subsAll as us) ts
@@ -510,12 +514,12 @@ typeModule m = do
       cds <- gets (Map.assocs . consDecls)
       Map.fromList <$> mapM buildDConsType cds
       where
-        buildDConsType (ic, (it, as, ts)) = do
+        buildDConsType (ic, (it, map fst -> as, ts)) = do
           ksigs <- gets kindSigs
           case ksigs Map.!? it of
             Just (Expose.kindArrow -> (ks,k)) -> do
               let aks = zip as ks
-              (Right ic,) . T.variadicQuant (getSpan ic) T.In aks <$>
+              (Right ic,) . T.AppForall (getSpan ic) aks <$>
                 buildArrow (Map.fromList aks) ts
             _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
           where

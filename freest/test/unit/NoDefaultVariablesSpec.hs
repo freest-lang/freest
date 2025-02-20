@@ -21,20 +21,20 @@ spec = mkKindingSpec
   \(t, _, m) -> noDefault t && noDefault (buildTypeDecls m) && noDefault (buildDataDecls m) `shouldBe` True
 
 class NoDefaultVariables a where
-  noDefault :: a-> Bool
+  noDefault :: a -> Bool
 
 instance NoDefaultVariables Variable where
   noDefault a = internal a >= firstInternal
 
 instance NoDefaultVariables T.Type where
   noDefault = \case
-    T.Quant _ _ a _ t -> noDefault a && noDefault t
+    T.Abs _ (aks, t) -> all (noDefault . fst) aks && noDefault t
     T.Var _ a -> noDefault a
     T.App _ t us -> all noDefault (t:us)
     _ -> True
 
 instance NoDefaultVariables TypeDeclMap where
-  noDefault = Map.foldr (\(as, t) b -> b && all noDefault as && noDefault t) True
+  noDefault = Map.foldr (\(aks, t) b -> b && all (noDefault . fst) aks && noDefault t) True
 
 instance NoDefaultVariables DataDeclMap where
   noDefault m = True -- TODO: complete me!

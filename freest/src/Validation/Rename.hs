@@ -10,6 +10,7 @@ Absorbing - non-normed types == types w/ infinite norm
 
 module Validation.Rename
   ( rename
+  , renameLambda
   , isAbsorbing -- for testing purposes
   )
 where
@@ -18,7 +19,7 @@ import           Syntax.Base
 import qualified Syntax.Kind                   as K
 import qualified Syntax.Type                   as T
 import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution       ( subs )
+import           Validation.Substitution       ( subs, subsAll )
 import           Utils                         ( internalError )
 
 import qualified Data.Map.Strict               as M
@@ -30,9 +31,15 @@ rename td = \case
   t@T.Var{} -> t
   t@T.TName{} -> t
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  T.Quant s p a k t -> T.Quant s p b k (rename td (subs a (T.fromVariable b) t))
-    where reach = reachable td t
-          b = if a `elem` reach then firstVar a reach else nullVar a
+  T.Abs s l -> T.Abs s (renameLambda td l)
+
+renameLambda :: TypeDeclMap -> T.Lambda T.Type -> T.Lambda T.Type
+renameLambda td (unzip -> (as, ks), t) = 
+  (zip bs ks, rename td (subsAll as (map T.fromVariable bs) t))
+  where reach = reachable td t
+        bs = foldr (\a bs' -> if a `elem` reach 
+                              then firstVar a (S.fromList bs' `S.union` reach) : bs'
+                              else nullVar a : bs') [] as
 
 -- The set of free variables reachable in a type
 reachable :: TypeDeclMap -> T.Type -> S.Set Variable
@@ -40,7 +47,7 @@ reachable td = \case
   t | T.isConstant t -> S.empty
   T.TName{} -> S.empty
   T.Var _ a -> S.singleton a
-  T.Quant _ _ a _ t -> S.delete a (reachable td t)
+  T.Abs _ (map fst -> as, t) -> reachable td t S.\\ S.fromList as
   T.AppSemi _ t u | isAbsorbing td t -> reachable td t
                   | otherwise -> reachable td t `S.union` reachable td u
   T.App _ t us -> S.unions (map (reachable td) (t:us))
@@ -60,5 +67,5 @@ isAbsorbing td = absorb S.empty
       T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
         Just (_, u) -> absorb (S.insert name v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
-      T.Quant _ _ _ _ t -> absorb v t
+      T.AppQuant _ _ _ t -> absorb v t
       _ -> False

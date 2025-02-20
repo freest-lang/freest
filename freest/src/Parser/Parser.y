@@ -185,10 +185,10 @@ ModuleDecl :: { M.Module -> M.Module }
   | KindSig  { $1 }
 
 DataDecl :: { M.Module -> M.Module }
-  : 'data' UPPER_ID VarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
+  : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
 
 TypeDecl :: { M.Module -> M.Module }
-  : 'type' UPPER_ID VarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
+  : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
 KindSig :: { M.Module -> M.Module }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
@@ -291,7 +291,7 @@ TypePrimary :: { T.Type }
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVar KindedVarListWS '.' Type   { T.variadicQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
+  | Quant KindedVar KindedVarListWS '.' Type   { T.AppQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }

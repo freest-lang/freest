@@ -66,15 +66,15 @@ wordWhnf = \case
   -- Remaining constants
   t | T.isConstant t ->  -- ι ≠ Skip, End, *#{}
     getLHS $ M.singleton (show t) []
-  T.AppVar _ α ts -> do -- α T1...Tm
+  T.AppVar _ a ts -> do -- α T1...Tm
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
-    let terminals = map (\n -> varTerminal α ++ "_" ++ show n) [0..]
+    let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
     getLHS $ M.fromList (zip terminals words)
-  T.Quant _ p α k t -> do -- ∀α:κ.T, since we do not have explicit λ types
+  T.Abs _ (aks, t) -> do -- λα1:κ1...αn:κn.T
     w <- word t
-    getLHS $ M.singleton (showView p ++ varTerminal α ++ ":" ++ show k) (w ++ [bottom])
-    where showView T.In = "∀"; showView T.Out = "∃"
+    foldM (\w' (a, k) -> getLHS $ M.singleton (varTerminal a ++ ":" ++ show k) w') 
+          (w ++ [bottom]) aks
   T.AppMessage _ m p u -> do -- #T
     w <- word u
     getLHS $ M.fromList [
@@ -187,7 +187,7 @@ fatTerminal = \case
   --           Just u -> Just (id, u)
   --           Nothing -> Nothing
   -- Polymorphism
-  T.Quant s p a k t -> Just (T.Quant s p a k) <*> fatTerminal t
+  T.AppQuant s p aks t -> Just (T.AppQuant s p aks) <*> fatTerminal t
   -- Higher-order
   t@T.Var{}      -> Just t
   T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts

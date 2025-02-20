@@ -66,8 +66,8 @@ isWhnf = \case
   T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
-  -- W-Abs _ we do not have abstractions, but we have quantifiers
-  T.Quant{} -> True
+  -- W-Abs
+  T.Abs{} -> True
   -- W-Dual
   T.AppDual _ T.Var{} -> True
   _ -> False
@@ -96,7 +96,7 @@ reduce td = \case
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
   T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
   -- R-DQuant
-  T.AppDual s1 (T.Quant s2 p a k t) -> T.Quant s1 (T.dual p) a k (T.AppDual s2 t)
+  T.AppDual s1 (T.AppQuant s2 p aks t) -> T.AppQuant s1 (T.dual p) aks (T.AppDual s2 t)
   -- -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
   -- R-DDVar - redundant in face of the above; alone seems not enough (normalisation diverges)
@@ -109,7 +109,7 @@ reduce td = \case
   -- Q: What if as and ts are of different lengths?
   -- A: Then subsAll considers only the shortest between as and ts
   T.AppTName _ name ts -> case td M.!? name of
-    Just (as, u) -> subsAll as ts u
+    Just (map fst -> as, u) -> subsAll as ts u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
