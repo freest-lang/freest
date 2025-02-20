@@ -18,10 +18,9 @@ import Control.Arrow ((>>>))
 import Data.Bifunctor (second)
 import qualified Data.List.NonEmpty as NE
 
-type Lambda t = ([Variable], t)
-type TypeDeclMap = Map.Map Identifier (Lambda T.Type)
+type TypeDeclMap = Map.Map Identifier (T.Lambda T.Type)
 type ConsDeclMap = Map.Map Identifier [T.Type]
-type DataDeclMap = Map.Map Identifier (Lambda ConsDeclMap)
+type DataDeclMap = Map.Map Identifier (T.Lambda ConsDeclMap)
 
 data ValidationState
   = ValidationState
@@ -29,7 +28,7 @@ data ValidationState
     , kindSigs  :: Map.Map Identifier K.Kind
     , typeDecls :: TypeDeclMap
     , dataDecls :: DataDeclMap
-    , consDecls :: Map.Map Identifier (Identifier, [Variable], [T.Type])
+    , consDecls :: Map.Map Identifier (Identifier, [(Variable, K.Kind)], [T.Type])
     }
   
 emptyValidationState :: ValidationState
@@ -47,7 +46,7 @@ buildValidationState m = ValidationState -- TODO: traverse module once.
   , kindSigs  = Map.fromList (concatMap (\(is,k) -> map (,k) is) $ M.kindSigs m)
   , typeDecls = Map.fromList (M.typeDecls m)
   , dataDecls = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
-  , consDecls = Map.fromList (concatMap (\(i,(as,cds)) -> map (second (i,as,)) cds) $ M.dataDecls m)
+  , consDecls = Map.fromList (concatMap (\(i,(aks,cds)) -> map (second (i,aks,)) cds) $ M.dataDecls m)
   }
 
 type Validation = ExceptT Error (State ValidationState)
@@ -82,13 +81,13 @@ lookupTName :: Identifier -> [T.Type] -> Validation T.Type
 lookupTName i ts =
   gets (Map.lookup i . typeDecls) >>= \case 
     Nothing    -> throwE (TypeOutOfScope (getSpan i) i)
-    Just (aks, t) 
+    Just (map fst -> as, t) 
       | n >  m -> pure $ T.AppTName (getSpan i) i ts
       | n == m -> pure t'
       | n <  m -> pure $ T.smartApp s t' (drop n ts)
-      where n  = length aks
+      where n  = length as
             m  = length ts
-            t' = foldr (uncurry subs) t (zip (take m aks) ts)
+            t' = foldr (uncurry subs) t (zip (take m as) ts)
             -- TODO: Can we have? (zip takes the length of the shorter list)
             -- t' = foldr (uncurry subs) t (zip aks ts)
             -- TODO: if yes, then we may as well write (with a proper import)

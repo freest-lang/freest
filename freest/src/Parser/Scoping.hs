@@ -24,6 +24,7 @@ import           Syntax.Base
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
 import qualified Syntax.Module as M
+import           Validation.Rename (renameLambda)
 import           Validation.Substitution (freeVars)
 import qualified Syntax.Type as T
 import           UI.Error (Error(..))
@@ -136,11 +137,12 @@ scopeDataDecls ctx dds = do
     ctx dds
   foldM scopeDataDecl (ctx', []) dds
   where
-    scopeDataDecl (ctx',dds') dd@(ti, (as, cds)) = do
+    scopeDataDecl (ctx',dds') dd@(ti, (unzip -> (as, ks), cds)) = do
         unless (ti `memberKSig` ctx) (insertError (LacksKindSig (getSpan ti) ti))
         as' <- mapM freshInternal as 
+        ks' <- mapM scopeKind ks
         (ctx''',cds') <- scopeConsDecls (Map.union (fromTVarList as') ctx') cds
-        return (ctx''', (ti, (as', cds')) : dds')
+        return (ctx''', (ti, (zip as' ks', cds')) : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
       where
         scopeConsDecl (ctx',cds') (ci,ts)
@@ -161,11 +163,13 @@ scopeTypeDecls ctx tds = do
     ctx tds
   foldM scopeTypeDecl (ctx', []) tds
   where
-    scopeTypeDecl (ctx', tds') td@(ti, (as, t)) = do
+    scopeTypeDecl (ctx', tds') td@(ti, (unzip -> (as, ks), t)) = do
       unless (ti `memberKSig` ctx') (insertError (LacksKindSig (getSpan ti) ti))
       as' <- mapM freshInternal as
+      ks' <- mapM scopeKind ks
       t'  <- scopeType (fromTVarList as' `Map.union` ctx') t
-      return (ctx', (ti, (as', t')) : tds')
+      return (ctx', (ti, renameLambda tdm (zip as' ks', t')) : tds')
+    tdm = Map.fromList tds
 
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
 scopeDefs ctx = scopeDefs' ctx Map.empty . groupEquations
@@ -354,11 +358,11 @@ scopeType ctx = \case
         when (l `elem` ls') (insertError (MultipleFieldDecls (getSpan l) l))
         return $ ls' ++ [l]) [] ls
   -- Polymorphism
-  T.Quant s p a k t -> do
-    a' <- freshInternal a
-    k' <- scopeKind k
-    let ctx' = insertTVar a' ctx
-    T.Quant s p a' k' <$> scopeType ctx' t
+  T.Abs s (unzip -> (as, ks), t) -> do
+    as' <- mapM freshInternal as
+    ks' <- mapM scopeKind ks
+    let ctx' = fromTVarList as' `Map.union` ctx
+    T.Abs s . (zip as' ks',) <$> scopeType ctx' t
   -- Higher-order
   t@(T.Var s a) ->
     case lookupTVar a ctx of
@@ -383,8 +387,8 @@ scopeTypeQ ctx t = do
     else do
       aks <- mapM (\a -> (a,) <$> freshKVar a) 
         $ List.sortBy (compare `on` getSpan) $ Map.elems fvm
-      T.variadicQuant (getSpan t) T.In aks 
-        <$> scopeType (Map.map internal fvm `Map.union` ctx) t'
+      T.AppForall (getSpan t) aks <$> 
+        scopeType (Map.map internal fvm `Map.union` ctx) t'
 
 scopeKind :: K.Kind -> Scoping K.Kind
 scopeKind = \case
