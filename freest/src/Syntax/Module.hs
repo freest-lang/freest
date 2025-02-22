@@ -20,6 +20,7 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , empty
+  , include
   )
 where
 
@@ -100,6 +101,16 @@ empty = Module{ name        = Nothing
               , kindSigs    = []
               , definitions = []
               }
+
+include :: Module -> Module -> Module
+include m1 m2 =
+  Module{ name        = name m2
+        , imports     = imports     m1 ++ imports     m2
+        , dataDecls   = dataDecls   m1 ++ dataDecls   m2
+        , typeDecls   = typeDecls   m1 ++ typeDecls   m2
+        , kindSigs    = kindSigs    m1 ++ kindSigs    m2
+        , definitions = definitions m1 ++ definitions m2
+        } 
 
 instance Show Module where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =

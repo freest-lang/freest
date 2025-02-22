@@ -10,12 +10,13 @@ module FreeST where
 import Parser.LexerUtils
 import Parser.Lexer
 import Parser.Token
+import Paths_freest (getDataFileName)
 import Control.Monad.RWS
 import UI.CLI
 import UI.Error
 import Parser.Parser
-import Syntax.Module
-import Parser.Scoping (runScoping, scopeModule_)
+import qualified Syntax.Module as M
+import Parser.Scoping (runScopeModule)
 import Validation.Base
 import Validation.Kinding
 import Validation.Typing
@@ -33,10 +34,12 @@ main = do
   execParser opts >>= freest
 
 freest :: RunOpts -> IO ()
-freest RunOpts{file=f} = do
-  source <- readFile f
-  runLexer parseModule f source 
-    >>= runScoping scopeModule_ & \case 
+freest RunOpts{file=programPath} = do
+  preludeSrc <- getDataFileName preludePath >>= readFile
+  programSrc <- readFile programPath
+  M.include <$> runParseModule preludePath preludeSrc
+            <*> runParseModule programPath programSrc
+    >>= runScopeModule & \case 
       Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
       Right m -> do 
         putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
@@ -44,10 +47,5 @@ freest RunOpts{file=f} = do
         --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
         --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
 
-lexAll :: Lexer ()
-lexAll = do
-  tok <- scan
-  case tok of
-    TkEOF _ -> pure ()
-    x -> do
-      lexAll
+preludePath :: FilePath
+preludePath = "StandardLib/Prelude.fst"

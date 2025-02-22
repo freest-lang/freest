@@ -123,4 +123,4 @@ token t _ = do
   return (t Span{startPos=(l,c), endPos=(l,c), filepath=f})
 
 runLexer :: Lexer a -> FilePath -> String -> Either [Error] a
-runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s) 
+runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s)

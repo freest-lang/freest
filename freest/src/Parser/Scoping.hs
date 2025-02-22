@@ -13,8 +13,9 @@ module Parser.Scoping
   (Scoping
   ,ScopingCtx
   ,runScoping
+  ,runScopeModule
   ,scopeModule
-  ,scopeModule_
+  ,scopeModule'
   ,scopeType
   ,scopeKind
   )
@@ -104,8 +105,8 @@ insertError e = modify (\s -> s{errors = e : errors s})
 freshInternal :: Variable -> Scoping Variable
 freshInternal x = incCounter >>= \i -> return x{internal=i}
 
-scopeModule :: ScopingCtx -> M.Module -> Scoping (ScopingCtx, M.Module)
-scopeModule ctx m = do
+scopeModule' :: ScopingCtx -> M.Module -> Scoping (ScopingCtx, M.Module)
+scopeModule' ctx m = do
   ctx' <- scopeKindSigs ctx (M.kindSigs m)
   (ctx''  , dataDecls'  ) <- scopeDataDecls ctx'   (M.dataDecls   m)
   (ctx''' , typeDecls'  ) <- scopeTypeDecls ctx''  (M.typeDecls   m)
@@ -115,8 +116,11 @@ scopeModule ctx m = do
                     , M.definitions = definitions'
                     })
 
-scopeModule_ :: ScopingCtx -> M.Module -> Scoping M.Module
-scopeModule_ ctx m = snd <$> scopeModule ctx m
+scopeModule :: ScopingCtx -> M.Module -> Scoping M.Module
+scopeModule ctx m = snd <$> scopeModule' ctx m
+
+runScopeModule :: M.Module -> Either [Error] M.Module
+runScopeModule = runScoping scopeModule
 
 scopeKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
 scopeKindSigs = foldM scopeKindSig

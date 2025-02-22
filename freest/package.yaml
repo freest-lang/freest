@@ -21,6 +21,10 @@ default-extensions:
   - BangPatterns
   - ScopedTypeVariables
 
+data-dir: data
+data-files:
+  - StandardLib/Prelude.fst
+
 extra-source-files:
   - README.md
 
@@ -42,6 +46,7 @@ library:
     - happy
   exposed-modules:
     - FreeST
+    - Paths_freest
     - UI.CLI
     - UI.Error
     - Parser.Parser
