@@ -34,7 +34,7 @@ import           System.FilePath
 import           Data.List
 
 baseTestDir :: String
-baseTestDir = "/test/prog/invalid/"
+baseTestDir = "/test/prog/Invalid/"
 
 spec :: Spec
 spec = specTest "invalid" baseTestDir testDir

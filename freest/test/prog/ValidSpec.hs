@@ -27,7 +27,7 @@ import Test.HUnit (assertFailure)
 data TestResult = Timeout | Passed | Failed
 
 baseDir :: String
-baseDir = "/test/prog/valid/"
+baseDir = "/test/prog/Valid/"
 
 spec :: Spec
 spec = specTest' "valid" baseDir test
