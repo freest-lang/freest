@@ -82,6 +82,8 @@ data Type
   --   Equations
   | TName Span Identifier
   | DName Span Identifier
+  --   The type of non-contractive types
+  | Bottom Span
   -- Non-constants
   | Var Span Variable
   | Abs Span (Lambda Type)
@@ -203,6 +205,8 @@ instance Dual Type where
   dual (End s p) = End s (dual p)
   dual (Message s m p) = Message s m (dual p)
   dual (Choice s m p ids) = Choice s m (dual p) ids
+  dual t@Skip{} = t
+  dual t@Bottom{} = t
 
 instance Show Type where
   show = \case
@@ -237,6 +241,8 @@ instance Show Type where
     -- Equations
     TName _ i -> show i ++ "#type"
     DName _ i -> show i ++ "#data"
+    -- The type of non-contractive types
+    Bottom{} -> "Bottom"
     where 
       showView  = \case In -> "&"     ; Out -> "+"
       showQuant = \case In -> "forall"; Out -> "exists"
@@ -274,6 +280,8 @@ instance Congruence Type where
   -- Equations
     (TName _ i1) (TName _ i2) -> i1 == i2
     (DName _ i1) (DName _ i2) -> i1 == i2
+  --   The type of non-contractive types
+    (Bottom _) (Bottom _) -> True
     _ _ -> False
 
 instance Congruence [Type] where
@@ -310,25 +318,29 @@ instance Located Type where
     -- Equations
     TName s _       -> s
     DName s _       -> s
+    --   The type of non-contractive types
+    Bottom s        -> s
 
   setSpan s = \case
     -- Functional types
-    Int _             -> Int s
-    Float _           -> Float s
-    Char _            -> Char s
-    Arrow _ m         -> Arrow s m
-    Quant _ p         -> Quant s p
+    Int _            -> Int s
+    Float _          -> Float s
+    Char _           -> Char s
+    Arrow _ m        -> Arrow s m
+    Quant _ p        -> Quant s p
     -- Session types
-    Message _ m p     -> Message s m p
-    Choice  _ m p ls  -> Choice s m p ls
-    End _ p           -> End s p
-    Skip _            -> Skip s
-    Semi _            -> Semi s
-    Dual _            -> Dual s
+    Message _ m p    -> Message s m p
+    Choice  _ m p ls -> Choice s m p ls
+    End _ p          -> End s p
+    Skip _           -> Skip s
+    Semi _           -> Semi s
+    Dual _           -> Dual s
     -- Higher-order
-    Var _ a           -> Var s a
-    Abs _ l           -> Abs s l
-    App _ t1 t2       -> App s t1 t2
+    Var _ a          -> Var s a
+    Abs _ l          -> Abs s l
+    App _ t1 t2      -> App s t1 t2
     -- Equations
-    TName _ n         -> TName s n
-    DName _ n         -> DName s n
+    TName _ n        -> TName s n
+    DName _ n        -> DName s n
+    --   The type of non-contractive types
+    Bottom _         -> Bottom s

@@ -44,6 +44,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             let u = normalise td t
             case u of
               T.Skip{} -> pure []
+              T.Bottom{} -> pure [bottom]
               _ -> do
                 ~(z:δ) <- wordWhnf u
                 γ <- getTransitions z
@@ -52,18 +53,18 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
 -- word t =
 --   -- case fatTerminal t of
 --   --   -- Optimisation; not strictly necessary. TODO: one can't simply (show t')
---   --   -- for the variables must come with the internal representation only
+--   --   -- for the variables must come with the internal representation alone
 
 -- | Requires whnf t. Not exactly, arbitrary T;U will also do
 wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
-  -- Special cases for constants
   T.Skip{} -> -- Skip
     pure []
+  t@T.Bottom{} -> -- Bottom
+    pure [bottom] 
   t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
   t@(T.Choice _ Un _ _) -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
-  -- Remaining constants
   t | T.isConstant t ->  -- ι ≠ Skip, End, *#{}
     getLHS $ M.singleton (show t) []
   T.AppVar _ a ts -> do -- α T1...Tm

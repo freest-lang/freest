@@ -232,11 +232,6 @@ case forall a:1S. forall b:1S. Wait ; a ; b == forall a:1S. forall b:1S. Wait : 
 
 case forall a:1S. forall b:*T. !b ; Wait ; a == forall a:1S. forall c:*T. !c ; Wait : 1S
 
-case forall a:1S. NC ; Wait ; a == forall b:1S. Wait : 1S
-where
-  type NC : *S
-  type NC = NC
-
 case ?(forall a:1S. Wait ; a) == ?(forall b:1S. Wait) : 1S
 
 case forall a:1S. Wait ; a -> Char == forall b:1S. Wait -> Char : *T

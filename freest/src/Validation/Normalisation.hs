@@ -37,7 +37,7 @@ normalise td = norm S.empty
     norm :: Visited -> T.Type -> T.Type
     norm visited t
       | isWhnf t = t
-      | reappears = T.Skip (getSpan t)
+      | reappears = T.Bottom (getSpan t)
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
@@ -89,7 +89,9 @@ reduce td = \case
   -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
   -- R-DEnd
-  T.AppDual _ t@T.End{}  -> T.dual t
+  T.AppDual _ t@T.End{} -> T.dual t
+  -- R-DBottom
+  T.AppDual _ t@T.Bottom{} -> t
   -- R-DMsg
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
   -- R-DChoice

@@ -25,7 +25,7 @@ spec = mkKindingSpec
   \(t,_,m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
 
 translateToGrammar :: TypeDeclMap -> T.Type -> Bool
-translateToGrammar td t = let !_ = trace ("\n" ++ show (fromType td [t])) () in True
+translateToGrammar td t = trace ("\n" ++ show (fromType td [t])) True
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
