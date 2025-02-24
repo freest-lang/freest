@@ -27,7 +27,7 @@ data Token
   -- Keywords
   | TkModule Span | TkWhere Span | TkImport Span
   | TkData Span | TkType Span
-  | TkLet Span | TkIn Span
+  | TkLet Span | TkIn Span | TkMutual Span
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
   | TkSelect Span | TkChannel Span
@@ -103,6 +103,7 @@ instance Located Token where
     TkType s -> s
     TkLet s -> s
     TkIn s -> s
+    TkMutual s -> s
     TkCase s -> s
     TkOf s -> s
     TkIf s -> s
@@ -195,6 +196,7 @@ instance Located Token where
     TkType _ -> TkType s
     TkLet _ -> TkLet s
     TkIn _ -> TkIn s
+    TkMutual _ -> TkMutual s
     TkCase _ -> TkCase s
     TkOf _ -> TkOf s
     TkIf _ -> TkIf s

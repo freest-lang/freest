@@ -43,9 +43,9 @@ freest RunOpts{file=programPath} = do
       Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
       Right m -> do 
         putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-        -- runValidate m & \case 
-        --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-        --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
+        runValidate m & \case 
+          Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+          Right m -> putStrLn "[Validation passed]" >> exitSuccess
 
 preludePath :: FilePath
 preludePath = "StandardLib/Prelude.fst"

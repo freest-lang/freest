@@ -58,6 +58,7 @@ data Error
   | IllegalChoice Span Identifier T.Type
   | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
   | UnsupportedError Span String
+  | SigLacksDef Span Variable
 
 instance Located Error where
   getSpan = \case 
@@ -97,6 +98,7 @@ instance Located Error where
     LinVarAtEndOfScope s _ _ -> s
     IllegalChoice s _ _ -> s
     UnsupportedError s _ -> s
+    SigLacksDef s _ -> s
 
   setSpan = internalError "span not settable for Error type."
 
@@ -143,6 +145,8 @@ instance Show Error where
           "\n Type `"++show i++"` lacks an accompanying kind signature."
         LacksTypeSig _ x -> 
           "\n Function `"++show x++"` lacks an accompanying type signature."
+        SigLacksDef _ x ->
+          "\n Signature for variable `"++show x++"` lacks an accompanying definition."
         GivenTooManyArgs _ f t expected actual ->
           "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
         ExpectsTooManyArgs _ f ->

@@ -55,6 +55,7 @@ $upper = [ A-Z ]
 <0> "type"   { token TkType }
 <0> "let"    { layoutKw TkLet }
 <0> "in"     { token TkIn }
+<0> "mutual" { layoutKw TkMutual }
 <0> "case"   { token TkCase }
 <0> "of"     { layoutKw TkOf }
 <0> "if"     { token TkIf }

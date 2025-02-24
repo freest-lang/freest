@@ -35,9 +35,13 @@ rem _ _ = 0
 negate : Int -> Int
 negate _ = 0
 
-(==), (>) : Int -> Int -> Bool
+(<), (<=), (==), (>=), (>), (/=) : Int -> Int -> Bool
+_ <  _ = False
+_ <= _ = False
 _ == _ = False
+_ >= _ = False
 _ >  _ = False
+_ /= _ = False
 
 ord : Char -> Int
 ord _ = 0

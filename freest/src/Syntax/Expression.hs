@@ -61,6 +61,7 @@ data LetDecl
   = ValDef Pat      RHS
   | FnDef  Variable [([Level Pat Variable], RHS)]
   | TypeSig [Variable] Type
+  | Mutual [LetDecl {- FnDef only -}]
 
 data RHS
   = GuardedRHS [(Exp, Exp)] (Maybe [LetDecl])
@@ -181,6 +182,7 @@ instance Show LetDecl where
       where showParam = \case TypeLevel a -> "@"++show a
                               ExpLevel  p -> show p
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
+    Mutual ds -> "mutual ⦃\n"++intercalate "⨾\n" (map show ds)++"\n⦄"
 
 instance Show RHS where
   show = \case

@@ -25,7 +25,8 @@ import Control.Monad
 import Data.Bifunctor
 import Data.Function (on)
 import Data.Functor
-import Data.List.Extra (snoc)
+import qualified Data.List as List
+import qualified Data.List.Extra as List
 import qualified Data.Map.Strict as Map
 import Control.Monad.State
 import Control.Monad.Extra ( ifM, whenM )
@@ -317,6 +318,10 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
         return (tctxds, tctx1)
         where
           prepareParams = map (bimap (,Nothing) (,Nothing))
+      E.Mutual ds -> do
+        let (sigs, fndefs) =
+              List.partition (\case E.TypeSig{} -> True; _ -> False) ds
+        checkDecls kctx tctx' (sigs ++ fndefs)
 
 -- | Check-against for function arguments. Given kind and type contexts, it
 -- simultaneously walks down a list of arguments and the type of the function,

@@ -54,6 +54,7 @@ import qualified Data.List.NonEmpty as NE
   'type'   { TkType _ }
   'let'    { TkLet _ }
   'in'     { TkIn _ }
+  'mutual' { TkMutual _ }
   'case'   { TkCase _ }
   'of'     { TkOf _ }
   'channel'{ TkChannel _ }
@@ -195,9 +196,24 @@ KindSig :: { M.Module -> M.Module }
 
 LetDecl
   : Pat RHS('=') { E.ValDef $1 $2 }
-  | FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
+  | FnDef { $1 }
+  | TypeSig { $1 }
+  | 'mutual' OPEN MutualDecls Close { E.Mutual $3 }
+
+MutualDecls :: { [E.LetDecl] }
+  : MutualDecl                  { [$1]    }
+  | MutualDecl PIPE MutualDecls { $1 : $3 }
+
+MutualDecl :: { E.LetDecl }
+  : FnDef { $1 }
+  | TypeSig { $1 }
+
+TypeSig :: { E.LetDecl }
+  : FnNameListComma ':' Type { E.TypeSig $1 $3 }
+
+FnDef :: { E.LetDecl }
+  : FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
   | PatPrimary OpOrMinus PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
-  | FnNameListComma ':' Type { E.TypeSig $1 $3 }
 
 FnName :: { Variable }
   : LOWER_ID   { mkVarTk $1 }
