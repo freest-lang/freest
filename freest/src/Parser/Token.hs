@@ -59,7 +59,7 @@ data Token
   -- Kinds 
   | TkLinTopKind Span | TkUnTopKind Span
   | TkLinSessionKind Span | TkUnSessionKind Span
-  | TkLinBoundedKind Span | TkUnBoundedKind Span
+  | TkLinChannelKind Span | TkUnChannelKind Span
 
   deriving (Eq, Show)
 
@@ -171,8 +171,8 @@ instance Located Token where
     TkUnTopKind s -> s
     TkLinSessionKind s -> s
     TkUnSessionKind s -> s
-    TkLinBoundedKind s -> s
-    TkUnBoundedKind s -> s
+    TkLinChannelKind s -> s
+    TkUnChannelKind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
@@ -262,6 +262,6 @@ instance Located Token where
     TkUnTopKind _ -> TkUnTopKind s
     TkLinSessionKind _ -> TkLinSessionKind s
     TkUnSessionKind _ -> TkUnSessionKind s
-    TkLinBoundedKind _ -> TkLinBoundedKind s
-    TkUnBoundedKind _ -> TkUnBoundedKind s
+    TkLinChannelKind _ -> TkLinChannelKind s
+    TkUnChannelKind _ -> TkUnChannelKind s
 

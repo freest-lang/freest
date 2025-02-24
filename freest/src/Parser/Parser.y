@@ -117,8 +117,8 @@ import qualified Data.List.NonEmpty as NE
   '*T'    { TkUnTopKind _ }
   '1S'    { TkLinSessionKind _ }
   '*S'    { TkUnSessionKind _ }
-  '1B'    { TkLinBoundedKind _ }
-  '*B'    { TkUnBoundedKind _ }
+  '1C'    { TkLinChannelKind _ }
+  '*C'    { TkUnChannelKind _ }
 
   -- Expression literals
   INT_LIT { TkIntLit _ _ }
@@ -245,12 +245,12 @@ Kind :: { K.Kind }
   | ProperKind                  { $1 }
 
 ProperKind :: { K.Kind }
-  : '1T' { K.Proper (getSpan $1) K.Lin K.Top     }
-  | '*T' { K.Proper (getSpan $1) K.Un  K.Top     }
-  | '1S' { K.Proper (getSpan $1) K.Lin K.Session }
-  | '*S' { K.Proper (getSpan $1) K.Un  K.Session }
-  | '1B' { K.Proper (getSpan $1) K.Lin K.Bounded }
-  | '*B' { K.Proper (getSpan $1) K.Un  K.Bounded }
+  : '1T' { K.lt (getSpan $1) }
+  | '*T' { K.ut (getSpan $1) }
+  | '1S' { K.ls (getSpan $1) }
+  | '*S' { K.us (getSpan $1) }
+  | '1C' { K.lc (getSpan $1) }
+  | '*C' { K.uc (getSpan $1) }
 
 TypePrimary :: { T.Type }
   -- Builtins (necessary?)

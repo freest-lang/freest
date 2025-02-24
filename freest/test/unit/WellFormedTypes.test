@@ -342,14 +342,14 @@ where
   type A : *S
   type A = Dual Skip
 
-case Y : 1B
+case Y : 1C
 where
-  type Y : 1B
+  type Y : 1C
   type Y = +{B: !(), C: !Int} ; (+{A: Y;!(), C: !()} ; Y)
 
-case X : 1B
+case X : 1C
 where
-  type X, Y : 1B
+  type X, Y : 1C
   type X = Y
   type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
 
@@ -366,55 +366,55 @@ where
 
 -- Shared channels, special syntax
 
-case *!Int : *B
+case *!Int : *C
 
-case *?Int : *B
+case *?Int : *C
 
-case *?(X) : *B
+case *?(X) : *C
 where
   type X : 1S
   type X = Y 
   type Y : 1S
   type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
 
-case *+{One, Two} : *B
+case *+{One, Two} : *C
 
-case *&{One, Two} : *B
+case *&{One, Two} : *C
 
-case *&{Mon, Tue, Wed, Thu, Fri, Sat, Sun} : *B
+case *&{Mon, Tue, Wed, Thu, Fri, Sat, Sun} : *C
 
-case !Int ; *!Int : 1B
+case !Int ; *!Int : 1C
 
 -- Shared channels, raw syntax
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = !Int; A
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = ?Int; A
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = +{One: A, Two: A} 
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = &{One: A, Two: A}
 
-case !Int ; A : 1B
+case !Int ; A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = !Int ; A
 
-case !Int ; !Int ; !Int ; !Int ; A : 1B
+case !Int ; !Int ; !Int ; !Int ; A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = !Int ; A
 
 -- Session types
@@ -447,59 +447,59 @@ case Skip;Skip : 1S
 
 -- Close 
 
-case Close : 1B
+case Close : 1C
 
-case Close;!Int : 1B
+case Close;!Int : 1C
 
-case Close;!Int : 1B
+case Close;!Int : 1C
 
-case Close;?Int : 1B
+case Close;?Int : 1C
 
-case !Char;Close;!Int : 1B
+case !Char;Close;!Int : 1C
 
-case !Char;Close;?Int : 1B
+case !Char;Close;?Int : 1C
 
-case (!Int;Close;!Int);?Int : 1B
+case (!Int;Close;!Int);?Int : 1C
 
-case !Int;Close;!Int : 1B
+case !Int;Close;!Int : 1C
 
 case Skip;+{S:Skip,I:!Int} : 1S
 
-case T;!Int : 1B
+case T;!Int : 1C
 where
-  type T, U : 1B
+  type T, U : 1C
   type T = +{A: !Int;T, B: Skip;Close;Skip}
   type U = +{A: !Int;U, B: Close;U}
 
-case U : 1B
+case U : 1C
 where
-  type T, U : 1B
+  type T, U : 1C
   type T = +{A: !Int;T, B: Skip;Close;Skip}
   type U = +{A: !Int;U, B: Close;U}
 
-case T : 1B
+case T : 1C
 where 
-  type T, T', U, U' : 1B
+  type T, T', U, U' : 1C
   type T = T'
   type T' = +{A: !Int;T', B:Close;T}
   type U = U'
   type U' = +{A: !Int;U', B:Close;U'}
 
-case U : 1B
+case U : 1C
 where 
-  type U, U' : 1B
+  type U, U' : 1C
   type U = U'
   type U' = +{A: !Int;U', B:Close;U'}
 
-case T : 1B
+case T : 1C
 where
-  type T, U : 1B
+  type T, U : 1C
   type T = &{N:!Int;!Int;T, L:Close};?Int
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
-case U : 1B
+case U : 1C
 where
-  type T, U : 1B
+  type T, U : 1C
   type T = &{N:!Int;!Int;T, L:Close};?Int
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
@@ -529,9 +529,9 @@ case !(!Int;Close) : 1S
 
 case !(!Int;Skip;Close;?Int) : 1S 
 
-case forall a:1S. Close;a;!Int : 1B
+case forall a:1S. Close;a;!Int : 1C
 
-case forall b:1S. (Close;b);Skip : 1B
+case forall b:1S. (Close;b);Skip : 1C
 
 case forall a:1S. T a : 1S
 where
@@ -557,49 +557,49 @@ where
 
 -- Unrestricted session types
 
-case *!Int : *B
+case *!Int : *C
 
-case *?Int : *B
+case *?Int : *C
 
-case *!(!Int;?Bool;Close) : *B
+case *!(!Int;?Bool;Close) : *C
 where
   type Bool : 1T
   data Bool = True | False
 
-case *?(!Int;?Bool;Close) : *B
+case *?(!Int;?Bool;Close) : *C
 where
   type Bool : 1T
   data Bool = True | False
 
-case *&{One} : *B
+case *&{One} : *C
 
-case *&{One, Two} : *B
+case *&{One, Two} : *C
 
-case *+{One} : *B
+case *+{One} : *C
 
-case *+{One, Two} : *B
+case *+{One, Two} : *C
 
-case *!Int ; !Char : 1B
+case *!Int ; !Char : 1C
 
-case *?Int ; !Char : 1B
+case *?Int ; !Char : 1C
 
-case *!(!Int ; ?Bool ; Close) ; !Char : 1B
+case *!(!Int ; ?Bool ; Close) ; !Char : 1C
 where
   type Bool : 1T
   data Bool = True | False
 
-case *?(!Int ; ?Bool ; Close) ; !Char : 1B
+case *?(!Int ; ?Bool ; Close) ; !Char : 1C
 where
   type Bool : 1T
   data Bool = True | False
 
-case *&{One} ; !Char : 1B
+case *&{One} ; !Char : 1C
 
-case *&{One, Two} ; !Char : 1B
+case *&{One, Two} ; !Char : 1C
 
-case *&{One} ; !Char : 1B
+case *&{One} ; !Char : 1C
 
-case *+{One, Two} ; !Char : 1B
+case *+{One, Two} ; !Char : 1C
 
 case Either : *T -> *T -> *T
 where
@@ -611,57 +611,57 @@ where
   type Either : *T -> *T -> *T
   data Either a b = Left a | Right b
 
-case Stream : 1S -> 1B
+case Stream : 1S -> 1C
 where
-  type Stream : 1S -> 1B
+  type Stream : 1S -> 1C
   type Stream a = ?a ; Stream a
 
 -- Poly Streams
 
-case OutStream : 1B
+case OutStream : 1C
 where
-  type OutStream : 1B
+  type OutStream : 1C
   type OutStream = exists a:*T . !a ; OutStream
 
-case InStream : 1B
+case InStream : 1C
 where
-  type InStream : 1B
+  type InStream : 1C
   type InStream = forall a:*T . ?a ; InStream
 
 -- Same, with a function to consume the values
 
-case PolyStream Bool : 1B
+case PolyStream Bool : 1C
 where
-  type PolyStream : 1T -> 1B
+  type PolyStream : 1T -> 1C
   type PolyStream b = forall a:*T . ?(a -> b) ; ?a ; PolyStream b
   type Bool : 1T
   data Bool = False | True
 
 -- Dual of the above
 
-case PolyStream Bool : 1B
+case PolyStream Bool : 1C
 where
-  type PolyStream : 1T -> 1B
+  type PolyStream : 1T -> 1C
   type PolyStream b = exists a:*T . !(a -> b) ; !a ; PolyStream b
   type Bool : 1T
   data Bool = False | True
 
 -- Noncontractive types are the big new valid types
 
-case B : 1B
+case B : 1C
 where 
-  type B : 1B
+  type B : 1C
   type B = Skip;B;?Char
 
-case Z : 1B
+case Z : 1C
 where 
-  type Z, B : 1B
+  type Z, B : 1C
   type Z = +{A: Skip, C: Z} ; B
   type B = (Skip;B);?Char
 
-case Z1 : 1B
+case Z1 : 1C
 where
-  type Z1, Z2, A, Z3 , B : 1B
+  type Z1, Z2, A, Z3 , B : 1C
   type Z1 = Z2
   type Z2 = A
   type A = +{A: Skip, C: A} ; Z3
@@ -671,38 +671,38 @@ where
   type Bool : *T
   data Bool = False | True
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = (Skip;A);!Bool
 
   type Bool : *T
   data Bool = False | True
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = A;!Int
 
-case A : 1B
+case A : 1C
 where
-  type A, B, C, D : 1B
+  type A, B, C, D : 1C
   type A = B
   type B = C
   type C = D
   type D = A;!Char
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = ((A; !Bool); !Int) ; ?Bool
 
   type Bool : *T
   data Bool = False | True
 
-case Z : 1B
+case Z : 1C
 where
-  type Z, Z', Z'', Z''', A, A' : 1B
+  type Z, Z', Z'', Z''', A, A' : 1C
   type Z = Z'
   type Z' = Skip;A
   type A = Z''
@@ -710,24 +710,24 @@ where
   type Z''' = A'
   type A' = Z''';(Skip;!Char)
 
-case Z : 1B
+case Z : 1C
 where
-  type Z, A, Z' : 1B
+  type Z, A, Z' : 1C
   type Z = A
   type A = &{B: Z'}
   type Z' = (Z';Skip);!Char
 
-case A;!Bool : 1B
+case A;!Bool : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = A;!Bool
 
   type Bool : *T
   data Bool = False | True
 
-case A : 1B
+case A : 1C
 where
-  type A : 1B
+  type A : 1C
   type A = A;!Bool
 
   type Bool : *T
@@ -754,7 +754,7 @@ case A : 1S -- Absorbing?
 where
   type A : 1S
   type A = &{B: Z !Char}
-  type Z : 1S -> 1B
+  type Z : 1S -> 1C
   type Z b = Z b ; Skip ; b
 
 case W : 1S -- Absorbing?
@@ -785,9 +785,9 @@ where
   type A : 1T
   type A = A
 
-case A : *B
+case A : *C
 where
-  type A : *B
+  type A : *C
   type A = A;A;A;A;A
 
 case A : *T
@@ -801,16 +801,16 @@ where
   type D : *T
   type D = A
 
-case A : *B
+case A : *C
 where
-  type A, A', A'' : *B
+  type A, A', A'' : *C
   type A = A';A''
   type A' = Skip;A'
   type A'' = Skip;A''
 
-case Skip ; A : *B
+case Skip ; A : *C
 where
-  type A, A', A'' : *B
+  type A, A', A'' : *C
   type A = (A' ; A'') ; Skip ; Skip
   type A' = Skip ; A'
   type A'' = Skip ; A''
@@ -851,43 +851,43 @@ where
   type D : *T
   type D = A
 
-case A : *B 
+case A : *C 
 where 
-  type A : *B
+  type A : *C
   type A = Dual A
 
-case A : *B
+case A : *C
 where 
-  type A : *B
+  type A : *C
   type A = Dual (Dual A)
 
-case A : *B
+case A : *C
 where 
-  type A : *B
+  type A : *C
   type A = (Dual (Dual A));&{A: !Int, B: ?Int}
 
-case A : *B
+case A : *C
 where 
-  type A : *B
+  type A : *C
   type A = Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual (Dual A)))))))))
 
 case (!Int ; !Int) ; !Int : 1S
 
-case T : 1B
+case T : 1C
 where
-  type T : 1B
+  type T : 1C
   type T = &{N: T} ; Skip
 
-case T : 1B
+case T : 1C
 where
-  type T : 1B
+  type T : 1C
   type T = &{N:!Int;!Int;T, L:Close};?Int
 
 -- Types with the Dual operator
 
-case Dual Close : 1B -- Should be Absorbing
+case Dual Close : 1C -- Should be Absorbing
 
-case Dual (Dual (Dual Wait)) : 1B  -- Should be Absorbing
+case Dual (Dual (Dual Wait)) : 1C  -- Should be Absorbing
 
 case Dual !Int : 1S
 
@@ -905,7 +905,7 @@ where
   type T : *S
   type T = Dual Skip
 
-case !(Dual ?Int) ; Close : 1B
+case !(Dual ?Int) ; Close : 1C
 
 case Id : 1S -> 1S
 where
@@ -1017,14 +1017,14 @@ where
   type T : 1S
   type T = !T ; !Int
 
-case T : 1B
+case T : 1C
 where
-  type T : 1B
+  type T : 1C
   type T = !Float ; T ; !Int
 
-case T : 1S -> 1B
+case T : 1S -> 1C
 where
-  type T : 1S -> 1B
+  type T : 1S -> 1C
   type T a1 = a1 ; T a1 ; !Int
 
 case T : 1S -> 1S -> 1S
@@ -1032,9 +1032,9 @@ where
   type T : 1S -> 1S -> 1S
   type T a1 a2 = a1 ; (T a1 a2) ; a2
 
-case T : 1S -> 1S -> 1S -> 1S -> 1S -> 1B
+case T : 1S -> 1S -> 1S -> 1S -> 1S -> 1C
 where
-  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1B
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1C
   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
 
 case Either !Int : 1S -> 1T

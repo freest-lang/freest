@@ -11,7 +11,7 @@ module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
-  , lt, ut, ls, us, lb, ub, bot
+  , lt, ut, ls, us, lc, uc, bot
   , Subsort(..)
   , Join(..)
   , Meet(..)
@@ -54,13 +54,13 @@ instance Meet Multiplicity where
   meet _  Un = Un
   meet _  _  = Lin
 
-data Prekind = Top | Session | Bounded | VarPK Variable
+data Prekind = Top | Session | Channel | VarPK Variable
   deriving (Eq, Ord)
 
 instance Subsort Prekind where
   Session <: Top     = True
-  Bounded <: Top     = True
-  Bounded <: Session = True
+  Channel <: Top     = True
+  Channel <: Session = True
   pk1     <: pk2     
     | pk1 == pk2     = True
   _       <: _       = False
@@ -68,18 +68,18 @@ instance Subsort Prekind where
 instance Join Prekind where  
   join ψ@VarPK{} _  = internalError ("join of prekind variable "++show ψ)
   join _ ψ@VarPK{}  = internalError ("join of prekind variable "++show ψ)
-  join Bounded Bounded = Bounded
+  join Channel Channel = Channel
   join Session Session = Session
-  join Bounded Session = Session
-  join Session Bounded = Session  
+  join Channel Session = Session
+  join Session Channel = Session  
   join _       _       = Top
 
 
 instance Meet Prekind where
   meet ψ@VarPK{} _  = internalError ("meet of prekind variable "++show ψ)
   meet _ ψ@VarPK{}  = internalError ("meet of prekind variable "++show ψ)
-  meet Bounded _       = Bounded
-  meet _       Bounded = Bounded
+  meet Channel _       = Channel
+  meet _       Channel = Channel
   meet Session _       = Session
   meet _       Session = Session
   meet _       _       = Top
@@ -105,13 +105,13 @@ instance Join Kind where
   join _ _ = internalError "join of non-proper kinds."
 
 -- | Abbreviations for the six proper kinds
-lt, ut, ls, us, lb, ub :: Span -> Kind
+lt, ut, ls, us, lc, uc :: Span -> Kind
 lt s = Proper s Lin Top 
 ut s = Proper s Un  Top 
 ls s = Proper s Lin Session 
 us s = Proper s Un  Session
-lb s = Proper s Lin Bounded
-ub s = Proper s Un  Bounded
+lc s = Proper s Lin Channel
+uc s = Proper s Un  Channel
 
 -- | Abbreviation for the bottom proper kind
 bot :: Span -> Kind
@@ -122,7 +122,7 @@ isStrictlyLin, isStrictlyAbsorbing, isStrictlySession :: Kind -> Bool
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
 
-isStrictlyAbsorbing (Proper _ _ Bounded) = True
+isStrictlyAbsorbing (Proper _ _ Channel) = True
 isStrictlyAbsorbing _ = False
 
 isStrictlySession (Proper _ _ Session) = True
@@ -138,7 +138,7 @@ instance Show Prekind where
   show = \case 
     Top     -> "T"
     Session -> "S"
-    Bounded -> "C"
+    Channel -> "C"
     VarPK ψ -> external ψ
 
 instance Located Kind where

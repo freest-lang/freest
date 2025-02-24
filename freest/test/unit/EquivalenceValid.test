@@ -39,35 +39,35 @@ case !Int;Skip == Skip;!Int : 1S
 
 case Skip == Skip;Skip : *S
 
-case Close == Close : 1B
+case Close == Close : 1C
 
-case Close == Close;!Int : 1B
+case Close == Close;!Int : 1C
 
-case Close;!Int == Close;?Int : 1B
+case Close;!Int == Close;?Int : 1C
 
-case Close;!Int == Close;?Int : 1B
+case Close;!Int == Close;?Int : 1C
 
 case !Char;Close;!Int 
-  == !Char;Close;?Int : 1B
+  == !Char;Close;?Int : 1C
 
 case (!Int;Close;!Int);?Int 
-  == !Int;Close;!Int : 1B
+  == !Int;Close;!Int : 1C
 
-case T ; !Int == U : 1B
+case T ; !Int == U : 1C
 where
-  type T, U : 1B
+  type T, U : 1C
   type T = +{A: !Int;T, B: Skip;Close;Skip}
   type U = +{A: !Int;U, B: Close;U}
 
-case T == U : 1B
+case T == U : 1C
 where 
-  type T : 1B
+  type T : 1C
   type T = T'
-  type T' : 1B
+  type T' : 1C
   type T' = +{A: !Int;T', B:Close;T}
-  type U : 1B
+  type U : 1C
   type U = U'
-  type U' : 1B
+  type U' : 1C
   type U' = +{A: !Int;U', B:Close;U'}
 
 case T == U : 1S
@@ -77,32 +77,32 @@ where
   type U : 1S
   type U = &{N:U}
 
-case T == U : 1B
+case T == U : 1C
 where
-  type T : 1B
+  type T : 1C
   type T = &{N:!Int;!Int;T, L:Close};?Int
-  type U : 1B
+  type U : 1C
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
 case T == U : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
-  type T' : 1B
+  type T' : 1C
   type T' = +{A: !Int;T', B: Skip;Close;Skip}
   type U : 1S
   type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
-  type U' : 1B
+  type U' : 1C
   type U' = +{A: !Int;U', B: Close;U'}
 
 case !(!Int;Close) 
   == !(!Int;Skip;Close;?Int) : 1S 
 
 case forall a:1S. Close ; a ; !Int 
-  == forall a:1S. (Close ; a) ; Skip : 1B
+  == forall a:1S. (Close ; a) ; Skip : 1C
 
 case forall a:1S. Close;a;!Int 
-  == forall b:1S. (Close;b);Skip : 1B
+  == forall b:1S. (Close;b);Skip : 1C
 
 case forall a:1S. T a
   == forall b: 1S. U b : 1S
@@ -140,23 +140,23 @@ case Dual (exists a:1S. Dual a) == forall b:1S. b : 1S
 
 -- Unrestricted sessions
 
-case *!Int == *!Int ; ?Char : *B
+case *!Int == *!Int ; ?Char : *C
 
-case *!Int ; ?Char == *!Int : *B
+case *!Int ; ?Char == *!Int : *C
 
-case *!Int == *!Int ; Wait : *B
+case *!Int == *!Int ; Wait : *C
 
-case *!Int ; Wait == *!Int : *B
+case *!Int ; Wait == *!Int : *C
 
-case *?Int == *?Int ; ?Char : *B
+case *?Int == *?Int ; ?Char : *C
 
-case *?Int ; ?Char == *?Int : *B
+case *?Int ; ?Char == *?Int : *C
 
-case *?Int == *?Int ; Close : *B
+case *?Int == *?Int ; Close : *C
 
-case *?Int ; Close == *?Int : *B
+case *?Int ; Close == *?Int : *C
 
-case Dual (*&{A, B}) == *+{A, B} : *B
+case Dual (*&{A, B}) == *+{A, B} : *C
 
 case *&{A, B} ; !Int == *&{B, A} : *S
 
@@ -330,11 +330,11 @@ where
   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
 
-case OutStream == Dual InStream : 1B
+case OutStream == Dual InStream : 1C
 where
-  type OutStream : 1B
+  type OutStream : 1C
   type OutStream = exists a:*T. !a ; OutStream
-  type InStream : 1B
+  type InStream : 1C
   type InStream = forall a:*T. ?a ; InStream
 
 case Stream Skip == Stream (Skip; Skip) : 1S

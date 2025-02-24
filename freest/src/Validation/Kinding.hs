@@ -54,24 +54,24 @@ synth ctx = \case
   T.Char s   -> pure (ut s)
   T.Arrow s m -> pure (Arrow s (lt s) (Arrow s (lt s) (Proper s m Top)))
   -- Session types
-  T.Message s m _ -> pure (Arrow s (lt s) (if m == Lin then ls s else ub s))
-  T.SharedChoice s p ls -> pure (ub s)
+  T.Message s m _ -> pure (Arrow s (lt s) (if m == Lin then ls s else uc s))
+  T.SharedChoice s p ls -> pure (uc s)
   T.AppLinChoice s p lts -> do
     pk <- foldM (\pk (_,t) -> meet pk . snd <$> checkSession ctx t) Session lts
     pure (Proper s Lin pk)
-  T.End s _ -> pure (lb s)
+  T.End s _ -> pure (lc s)
   T.Skip s -> pure (us s)
   T.Bottom s -> pure (us s)
   T.AppSemi s t u -> do
     (m1, pk1) <- checkSession ctx t
     (m2, pk2) <- checkSession ctx u
-    return $ Proper s (if pk1 == Bounded then m1 else join m1 m2) (meet pk1 pk2) 
+    return $ Proper s (if pk1 == Channel then m1 else join m1 m2) (meet pk1 pk2) 
   T.AppDual s t -> do
     synthCheck ctx t (ls s)
   -- Polymorphism
   T.AppQuant s p aks t -> do
     checkProper (Map.fromList aks `Map.union` ctx) t
-    >>= \case (m, Bounded) -> pure (Proper s Lin Bounded)
+    >>= \case (m, Channel) -> pure (Proper s Lin Channel)
               (m, Session) -> pure (Proper s Lin Session)
               (m, Top    ) -> pure (Proper s m   Top    )
   -- Equations (including built-ins)
@@ -180,7 +180,7 @@ runCheck m t k = runValidation (buildValidationState m) (check Map.empty t k)
 isAbsorbingM :: KindingCtx -> T.Type -> Validation Bool
 isAbsorbingM kctx t =
   synth kctx t >>= \case
-    Proper _ _ pk -> return $ pk <: Bounded
+    Proper _ _ pk -> return $ pk <: Channel
     _             -> return False
 
 isAbsorbing :: M.Module -> T.Type -> Bool
