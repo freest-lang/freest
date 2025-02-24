@@ -65,7 +65,7 @@ wordWhnf = \case
   t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
   t@(T.Choice _ Un _ _) -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
-  t | T.isConstant t ->  -- ι ≠ Skip, End, *#{}
+  t | T.isConstant t ->  -- ι ≠ Skip, Bot, End, *#{}
     getLHS $ M.singleton (show t) []
   T.AppVar _ a ts -> do -- α T1...Tm
     ws <- mapM word ts
