@@ -1,4 +1,4 @@
-module KindingValidSpec (spec) where
+module KindSynthValidSpec (spec) where
 
 import           Validation.Kinding
 import           UnitSpecUtils
@@ -10,11 +10,8 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test"]
-  "Valid kinding tests" 
+  "Valid kind synthesis tests" 
   \case
-    (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 
-      Left es -> expectationFailure (unlines $ map show es)
-      _       -> return ()
-    (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of 
+    (t, _, m) -> case runKindModule m >>= (`runSynth` t) of 
       Left es -> expectationFailure (unlines $ map show es)
       _       -> return ()
