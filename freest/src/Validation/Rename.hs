@@ -3,7 +3,7 @@ Module      :  SimpleGrammar.Rename
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Minimal (or canonical) type renaming
+Minimal (or canonical) type renaming.
 
 Absorbing - non-normed types == types w/ infinite norm
 -}
@@ -25,6 +25,7 @@ import Utils ( internalError )
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 
+-- | Rename a type.
 rename :: TypeDeclMap -> T.Type -> T.Type
 rename td = \case
   t | T.isConstant t -> t
@@ -33,6 +34,7 @@ rename td = \case
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
   T.Abs s l -> T.Abs s (renameLambda td l)
 
+-- | Rename a type abstraction.
 renameLambda :: TypeDeclMap -> T.Lambda T.Type -> T.Lambda T.Type
 renameLambda td (unzip -> (as, ks), t) = 
   (zip bs ks, rename td (subsAll as (map T.fromVariable bs) t))
@@ -41,7 +43,7 @@ renameLambda td (unzip -> (as, ks), t) =
                               then firstVar a (S.fromList bs' `S.union` reach) : bs'
                               else nullVar a : bs') [] as
 
--- The set of free variables reachable in a type
+-- | The set of free variables reachable in a type.
 reachable :: TypeDeclMap -> T.Type -> S.Set Variable
 reachable td = \case
   t | T.isConstant t -> S.empty
@@ -52,6 +54,7 @@ reachable td = \case
                   | otherwise -> reachable td t `S.union` reachable td u
   T.App _ t us -> S.unions (map (reachable td) (t:us))
 
+-- | Is a type absorbing?
 isAbsorbing :: TypeDeclMap -> T.Type -> Bool
 isAbsorbing td = absorb S.empty
   where

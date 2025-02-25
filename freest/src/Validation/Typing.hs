@@ -35,11 +35,12 @@ import Data.Map.Strict qualified as Map
 import Debug.Trace ( traceM )
 
 
--- Type context. It keeps track of the variables and constructors in scope and 
--- their types.
+-- The type context. It keeps track of the variables and constructors in scope
+-- and their types.
 type TypeCtx = Map.Map (Either Variable Identifier) T.Type
 
--- Kind context. It keeps track of the type variables in scope and their kinds.
+-- The kind context. It keeps track of the type variables in scope and their 
+-- kinds.
 type KindCtx = Map.Map Variable K.Kind
 
 -- | Looks up the type of a variable or identifier in a type context,
@@ -539,4 +540,4 @@ typeModule m = do
 
 runValidate :: M.Module -> Either [Error] M.Module
 runValidate m =
-  runValidation (buildValidationState m) (Kinding.kindModule m >>= typeModule)
+  runValidation (buildValidationState m) (Kinding.kindModule m >> typeModule m)

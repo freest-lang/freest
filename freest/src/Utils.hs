@@ -1,16 +1,21 @@
+{- |
+Module      :  Utils
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Miscellaneous utility functions.
+-}
 module Utils 
   ( internalError
-  , maybeLeft
   , ordinal
   )
 where
 
+-- | Throw an 'error' with standard formatting.
 internalError :: String -> a
 internalError s = error $ "(Internal error) "++s
 
-maybeLeft :: Either a b -> Maybe a
-maybeLeft = either Just (const Nothing)
-
+-- | The ordinal 'String' of an 'Integral'.
 ordinal :: (Integral a, Show a) => a -> String
 ordinal i = show i ++ suffix
   where suffix | i' > 10 && i' < 20 = "th"

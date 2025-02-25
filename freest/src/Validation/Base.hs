@@ -17,10 +17,17 @@ import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
 
+-- | Maps @type@ names to their declarations.
 type TypeDeclMap = Map.Map Identifier (T.Lambda T.Type)
-type ConsDeclMap = Map.Map Identifier [T.Type]
+
+-- | Maps @data@ names to their declarations.
 type DataDeclMap = Map.Map Identifier (T.Lambda ConsDeclMap)
 
+-- | Maps @data@ constructor names to their declarations.
+type ConsDeclMap = Map.Map Identifier [T.Type]
+
+-- | The validation state. Keeps track of errors. Also stores declarations
+-- for easy lookup, but these are not supposed to change.
 data ValidationState
   = ValidationState
     { errors    :: [Error]
@@ -29,7 +36,8 @@ data ValidationState
     , dataDecls :: DataDeclMap
     , consDecls :: Map.Map Identifier (Identifier, [(Variable, K.Kind)], [T.Type])
     }
-  
+
+-- | The empty validation state. No errors or declarations.
 emptyValidationState :: ValidationState
 emptyValidationState = ValidationState 
   { errors    = []
@@ -39,6 +47,8 @@ emptyValidationState = ValidationState
   , consDecls = Map.empty
   }
 
+-- | Build an initial validation state from a module, storing its declarations
+-- for easy lookup. The resulting state contains no errors.
 buildValidationState :: M.Module -> ValidationState
 buildValidationState m = ValidationState -- TODO: traverse module once.
   { errors    = []
@@ -48,8 +58,14 @@ buildValidationState m = ValidationState -- TODO: traverse module once.
   , consDecls = Map.fromList (concatMap (\(i,(aks,cds)) -> map (second (i,aks,)) cds) $ M.dataDecls m)
   }
 
+-- | The validation monad. Combines exceptions of type 'Error' with state of 
+-- type 'ValidationState'.
 type Validation = ExceptT Error (State ValidationState)
 
+-- | Run a validation procedure from an initial state, returning either:
+-- 
+--     * a list of errors, if any was encountered;
+--     * the result of the validation procedure, otherwise.
 runValidation :: ValidationState -> Validation t -> Either [Error] t
 runValidation s v =
   let (x, ValidationState{errors}) = runState (runExceptT v) s
@@ -58,37 +74,11 @@ runValidation s v =
     Right x' | null errors -> Right x'
              | otherwise   -> Left errors
 
-putErrorWithDefault :: MonadState ValidationState m => a -> Error -> m a
-putErrorWithDefault x e = do
-  modify \s -> s{errors=errors s++[e]}
-  return x
-
-catch :: Validation () -> Validation ()
-catch v = catchE v (putErrorWithDefault ())
-
-catchWithDefault :: a -> Validation a -> Validation a
-catchWithDefault x v = catchE v (putErrorWithDefault x)
-
-lookupKindSig :: Identifier -> Validation K.Kind
-lookupKindSig i = do 
+-- | Look up the kind of a @type@ or @data@ name in the validation state.
+lookupKind :: Identifier -> Validation K.Kind
+lookupKind i = do 
   ctx <- gets kindSigs
   case ctx Map.!? i of
     Just k  -> return k
     Nothing -> throwE (TypeOutOfScope (getSpan i) i)
 
-lookupTName :: Identifier -> [T.Type] -> Validation T.Type
-lookupTName i ts =
-  gets (Map.lookup i . typeDecls) >>= \case 
-    Nothing    -> throwE (TypeOutOfScope (getSpan i) i)
-    Just (map fst -> as, t) 
-      | n >  m -> pure $ T.AppTName (getSpan i) i ts
-      | n == m -> pure t'
-      | n <  m -> pure $ T.smartApp s t' (drop n ts)
-      where n  = length as
-            m  = length ts
-            t' = foldr (uncurry subs) t (zip (take m as) ts)
-            -- TODO: Can we have? (zip takes the length of the shorter list)
-            -- t' = foldr (uncurry subs) t (zip aks ts)
-            -- TODO: if yes, then we may as well write (with a proper import)
-            -- t' = subsAll aks ts t
-            s  = spanFromTo i (last ts)

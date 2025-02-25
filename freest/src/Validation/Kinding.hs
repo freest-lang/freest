@@ -17,8 +17,6 @@ module Validation.Kinding
   , runKindModule
   , runSynth
   , runCheck
-  -- , isAbsorbingM
-  , isAbsorbing
   )
 where
 
@@ -43,9 +41,10 @@ import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 
-
+-- | The kinding context. Keeps track of type variables and their kinds.
 type KindingCtx = Map.Map Variable Kind
 
+-- | Synthesize the (minimal?) kind of a type.
 synth :: KindingCtx -> T.Type -> Validation Kind
 synth ctx = \case
   -- Functional types
@@ -75,10 +74,10 @@ synth ctx = \case
               (m, Session) -> pure (Proper s Lin Session)
               (m, Top    ) -> pure (Proper s m   Top    )
   -- Equations (including built-ins)
-  T.TName s i -> lookupKindSig i
+  T.TName s i -> lookupKind i
   T.Tuple s ts -> Proper s <$> foldCheckProperJoin ctx Un ts <*> pure Top
   T.List s t -> (Proper s . fst <$> checkProper ctx t) <*> pure Top
-  T.DName s i -> lookupKindSig i
+  T.DName s i -> lookupKind i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
     Just k -> pure k
@@ -98,20 +97,28 @@ synth ctx = \case
     checkArgs s t nargs npars (t' : ts') (k' : ks') kn =
       check ctx t' k' >> checkArgs s t nargs npars ts' ks' kn
 
+-- | Check a type against a given kind.
 check :: KindingCtx -> T.Type -> Kind -> Validation ()
 check ctx t k = void (synthCheck ctx t k)
 
+-- | Calculate the join of the multiplicities of a list of types, starting
+-- from a given multiplicity. Throws an error if a non-proper type is
+-- encountered.
 foldCheckProperJoin :: KindingCtx -> Multiplicity -> [T.Type] -> Validation Multiplicity
 foldCheckProperJoin ctx = foldM (checkProperJoin ctx)
   where checkProperJoin ctx m' t =
           checkProper ctx t >>= \(m'',_) -> pure (join m' m'')
 
+-- | Check if a type is a proper type. If so, return its minimal multiplicity 
+-- and prekind. Otherwise, throw an error.
 checkProper :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkProper ctx t =
   synth ctx t >>= \case
     Proper _ m pk -> pure (m,pk)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
 
+-- | Check if a type is a session type. If so, return its minimal multiplicity
+-- and prekind. Otherwise, throw an error.
 checkSession :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkSession ctx t = do
   (m,pk) <- checkProper ctx t
@@ -119,26 +126,30 @@ checkSession ctx t = do
     throwE (SessionTypeMismatch (getSpan t) t (Proper (getSpan t) m pk))
   return (m,pk)
 
+-- | Check if the kind of a type is a subkind of another. If not, throw an 
+-- error located at the type.
 checkSubkindOf :: T.Type -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k = 
   unless (k' <: k) $
     throwE (KindMismatch (getSpan t) k t k')
-  
+
+-- | Synthesize the kind of a type and check if it is a subkind of another
+-- kind.
 synthCheck :: KindingCtx -> T.Type -> Kind -> Validation Kind
 synthCheck ctx t k = do
   k' <- synth ctx t
   checkSubkindOf t k' k
   return k'
 
-kindModule :: M.Module -> Validation M.Module
+-- | Check a module for type formation.
+kindModule :: M.Module -> Validation ()
 kindModule m = do
   forM_ (M.typeDecls m) kindTypeDecl
   forM_ (M.dataDecls m) kindDataDecl
-  return m
   where 
     kindTypeDecl :: (Identifier, T.Lambda T.Type) -> Validation ()
     kindTypeDecl (i, (map fst -> as, t)) = do
-      k <- lookupKindSig i
+      k <- lookupKind i
       checkTypeDecl k Map.empty as k
       where
         checkTypeDecl k ctx [] k' =
@@ -150,7 +161,7 @@ kindModule m = do
 
     kindDataDecl :: (Identifier, T.Lambda M.ConsDeclList) -> Validation ()
     kindDataDecl (i, (map fst -> as, t)) = do
-      k <- lookupKindSig i
+      k <- lookupKind i
       checkDataDecl k id Map.empty as k
       where
         checkDataDecl k f ctx [] _ =
@@ -168,26 +179,27 @@ kindModule m = do
 
         synthDataMult ctx = foldM (foldCheckProperJoin ctx) Un
 
+-- | Run kinding on a module, building the initial validation state from it.
+-- This returns either:
+-- 
+--     * a list of errors, if any was encountered;
+--     * the given module, otherwise.
 runKindModule :: M.Module -> Either [Error] M.Module
-runKindModule m = runValidation (buildValidationState m) (kindModule m)
+runKindModule m = 
+  runValidation (buildValidationState m) (kindModule m) >> pure m
 
+-- | Run synthesis on type, building the initial validation state from a given
+-- module. This returns either:
+-- 
+--     * a list of errors, if any was encountered;
+--     * a kind synthesized from the type, otherwise.
 runSynth :: M.Module -> T.Type -> Either [Error] Kind
 runSynth m t = runValidation (buildValidationState m) (synth Map.empty t)
 
+-- | Run checking on a type against a kind, building the initial validation 
+-- state from a given module. This returns either:
+-- 
+--     * a list of errors, if any was encountered;
+--     * unit, otherwise.
 runCheck :: M.Module -> T.Type -> Kind -> Either [Error] ()
 runCheck m t k = runValidation (buildValidationState m) (check Map.empty t k)
-
-isAbsorbingM :: KindingCtx -> T.Type -> Validation Bool
-isAbsorbingM kctx t =
-  synth kctx t >>= \case
-    Proper _ _ pk -> return $ pk <: Channel
-    _             -> return False
-
-isAbsorbing :: M.Module -> T.Type -> Bool
-isAbsorbing m = isAbsorb (buildValidationState m) Map.empty
-  where
-    isAbsorb :: ValidationState -> KindingCtx -> T.Type -> Bool
-    isAbsorb s kctx t =
-      case evalState (runExceptT $ isAbsorbingM kctx t) s of
-        Right b  -> b
-        Left  es -> internalError $ "isAbsorbing: got errors "++show es

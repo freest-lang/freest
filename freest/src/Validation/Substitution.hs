@@ -26,6 +26,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Debug.Trace ( trace )
 
+-- | The set of free variables ocurring in a type.
 freeVars :: T.Type -> Set.Set Variable
 freeVars = \case
     T.Abs _ (aks, t) -> freeVars t Set.\\ Set.fromList (map fst aks)
@@ -33,6 +34,7 @@ freeVars = \case
     T.App _ t ts     -> Set.unions (freeVars t : map freeVars ts)
     _                -> Set.empty
 
+-- | The set of all variables ocurring in a type.
 allVars :: T.Type -> Set.Set Variable
 allVars = \case 
     T.Abs _ (aks, t)   -> allVars t
@@ -40,7 +42,8 @@ allVars = \case
     T.App _ t ts       -> Set.unions (allVars t : map allVars ts)
     _                  -> Set.empty
 
--- [a -> u] t
+-- | Type substitution. Substitutes ocurrences of a variable in a type for 
+-- another type (usually written @[a -> u] t@).
 subs :: Variable -> T.Type -> T.Type -> T.Type
 subs a u = \case 
   -- Variables
@@ -63,6 +66,7 @@ subs a u = \case
   T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)
   t -> t
 
--- [as -> us]t, consider only the shortest between as and us
+-- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
+-- between @as@ and @us@.
 subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
 subsAll as us t = foldr (uncurry subs) t (zip as us)

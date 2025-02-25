@@ -29,23 +29,33 @@ import Debug.Trace ( traceM )
 import Options.Applicative
 import System.Exit ( exitFailure, exitSuccess )
 
+-- | The entry point of the FreeST compiler. Parses the command line options
+-- and passes them to the compiler pipeline.
 main :: IO ()
 main = do
   execParser opts >>= freest
 
+-- | The FreeST compiler pipeline.
 freest :: RunOpts -> IO ()
 freest RunOpts{file=programPath} = do
+  -- Read the source code of the Prelude.
   preludeSrc <- getDataFileName preludePath >>= readFile
+  -- Read the source code of the program.
   programSrc <- readFile programPath
+  -- Parse the source code of both the Prelude and the program, and
+  -- include the former in the latter, resulting in a single module.
   M.include <$> runParseModule preludePath preludeSrc
             <*> runParseModule programPath programSrc
+    -- Scope the module.
     >>= runScopeModule & \case 
       Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
       Right m -> do 
         putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+        -- Validate the module.
         runValidate m & \case 
           Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
           Right m -> putStrLn "[Validation passed]" >> exitSuccess
 
+-- | The path to the source code of the Prelude.
 preludePath :: FilePath
 preludePath = "StandardLib/Prelude.fst"

@@ -29,7 +29,7 @@ import Debug.Trace
 
 type Visited = S.Set T.Type
 
--- The weak head normal form of a type. Big-step semantics. A total function for
+-- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
 normalise :: TypeDeclMap -> T.Type -> T.Type
 normalise td = norm S.empty
@@ -44,6 +44,7 @@ normalise td = norm S.empty
         reappears = maybe False   (`S.member` visited) u
         insert    = maybe visited (`S.insert` visited) u
 
+-- | Extract the applied @type@ name at the head of a type, if any.
 tNameRedex :: T.Type -> Maybe T.Type
 tNameRedex = \case 
   t@T.AppTName{}                               -> Just t -- µ∗U
@@ -52,7 +53,7 @@ tNameRedex = \case
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
--- Is a given type a weak head normal form?
+-- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
 isWhnf = \case
   -- W-Const0
@@ -72,8 +73,7 @@ isWhnf = \case
   T.AppDual _ T.Var{} -> True
   _ -> False
 
--- One step type reduction
--- Requires: not (isWhnf t) ?
+-- | One step type reduction (requires @not (isWhnf t)@?)
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
   -- 1. Semicolon

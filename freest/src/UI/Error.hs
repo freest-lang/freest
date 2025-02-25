@@ -20,6 +20,7 @@ import Utils
 import Data.List ( intercalate )
 import Data.Map.Strict qualified as Map
 
+-- | The errors that can be found in a FreeST program.
 data Error 
   = LexicalError Span Char 
   | ParseError Span (Token, [String])
@@ -60,7 +61,10 @@ data Error
   | UnsupportedError Span String
   | SigLacksDef Span Variable
 
+-- | Errors can be tracked to the source code.
 instance Located Error where
+  -- | Returns the span of an 'Error', i.e., where the error occurs in the
+  -- source code.
   getSpan = \case 
     LexicalError s _ -> s
     ParseError s _ -> s
@@ -99,9 +103,12 @@ instance Located Error where
     IllegalChoice s _ _ -> s
     UnsupportedError s _ -> s
     SigLacksDef s _ -> s
-
+  -- | There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
+-- | Convert an error to a readable 'String', which should include its location
+-- in the source code in a way that is parseable and by most common IDEs.
+-- (Needs some work.)
 instance Show Error where
   show e = show (getSpan e) ++ ": error:"++showError e
     where 

@@ -162,7 +162,7 @@ type Scoping = State ScopingState
 -- | Run a scoping procedure on a given value, returning either:
 -- 
 --     * a list of errors, if any was encountered;
---     * the result of the scoping procedure.
+--     * the result of the scoping procedure, otherwise.
 runScoping :: (ScopingCtx -> a -> Scoping b) -> a -> Either [Error] b
 runScoping f x =
   let (x',s) = runState (f empty x) (ScopingState firstInternal [])
@@ -189,7 +189,7 @@ freshInternal x = incCounter >>= \i -> return x{internal = i}
 -- | Run scoping on a module, returning either:
 -- 
 --     * a list of errors, if any was encountered;
---     * the scoped module.
+--     * the scoped module, otherwise.
 runScopeModule :: M.Module -> Either [Error] M.Module
 runScopeModule = runScoping scopeModule
 
