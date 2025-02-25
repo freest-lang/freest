@@ -8,31 +8,31 @@ This module implements FreeST's bidirectional type checking algorithm.
 module Validation.Typing where
 
 import Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Module as M
-import qualified Syntax.Type as T
-import Validation.TypeEquivalence.TypeEquivalence (equivalent)
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
 import UI.Error
 import Utils
 import Validation.Base
-import qualified Validation.Expose as Expose
-import qualified Validation.Kinding as Kinding
-import Validation.Normalisation (normalise)
-import Validation.Substitution (subs, subsAll)
+import Validation.Expose qualified as Expose
+import Validation.Kinding qualified as Kinding
+import Validation.Normalisation ( normalise )
+import Validation.Substitution ( subs, subsAll )
+import Validation.TypeEquivalence.TypeEquivalence ( equivalent )
 
 import Control.Monad
-import Data.Bifunctor
-import Data.Function (on)
-import Data.Functor
-import qualified Data.List as List
-import qualified Data.List.Extra as List
-import qualified Data.Map.Strict as Map
-import Control.Monad.State
 import Control.Monad.Extra ( ifM, whenM )
+import Control.Monad.State
 import Control.Monad.Trans.Except ( catchE, throwE )
-import Data.Foldable (foldrM)
-import Debug.Trace (traceM)
+import Data.Bifunctor
+import Data.Foldable ( foldrM )
+import Data.Function ( on )
+import Data.Functor
+import Data.List qualified as List
+import Data.List.Extra qualified as List
+import Data.Map.Strict qualified as Map
+import Debug.Trace ( traceM )
 
 
 -- Type context. It keeps track of the variables and constructors in scope and 

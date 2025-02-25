@@ -30,10 +30,10 @@ module Validation.TypeEquivalence.Grammar
   )
 where
 
-import           Syntax.Base
-import qualified Data.Map.Strict         as M
-import           Data.List               ( intercalate )
-import           Prelude                 hiding ( Word )
+import Syntax.Base
+import Data.Map.Strict qualified as M
+import Data.List ( intercalate )
+import Prelude hiding ( Word )
 
 -- Terminal symbols in the grammar
 type Terminal = String

@@ -8,23 +8,23 @@ This module implements a layout-sensitive parser for FreeST.
 -}
 module Parser.Parser where
 
-import Parser.Lexer (scan)
+import Parser.Lexer ( scan )
 import Parser.Token
 import Parser.LexerUtils
 import Parser.ParserUtils
 import Syntax.Base 
 import Syntax.Names
-import qualified Syntax.Expression as E 
-import qualified Syntax.Kind       as K 
-import qualified Syntax.Type       as T 
-import qualified Syntax.Module     as M
+import Syntax.Expression qualified as E 
+import Syntax.Kind qualified as K 
+import Syntax.Type qualified as T 
+import Syntax.Module qualified as M
 import UI.Error
 
 import Control.Monad.Except
 import Data.Bifunctor
-import Data.Function (on)
-import Data.List (sortBy)
-import qualified Data.List.NonEmpty as NE
+import Data.Function ( on )
+import Data.List ( sortBy )
+import Data.List.NonEmpty qualified as NE
 }
 
 %name parseExp Exp

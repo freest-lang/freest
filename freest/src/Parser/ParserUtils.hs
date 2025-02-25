@@ -13,11 +13,11 @@ import Parser.Token
 import Parser.LexerUtils
 import Syntax.Base
 import Syntax.Names
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 
-import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty qualified as NE
 
 dummyKindVar :: Located a => a -> K.Kind
 dummyKindVar (getSpan -> s) =

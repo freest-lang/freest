@@ -16,15 +16,15 @@ module Validation.Substitution
 where
 
 import Syntax.Base
-import qualified Syntax.Type as T
-import qualified Syntax.Kind as K
+import Syntax.Type qualified as T
+import Syntax.Kind qualified as K
 
-import Data.Bifunctor (first, second)
-import Data.List (intersperse, union)
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-import Debug.Trace (trace)
+import Data.Bifunctor ( first, second )
+import Data.List ( intersperse, union )
+import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Debug.Trace ( trace )
 
 freeVars :: T.Type -> Set.Set Variable
 freeVars = \case

@@ -1,15 +1,15 @@
 module WhnfImpliesNotReducesSpec (spec) where
 
-import qualified Syntax.Module                 as M
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Normalisation      ( isWhnf, reduce )
-import           UnitSpecUtils
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap )
+import Validation.Normalisation ( isWhnf, reduce )
+import UnitSpecUtils
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
-import           Control.Exception             ( catch, ErrorCall )
-import           Debug.Trace
+import Control.Exception ( catch, ErrorCall )
+import Data.Map.Strict qualified as Map
+import Debug.Trace
+import Test.Hspec
 
 -- This test should be called with well-formed types only
 

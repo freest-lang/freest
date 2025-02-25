@@ -24,11 +24,11 @@ module Syntax.Expression
 where
 
 import Syntax.Base
-import Syntax.Kind (Multiplicity, Kind)
-import Syntax.Type (Type)
-
-import Data.List (intercalate)
+import Syntax.Kind ( Multiplicity, Kind )
 import Syntax.Names
+import Syntax.Type ( Type )
+
+import Data.List ( intercalate )
 
 data Pat
   = IntPat Span Int

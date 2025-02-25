@@ -25,23 +25,23 @@ where
 import UI.Error
 import Syntax.Base
 import Syntax.Kind
-import qualified Syntax.Module as M
-import qualified Syntax.Type as T
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
 import Utils
 import Validation.Base
-import qualified Validation.Expose as Expose
+import Validation.Expose qualified as Expose
 import Validation.Normalisation
-import Validation.Substitution (subs)
+import Validation.Substitution ( subs )
 
-import Data.Bifunctor (first)
-import Data.Functor ((<&>))
-import qualified Data.Map.Strict as Map
-import Control.Monad.Extra (unlessM, (&&^))
-import Data.Foldable.Extra (allM)
-import Control.Monad.State (MonadState, foldM, unless, void, forM_, when, runState, StateT (runStateT), evalState, gets)
-import Control.Monad.Trans.Except (throwE, runExceptT, ExceptT (ExceptT))
-import Control.Monad.Identity (Identity(..))
-import qualified Data.List.NonEmpty as NE
+import Control.Monad.Identity ( Identity(..) )
+import Control.Monad.Extra ( unlessM, (&&^) )
+import Control.Monad.State ( MonadState, foldM, unless, void, forM_, when, runState, StateT (runStateT), evalState, gets )
+import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
+import Data.Bifunctor ( first )
+import Data.Foldable.Extra ( allM )
+import Data.Functor ( (<&>) )
+import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict qualified as Map
 
 
 type KindingCtx = Map.Map Variable Kind

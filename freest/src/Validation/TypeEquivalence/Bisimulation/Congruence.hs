@@ -11,21 +11,20 @@ module Validation.TypeEquivalence.Bisimulation.Congruence
   )
 where
 
-import           Syntax.Base
-import           Validation.TypeEquivalence.Grammar
-import           Validation.TypeEquivalence.Bisimulation.State hiding ( TState, visitedPairs )
+import Syntax.Base
+import Validation.TypeEquivalence.Grammar
+import Validation.TypeEquivalence.Bisimulation.State 
+  hiding ( TState, visitedPairs )
 
-import           Control.Monad.State           ( State, evalState, gets, modify )
-import qualified Data.Map.Strict               as Map ( empty, lookup )
-import qualified Data.Set                      as Set ( empty, Set, union, fromList )
-import           Data.List                     ( isPrefixOf, nub )
-import           Prelude hiding                ( Word )
+import Control.Monad.State ( State, evalState, gets, modify )
+import Data.List ( isPrefixOf, nub )
+import Data.Map.Strict qualified as Map ( empty, lookup )
+import Data.Set qualified as Set ( empty, Set, union, fromList )
+import Prelude hiding ( Word )
 
 type VisitedState = State VisitedStateData
 
-newtype VisitedStateData = TState
-  { visitedPairs :: Set.Set (Word, Word)
-  }
+newtype VisitedStateData = TState {visitedPairs :: Set.Set (Word, Word)}
 
 addVisitedVariable :: Set.Set (Word, Word) -> VisitedState ()
 addVisitedVariable w = modify (\s -> s {visitedPairs = Set.union w (visitedPairs s)})

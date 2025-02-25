@@ -10,24 +10,24 @@ module FreeST where
 import Parser.LexerUtils
 import Parser.Lexer
 import Parser.Token
-import Paths_freest (getDataFileName)
+import Paths_freest ( getDataFileName )
 import Control.Monad.RWS
 import UI.CLI
 import UI.Error
 import Parser.Parser
-import qualified Syntax.Module as M
-import Parser.Scoping (runScopeModule)
+import Syntax.Module qualified as M
+import Parser.Scoping ( runScopeModule )
 import Validation.Base
 import Validation.Kinding
 import Validation.Typing
 
 
-import Control.Monad.State (runState)
-import Data.Function ((&))
-import qualified Data.Map as Map
-import Debug.Trace (traceM)
+import Control.Monad.State ( runState )
+import Data.Function ( (&) )
+import Data.Map qualified as Map
+import Debug.Trace ( traceM )
 import Options.Applicative
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit ( exitFailure, exitSuccess )
 
 main :: IO ()
 main = do

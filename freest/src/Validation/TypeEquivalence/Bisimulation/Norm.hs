@@ -15,18 +15,18 @@ module Validation.TypeEquivalence.Bisimulation.Norm
   )
 where
 
-import           Syntax.Base
-import           Validation.TypeEquivalence.Grammar
-import           Validation.TypeEquivalence.Bisimulation.State
+import Syntax.Base
+import Validation.TypeEquivalence.Grammar
+import Validation.TypeEquivalence.Bisimulation.State
 
-import           Control.Monad.State
-import           Control.Applicative
-import qualified Data.Map.Strict               as Map
-import qualified Data.Set                      as Set
-import           Data.List
-import           Data.Maybe
-import           Data.Function                 ( on )
-import           Prelude                       hiding ( Word, log )
+import Control.Monad.State
+import Control.Applicative
+import Data.Function ( on )
+import Data.List
+import Data.Map.Strict qualified as Map
+import Data.Maybe
+import Data.Set qualified as Set
+import Prelude hiding ( Word, log )
 
 nonterminals :: Grammar -> Set.Set NonTerminal
 nonterminals (Grammar _ productions) = Set.union (Map.keysSet productions) (Set.fromList $ concatMap (concatMap snd . Map.toList) (Map.elems productions))

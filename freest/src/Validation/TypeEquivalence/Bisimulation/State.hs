@@ -23,14 +23,14 @@ module Validation.TypeEquivalence.Bisimulation.State
   )
 where
 
-import           Syntax.Base
-import           Validation.TypeEquivalence.Grammar
+import Syntax.Base
+import Validation.TypeEquivalence.Grammar
 
-import           Control.Monad.State
-import qualified Data.Map.Strict               as Map
-import qualified Data.Set                      as Set
-import qualified Data.Sequence                 as Seq
-import           Prelude                       hiding ( Word, log )
+import Control.Monad.State
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Sequence qualified as Seq
+import Prelude hiding ( Word, log )
 
 -- Type used in norm
 type IOF = Maybe Int

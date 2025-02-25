@@ -1,5 +1,5 @@
 module Parser.Unparser() where
-import qualified Syntax.Kind as K -- needed for Associativity
+import Syntax.Kind qualified as K -- needed for Associativity
 
 data Precedence
   = PMin

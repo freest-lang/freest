@@ -1,13 +1,13 @@
 module NoDefaultVariablesSpec (spec) where
 
-import           Syntax.Base
-import qualified Syntax.Module                 as M
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap, DataDeclMap )
+import Syntax.Base
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap, DataDeclMap )
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
-import           UnitSpecUtils
+import Data.Map.Strict qualified as Map
+import Test.Hspec
+import UnitSpecUtils
 
 -- This test should be called with well-formed types only
 

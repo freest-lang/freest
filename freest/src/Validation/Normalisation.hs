@@ -16,16 +16,16 @@ module Validation.Normalisation
   )
 where
 
-import           Syntax.Base
-import           Syntax.Kind (Kind)
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution       ( subsAll )
-import           Utils                         ( internalError )
+import Syntax.Base
+import Syntax.Kind ( Kind )
+import Syntax.Type as T
+import Validation.Base ( TypeDeclMap )
+import Validation.Substitution ( subsAll )
+import Utils ( internalError )
 
-import qualified Data.Map.Strict               as M
-import qualified Data.Set                      as S
-import           Debug.Trace
+import Data.Map.Strict qualified as M
+import Data.Set qualified as S
+import Debug.Trace
 
 type Visited = S.Set T.Type
 

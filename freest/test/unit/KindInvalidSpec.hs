@@ -1,10 +1,11 @@
 module KindInvalidSpec (spec) where
 
-import           Validation.Kinding (runSynth, runCheck, runKindModule)
-import           Test.Hspec
-import           UnitSpecUtils (mkKindingSpec)
-import           Data.Either (isRight)
-import qualified Data.Map as Map
+import Validation.Kinding ( runSynth, runCheck, runKindModule )
+
+import Data.Either ( isRight )
+import Data.Map qualified as Map
+import Test.Hspec
+import UnitSpecUtils ( mkKindingSpec )
 
 main :: IO ()
 main = hspec spec

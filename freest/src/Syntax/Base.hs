@@ -11,10 +11,10 @@ module Syntax.Base
   -- TODO: explicit export list
 where
 
-import qualified Data.Set                      as Set
 
-import Data.List ((\\))
-import           Data.Bifunctor
+import Data.Bifunctor ( Bifunctor(..) )
+import Data.List ( (\\) )
+import Data.Set qualified as Set
 
 -- Positions in the source code
 

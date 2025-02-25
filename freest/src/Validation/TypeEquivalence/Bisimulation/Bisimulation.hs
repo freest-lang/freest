@@ -11,23 +11,22 @@ module Validation.TypeEquivalence.Bisimulation.Bisimulation
  )
 where
 
-import           Syntax.Base
-import qualified Syntax.Type                   as T
-import           Validation.TypeEquivalence.Grammar
-import           Validation.TypeEquivalence.Bisimulation.Norm
-import           Validation.TypeEquivalence.Bisimulation.State
-import           Validation.TypeEquivalence.Bisimulation.Congruence 
+import Syntax.Base
+import Syntax.Type qualified as T
+import Validation.TypeEquivalence.Grammar
+import Validation.TypeEquivalence.Bisimulation.Norm
+import Validation.TypeEquivalence.Bisimulation.State
+import Validation.TypeEquivalence.Bisimulation.Congruence 
 
-import           Control.Monad.State
-import           Data.Foldable                 ()
-import           Data.Function                 ( on )
-import           Data.List                     ( sortBy )
-import qualified Data.Map.Strict               as Map
-import qualified Data.Set                      as Set
-import qualified Data.Sequence                 as Seq
-import           Data.Maybe                    ( isNothing )
-import           Data.Ord                      ( comparing )
-import           Prelude                       hiding ( Word, log )
+import Control.Monad.State
+import Data.Function ( on )
+import Data.List ( sortBy )
+import Data.Maybe ( isNothing )
+import Data.Map.Strict qualified as Map
+import Data.Ord ( comparing )
+import Data.Set qualified as Set
+import Data.Sequence qualified as Seq
+import Prelude hiding ( Word, log )
 
 -- Are two words bisimilar?
 bisimilar :: Grammar -> Bool

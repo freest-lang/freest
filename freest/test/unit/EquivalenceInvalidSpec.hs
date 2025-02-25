@@ -1,14 +1,14 @@
 
 module EquivalenceInvalidSpec (spec) where
 
-import qualified Syntax.Module                 as M
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Kinding            ( runCheck )
-import           Validation.TypeEquivalence.TypeEquivalence (equivalent)
+import Syntax.Module qualified as M
+import Validation.Base ( TypeDeclMap )
+import Validation.Kinding ( runCheck )
+import Validation.TypeEquivalence.TypeEquivalence ( equivalent )
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
-import           UnitSpecUtils (mkEquivalenceSpec)
+import Data.Map.Strict qualified as Map
+import Test.Hspec
+import UnitSpecUtils ( mkEquivalenceSpec )
 
 main :: IO ()
 main = hspec spec

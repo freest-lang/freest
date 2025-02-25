@@ -1,20 +1,20 @@
 module UnitSpecUtils where
 
-import           Parser.LexerUtils (runLexer)
-import           Parser.Parser
-import           Parser.Scoping
-import qualified Syntax.Kind as K
-import qualified Syntax.Module as M
-import qualified Syntax.Type as T
-
-import           Control.Monad (forM, forM_)
-import qualified Data.Map as Map
-import           Test.Hspec
-import           Validation.Kinding (runKindModule)
+import Parser.LexerUtils ( runLexer )
+import Parser.Parser
+import Parser.Scoping
 import Syntax.Base
-import System.Directory.Internal.Prelude (exitFailure)
-import Data.Foldable (foldlM)
-import Control.Monad.Extra (concatMapM)
+import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
+import Validation.Kinding ( runKindModule )
+
+import Control.Monad ( forM, forM_ )
+import Control.Monad.Extra ( concatMapM )
+import Data.Foldable ( foldlM )
+import Data.Map qualified as Map
+import System.Directory.Internal.Prelude ( exitFailure )
+import Test.Hspec
 
 mkKindingSpec :: [FilePath] -> String -> ((T.Type, Maybe K.Kind, M.Module) -> Expectation) -> Spec
 mkKindingSpec testPaths testDesc testFun = do

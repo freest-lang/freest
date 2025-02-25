@@ -15,15 +15,15 @@ module Validation.Rename
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Kind                   as K
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution       ( subs, subsAll )
-import           Utils                         ( internalError )
+import Syntax.Base
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap )
+import Validation.Substitution ( subs, subsAll )
+import Utils ( internalError )
 
-import qualified Data.Map.Strict               as M
-import qualified Data.Set                      as S
+import Data.Map.Strict qualified as M
+import Data.Set qualified as S
 
 rename :: TypeDeclMap -> T.Type -> T.Type
 rename td = \case

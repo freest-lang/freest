@@ -3,20 +3,19 @@ module Validation.Base
 where
 
 import Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Module as M
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
 import UI.Error
-import Validation.Substitution (subs)
+import Validation.Substitution ( subs )
 
-import Control.Monad.State (State, MonadState, modify, gets, foldM, runState)
-import qualified Data.Map.Strict as Map
+import Control.Monad.State ( State, MonadState, modify, gets, foldM, runState )
+import Data.Map.Strict qualified as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
-import Control.Arrow ((>>>))
-import Data.Bifunctor (second)
-import qualified Data.List.NonEmpty as NE
+import Data.Bifunctor ( second )
+import Data.List.NonEmpty qualified as NE
 
 type TypeDeclMap = Map.Map Identifier (T.Lambda T.Type)
 type ConsDeclMap = Map.Map Identifier [T.Type]

@@ -24,10 +24,10 @@ module Syntax.Module
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Base
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 
 import           Data.List (intercalate)
 import           Data.Maybe (fromMaybe)

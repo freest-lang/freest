@@ -11,26 +11,26 @@ module Validation.TypeEquivalence.FromType
   )
 where
 
-import           Syntax.Base
-import           Syntax.Kind
-import qualified Syntax.Type                   as T
-import           Validation.TypeEquivalence.Grammar         as G
-import           Validation.Normalisation
-import           Validation.Rename
-import           Validation.Base               ( TypeDeclMap )
-import           Utils                         ( internalError )
+import Syntax.Base
+import Syntax.Kind
+import Syntax.Type qualified as T
+import Validation.TypeEquivalence.Grammar
+import Validation.Normalisation
+import Validation.Rename
+import Validation.Base ( TypeDeclMap )
+import Utils ( internalError )
 
-import           Control.Monad.State
-import qualified Data.Map.Strict               as M
-import           Prelude                       hiding ( Word, words )
-import           Debug.Trace                   ( trace )
+import Control.Monad.State
+import Data.Map.Strict qualified as M
+import Debug.Trace ( trace )
+import Prelude hiding ( Word, words )
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
   trace ("\nTypes:   " ++ show ts ++
          "\nRenamed: " ++ show (map (rename td) ts) ++ 
-         "\n"++show (G.Grammar w (productions s))) $
-  G.Grammar w (productions s)
+         "\n"++show (Grammar w (productions s))) $
+  Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.Type -> TransState Word
@@ -142,7 +142,7 @@ addVisited t y = do
 -- TODO: Add only if needed
 addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
 addProduction x a w =
-  modify $ \s -> s { productions = G.insertProduction x a w (productions s) }
+  modify $ \s -> s { productions = insertProduction x a w (productions s) }
 
 addProductions :: NonTerminal -> Transitions -> TransState ()
 addProductions x m =

@@ -14,14 +14,14 @@ import FreeST
 import ProgSpecUtils
 
 import Control.Exception
-import Control.Monad (void)
-import Data.List (intercalate, isPrefixOf)
-import System.Exit (ExitCode(..))
-import System.IO (stdout, stderr)
+import Control.Monad ( void )
+import Data.List ( intercalate, isPrefixOf )
+import System.Exit ( ExitCode(..) )
+import System.IO ( stdout, stderr )
 import System.IO.Silently
 import System.Timeout
 import Test.Hspec
-import Test.HUnit (assertFailure)
+import Test.HUnit ( assertFailure )
 
 
 data TestResult = Timeout | Passed | Failed

@@ -12,13 +12,13 @@ where
 
 import Parser.Token
 import Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 import Utils
 
-import Data.List (intercalate)
-import qualified Data.Map.Strict as Map
+import Data.List ( intercalate )
+import Data.Map.Strict qualified as Map
 
 data Error 
   = LexicalError Span Char 

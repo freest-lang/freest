@@ -12,10 +12,10 @@ module Validation.TypeEquivalence.TypeEquivalence
   )
 where
 
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.TypeEquivalence.FromType ( fromType )
-import           Validation.TypeEquivalence.Bisimulation.Bisimulation ( bisimilar )
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap )
+import Validation.TypeEquivalence.FromType ( fromType )
+import Validation.TypeEquivalence.Bisimulation.Bisimulation ( bisimilar )
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =

@@ -41,16 +41,16 @@ module Syntax.Type
   )
 where
 
-import           Syntax.Base
-import           Parser.Unparser
-import qualified Syntax.Kind                   as K
-import           Syntax.Names
-import           Utils ( internalError )
+import Syntax.Base
+import Parser.Unparser
+import Syntax.Kind qualified as K
+import Syntax.Names
+import Utils ( internalError )
 
-import           Data.Bifunctor
-import           Data.Function (on)
-import           Data.List                     (intercalate, sort, sortBy)
-import qualified Data.Map.Strict               as M
+import Data.Bifunctor
+import Data.Function ( on )
+import Data.List ( intercalate, sort, sortBy )
+import Data.Map.Strict qualified as M
 
 data Polarity = In | Out
   deriving (Eq, Ord)

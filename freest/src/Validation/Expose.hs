@@ -5,20 +5,20 @@ module Validation.Expose
   )
 where
 
-import           UI.Error
-import           Validation.Base
-import           Syntax.Base
-import qualified Syntax.Expression             as E
-import qualified Syntax.Kind                   as K
-import qualified Syntax.Type                   as T
-import           Validation.Normalisation      ( normalise )
+import UI.Error
+import Validation.Base
+import Syntax.Base
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
+import Validation.Normalisation ( normalise )
 
-import           Data.Functor
-import           Data.Bifunctor
-import qualified Data.Map as Map
-import           Control.Applicative
-import           Control.Monad.Trans.Except
-import Control.Monad.State (gets)
+import Data.Functor
+import Data.Bifunctor
+import Data.Map qualified as Map
+import Control.Applicative
+import Control.Monad.Trans.Except
+import Control.Monad.State ( gets )
 
 kindArrow :: K.Kind -> ([K.Kind], K.Kind)
 kindArrow (K.Arrow _ k1 k2) = first (k1:) (kindArrow k2)

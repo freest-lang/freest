@@ -1,13 +1,13 @@
 module AbsorbingSpec (spec) where
 
-import qualified Syntax.Kind                   as K
-import qualified Validation.Rename             as R
-import           Validation.Base               ( TypeDeclMap )
-import qualified Syntax.Module                 as M
-import           UnitSpecUtils
+import Syntax.Kind qualified as K
+import Validation.Rename qualified as R
+import Validation.Base ( TypeDeclMap )
+import Syntax.Module qualified as M
+import UnitSpecUtils
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
+import Data.Map.Strict qualified as Map
+import Test.Hspec
 
 main :: IO ()
 main = hspec spec

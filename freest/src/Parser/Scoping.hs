@@ -21,28 +21,27 @@ module Parser.Scoping
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Module as M
-import           Validation.Rename (renameLambda)
-import           Validation.Substitution (freeVars)
-import qualified Syntax.Type as T
-import           UI.Error (Error(..))
+import Syntax.Base
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
+import Validation.Rename ( renameLambda )
+import Validation.Substitution ( freeVars )
+import Syntax.Type qualified as T
+import UI.Error ( Error(..) )
 
-import           Control.Monad 
-                 (replicateM, forM, void, forM_, unless, foldM, when)
-import           Control.Monad.State ( gets, modify, State, runState)
-import           Data.Bifunctor (first, second, bimap)
-import           Data.Bitraversable (bisequence, bimapM)
-import           Data.Foldable (foldrM)
-import           Data.Function (on)
-import qualified Data.List as List
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-import           Control.Monad.Extra (ifM)
-import Debug.Trace (traceM)
+import Control.Monad ( replicateM, forM, void, forM_, unless, foldM, when )
+import Control.Monad.Extra ( ifM )
+import Control.Monad.State ( gets, modify, State, runState )
+import Data.Bifunctor ( first, second, bimap )
+import Data.Bitraversable ( bisequence, bimapM )
+import Data.Foldable ( foldrM )
+import Data.Function ( on )
+import Data.List qualified as List
+import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Debug.Trace ( traceM )
 
 -- = Scoping context
 -- The scoping context keeps track of variable and indentifier names.

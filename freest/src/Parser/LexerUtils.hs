@@ -17,12 +17,12 @@ import Syntax.Base
 import UI.Error
 
 
-import Data.Word (Word8)
-import Data.List (uncons)
-import qualified Data.List.NonEmpty as NE
-import Data.Char (ord)
-import Control.Monad.State (gets, modify', MonadState, StateT(..))
-import Control.Monad.Except (MonadError)
+import Data.Word ( Word8 )
+import Data.List ( uncons )
+import Data.List.NonEmpty qualified as NE
+import Data.Char ( ord )
+import Control.Monad.State ( gets, modify', MonadState, StateT(..) )
+import Control.Monad.Except ( MonadError )
 
 data AlexInput
   = Input { inpLine   :: {-# UNPACK #-} !Int
