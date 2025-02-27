@@ -355,7 +355,23 @@ where
   data Tree a = Leaf a | Node (Tree (a, a))
 
 -- Polymorphic type recursion, translation to grammar hangs
+
 -- case CTree Close == CTree (Close; Wait): 1S
 -- where
 --   type CTree : 1T -> 1S
 --   type CTree a = +{Leaf: !a, Node: CTree (a, a)}
+
+-- Is this poly rec? (translation does not hang)
+
+case !Int ; T Char Int == T Int Char : 1S
+where
+  type T : *T -> *T -> 1S
+  type T a b = ! a ; T b a
+
+-- As above, w/o poly record
+
+case !Int ; T Char Int == T Int Char : 1S
+where
+  type T, U : *T -> *T -> 1S
+  type T a b = ! a ; U a b
+  type U a b = ! b ; T a b
