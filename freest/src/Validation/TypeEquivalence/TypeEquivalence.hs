@@ -15,7 +15,7 @@ where
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
 import Validation.TypeEquivalence.FromType ( fromType )
-import Validation.TypeEquivalence.Bisimulation.Bisimulation ( bisimilar )
+import Language.Simple.Bisimulation ( bisimilar )
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
