@@ -6,7 +6,7 @@ copyright:  © 2025 FreeST Team.
 synopsis:   Simple grammar bisimilarity
 maintainer: The FreeST Team
 homepage:   https://freest-lang.github.io/
-category:   Grammars
+category:   Simple grammars
 
 default-extensions:
   - FlexibleInstances
