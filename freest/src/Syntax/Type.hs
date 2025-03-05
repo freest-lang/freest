@@ -82,7 +82,7 @@ data Type
   --   Equations
   | TName Span Identifier
   | DName Span Identifier
-  --   The type of non-contractive types
+  --   The type equivalent to non-contractive types
   | Bottom Span
   -- Non-constants
   | Var Span Variable

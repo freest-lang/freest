@@ -67,9 +67,8 @@ isAbsorbing td = absorb S.empty
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.App _ T.Choice{} ts -> all (absorb v) ts
       T.AppDual _ t -> absorb v t
--- TODO: Fix the case with recursion on the argument to a TName. Should be non-absorbing
-      T.AppTName _ name ts -> name `S.member` v || case td M.!? name of
-        Just (_, u) -> absorb (S.insert name v) u
-        Nothing -> internalError $ "isAbsorbing: " ++ show name ++ " name not in type declaration map, when applied to " ++ show ts
+      T.AppTName _ id ts -> id `S.member` v || case td M.!? id of
+        Just (_, u) -> absorb (S.insert id v) u
+        Nothing -> internalError $ "isAbsorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
       T.AppQuant _ _ _ t -> absorb v t
       _ -> False

@@ -342,6 +342,16 @@ where
   type Stream : 1T -> 1S
   type Stream a = !a ; Stream a
 
+case Seq Bot == Bot : *T
+where
+  type Seq : *S -> *S
+  type Seq a = a ; Seq a
+  type Bot : *S
+  type Bot = Bot
+  
+
+-- Polymorphic recursion
+
 -- Polymorphic datatype recursion, https://stackoverflow.com/questions/40247339/polymorphic-recursion-syntax-and-uses
 
 case Nested Skip == Nested (Skip ; Skip) : 1T
@@ -354,7 +364,8 @@ where
   type Tree: 1T -> 1T
   data Tree a = Leaf a | Node (Tree (a, a))
 
--- Polymorphic type recursion, translation to grammar hangs
+-- Polymorphic type recursion, translation to grammar hangs. These types are not
+-- well formed, hence we're good.
 
 -- case CTree Close == CTree (Close; Wait): 1S
 -- where
