@@ -11,7 +11,7 @@
 -- (\f:A -> (\x:B -> f (x x)) (\x:C -> f (x x)))
 
 -- Fixed point combinator for strict languages - Z Combinator
--- (\f:A -> (\x:B -> f (\v:C -> x x v)) (\x:D -> f (\v:E -> x x v)))
+-- (\f:A -> (\x:B -> f (\v:C -> x x v)) (\x:D -> f (\v:E -> x x )))
 
 -- factorial
 -- (\f:A -> (\x:B -> f (x x)) (\x:C -> f (x x))) (\fac:(Int -> Int) -> (\n:Int -> case n { 0 -> 1, _ -> (* n (fac (- n 1)))})) 5
