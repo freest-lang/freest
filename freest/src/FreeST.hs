@@ -21,6 +21,7 @@ import Validation.Base
 import Validation.Kinding
 import Validation.Typing
 
+import FstToLst.FstToLst ( fstToLst )
 import LeaST.Parser (parseLeaST)
 import LeaST.Interpreter ( interpret, Value(VIO) )
 
@@ -58,6 +59,13 @@ freest RunOpts{file=f, least=l} = do
           -- runValidate m & \case 
           --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
           --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
+          let leastAST = fstToLst [m]
+          print leastAST
+          res <- interpret leastAST
+          case res of
+            VIO io -> do io2 <- io
+                         print io2
+            res -> print res
 
 lexAll :: Lexer ()
 lexAll = do

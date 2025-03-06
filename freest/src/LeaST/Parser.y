@@ -168,6 +168,7 @@ LExpPrimary :: { L.Exp }
 LExp :: { L.Exp }
   : '\\' LOWER_ID ':' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
   | '\\' '@' LOWER_ID ':' Kind '->' LExp { L.TAbs (mkVarTk $3) $5 $7 }
+-- TODO make use of the case sensitive parser ??
   | 'case' LExp '{' LAlternatives '}' { L.Case $2 $4 }
   | LExpApp { $1 }
 

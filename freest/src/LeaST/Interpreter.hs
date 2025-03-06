@@ -19,7 +19,7 @@ interpret exp = eval builtins exp
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
 data Value = VInt Int
-  | VFloat Float
+  | VFloat Double
   | VChar Char
   | VCon String [Value]
   | VClosure Context B.Variable L.Exp

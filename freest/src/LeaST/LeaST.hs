@@ -19,7 +19,7 @@ data Exp
   deriving Show
 
 data Literal = LInt Int
-  | LFloat Float
+  | LFloat Double
   | LChar Char
   deriving Show
 
