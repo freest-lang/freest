@@ -60,7 +60,7 @@ synth ctx = \case
     pure (Proper s Lin pk)
   T.End s _ -> pure (lc s)
   T.Skip s -> pure (us s)
-  T.Bottom s -> pure (uc s)
+  T.Bottom s -> pure (us s)
   T.AppSemi s t u -> do
     (m1, pk1) <- checkSession ctx t
     (m2, pk2) <- checkSession ctx u
