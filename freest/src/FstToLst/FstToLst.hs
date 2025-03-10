@@ -26,7 +26,7 @@ translateLetDecls ((E.FnDef var patRhss):letDecls) _ _ = undefined
 translateLetDecls ((E.TypeSig [var] ty):letDecls) typeSigs cont = translateLetDecls letDecls ((var,ty):typeSigs) cont
 
 translateRHS :: E.RHS -> L.Exp
-translateRHS (E.UnguardedRHS exp (Just letDecls)) = undefined
+translateRHS (E.UnguardedRHS exp (Just letDecls)) = translateLetDecls letDecls [] (translateExp exp)
 translateRHS (E.UnguardedRHS exp Nothing) = translateExp exp
 translateRHS (E.GuardedRHS guards (Just letDecls)) = undefined
 translateRHS (E.GuardedRHS guards Nothing) = undefined
