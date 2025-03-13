@@ -12,10 +12,14 @@ import Test.Hspec
 main :: IO ()
 main = hspec spec
 
+{-
+The inverse of this test is not (no longer) valid. There are absorbing types
+that are not channel types. Non-contractive types are one (the?) example.
+-}
 spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test" ]
-  "Absorbing types" 
+  "Channel types (kind C) are absorbing types"
   \case
     (t, Just k, m) -> not (K.isStrictlyAbsorbing k) || R.isAbsorbing (buildDataDecls m) t `shouldBe` True
     _ -> expectationFailure "Ill formed test case: missing kind annotation"
