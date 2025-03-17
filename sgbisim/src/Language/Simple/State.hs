@@ -6,7 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module TODO
 -}
 
-module Validation.TypeEquivalence.Bisimulation.State
+module Language.Simple.State
   ( IOF
   , NormMap
   , GlobalState
@@ -23,8 +23,7 @@ module Validation.TypeEquivalence.Bisimulation.State
   )
 where
 
-import Syntax.Base
-import Validation.TypeEquivalence.Grammar
+import Language.Simple.Grammar
 
 import Control.Monad.State
 import Data.Map.Strict qualified as Map

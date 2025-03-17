@@ -15,7 +15,7 @@ non-terminals to a map from terminals to words.
 
 -}
 
-module Validation.TypeEquivalence.Grammar
+module Language.Simple.Grammar
   ( Terminal
   , NonTerminal
   , Word
@@ -30,7 +30,6 @@ module Validation.TypeEquivalence.Grammar
   )
 where
 
-import Syntax.Base
 import Data.Map.Strict qualified as M
 import Data.List ( intercalate )
 import Prelude hiding ( Word )

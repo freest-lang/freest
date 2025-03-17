@@ -39,6 +39,7 @@ dependencies:
   - optparse-applicative >= 0.16.1.0
   - extra >= 1.7.9
   - transformers >= 0.5.6.2
+  - sgbisim
 
 library:
   source-dirs: src
@@ -67,7 +68,6 @@ library:
     - Validation.Substitution
     - Validation.TypeEquivalence.TypeEquivalence
     - Validation.TypeEquivalence.FromType
-    - Validation.TypeEquivalence.Grammar
     - Validation.Typing
     - Utils
 executables:

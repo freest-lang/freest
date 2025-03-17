@@ -1,0 +1,31 @@
+name:       sgbisim
+version:    1.0
+license:    BSD3
+author:     The FreeST Team
+copyright:  © 2025 FreeST Team.
+synopsis:   Simple grammar bisimilarity
+maintainer: The FreeST Team
+homepage:   https://freest-lang.github.io/
+category:   Simple grammars
+
+default-extensions:
+  - FlexibleInstances
+  - ImportQualifiedPost
+
+extra-source-files:
+  - README.md
+
+dependencies:
+  - base >= 4.7 && < 5
+  - containers >= 0.5.9
+  - mtl >= 2.2.1
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Language.Simple.Bisimulation
+    - Language.Simple.Grammar
+    - Language.Simple.Congruence
+    - Language.Simple.Norm
+    - Language.Simple.State
+

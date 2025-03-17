@@ -14,7 +14,7 @@ where
 import Syntax.Base
 import Syntax.Kind
 import Syntax.Type qualified as T
-import Validation.TypeEquivalence.Grammar
+import Language.Simple.Grammar
 import Validation.Normalisation
 import Validation.Rename
 import Validation.Base ( TypeDeclMap )
