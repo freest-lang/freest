@@ -5,7 +5,7 @@ import UnitSpecUtils
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
-import Validation.TypeEquivalence.FromType ( fromType )
+import Validation.TypeEquivalence ( fromType )
 import Language.Simple.Grammar
 
 import Data.Map.Strict qualified as Map

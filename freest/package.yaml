@@ -66,8 +66,7 @@ library:
     - Validation.Normalisation
     - Validation.Rename
     - Validation.Substitution
-    - Validation.TypeEquivalence.TypeEquivalence
-    - Validation.TypeEquivalence.FromType
+    - Validation.TypeEquivalence
     - Validation.Typing
     - Utils
 executables:

@@ -1,13 +1,15 @@
 {- |
-Module      :  SimpleGrammar.FromType
+Module      :  TypeEquivalence.TypeEquivalence
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-This module converts a list of session types into a simple grammar
+Check whether two types are equivalent, by first testing whether they are
+alpha-congruent and, if not, whether they are bisimilar.
 -}
 
-module Validation.TypeEquivalence.FromType
-  ( fromType
+module Validation.TypeEquivalence
+  ( equivalent
+  , fromType
   )
 where
 
@@ -15,15 +17,22 @@ import Syntax.Base
 import Syntax.Kind
 import Syntax.Type qualified as T
 import Language.Simple.Grammar
+import Validation.Base ( TypeDeclMap )
 import Validation.Normalisation
 import Validation.Rename
-import Validation.Base ( TypeDeclMap )
 import Utils ( internalError )
+
+import Language.Simple.Bisimulation ( bisimilar )
 
 import Control.Monad.State
 import Data.Map.Strict qualified as M
 import Debug.Trace ( trace )
 import Prelude hiding ( Word, words )
+
+equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
+equivalent td t u =
+  t == u ||
+  bisimilar (fromType td [t, u])
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =

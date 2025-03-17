@@ -19,7 +19,7 @@ import Validation.Expose qualified as Expose
 import Validation.Kinding qualified as Kinding
 import Validation.Normalisation ( normalise )
 import Validation.Substitution ( subs, subsAll )
-import Validation.TypeEquivalence.TypeEquivalence ( equivalent )
+import Validation.TypeEquivalence ( equivalent )
 
 import Control.Monad
 import Control.Monad.Extra ( ifM, whenM )
