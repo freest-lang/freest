@@ -22,8 +22,9 @@ import Validation.Kinding
 import Validation.Typing
 
 import FstToLst.FstToLst ( fstToLst )
-import LeaST.Parser (parseLeaST)
+import LeaST.Parser ( parseLeaST )
 import LeaST.Interpreter ( interpret, Value(VIO) )
+import qualified LeaST.PrettyPrint as LPP
 
 import Control.Monad.State ( runState )
 import Data.Function ( (&) )
@@ -43,7 +44,7 @@ freest RunOpts{file=f, least=l} = do
   source <- readFile f
   if l then case runLexer parseLeaST f source of
     Right leastAST -> do
-      print leastAST
+      LPP.prettyPrint leastAST
       res <- interpret leastAST
       case res of
         VIO io -> do io2 <- io
@@ -61,6 +62,7 @@ freest RunOpts{file=f, least=l} = do
           --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
           let leastAST = fstToLst [m]
           print leastAST
+          LPP.prettyPrint leastAST
           res <- interpret leastAST
           case res of
             VIO io -> do io2 <- io
