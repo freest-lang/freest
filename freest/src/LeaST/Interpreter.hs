@@ -16,6 +16,8 @@ import Debug.Trace
 interpret :: L.Exp -> IO Value
 interpret exp = eval builtins exp
 
+-- TODO: Fatbar implementation will not work because language is strict
+
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
 data Value = VInt Int
@@ -27,6 +29,7 @@ data Value = VInt Int
   | VIO (IO Value)
   | VChan ChannelEnd
   | VFork
+  | VFatbar
 
 instance Show Value where
   show (VInt int) = show int
@@ -40,6 +43,8 @@ instance Show Value where
  
 eval :: Context -> L.Exp -> IO Value
 eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="fork"})) = return VFork
+eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="error__"})) = error "Error"
+eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="fatbar__"})) = return VFatbar
 eval ctx (L.Var var) = return $ getVar ctx (getStringFromVariable var)
 eval _ (L.Lit (L.LInt int)) = return $ VInt int
 eval _ (L.Lit (L.LFloat float)) = return $ VFloat float
@@ -49,6 +54,14 @@ eval ctx (L.App lExp rExp) = do
   lVal <- eval ctx lExp
   case lVal of
     VFork -> forkIO (void $ eval ctx (unpackAbs rExp)) $> VCon "()" []
+    VFatbar -> do
+      rVal <- eval ctx rExp
+      print rVal
+      case rVal of
+-- TODO: implement this
+        VCon "Fail__" [] -> undefined
+-- TODO: this is wrong
+        _ -> return $ VBuiltin (\_ -> rVal)
     _ -> do rVal <- eval ctx rExp
             case lVal of
               VCon iden consArgs -> return $ VCon iden (consArgs++[rVal])
