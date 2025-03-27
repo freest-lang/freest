@@ -8,6 +8,7 @@ import qualified Syntax.Type as T
 
 import Data.List ( find )
 import Data.Maybe ( maybe )
+import Debug.Trace
 
 fstToLst :: [M.Module] -> L.Exp
 fstToLst modules = translateLetDecls (concat (map (\M.Module {M.name=_, M.imports=_, M.dataDecls=_, M.typeDecls=_, M.kindSigs=_, M.definitions=letDecls} -> letDecls) modules)) [] (L.Con $ B.Identifier B.nullSpan "()") 
@@ -16,11 +17,13 @@ translateLetDecls :: [E.LetDecl] -> [(B.Variable, T.Type)] -> L.Exp -> L.Exp
 translateLetDecls [] _ cont = cont
 translateLetDecls ((E.ValDef pat@(E.VarPat _ (B.Variable { B.varSpan=_, B.internal=_, B.external="main"})) rhs):_) _ _ = translateRHS rhs
 translateLetDecls ((E.ValDef pat@(E.VarPat _ var) rhs):letDecls) typeSigs cont = (L.App (translatePat (pat, getTypeFromTypeSigs typeSigs var) (translateLetDecls letDecls typeSigs cont)) (translateRHS rhs))
+translateLetDecls ((E.ValDef pat rhs):letDecls) typeSigs cont = L.App (L.Abs (generatePrimitiveVar "arg0__") (T.Int B.nullSpan) (compileEquations 1 (newKVars 0 0) [([pat], cont)] generateError)) (translateRHS rhs) 
+-- (L.Case (translateRHS rhs) (foo 0 [] (replaceVar (head vars) s)[[([pat], cont)]] generateError))
 -- translateLetDecls ((E.FnDef var [(levels, rhs)]):letDecls) typeSigs cont = (L.App (L.Abs var (T.Int B.nullSpan) (translateLetDecls letDecls typeSigs cont)) (L.App generateFixPoint (L.Abs var (T.Int B.nullSpan) (foldr (\abs acc -> case abs of
 --     B.ExpLevel pat -> translatePat (pat, T.Int B.nullSpan) acc
 --     B.TypeLevel _ -> undefined) (translateRHS rhs) levels))))
 translateLetDecls ((E.FnDef var patRhss):letDecls) typeSigs cont = (L.App (L.Abs var (T.Int B.nullSpan) (translateLetDecls letDecls typeSigs cont)) (L.App generateFixPoint (L.Abs var (T.Int B.nullSpan) (let eqs = bar patRhss in
-                    let argsNum = length $ (fst . head) eqs in generateArgs argsNum argsNum (compileEquations argsNum (newKVars 0 argsNum) eqs generateError)))))
+  let argsNum = length $ (fst . head) eqs in generateArgs argsNum argsNum (compileEquations argsNum (newKVars 0 argsNum) eqs generateError)))))
 translateLetDecls ((E.TypeSig [var] ty):letDecls) typeSigs cont = translateLetDecls letDecls ((var,ty):typeSigs) cont
 
 generateArgs :: Int -> Int -> L.Exp -> L.Exp
@@ -47,6 +50,7 @@ translateExp (E.Abs _ levels _ exp) = foldr (\abs acc -> case abs of
   B.TypeLevel (_, kind) -> undefined) (translateExp exp) levels
 translateExp (E.Let _ letDecls exp) = translateLetDecls letDecls [] (translateExp exp)
 translateExp (E.If _ cond t f) = generateLeastIf (translateExp cond) (translateExp t) (translateExp f)
+translateExp (E.Case _ exp patRhss) = L.App (L.Abs (generatePrimitiveVar "arg0__") (T.Int B.nullSpan) (compileEquations 0 (newKVars 0 0) (map (\(pat, rhs) -> ([pat], translateRHS rhs)) patRhss) generateError)) (translateExp exp)
 translateExp (E.Channel _ _) = undefined
 translateExp (E.Select _ iden exp) = undefined
 
@@ -88,13 +92,13 @@ generateFixPoint = L.Abs (generatePrimitiveVar "f__") (T.Int B.nullSpan) (
 type Equation = ([E.Pat], L.Exp)
 
 compileEquations :: Int -> [B.Variable] -> [Equation] -> L.Exp -> L.Exp
--- TODO: empty rule is not correct
+-- TODO: empty rule is not correct, maybe?
 -- compileEquations _ [] eqs def = let (hd:tl) = [e |(_,e) <- eqs] in 
 --   L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") (foldl (\acc exp -> L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") acc) exp) hd tl)) def
-compileEquations _ [] ((_,exp):_) _ = exp  
-compileEquations num vars eqs def | allVars eqs = compileEquations num (tail vars) (replaceVar (head vars) eqs) def
+compileEquations _ [] ((_,exp):_) _ = exp
+compileEquations num vars eqs def | allVars eqs = traceShow eqs $ compileEquations num (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
                               | allCons eqs = L.Case (L.Var (head vars)) (foo num (tail vars) (groupEqs eqs) def)
-                              | otherwise = undefined
+                              | otherwise = foldr (\groupedEqs acc -> compileEquations num vars groupedEqs acc) def (reverse $ mixtureGroup eqs)
 
 allVars :: [Equation] -> Bool
 allVars [] = True 
@@ -106,10 +110,15 @@ allCons :: [Equation] -> Bool
 allCons [] = True
 allCons (eq:eqs) = case (head . fst) eq of
   E.DConsPat _ _ _ -> allCons eqs
+  E.IntPat _ _ -> allCons eqs
+  E.FloatPat _ _ -> allCons eqs
+  E.CharPat _ _ -> allCons eqs
   _ -> False
 
 replaceVar :: B.Variable -> [Equation] -> [Equation]
-replaceVar var eqs = map (\(pats@((E.VarPat _ patVar):_), exp) -> (pats, subs patVar var exp)) eqs  
+replaceVar var eqs = map (\(pats, exp) -> case pats of
+  ((E.VarPat _ patVar):_) -> (pats, subs patVar var exp)
+  _ -> traceShow pats undefined) eqs
 
 subs :: B.Variable -> B.Variable -> L.Exp -> L.Exp
 subs target var exp@(L.Var v) = if v == target then (L.Var var) else exp
@@ -128,17 +137,62 @@ altSub target var (L.ACon iden vars, exp) =
   else
     (L.ACon iden vars, subs target var exp)
 
--- TODO implement this
+-- TODO Verificar que a ordem nao muda
+-- Only called if all are constructor
 groupEqs :: [Equation] -> [[Equation]]
-groupEqs eqs = [eqs]
+groupEqs [] = [[]]
+groupEqs (eq:eqs) = addEq eq (groupEqs eqs)
 
+-- Ewwwwww
+addEq :: Equation -> [[Equation]] -> [[Equation]]
+addEq eq [] = [[eq]]
+addEq eq [[]] = [[eq]]
+addEq eq@((patX:_),_) (eqs@(((patY:_), _):_):eqss) = if patIsEq patX patY then (eq:eqs):eqss else (eqs: addEq eq eqss)
+
+mixtureGroup :: [Equation] -> [[Equation]]
+mixtureGroup [] = [[]]
+mixtureGroup (eq:eqs) = addEqMix eq (mixtureGroup eqs)
+
+addEqMix :: Equation -> [[Equation]] -> [[Equation]]
+addEqMix eq [] = [[eq]]
+addEqMix eq [[]] = [[eq]]
+addEqMix eq@((patX:_),_) (eqs@(((patY:_), _):_):eqss) = if patIsEqMix patX patY then (eq:eqs): eqss else (eqs: (addEqMix eq eqss))
+
+patIsEq :: E.Pat -> E.Pat -> Bool
+patIsEq (E.IntPat _ x) (E.IntPat _ y) = x == y
+patIsEq (E.FloatPat _ x) (E.FloatPat _ y) = x == y
+patIsEq (E.CharPat _ x) (E.CharPat _ y) = x == y
+patIsEq (E.WildPat _ x) (E.WildPat _ y) = undefined
+patIsEq (E.VarPat _ x) (E.VarPat _ y) = undefined
+patIsEq (E.DConsPat _ (B.Identifier _ x) _) (E.DConsPat _ (B.Identifier _ y) _) = x == y
+patIsEq (E.AsPat _ x xPat) (E.AsPat _ y yPat) = undefined
+patIsEq _ _ = False
+
+patIsEqMix :: E.Pat -> E.Pat -> Bool
+patIsEqMix (E.VarPat _ _) (E.VarPat _ _) = True
+patIsEqMix (E.IntPat _ _) (E.IntPat _ _) = True 
+patIsEqMix (E.FloatPat _ _) (E.FloatPat _ _) = True 
+patIsEqMix (E.CharPat _ _) (E.CharPat _ _) = True 
+patIsEqMix (E.WildPat _ _) (E.WildPat _ _) = undefined
+patIsEqMix (E.DConsPat _ _ _) (E.DConsPat _ _ _) = undefined
+patIsEqMix _ _ = False
+
+-- TODO: relembrar o que isto faz e dar um nome adequado
 foo :: Int -> [B.Variable] -> [[Equation]] -> L.Exp -> [(L.Alt, L.Exp)]
 -- def makes sense here?
 foo num vars [] def = [(L.ADefault, def)]
+-- foo num vars (eqs:eqss) def =
+--   let E.DConsPat _ iden pats = (head . fst . head) eqs
+--       freshVars = (newKVars num (length pats))
+--   in (L.ACon iden freshVars, compileEquations (num+length freshVars) (freshVars++vars) (updateHeadPattern eqs) def):(foo num vars eqss def)
 foo num vars (eqs:eqss) def =
-  let E.DConsPat _ iden pats = (head . fst . head) eqs
-      freshVars = (newKVars num (length pats))
-  in (L.ACon iden freshVars, compileEquations (num+length freshVars) (freshVars++vars) (updateHeadPattern eqs) def):(foo num vars eqss def)
+  case (head . fst . head) eqs of
+    E.DConsPat _ iden pats -> let freshVars = (newKVars num (length pats - 1)) in
+    -- Posso por aqui pats em vez de updateHeadPattern eqs ??
+      (L.ACon iden freshVars, compileEquations (num+length freshVars) (freshVars++vars) (updateHeadPattern eqs) def):(foo num vars eqss def)
+    E.IntPat _ n -> (L.ALit $ L.LInt n, compileEquations 0 [] (updateHeadPattern eqs) def) : (foo num vars eqss def)
+    E.FloatPat _ n -> (L.ALit $ L.LFloat n, compileEquations 0 [] (updateHeadPattern eqs) def) : (foo num vars eqss def)
+    E.CharPat _ c -> (L.ALit $ L.LChar c, compileEquations 0 [] (updateHeadPattern eqs) def) : (foo num vars eqss def)
 
 newKVars :: Int -> Int -> [B.Variable]
 newKVars from size = [generatePrimitiveVar ("arg"++(show n)++"__") | n <- [from..from+size]]
@@ -149,7 +203,9 @@ updateHeadPattern eqs = map (\(pats, exp) -> (updateHeadPattern' pats, exp)) eqs
 updateHeadPattern' :: [E.Pat] -> [E.Pat]
 updateHeadPattern' ((E.DConsPat _ _ []):pats) = pats 
 updateHeadPattern' ((E.DConsPat _ _ innerPats):pats) = innerPats++pats 
+updateHeadPattern' (pat:pats) = pats
 
+-- TODO: rename this for function for something better
 -- TODO: support functions that take type argument. For now just ignore it
 bar :: [([B.Level E.Pat B.Variable], E.RHS)] -> [([E.Pat], L.Exp)]
 bar patRHS = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filter (\level -> case level of 
@@ -158,4 +214,3 @@ bar patRHS = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filter (\le
 
 generateError :: L.Exp
 generateError = L.Var $ generatePrimitiveVar "error__"
-
