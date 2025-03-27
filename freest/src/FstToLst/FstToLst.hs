@@ -23,7 +23,7 @@ translateLetDecls ((E.ValDef pat rhs):letDecls) typeSigs cont = L.App (L.Abs (ge
 --     B.ExpLevel pat -> translatePat (pat, T.Int B.nullSpan) acc
 --     B.TypeLevel _ -> undefined) (translateRHS rhs) levels))))
 translateLetDecls ((E.FnDef var patRhss):letDecls) typeSigs cont = (L.App (L.Abs var (T.Int B.nullSpan) (translateLetDecls letDecls typeSigs cont)) (L.App generateFixPoint (L.Abs var (T.Int B.nullSpan) (let eqs = bar patRhss in
-  let argsNum = length $ (fst . head) eqs in generateArgs argsNum argsNum (compileEquations argsNum (newKVars 0 argsNum) eqs generateError)))))
+  let argsNum = length $ (fst . head) eqs in generateArgs argsNum argsNum (compileEquations argsNum (newKVars 0 (argsNum-1)) eqs generateError)))))
 translateLetDecls ((E.TypeSig [var] ty):letDecls) typeSigs cont = translateLetDecls letDecls ((var,ty):typeSigs) cont
 
 generateArgs :: Int -> Int -> L.Exp -> L.Exp
@@ -96,7 +96,7 @@ compileEquations :: Int -> [B.Variable] -> [Equation] -> L.Exp -> L.Exp
 -- compileEquations _ [] eqs def = let (hd:tl) = [e |(_,e) <- eqs] in 
 --   L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") (foldl (\acc exp -> L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") acc) exp) hd tl)) def
 compileEquations _ [] ((_,exp):_) _ = exp
-compileEquations num vars eqs def | allVars eqs = traceShow eqs $ compileEquations num (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
+compileEquations num vars eqs def | allVars eqs = compileEquations num (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
                               | allCons eqs = L.Case (L.Var (head vars)) (foo num (tail vars) (groupEqs eqs) def)
                               | otherwise = foldr (\groupedEqs acc -> compileEquations num vars groupedEqs acc) def (reverse $ mixtureGroup eqs)
 
@@ -190,7 +190,7 @@ foo num vars (eqs:eqss) def =
     E.DConsPat _ iden pats -> let freshVars = (newKVars num (length pats - 1)) in
     -- Posso por aqui pats em vez de updateHeadPattern eqs ??
       (L.ACon iden freshVars, compileEquations (num+length freshVars) (freshVars++vars) (updateHeadPattern eqs) def):(foo num vars eqss def)
-    E.IntPat _ n -> (L.ALit $ L.LInt n, compileEquations 0 [] (updateHeadPattern eqs) def) : (foo num vars eqss def)
+    E.IntPat _ n -> (L.ALit $ L.LInt n, compileEquations num vars (updateHeadPattern eqs) def) : (foo num vars eqss def)
     E.FloatPat _ n -> (L.ALit $ L.LFloat n, compileEquations 0 [] (updateHeadPattern eqs) def) : (foo num vars eqss def)
     E.CharPat _ c -> (L.ALit $ L.LChar c, compileEquations 0 [] (updateHeadPattern eqs) def) : (foo num vars eqss def)
 
