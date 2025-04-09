@@ -40,6 +40,9 @@ instance Show Value where
   show (VBuiltin _ ) = "<builtin>"
   show (VIO _) = "<vio>"
   show (VChan chanEnd) = "<channel end>"
+  show VFork = "<vfork>"
+  show VFatbar = "<vfatbar>"
+
  
 eval :: Context -> L.Exp -> IO Value
 eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="fork"})) = return VFork
@@ -100,6 +103,7 @@ getStringFromIdentifier (B.Identifier _ str) = str
 
 unpackAbs :: L.Exp -> L.Exp
 unpackAbs (L.Abs _ _ exp) = exp
+unpackAbs exp = traceShow exp undefined
 
 type Context = [(String, Value)]
 
