@@ -51,7 +51,7 @@ translateExp (E.Abs _ levels _ exp) = foldr (\abs acc -> case abs of
 translateExp (E.Let _ letDecls exp) = translateLetDecls letDecls [] (translateExp exp)
 translateExp (E.If _ cond t f) = generateLeastIf (translateExp cond) (translateExp t) (translateExp f)
 translateExp (E.Case _ exp patRhss) = L.App (L.Abs (generatePrimitiveVar "arg0__") (T.Int B.nullSpan) (compileEquations 0 (newKVars 0 0) (map (\(pat, rhs) -> ([pat], translateRHS rhs)) patRhss) generateError)) (translateExp exp)
-translateExp (E.Channel _ _) = undefined
+translateExp (E.Channel _ _) = L.App (L.Var $ generatePrimitiveVar "chan") generateUnit
 translateExp (E.Select _ iden exp) = undefined
 
 generateLeastIf :: L.Exp -> L.Exp -> L.Exp -> L.Exp
@@ -61,8 +61,13 @@ generateLeastIf cond t f = L.Case cond [(L.ACon (B.Identifier B.nullSpan "True")
 generatePrimitiveVar :: String -> B.Variable
 generatePrimitiveVar name = B.Variable {B.internal=(-1), B.external=name, B.varSpan=B.Span{B.filepath="", B.startPos=(0,0), B.endPos=(0,0)}}
 
+generateUnit :: L.Exp
+generateUnit = L.Con (B.Identifier B.nullSpan "()")
+
+-- TODO: necessario um variavel fresca para o wildpat??
 translatePat :: (E.Pat, T.Type) -> L.Exp -> L.Exp
 translatePat ((E.VarPat _ var), ty) cont = L.Abs var ty cont  
+translatePat ((E.WildPat _ var), ty) cont = L.Abs var ty cont  
 
 getTypeFromTypeSigs :: [(B.Variable, T.Type)] -> B.Variable -> T.Type
 getTypeFromTypeSigs typeSigs var = case find ((var ==) . fst) typeSigs of
