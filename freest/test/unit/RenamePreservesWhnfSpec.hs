@@ -1,14 +1,14 @@
 module RenamePreservesWhnfSpec (spec) where
 
-import qualified Syntax.Module                 as M
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Rename
-import           Validation.Normalisation      ( isWhnf )
-import           UnitSpecUtils
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap )
+import Validation.Rename
+import Validation.Normalisation ( isWhnf )
+import UnitSpecUtils
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
+import Data.Map.Strict qualified as Map
+import Test.Hspec
 
 -- Requires: This test should be called with well-formed types only
 
@@ -17,7 +17,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  ["test/unit/WellFormedTypes.test"] 
   "T is a whnf iff rename T is a whnf" 
   \(t,_,m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
 

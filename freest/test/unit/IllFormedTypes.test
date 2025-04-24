@@ -1,0 +1,29 @@
+-- Dual
+
+case Dual Int
+
+case Dual (Int -> (Char, String) -> [Float])
+
+case Int -> (Char, Dual String) -> [Float]
+
+-- Haskell Curry's paradoxical combinator Y. Can't possible be well formed; just
+-- look at the part (x x).
+
+case Y
+where
+  type G : (*T -> *T) -> (*T -> *T) -> *T
+  type G f x = f (x x)
+  type Y : (*T -> *T) -> *T
+  type Y f = (G f) (G f)
+
+-- Polymorphic type recursion
+
+case PerfectTree : 1T -> 1S
+where
+  type PerfectTree : 1T -> 1S
+  type PerfectTree a = +{Leaf: !a, Node: PerfectTree (a, a)}
+
+case NestedTree : 1T -> 1S
+where
+  type NestedTree : 1T -> 1S
+  type NestedTree a = +{Leaf: !a, Node: NestedTree [a]}

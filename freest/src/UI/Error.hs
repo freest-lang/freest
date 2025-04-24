@@ -12,14 +12,15 @@ where
 
 import Parser.Token
 import Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 import Utils
 
-import Data.List (intercalate)
-import qualified Data.Map.Strict as Map
+import Data.List ( intercalate )
+import Data.Map.Strict qualified as Map
 
+-- | The errors that can be found in a FreeST program.
 data Error 
   = LexicalError Span Char 
   | ParseError Span (Token, [String])
@@ -45,7 +46,7 @@ data Error
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
-  | SessionTypeMismatch Span T.Type
+  | SessionTypeMismatch Span T.Type K.Kind
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
@@ -55,11 +56,15 @@ data Error
   | TypeCtxMismatch Span E.Exp [(Either Variable Identifier, T.Type)] 
                                [(Either Variable Identifier, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
-  | ChoiceNotAllowed Span Identifier T.Type
+  | IllegalChoice Span Identifier T.Type
   | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
   | UnsupportedError Span String
+  | SigLacksDef Span Variable
 
+-- | Errors can be tracked to the source code.
 instance Located Error where
+  -- | Returns the span of an 'Error', i.e., where the error occurs in the
+  -- source code.
   getSpan = \case 
     LexicalError s _ -> s
     ParseError s _ -> s
@@ -85,7 +90,7 @@ instance Located Error where
     NonLinPat s _ _ -> s
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
-    SessionTypeMismatch s _ -> s
+    SessionTypeMismatch s _ _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
@@ -95,11 +100,15 @@ instance Located Error where
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
-    ChoiceNotAllowed s _ _ -> s
+    IllegalChoice s _ _ -> s
     UnsupportedError s _ -> s
-
+    SigLacksDef s _ -> s
+  -- | There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
+-- | Convert an error to a readable 'String', which should include its location
+-- in the source code in a way that is parseable and by most common IDEs.
+-- (Needs some work.)
 instance Show Error where
   show e = show (getSpan e) ++ ": error:"++showError e
     where 
@@ -143,6 +152,8 @@ instance Show Error where
           "\n Type `"++show i++"` lacks an accompanying kind signature."
         LacksTypeSig _ x -> 
           "\n Function `"++show x++"` lacks an accompanying type signature."
+        SigLacksDef _ x ->
+          "\n Signature for variable `"++show x++"` lacks an accompanying definition."
         GivenTooManyArgs _ f t expected actual ->
           "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
         ExpectsTooManyArgs _ f ->
@@ -157,24 +168,24 @@ instance Show Error where
           "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
           "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
-          "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
+          "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
           "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
-          "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
+          "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
           "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
-          "\n  In the "++show n {- TODO: use numerals-}++"th parameter of function `"++show f++"`."
+          "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f -> 
           "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++
-          "\n  In the "++show n {- TODO: use numerals-}++"th parameter of function `"++show f++"`."
+          "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
           "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
         ProperKindMismatch s t k -> 
           "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`"
-        SessionTypeMismatch s t -> 
-          "\n Expected a session type, but found type `"++show t++"`."
+        SessionTypeMismatch s t k -> 
+          "\n Expected a session type, but found type `"++show t++"` of kind `"++show k++"`."
         GivenTooManyArgsK s t n m ->
           "\n  Type `"++show t++"` expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->
@@ -201,9 +212,11 @@ instance Show Error where
           "\n  \t(is there a variable with different types in the two contexts?)"
         ConstructorArgumentMismatch _ i n m ->
           "\n  The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
-        LinVarAtEndOfScope _ x t -> 
-          "\n  Variable `"++show x++"`, of linear type `"++show t++"`, was not consumed."
-        ChoiceNotAllowed s i t ->
+        LinVarAtEndOfScope _ xi t -> 
+          "\n  "++showVarCons xi++", of linear type `"++show t++"`, was not consumed."
+          where showVarCons = \case Left x  -> "Variable `"    ++show x++"`" 
+                                    Right i -> "Constructor `"++show i++"`"
+        IllegalChoice s i t ->
           "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
         UnsupportedError _ m ->
           "\n  " ++ m

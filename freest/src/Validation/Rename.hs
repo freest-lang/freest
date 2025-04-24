@@ -3,69 +3,72 @@ Module      :  SimpleGrammar.Rename
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Minimal (or canonical) type renaming
+Minimal (or canonical) type renaming.
 
 Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
   ( rename
-  , bounded -- for testing purposes
+  , renameLambda
+  , isAbsorbing -- for testing purposes
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Kind                   as K
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Substitution       ( subs, freeVars )
+import Syntax.Base
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap )
+import Validation.Substitution ( subs, subsAll )
+import Utils ( internalError )
 
-import qualified Data.Map.Strict               as M
-import qualified Data.Set                      as S
-import           Data.Bifunctor                ( second )
+import Data.Map.Strict qualified as M
+import Data.Set qualified as S
 
-type Visited = S.Set Identifier
-
+-- | Rename a type.
 rename :: TypeDeclMap -> T.Type -> T.Type
 rename td = \case
   t | T.isConstant t -> t
   t@T.Var{} -> t
   t@T.TName{} -> t
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  t@(T.Quant s p a k u) -> T.Quant s p b k (rename td (subs a (T.fromVariable b) u))
-    where freet = freeReachable t
-          freeu = freeReachable u
-          b = if a `elem` freeu then firstVar a freet else nullVar a
+  T.Abs s l -> T.Abs s (renameLambda td l)
 
-freeReachable :: T.Type -> S.Set Variable
-freeReachable = freeVars
--- freeReachable = freeReach S.empty
---   where freeReach :: S.Set Variable -> Variable -> S.Set Variable
---         freeReach _ a = S.singleton a
+-- | Rename a type abstraction.
+renameLambda :: TypeDeclMap -> T.Lambda T.Type -> T.Lambda T.Type
+renameLambda td (unzip -> (as, ks), t) = 
+  (zip bs ks, rename td (subsAll as (map T.fromVariable bs) t))
+  where reach = reachable td t
+        bs = foldr (\a bs' -> if a `elem` reach 
+                              then firstVar a (S.fromList bs' `S.union` reach) : bs'
+                              else nullVar a : bs') [] as
 
-bounded = absorbing
+-- | The set of free variables reachable in a type.
+reachable :: TypeDeclMap -> T.Type -> S.Set Variable
+reachable td = \case
+  t | T.isConstant t -> S.empty
+  T.TName{} -> S.empty
+  T.Var _ a -> S.singleton a
+  T.Abs _ (map fst -> as, t) -> reachable td t S.\\ S.fromList as
+  T.AppSemi _ t u | isAbsorbing td t -> reachable td t
+                  | otherwise -> reachable td t `S.union` reachable td u
+  T.App _ t us -> S.unions (map (reachable td) (t:us))
 
--- Requires: the type is normalised,
--- otherwise the function may diverge on non-contractive types
-absorbing :: TypeDeclMap -> T.Type -> Bool
-absorbing td = absorb S.empty
+-- | Is a type absorbing?
+isAbsorbing :: TypeDeclMap -> T.Type -> Bool
+isAbsorbing td = absorb S.empty
   where
-    absorb :: Visited -> T.Type -> Bool
+    absorb :: S.Set Identifier -> T.Type -> Bool
     absorb v = \case
-      -- Session types
       T.End{} -> True
+      T.Bottom{} -> True
+      T.SharedChoice{} -> True -- Unrestricted choice
+      T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
       T.AppSemi _ t u -> absorb v t || absorb v u
-      T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
-      T.SharedChoice{} -> True -- Unrestricted type
-      T.AppLinChoice _ _ its -> all (absorb v . snd) its
-      -- Polymorphism
-      T.Quant _ _ _ _ t -> absorb v t
-      -- Equations
-      T.AppTName _ id ts
-        | id `S.member` v -> True
-        | otherwise -> absorb (S.insert id v) (snd (td M.! id)) -- TODO: Check
-      -- Higher-order, including AppDual
-      T.App _ t ts -> all (absorb v) (t:ts)
-      -- Functional types, Skip, Message, DName, Var
+      T.App _ T.Choice{} ts -> all (absorb v) ts
+      T.AppDual _ t -> absorb v t
+      T.AppTName _ id ts -> id `S.member` v || case td M.!? id of
+        Just (_, u) -> absorb (S.insert id v) u
+        Nothing -> internalError $ "isAbsorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
+      T.AppQuant _ _ _ t -> absorb v t
       _ -> False
-

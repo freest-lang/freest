@@ -20,6 +20,11 @@ default-extensions:
   - NamedFieldPuns
   - BangPatterns
   - ScopedTypeVariables
+  - ImportQualifiedPost
+
+data-dir: data
+data-files:
+  - StandardLib/Prelude.fst
 
 extra-source-files:
   - README.md
@@ -34,6 +39,7 @@ dependencies:
   - optparse-applicative >= 0.16.1.0
   - extra >= 1.7.9
   - transformers >= 0.5.6.2
+  - sgbisim
 
 library:
   source-dirs: src
@@ -42,6 +48,7 @@ library:
     - happy
   exposed-modules:
     - FreeST
+    - Paths_freest
     - UI.CLI
     - UI.Error
     - Parser.Parser
@@ -59,9 +66,7 @@ library:
     - Validation.Normalisation
     - Validation.Rename
     - Validation.Substitution
-    - Validation.TypeEquivalence.TypeEquivalence
-    - Validation.TypeEquivalence.FromType
-    - Validation.TypeEquivalence.Grammar
+    - Validation.TypeEquivalence
     - Validation.Typing
     - Utils
 executables:

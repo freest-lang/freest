@@ -1,7 +1,7 @@
 module LeaST.LeaST where
 
 import qualified Syntax.Base as B
-qs: addEqimport qualified Syntax.Type as T
+import qualified Syntax.Type as T
 import qualified Syntax.Kind as K
 
 

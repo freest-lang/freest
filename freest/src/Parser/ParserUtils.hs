@@ -13,11 +13,11 @@ import Parser.Token
 import Parser.LexerUtils
 import Syntax.Base
 import Syntax.Names
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 
-import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty qualified as NE
 
 dummyKindVar :: Located a => a -> K.Kind
 dummyKindVar (getSpan -> s) =
@@ -44,16 +44,10 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 unOp :: E.Exp -> E.Exp -> E.Exp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
-tupleExp :: Span -> [E.Exp] -> E.Exp
-tupleExp s es = E.App s (E.DCons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
-
 listExp :: Span -> T.Type -> [E.Exp] -> E.Exp
-listExp s t = 
-  foldr (\e l -> E.App s (E.DCons s $ mkConsId s) 
-                         (TypeLevel t : map ExpLevel [e,l])) 
-        (E.App s (E.DCons s (mkNilId s)) [TypeLevel t])
+listExp s t = foldr (E.Cons s) (E.Nil s t)
 
-addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp 
+addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp
 addArgExp a (E.App s e as) = E.App s e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 

@@ -15,26 +15,21 @@ import ProgSpecUtils
 import UI.CLI
 
 import Control.Exception
-import System.Exit (ExitCode(..))
+import Control.Exception
+import Control.Monad ( void )
+import Data.List
+import System.Directory
+import System.Exit
+import System.Exit ( ExitCode(..) )
+import System.FilePath
+import System.IO ( stdout, stderr )
+import System.IO.Silently ( hSilence )
 import Test.Hspec
-import           Control.Exception
-import           Control.Monad                  ( void )
-import           System.Directory
-import           System.Exit
-import           System.IO                      ( stdout
-                                                , stderr
-                                                )
-import           System.IO.Silently             ( hSilence )
-import           Test.HUnit                     ( assertFailure
-                                                , assertEqual
-                                                )
-import           Test.Hspec
+import Test.HUnit ( assertFailure, assertEqual )
 
-import           System.FilePath
-import           Data.List
 
 baseTestDir :: String
-baseTestDir = "/test/prog/invalid/"
+baseTestDir = "/test/prog/Invalid/"
 
 spec :: Spec
 spec = specTest "invalid" baseTestDir testDir

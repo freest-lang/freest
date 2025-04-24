@@ -1,0 +1,1 @@
+Node 0 (Cons (Node 1 (Cons (Node 7 (Cons (Node 13 Nil) Nil)) (Cons (Node 8 (Cons (Node 11 Nil) (Cons (Node 20 Nil) Nil))) (Cons (Node 6 Nil) Nil)))) (Cons (Node 2 Nil) (Cons (Node 3 (Cons (Node 4 Nil) (Cons (Node 5 Nil) Nil))) Nil)))

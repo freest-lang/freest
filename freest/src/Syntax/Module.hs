@@ -20,13 +20,14 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , empty
+  , include
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Base
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 
 import           Data.List (intercalate)
 import           Data.Maybe (fromMaybe)
@@ -44,14 +45,14 @@ type ConsDeclList = [(Identifier, [T.Type])]
 --   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
 -- represented as
 --   [(Tree, ([a], <see above>))]
-type DataDeclList = [(Identifier, ([Variable], ConsDeclList))]
+type DataDeclList = [(Identifier, T.Lambda ConsDeclList)]
 -- Type (type) constructor declaration list, e.g.
 --   type Stream a = !a ; Stream a
 -- In Fµω:
 --   type Stream = λa. µs. !a ; s a
 -- represented as
 --   [(Stream, ([a], (!a ; Stream a))
-type TypeDeclList = [(Identifier, ([Variable], T.Type))]
+type TypeDeclList = [(Identifier, T.Lambda T.Type)]
 -- Kind signature list, e.g.
 --   type Tree : *T -> *T
 --   type Stream : 1T -> 1S
@@ -80,11 +81,11 @@ setName n m = m {name = Just n}
 insertImport :: [String] -> Module -> Module
 insertImport i m = m{imports = i : imports m}
 
-insertDataDecl ::  Identifier -> [Variable] -> ConsDeclList -> Module -> Module
-insertDataDecl i as b m = m{dataDecls = (i, (as, b)) : dataDecls m}
+insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> ConsDeclList -> Module -> Module
+insertDataDecl i aks b m = m{dataDecls = (i, (aks, b)) : dataDecls m}
 
-insertTypeDecl :: Identifier -> [Variable] -> T.Type -> Module -> Module
-insertTypeDecl i as t m = m{typeDecls = (i, (as, t)) : typeDecls m}
+insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type -> Module -> Module
+insertTypeDecl i aks t m = m{typeDecls = (i, (aks, t)) : typeDecls m}
 
 insertKindSig :: [Identifier] -> K.Kind -> Module -> Module
 insertKindSig is k m = m{kindSigs = (is, k) : kindSigs m}
@@ -100,6 +101,16 @@ empty = Module{ name        = Nothing
               , kindSigs    = []
               , definitions = []
               }
+
+include :: Module -> Module -> Module
+include m1 m2 =
+  Module{ name        = name m2
+        , imports     = imports     m1 ++ imports     m2
+        , dataDecls   = dataDecls   m1 ++ dataDecls   m2
+        , typeDecls   = typeDecls   m1 ++ typeDecls   m2
+        , kindSigs    = kindSigs    m1 ++ kindSigs    m2
+        , definitions = definitions m1 ++ definitions m2
+        } 
 
 instance Show Module where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =

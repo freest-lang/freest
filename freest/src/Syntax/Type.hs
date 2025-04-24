@@ -8,9 +8,11 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
+  , Lambda
   , Type( ..
-        , Forall
-        , Exists
+        , AppQuant
+        , AppForall
+        , AppExists
         , AppArrow
         , AppMessage
         , AppLinChoice
@@ -24,13 +26,13 @@ module Syntax.Type
         , AppVar
         )
   , smartApp
-  , variadicQuant
   , bool
   , Dual(..)
   , isConstant
   , isSkip
   , isSemi
   , isAppSemi
+  , isAppLinChoice
   , isDual
   , isTName
   , isDName
@@ -39,15 +41,16 @@ module Syntax.Type
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Kind                   as K
-import           Syntax.Names
-import           Utils ( internalError )
+import Syntax.Base
+import Parser.Unparser
+import Syntax.Kind qualified as K
+import Syntax.Names
+import Utils ( internalError )
 
-import           Data.Bifunctor
-import           Data.Function (on)
-import           Data.List                     (intercalate, sort, sortBy)
-import qualified Data.Map.Strict               as M
+import Data.Bifunctor
+import Data.Function ( on )
+import Data.List ( intercalate, sort, sortBy )
+import Data.Map.Strict qualified as M
 
 data Polarity = In | Out
   deriving (Eq, Ord)
@@ -59,39 +62,49 @@ instance Dual Polarity where
   dual Out = In
   dual In = Out
 
+type Lambda t = ([(Variable, K.Kind)], t)
+
 data Type
-  -- Functional types
+  -- Constants
+  --   Functional types
   = Int Span
   | Float Span
   | Char Span
   | Arrow Span K.Multiplicity
-  -- Session types
+  | Quant Span Polarity
+  --   Session types
   | Skip Span
-  | Semi Span
-  | Dual Span
   | End Span Polarity
   | Message Span K.Multiplicity Polarity
   | Choice Span K.Multiplicity Polarity [Identifier]
-  -- Polymorphism
-  | Quant Span Polarity Variable K.Kind Type
-  -- Higher-order
-  | Var Span Variable
-  | App Span Type [Type]
-  -- Equations
+  | Semi Span
+  | Dual Span
+  --   Equations
   | TName Span Identifier
   | DName Span Identifier
+  --   The type equivalent to non-contractive types
+  | Bottom Span
+  -- Non-constants
+  | Var Span Variable
+  | Abs Span (Lambda Type)
+  | App Span Type [Type]
   deriving Ord
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
-pattern Forall :: Span -> Variable -> K.Kind -> Type -> Type
-pattern Forall s a k t <- Quant s In a k t
-  where Forall s a k t  = Quant s In a k t
+pattern AppQuant :: Span -> Polarity ->  [(Variable, K.Kind)] -> Type -> Type
+pattern AppQuant s p aks t <- App s (Quant _ p) [Abs _ (aks, t)]
+  where AppQuant s p []  t = t
+        AppQuant s p aks t = App s (Quant s p) [Abs s (aks, t)]
 
-pattern Exists :: Span -> Variable -> K.Kind -> Type -> Type
-pattern Exists s a k t <- Quant s Out a k t
-  where Exists s a k t  = Quant s Out a k t
+pattern AppForall :: Span -> [(Variable, K.Kind)] -> Type -> Type
+pattern AppForall s aks t <- AppQuant s In aks t
+  where AppForall s aks t  = AppQuant s In aks t
+
+pattern AppExists :: Span -> [(Variable, K.Kind)] -> Type -> Type
+pattern AppExists s aks t <- AppQuant s Out aks t
+  where AppExists s aks t  = AppQuant s Out aks t
 
 pattern AppArrow :: Span -> K.Multiplicity -> Type -> Type -> Type
 pattern AppArrow s m t u <- App s (Arrow _ m) [t,u]
@@ -128,7 +141,7 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
 
 pattern Tuple :: Span -> [Type] -> Type
 pattern Tuple s ts <- AppDName s i@(isTupleId -> True) ts
-  where Tuple s = \case 
+  where Tuple s = \case
           [_] -> internalError "cannot construct a 1-tuple type."
           ts  -> AppDName s (mkTupleId (length ts - 1) s) ts
 
@@ -152,11 +165,6 @@ pattern AppVar s a ts <- (\case Var s a            -> App s (Var s a) []
   where AppVar _ a [] = Var (getSpan a) a
         AppVar s a ts = App s (Var (getSpan a) a) ts
 
-variadicQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
-variadicQuant _ _ [] t = t
-variadicQuant s p ((a,k) : aks) t =
-  Quant s p a k $ variadicQuant s p aks t
-
 smartApp :: Span -> Type -> [Type] -> Type
 smartApp s (App _ t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
@@ -166,26 +174,39 @@ bool s = DName (getSpan s) (mkBoolId s)
 
 isConstant :: Type -> Bool
 isConstant = \case
-  Quant{}  -> False
-  TName{} -> False
   Var{}   -> False
+  Abs{}   -> False
   App{}   -> False
+  -- Given a declaration 'type A a1 ... an = U', type A stands for
+  -- λa1...λan.μλA.U. Hence, type A is then a non value.
+  TName{} -> False
+  -- On the other hand, given a declaration 'data A a1 ... an = U', type A is
+  -- understood as a constant.
   _       -> True
 
-isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isMsg :: Type -> Bool
-isSkip  = \case Skip{}  -> True; _ -> False
-isSemi  = \case Semi{}  -> True; _ -> False
-isAppSemi = \case AppSemi{} -> True; _ -> False
-isDual  = \case Dual{}  -> True; _ -> False
-isTName = \case TName{} -> True; _ -> False
-isDName = \case DName{} -> True; _ -> False
-isMsg = \case Message{} -> True; _ -> False
+isSkip, isSemi, isAppSemi, isAppLinChoice, isDual, isTName, isDName, isMsg :: Type -> Bool
+isSkip         = \case Skip{}         -> True; _ -> False
+isSemi         = \case Semi{}         -> True; _ -> False
+isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
+isDual         = \case Dual{}         -> True; _ -> False
+isTName        = \case TName{}        -> True; _ -> False
+isDName        = \case DName{}        -> True; _ -> False
+isMsg          = \case Message{}      -> True; _ -> False
 
 fromVariable :: Variable -> Type
 fromVariable a = Var (varSpan a) a
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"
+
+-- Defined only for session type constants: close/wait, message and choice constants
+instance Dual Type where
+  dual (End s p) = End s (dual p)
+  dual (Message s m p) = Message s m (dual p)
+  dual (Choice s m p ids) = Choice s m (dual p) ids
+  dual t@Skip{} = t
+  dual t@Bottom{} = t
 
 instance Show Type where
   show = \case
@@ -194,6 +215,7 @@ instance Show Type where
     Float{}   -> "Float"
     Char{}    -> "Char"
     Arrow _ m -> "("++show m++"->)"
+    Quant _ p -> "("++showQuant p++")"
     -- Session types
     Skip{}            -> "Skip"
     Semi{}            -> "(;)"
@@ -202,24 +224,30 @@ instance Show Type where
     End _ Out         -> "Close"
     Message _ K.Un p  -> "*" ++ show p
     Message _ _ p     -> show p
-    SharedChoice _ p ls   -> 
-      "*" ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
-    AppLinChoice  _ p lts -> showView p ++ "{" 
+    Choice _ m p ls   ->
+      (if m == K.Un then "*" else "")
+      ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
+    AppLinChoice  _ p lts -> showView p ++ "{"
       ++ intercalate ", " (map showField lts)
       ++ "}"
       where showField (l, t) = show l ++ ": " ++ show t
     -- Polymorphism
-    Quant _ p a k t -> "(" ++showQuant p++" "++show a++":"++show k++". "++show t++")"
-      where showQuant In  = "forall"
-            showQuant Out = "exists"
+    AppQuant _ p aks t -> "(" ++ showQuant p ++ " " ++ showLambda aks ". " t ++ ")"
     -- Higher-order
     Var _ a    -> show a
     AppSemi _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
-    App _ t ts -> foldl (\s a -> "("++s++" "++show a++")") (show t) ts
+    Abs _ (aks,t) -> "(\\" ++ showLambda aks " -> " t ++ ")"
+    App _ t ts -> foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts
     -- Equations
-    TName _ i -> show i++"#type"
-    DName _ i -> show i++"#data"
-    where showView = \case In    -> "&"; Out  -> "+"
+    TName _ i -> show i ++ "#type"
+    DName _ i -> show i ++ "#data"
+    -- The type of non-contractive types
+    Bottom{} -> "Bottom"
+    where 
+      showView  = \case In -> "&"     ; Out -> "+"
+      showQuant = \case In -> "forall"; Out -> "exists"
+      showLambda aks sep t =
+        unwords (map (\(a,k) -> show a ++ ":" ++ show k) aks) ++ sep ++ show t
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool
@@ -234,6 +262,7 @@ instance Congruence Type where
     Float{} Float{} -> True
     Char{} Char{}  -> True
     (Arrow _ m1) (Arrow _ m2) -> m1 == m2
+    (Quant _ p1) (Quant _ p2) -> p1 == p2
   -- Session types
     Skip{} Skip{} -> True
     Semi{} Semi{} -> True
@@ -241,17 +270,18 @@ instance Congruence Type where
     (End _ p1) (End _ p2) -> p1 == p2
     (Message _ m1 p1) (Message _ m2 p2) -> m1 == m2 && p1 == p2
     (Choice _ m1 p1 is1) (Choice _ m2 p2 is2) -> m1 == m2 && p1 == p2 && is1 == is2
-  -- Polymorphism
-    (Quant _ p1 a1 k1 t) (Quant _ p2 a2 k2 u) ->
-      p1 == p2 && k1 == k2 && congruent (M.insert a1 a2 m) t u
   -- Higher-order
     (Var _ v1) (Var _ v2) ->
       v1 == v2 ||              -- free variables
       Just v2 == M.lookup v1 m -- bound variables
+    (Abs _ (unzip -> (as1,ks1), t)) (Abs _ (unzip -> (as2, ks2), u)) ->
+      ks1 == ks2 && congruent (M.fromList (zip as1 as2) `M.union` m) t u
     (App _ t ts) (App _ u us) -> congruent m t u && congruent m ts us
   -- Equations
     (TName _ i1) (TName _ i2) -> i1 == i2
     (DName _ i1) (DName _ i2) -> i1 == i2
+  --   The type of non-contractive types
+    (Bottom _) (Bottom _) -> True
     _ _ -> False
 
 instance Congruence [Type] where
@@ -280,32 +310,37 @@ instance Located Type where
     Semi s          -> s
     Dual s          -> s
     -- Polymorphism
-    Quant s _ _ _ _ -> s
+    Quant s _       -> s
     -- Higher-order
     Var s _         -> s
+    Abs s _         -> s
     App s _ _       -> s
     -- Equations
     TName s _       -> s
     DName s _       -> s
+    --   The type of non-contractive types
+    Bottom s        -> s
 
   setSpan s = \case
     -- Functional types
-    Int _             -> Int s
-    Float _           -> Float s
-    Char _            -> Char s
-    Arrow _ m         -> Arrow s m
+    Int _            -> Int s
+    Float _          -> Float s
+    Char _           -> Char s
+    Arrow _ m        -> Arrow s m
+    Quant _ p        -> Quant s p
     -- Session types
-    Message _ m p     -> Message s m p
+    Message _ m p    -> Message s m p
     Choice  _ m p ls -> Choice s m p ls
-    End _ p           -> End s p
-    Skip _            -> Skip s
-    Semi _            -> Semi s
-    Dual _            -> Dual s
-    -- Polymorphism
-    Quant _ p a k t   -> Quant s p a k t
+    End _ p          -> End s p
+    Skip _           -> Skip s
+    Semi _           -> Semi s
+    Dual _           -> Dual s
     -- Higher-order
-    Var _ a           -> Var s a
-    App _ t1 t2       -> App s t1 t2
+    Var _ a          -> Var s a
+    Abs _ l          -> Abs s l
+    App _ t1 t2      -> App s t1 t2
     -- Equations
-    TName _ n         -> TName s n
-    DName _ n         -> DName s n
+    TName _ n        -> TName s n
+    DName _ n        -> DName s n
+    --   The type of non-contractive types
+    Bottom _         -> Bottom s

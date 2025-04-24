@@ -10,7 +10,7 @@ the tokens output by the lexer.
 module Parser.Token where 
 
 import Syntax.Base
-import Data.List (intercalate)
+import Data.List ( intercalate )
 
 data Token
   -- Identifiers
@@ -27,7 +27,7 @@ data Token
   -- Keywords
   | TkModule Span | TkWhere Span | TkImport Span
   | TkData Span | TkType Span
-  | TkLet Span | TkIn Span
+  | TkLet Span | TkIn Span | TkMutual Span
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
   | TkSelect Span | TkChannel Span
@@ -59,7 +59,7 @@ data Token
   -- Kinds 
   | TkLinTopKind Span | TkUnTopKind Span
   | TkLinSessionKind Span | TkUnSessionKind Span
-  | TkLinBoundedKind Span | TkUnBoundedKind Span
+  | TkLinChannelKind Span | TkUnChannelKind Span
 
   deriving (Eq, Show)
 
@@ -103,6 +103,7 @@ instance Located Token where
     TkType s -> s
     TkLet s -> s
     TkIn s -> s
+    TkMutual s -> s
     TkCase s -> s
     TkOf s -> s
     TkIf s -> s
@@ -110,6 +111,7 @@ instance Located Token where
     TkElse s -> s
     TkSelect s -> s
     TkForall s -> s
+    TkExists s -> s
     TkRec s -> s
     TkChannel s -> s
     -- Punctuation
@@ -170,8 +172,8 @@ instance Located Token where
     TkUnTopKind s -> s
     TkLinSessionKind s -> s
     TkUnSessionKind s -> s
-    TkLinBoundedKind s -> s
-    TkUnBoundedKind s -> s
+    TkLinChannelKind s -> s
+    TkUnChannelKind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
@@ -194,6 +196,7 @@ instance Located Token where
     TkType _ -> TkType s
     TkLet _ -> TkLet s
     TkIn _ -> TkIn s
+    TkMutual _ -> TkMutual s
     TkCase _ -> TkCase s
     TkOf _ -> TkOf s
     TkIf _ -> TkIf s
@@ -261,6 +264,6 @@ instance Located Token where
     TkUnTopKind _ -> TkUnTopKind s
     TkLinSessionKind _ -> TkLinSessionKind s
     TkUnSessionKind _ -> TkUnSessionKind s
-    TkLinBoundedKind _ -> TkLinBoundedKind s
-    TkUnBoundedKind _ -> TkUnBoundedKind s
+    TkLinChannelKind _ -> TkLinChannelKind s
+    TkUnChannelKind _ -> TkUnChannelKind s
 

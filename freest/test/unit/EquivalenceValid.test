@@ -1,113 +1,111 @@
 -- Simple types
 
-case Int == Int
+case Int == Int : *T
 
-case Char == Char
+case Char == Char : *T
 
-case Float == Float
+case Float == Float : *T
 
-case Int == Int
+case Int == Int : *T
 
-case () == ()
+case () == () : *T
+
 
 -- Session types
 
-case !Int == !Int
+case !Int == !Int : 1S
 
-case ?Char == ?Char
+case ?Char == ?Char : 1S
 
-case !Int == !Int
+case !Int == !Int : 1S
 
-case ?() == ?()
+case ?() == ?() : 1S
 
-case Skip == Skip
+case Skip == Skip : 1S
 
-case !Int == Skip;!Int
+case !Int == Skip;!Int : 1S
 
-case !Int == !Int;Skip
+case !Int == !Int;Skip : 1S
 
-case !Int == Skip;!Int;Skip
+case !Int == Skip;!Int;Skip : 1S
 
-case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip
+case !Int == Skip;Skip;Skip;Skip;!Int;Skip;Skip;Skip : 1S
 
-case !Int;Skip;?Int == !Int;?Int
+case !Int;Skip;?Int == !Int;?Int : 1S
 
-case Skip;!Int == !Int;Skip
+case Skip;!Int == !Int;Skip : 1S
 
-case !Int;Skip == Skip;!Int
+case !Int;Skip == Skip;!Int : 1S
 
-case Skip == Skip;Skip
+case Skip == Skip;Skip : *S
 
--- Close 
+case Close == Close : 1C
 
-case Close == Close
+case Close == Close;!Int : 1C
 
-case Close == Close;!Int
+case Close;!Int == Close;?Int : 1C
 
-case Close;!Int == Close;?Int
-
-case Close;!Int == Close;?Int
+case Close;!Int == Close;?Int : 1C
 
 case !Char;Close;!Int 
-  == !Char;Close;?Int
+  == !Char;Close;?Int : 1C
 
 case (!Int;Close;!Int);?Int 
-  == !Int;Close;!Int
+  == !Int;Close;!Int : 1C
 
-case T;!Int == U
+case T ; !Int == U : 1C
 where
-  type T : 1S
+  type T, U : 1C
   type T = +{A: !Int;T, B: Skip;Close;Skip}
-  type U : 1S
   type U = +{A: !Int;U, B: Close;U}
 
-case T == U
+case T == U : 1C
 where 
-  type T : 1S
+  type T : 1C
   type T = T'
-  type T' : 1S
+  type T' : 1C
   type T' = +{A: !Int;T', B:Close;T}
-  type U : 1S
+  type U : 1C
   type U = U'
-  type U' : 1S
+  type U' : 1C
   type U' = +{A: !Int;U', B:Close;U'}
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = &{N:T};Skip
   type U : 1S
   type U = &{N:U}
 
-case T == U
+case T == U : 1C
 where
-  type T : 1S
+  type T : 1C
   type T = &{N:!Int;!Int;T, L:Close};?Int
-  type U : 1S
+  type U : 1C
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !(T';!Int);?(T;!(Close);Close;?Int)
-  type T' : 1S
+  type T' : 1C
   type T' = +{A: !Int;T', B: Skip;Close;Skip}
   type U : 1S
   type U = !U';Skip;?(U;Skip;!(Close);Close;U;!U)
-  type U' : 1S
+  type U' : 1C
   type U' = +{A: !Int;U', B: Close;U'}
 
 case !(!Int;Close) 
-  == !(!Int;Skip;Close;?Int) 
+  == !(!Int;Skip;Close;?Int) : 1S 
 
 case forall a:1S. Close ; a ; !Int 
-  == forall a:1S. (Close ; a) ; Skip
+  == forall a:1S. (Close ; a) ; Skip : 1C
 
 case forall a:1S. Close;a;!Int 
-  == forall b:1S. (Close;b);Skip
+  == forall b:1S. (Close;b);Skip : 1C
 
 case forall a:1S. T a
-  == forall b: 1S . U b
+  == forall b: 1S. U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -118,77 +116,273 @@ where
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
+
+-- Dual
+
+case Dual (Dual !Int) == !Int : 1S
+
+case Dual (exists a:1S. a) == forall b:1S. (Dual b) : 1S
+
+case exists a:1S. exists b:1S. Dual (a ; b) ==
+     exists a:1S. exists b:1S. Dual a ; Dual b :1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. forall b:1S. Dual a ; Dual b : 1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+
+case Dual(exists a:1S. exists b:1S. a ; b) ==
+     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+
+case Dual (exists a:1S. Dual a) == forall b:1S. b : 1S
+
+
 -- Unrestricted sessions
 
-case *!Int == *!Int ; ?Char
+case *!Int == *!Int ; ?Char : *C
 
-case *!Int ; ?Char == *!Int
+case *!Int ; ?Char == *!Int : *C
 
-case *!Int == *!Int ; Wait
+case *!Int == *!Int ; Wait : *C
 
-case *!Int ; Wait == *!Int
+case *!Int ; Wait == *!Int : *C
 
-case *?Int == *?Int ; ?Char
+case *?Int == *?Int ; ?Char : *C
 
-case *?Int ; ?Char == *?Int
+case *?Int ; ?Char == *?Int : *C
 
-case *?Int == *?Int ; Close
+case *?Int == *?Int ; Close : *C
 
-case *?Int ; Close == *?Int
+case *?Int ; Close == *?Int : *C
 
--- Choices
+case Dual (*&{A, B}) == *+{A, B} : *C
 
-case +{A: Skip, B: Close} == +{B: Close, A: Skip ; Skip}
+case *&{A, B} ; !Int == *&{B, A} : *S
 
--- Poly Streams
+case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
 
-case OutStream == Dual InStream
-where
-  type OutStream : 1S
-  type OutStream = exists a:*T . !a ; OutStream
-  type InStream : 1S
-  type InStream = forall a:*T . ?a ; InStream
+case (?Char ; *&{A, B} ; !Int) 1-> Char == (?Char ; *&{A, B}) 1-> Char : 1T
+
 
 -- When there is (unreachable) life past noncontractive (rec) types
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !T ; !Int
   type U : 1S
   type U = !U ; !Int
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !T ; !Int
   type U : 1S
   type U = !T ; !Int
 
-case T == U
+case T == U : 1S
 where
   type T : 1S
   type T = !T ; !Int
   type U : 1S
   type U = T
 
-case T == U
+case T !Int == U !Int : 1S
 where
   type T : 1S -> 1S
   type T a = a ; (T a) ; !Int
   type U : 1S -> 1S
   type U b = b ; (U b) ; !Int
 
--- case T == U
--- where
---   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
---   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5) ; a2 ; a4
+case Maybe !Int == Maybe (Skip ; !Int) : 1T
+where
+  type Maybe : 1S -> 1T
+  data Maybe a = Nothing | Just a
 
--- case T == U
+case forall a:1S. Maybe a == forall b:1S. Maybe b : 1T
+where
+  type Maybe : 1S -> 1T
+  data Maybe a = Nothing | Just a
+
+case Either !Int == Either (Skip ; !Int) : 1S -> 1T
+where
+  type Either : 1S -> 1S -> 1T
+  data Either a b = Left a | Right b
+
+case T !Int == U !Int : 1S -- First order
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+
+-- Unreachable type vars
+
+case forall a:1S. Wait ; a == forall b:1S. Wait : 1S
+
+case !Int ; forall a:1S. Wait ; a == !Int ; forall b:1S. Wait : 1S
+
+case forall a:1S. ?Char ; Wait ; a == forall b:1S. ?Char ; Wait : 1S
+
+case forall a:1S. Wait ; a == forall b:1S. Dual Close : 1S
+
+case forall a:1S. forall b:1S. Wait ; a ; b == forall a:1S. forall b:1S. Wait : 1S
+
+case forall a:1S. forall b:*T. !b ; Wait ; a == forall a:1S. forall c:*T. !c ; Wait : 1S
+
+case ?(forall a:1S. Wait ; a) == ?(forall b:1S. Wait) : 1S
+
+case forall a:1S. Wait ; a -> Char == forall b:1S. Wait -> Char : *T
+
+case (forall a:1S. Wait ; a) -> (forall b:1S. Wait    ) ==
+     (forall b:1S. Wait    ) -> (forall a:1S. Wait ; a) : *T
+
+case &{A: forall a:1S. Wait ; a, B: Skip} == &{A: forall b:1S. Wait, B: Skip} : 1S
+
+case +{A: forall a:1S. Wait ; a, B: forall b:1S. Wait    } ==
+     +{A: forall b:1S. Wait,     B: forall a:1S. Wait ; a} : 1S
+
+case forall a:1S. Wait ; forall b:1S. a ; b == forall b:1S. Wait : 1S
+
+case forall a:1S. Wait ; Close ; a == forall b:1S. Wait : 1S
+
+case forall a:1S. Wait ; !Int ; Close ; a == forall b:1S. Wait : 1S
+
+case forall a:1S. forall b:1S. Wait ; a ;!Int ; Close ; b ==
+     forall a:1S. forall a:1S. Wait : 1S
+
+case forall a:1S. *!Int ; a == forall b:1S. *!Int : 1S
+
+case forall a:1S. *+{A,B} ; a == forall b:1S. *+{B,A} : 1S
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T : 1S
+  type T = !Int ; T
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T, U : 1S
+  type T = !Int ; U
+  type U = ?Char ; T
+
+case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+where
+  type T, U : 1S
+  type T = !Int ; U
+  type U = ?Char ; U
+
+case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+where
+  type T : *S -> 1S
+  type T c = !c ; T c
+
+case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+where
+  type T : *S -> 1S
+  type T c = !c ; T c
+
+case exists a:1S. Dual Close ; a == exists a:1S. Dual Close : 1S
+
+case exists a:1S. Dual Close ; a == exists a:1S. Wait : 1S
+
+case W == Skip ; W : 1S -- Recursion on the argument of a type constructor
+where
+  type W : 1S
+  type W = Z ?Char
+  type Z : 1S -> 1S
+  type Z b = W ; b
+
+-- The test cases below require renaming TName
+
+case T == U : 1S -> 1S 
+where
+  type T, U : 1S -> 1S
+  type T a = a
+  type U b = b
+
+case T == U : 1S -> 1S
+where
+  type T, U : 1S -> 1S
+  type T a = !a ; T a
+  type U b = !b ; U b
+
+case T == U : 1S -> 1S
+where
+  type T : 1S -> 1S
+  type T a = a ; (T a) ; !Int
+  type U : 1S -> 1S
+  type U b = b ; (U b) ; !Int
+
+case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+where
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+  type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5) ; a2 ; a4
+
+case T == U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+where
+  type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
+  type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
+  type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+
+case OutStream == Dual InStream : 1C
+where
+  type OutStream : 1C
+  type OutStream = exists a:*T. !a ; OutStream
+  type InStream : 1C
+  type InStream = forall a:*T. ?a ; InStream
+
+case Stream Skip == Stream (Skip; Skip) : 1S
+where
+  type Stream : 1T -> 1S
+  type Stream a = !a ; Stream a
+
+case Seq Bot == Bot : *T
+where
+  type Seq : *S -> *S
+  type Seq a = a ; Seq a
+  type Bot : *S
+  type Bot = Bot
+  
+
+-- Polymorphic recursion
+
+-- Polymorphic datatype recursion, https://stackoverflow.com/questions/40247339/polymorphic-recursion-syntax-and-uses
+
+case Nested Skip == Nested (Skip ; Skip) : 1T
+where
+  type Nested : 1T -> 1T
+  data Nested a = NestedCons a (Nested [a]) | Epsilon
+
+case Tree Close == Tree (Close; Wait) : 1T
+where
+  type Tree: 1T -> 1T
+  data Tree a = Leaf a | Node (Tree (a, a))
+
+-- Polymorphic type recursion, translation to grammar hangs. These types are not
+-- well formed, hence we're good.
+
+-- case CTree Close == CTree (Close; Wait): 1S
 -- where
---   type T : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type T a1 a2 a3 a4 a5 = a1 ; a3 ; (T a1 a2 a3 a4 a5) ; a2 ; a4
---   type U : 1S -> 1S -> 1S -> 1S -> 1S -> 1S
---   type U a1 a2 a3 a4 a5 = a1 ; a3 ; (U a1 a2 a3 a4 a5)
+--   type CTree : 1T -> 1S
+--   type CTree a = +{Leaf: !a, Node: CTree (a, a)}
+
+-- Is this poly rec? (translation does not hang)
+
+case !Int ; T Char Int == T Int Char : 1S
+where
+  type T : *T -> *T -> 1S
+  type T a b = ! a ; T b a
+
+-- As above, w/o poly record
+
+case !Int ; T Char Int == T Int Char : 1S
+where
+  type T, U : *T -> *T -> 1S
+  type T a b = ! a ; U a b
+  type U a b = ! b ; T a b

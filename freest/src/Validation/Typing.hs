@@ -8,38 +8,39 @@ This module implements FreeST's bidirectional type checking algorithm.
 module Validation.Typing where
 
 import Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Module as M
-import qualified Syntax.Type as T
-import Validation.TypeEquivalence.TypeEquivalence (equivalent)
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
 import UI.Error
 import Utils
 import Validation.Base
-import qualified Validation.Expose as Expose
-import qualified Validation.Kinding as Kinding
-import Validation.Normalisation (normalise)
-import Validation.Substitution (subs, subsAll)
+import Validation.Expose qualified as Expose
+import Validation.Kinding qualified as Kinding
+import Validation.Normalisation ( normalise )
+import Validation.Substitution ( subs, subsAll )
+import Validation.TypeEquivalence ( equivalent )
 
 import Control.Monad
-import Data.Bifunctor
-import Data.Function (on)
-import Data.Functor
-import Data.List.Extra (snoc)
-import qualified Data.Map.Strict as Map
-import Control.Monad.State
 import Control.Monad.Extra ( ifM, whenM )
-import Control.Applicative ()
+import Control.Monad.State
 import Control.Monad.Trans.Except ( catchE, throwE )
-import Data.Foldable (foldrM)
-import Debug.Trace (traceM)
+import Data.Bifunctor
+import Data.Foldable ( foldrM )
+import Data.Function ( on )
+import Data.Functor
+import Data.List qualified as List
+import Data.List.Extra qualified as List
+import Data.Map.Strict qualified as Map
+import Debug.Trace ( traceM )
 
 
--- Type context. It keeps track of the variables and constructors in scope and 
--- their types.
+-- The type context. It keeps track of the variables and constructors in scope
+-- and their types.
 type TypeCtx = Map.Map (Either Variable Identifier) T.Type
 
--- Kind context. It keeps track of the type variables in scope and their kinds.
+-- The kind context. It keeps track of the type variables in scope and their 
+-- kinds.
 type KindCtx = Map.Map Variable K.Kind
 
 -- | Looks up the type of a variable or identifier in a type context,
@@ -67,7 +68,7 @@ lookupType_ tctx xi = case tctx Map.!? xi of
 
 -- | Looks up the declaration of a data constructor, throwing an error if it
 -- has not been declared.
-lookupDConsDecl :: Identifier -> Validation (Identifier, [Variable], [T.Type])
+lookupDConsDecl :: Identifier -> Validation (Identifier, [(Variable, K.Kind)], [T.Type])
 lookupDConsDecl i = do
     dds <- gets consDecls
     case dds Map.!? i of
@@ -79,7 +80,7 @@ lookupDConsDecl i = do
 -- linear variable it encounters. To be used at the end of a scope.
 typeCtxDifference :: KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
 typeCtxDifference kctx tctx1 tctx2 = do
-  foldM (\tctx1' x -> case tctx2 Map.!? x of
+  foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just t  -> do
         whenM (K.isStrictlyLin <$> Kinding.synth kctx t) $
           throwE (LinVarAtEndOfScope (getSpan x) x t)
@@ -115,15 +116,18 @@ synth kctx tctx = \case
     (t, tctx') <- synth kctx tctx f
     t' <- Expose.typeArrow f t
     checkArgs f kctx tctx' t' (as, t')
-  e'@(E.Abs s ps m e)  -> do
+  E.Abs s ps m e'  -> do
     -- TODO: detect incomplete patterns
     (kctxps, tctxps) <- synthParams kctx ps
     let kctx' = kctxps `Map.union` kctx
-    (t, tctxe) <- synth kctx' (tctxps `Map.union` tctx) e
+    (t, tctxe) <- synth kctx' (tctxps `Map.union` tctx) e'
     tctx' <- typeCtxDifference kctx' tctxe tctxps
-    unless (m /= K.Un) $ checkEquivTypeCtxs e tctx' tctx
-    return (foldr (\case ExpLevel  (_,u) -> T.AppArrow s m u
-                         TypeLevel (a,k) -> T.Forall s a k) t ps
+    unless (m /= K.Un) $ checkEquivTypeCtxs e' tctx' tctx
+    return (foldr (\cases (ExpLevel  (_, u)) t' -> T.AppArrow s m u t'
+                          (TypeLevel (a, k)) (T.AppForall s aks t') -> 
+                            T.AppForall s ((a, k) : aks) t'
+                          (TypeLevel (a, k)) t' -> T.AppForall s [(a, k)] t')
+                  t ps
            ,tctx')
     where
       synthParams :: KindCtx -> [Level (E.Pat, T.Type) (Variable, K.Kind)] -> Validation (KindCtx, TypeCtx)
@@ -197,7 +201,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Tuple s es ->
     case normalise tds t of
       T.Tuple _ ts | length es == length ts ->
-        foldM (\tctx' (ei,ti) -> check kctx tctx ei ti) tctx (zip es ts)
+        foldM (\tctx' (ei,ti) -> check kctx tctx' ei ti) tctx (zip es ts)
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
@@ -205,10 +209,10 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Nil s u -> do
     Kinding.checkProper kctx u
     case (normalise tds t, normalise tds u) of
-      (T.List _ t', T.List _ u') -> do
+      (T.List _ t', u') -> do
         checkEquivTypes (Left e) t' u'
         return tctx
-      _ -> throwE (TypeMismatch s t u (Left e))
+      _ -> throwE (TypeMismatch s t (T.List (getSpan u) u) (Left e))
     -- Cons, (::) @a e1 e2
   E.Cons s e1 e2 ->
     case normalise tds t of
@@ -234,8 +238,8 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Abs s ps m e'  -> do
     (u, kctxps, tctxps) <- checkParams e t kctx tctx (prepareParams ps) t
     let kctx' = kctxps `Map.union` kctx
-    tctxe <- check kctx' (tctxps `Map.union` tctx) e u
-    tctx' <- typeCtxDifference kctx' tctxe tctxps
+    tctxe' <- check kctx' (tctxps `Map.union` tctx) e' u
+    tctx' <- typeCtxDifference kctx' tctxe' tctxps
     unless (m /= K.Un) $ checkEquivTypeCtxs e tctx' tctx
     return tctx'
     where
@@ -247,11 +251,11 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Case s e' ((p1,rhs1):psrhss) -> do
     (u,tctx') <- synth kctx tctx e'
     tctxp1 <- checkPat kctx p1 u
-    tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx) rhs1 t
+    tctxrhs1 <- checkRHS kctx (tctxp1 `Map.union` tctx') rhs1 t
     tctx1 <- typeCtxDifference kctx tctxrhs1 tctxp1
     forM_ psrhss \(pi,rhsi) -> do
       tctxpi <- checkPat kctx pi u
-      tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx) rhsi t
+      tctxrhsi <- checkRHS kctx (tctxpi `Map.union` tctx') rhsi t
       tctxi <- typeCtxDifference kctx tctxrhsi tctxpi
       checkEquivTypeCtxs e tctxi tctx1
     return tctx1
@@ -295,8 +299,8 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
         (t,tctx'') <- synthRHS kctx tctx' rhs
         ptctx <- checkPat kctx p t
         forM_ (Map.assocs ptctx) \case
-          (Left x,t) -> forM_ (tctx Map.!? Left x) 
-            (checkEquivTypes (Left (E.Var (getSpan x) x)) t)              
+          (Left x,t) -> forM_ (tctx' Map.!? Left x) 
+              (checkEquivTypes (Left (E.Var (getSpan x) x)) t)              
           _ -> return ()
         return (ptctx `Map.union` tctxds, ptctx `Map.union` tctx'')
       E.FnDef x ((ps1,rhs1):psrhss) -> do
@@ -315,6 +319,10 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
         return (tctxds, tctx1)
         where
           prepareParams = map (bimap (,Nothing) (,Nothing))
+      E.Mutual ds -> do
+        let (sigs, fndefs) =
+              List.partition (\case E.TypeSig{} -> True; _ -> False) ds
+        checkDecls kctx tctx' (sigs ++ fndefs)
 
 -- | Check-against for function arguments. Given kind and type contexts, it
 -- simultaneously walks down a list of arguments and the type of the function,
@@ -332,9 +340,9 @@ checkArgs = checkArgs' 1
   where
     checkArgs' n f kctx tctx t0 (as, t) = gets typeDecls >>= \tds -> case (as, t) of
       -- regular cases first
-      (TypeLevel t:as, normalise tds -> T.Forall s' a k u) -> do
+      (TypeLevel t:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         Kinding.check kctx t k
-        checkArgs' (n+1) f kctx tctx t0 (as, subs a t u)
+        checkArgs' (n+1) f kctx tctx t0 (as, T.AppForall s' aks (subs a t u))
       (ExpLevel  e:as, normalise tds -> T.AppArrow s' m u v) -> do
         tctx' <- check kctx tctx e u
         checkArgs' (n+1) f kctx tctx' t0 (as,v)
@@ -342,7 +350,7 @@ checkArgs = checkArgs' 1
       (TypeLevel t:as, normalise tds -> T.AppArrow s' m u v) -> do
         throwE (UnexpectedArg (getSpan t) (ExpLevel u) (TypeLevel t) n f)
       -- expected type, given expression (to be inferred...)
-      (ExpLevel  e:as, normalise tds -> T.Forall s' a k u) -> do
+      (ExpLevel  e:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         throwE (UnexpectedArg (getSpan e) (TypeLevel k) (ExpLevel e) n f)
       -- no more arguments, return type
       ([], t) -> return (t, tctx)
@@ -367,11 +375,12 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
   where
     checkParams' n kctx' tctx' ps t' = gets typeDecls >>= \tds -> case (ps, t') of
     -- regular cases first
-      (TypeLevel (a',mk'):as, normalise tds -> T.Forall s' a k u) -> do
+      (TypeLevel (a',mk'):as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         case mk' of
           Just k' -> Kinding.checkSubkindOf (T.Var (getSpan a') a') k' k
           Nothing -> return () -- catchE (...) putError_
-        checkParams' (n+1) (Map.insert a' k kctx') tctx' as (subs a (T.Var (getSpan a') a') u)
+        checkParams' (n+1) (Map.insert a' k kctx') tctx' as 
+          ((if null aks then id else T.AppForall s' aks) $ subs a (T.Var (getSpan a') a') u)
       (ExpLevel  (p,mu'):as, normalise tds -> T.AppArrow s' m u v) -> do
         case mu' of
           Just u' -> do
@@ -384,7 +393,7 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
       (TypeLevel (a,k):as, normalise tds -> T.AppArrow s' m u v) -> do
         throwE (UnexpectedParam (getSpan a) (ExpLevel u) (TypeLevel a) n e)
       -- expected type, given expression
-      (ExpLevel  (p,t):as, normalise tds -> T.Forall s' a k u) -> do
+      (ExpLevel  (p,t):as, normalise tds -> T.AppForall s' ((a, k):aks) u) -> do
         throwE (UnexpectedParam (getSpan p) (TypeLevel k) (ExpLevel p) n e)
       -- no more arguments, return type
       ([], t') -> return (t', kctx' Map.\\ kctx, tctx' Map.\\ tctx)
@@ -398,45 +407,45 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
 checkPat :: KindCtx -> E.Pat -> T.Type -> Validation TypeCtx
 checkPat kctx p t = gets typeDecls >>= \tds -> case p of
   -- 0
-  p@(E.IntPat    s _)  -> do
+  E.IntPat    s _   -> do
     checkEquivTypes (Right p) t (T.Int s)
     pure Map.empty
   -- 0.0
-  p@(E.FloatPat  s _)  -> do
+  E.FloatPat  s _   -> do
     checkEquivTypes (Right p) t (T.Float s)
     pure Map.empty
   -- 'a'
-  p@(E.CharPat   s _)  -> do
+  E.CharPat   s _   -> do
     checkEquivTypes (Right p) t (T.Char s)
     pure Map.empty
   -- x
-  E.VarPat    s x  -> pure $ Map.singleton (Left x) t
-  p@(E.WildPat  s _ ) -> do
+  E.VarPat    s x   -> pure $ Map.singleton (Left x) t
+  E.WildPat  s _    -> do
     k <- Kinding.synth kctx t
     when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
     return Map.empty
   -- []
-  p@(E.NilPat s) ->
+  E.NilPat s        ->
     case normalise tds t of
       T.List _ _ -> return Map.empty
       t' -> throwE (TypeMismatchList (getSpan p) t (Right p))
   -- (p1 :: p2)
-  p@(E.ConsPat s p1 p2) ->
+  E.ConsPat s p1 p2 ->
     case normalise tds t of
       t'@(T.List s t'') -> do
         tctx <- checkPat kctx p1 t''
         tctx' <- checkPat kctx p2 t'
         return (Map.union tctx tctx')
       t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
-    -- (p1 ... , pn)
-  p@(E.TuplePat s ps) ->
+  -- (p1 ... , pn)
+  E.TuplePat s ps   ->
     case normalise tds t of
       t'@(T.Tuple s ts) -> do
-        foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts)
+        foldM (\tctx (p', u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts)
       t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
-    -- (C p1 ... pn)
-  p@(E.DConsPat s i ps) -> do
-    (i',as,ts) <- lookupDConsDecl i
+  -- (C p1 ... pn)
+  E.DConsPat s i ps -> do
+    (i', map fst -> as, ts) <- lookupDConsDecl i
     case normalise tds t of
       T.AppDName _ i'' us | i' == i'' -> do
         let us = map (subsAll as us) ts
@@ -444,8 +453,21 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
         when (lus /= lps) (throwE (ConstructorArgumentMismatch (getSpan p) i lus lps))
         foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps us)
       t' -> throwE (TypeMismatch (getSpan p) t (T.AppDName (getSpan i) i' (map (T.Var (getSpan i)) as)) (Right p))
-    -- x@p
-  p@(E.AsPat s x p') -> do
+  -- (&C p)
+  E.ChoicePat s i p' -> do 
+    case normalise tds t of
+      T.AppLinChoice _ T.In lts -> case lookup i lts of
+        Just ti -> checkPat kctx p' ti
+        Nothing -> throwE (IllegalChoice (getSpan i) i t)
+      t'@(T.SharedChoice _ T.In ls) 
+        | i `elem` ls -> checkPat kctx p' t'
+        | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
+      (T.AppSemi _ t'@(T.SharedChoice _ T.In ls) u) 
+        | i `elem` ls -> checkPat kctx p' t'
+        | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
+      _ -> throwE (ExposeError (getSpan p) "an internal choice" (Right p) t)
+  -- x@p
+  E.AsPat s x p'     -> do
     k <- Kinding.synth kctx t
     when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
     Map.insert (Left x) t <$> checkPat kctx p' t
@@ -498,12 +520,12 @@ typeModule m = do
       cds <- gets (Map.assocs . consDecls)
       Map.fromList <$> mapM buildDConsType cds
       where
-        buildDConsType (ic, (it, as, ts)) = do
+        buildDConsType (ic, (it, map fst -> as, ts)) = do
           ksigs <- gets kindSigs
           case ksigs Map.!? it of
             Just (Expose.kindArrow -> (ks,k)) -> do
               let aks = zip as ks
-              (Right ic,) . T.variadicQuant (getSpan ic) T.In aks <$>
+              (Right ic,) . T.AppForall (getSpan ic) aks <$>
                 buildArrow (Map.fromList aks) ts
             _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
           where
@@ -518,4 +540,4 @@ typeModule m = do
 
 runValidate :: M.Module -> Either [Error] M.Module
 runValidate m =
-  runValidation (buildValidationState m) (Kinding.kindModule m >>= typeModule)
+  runValidation (buildValidationState m) (Kinding.kindModule m >> typeModule m)

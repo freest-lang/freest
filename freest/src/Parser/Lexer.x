@@ -55,13 +55,14 @@ $upper = [ A-Z ]
 <0> "type"   { token TkType }
 <0> "let"    { layoutKw TkLet }
 <0> "in"     { token TkIn }
+<0> "mutual" { layoutKw TkMutual }
 <0> "case"   { token TkCase }
 <0> "of"     { layoutKw TkOf }
 <0> "if"     { token TkIf }
 <0> "then"   { token TkThen }
 <0> "else"   { token TkElse }
 <0> "forall" { token TkForall }
-<0> "exists" { token TkForall }
+<0> "exists" { token TkExists }
 <0> "rec"    { token TkRec }
 <0> "channel"{ token TkChannel }
 <0> "select" { token TkSelect }
@@ -85,6 +86,7 @@ $upper = [ A-Z ]
 <0> "]"    { token TkRSquare }
 
 -- Operators
+<0> "::"  { token TkColonColon }
 <0> ";"   { token TkSemi }
 <0> "$"   { token TkDollar }
 <0> "||"  { token TkPipePipe }
@@ -126,8 +128,8 @@ $upper = [ A-Z ]
 <0> "*T" { token TkUnTopKind }
 <0> "1S" { token TkLinSessionKind }
 <0> "*S" { token TkUnSessionKind }
-<0> "1B" { token TkLinBoundedKind }
-<0> "*B" { token TkUnBoundedKind }
+<0> "1C" { token TkLinChannelKind }
+<0> "*C" { token TkUnChannelKind }
 
 -- Literals
 <0> @intLit    { emit TkIntLit }

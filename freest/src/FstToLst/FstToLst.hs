@@ -24,7 +24,9 @@ translateLetDecls ((E.ValDef pat rhs):letDecls) typeSigs cont = L.App (L.Abs (ge
 --     B.TypeLevel _ -> undefined) (translateRHS rhs) levels))))
 translateLetDecls ((E.FnDef var patRhss):letDecls) typeSigs cont = (L.App (L.Abs var (T.Int B.nullSpan) (translateLetDecls letDecls typeSigs cont)) (L.App generateFixPoint (L.Abs var (T.Int B.nullSpan) (let eqs = bar patRhss in
   let argsNum = length $ (fst . head) eqs in generateArgs argsNum argsNum (compileEquations argsNum (newKVars 0 (argsNum-1)) eqs generateError)))))
-translateLetDecls ((E.TypeSig [var] ty):letDecls) typeSigs cont = translateLetDecls letDecls ((var,ty):typeSigs) cont
+-- TODO: remover ctx das assinaturas
+translateLetDecls ((E.TypeSig vars ty):letDecls) typeSigs cont = translateLetDecls letDecls [] cont
+translateLetDecls (letDecl:_) _ _ = traceShow letDecl undefined
 
 generateArgs :: Int -> Int -> L.Exp -> L.Exp
 generateArgs 0 _ cont = cont
@@ -141,6 +143,7 @@ altSub target var (L.ACon iden vars, exp) =
     (L.ACon iden vars, exp)
   else
     (L.ACon iden vars, subs target var exp)
+altSub target var (L.ADefault, exp) = (L.ADefault, subs target var exp)
 
 -- TODO Verificar que a ordem nao muda
 -- Only called if all are constructor

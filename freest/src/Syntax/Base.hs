@@ -11,10 +11,10 @@ module Syntax.Base
   -- TODO: explicit export list
 where
 
-import qualified Data.Set                      as Set
 
-import Data.List ((\\))
-import           Data.Bifunctor
+import Data.Bifunctor ( Bifunctor(..) )
+import Data.List ( (\\) )
+import Data.Set qualified as Set
 
 -- Positions in the source code
 
@@ -148,6 +148,10 @@ mkDefaultVar external l = Variable{varSpan = getSpan l, external, internal = def
 unusedVar :: [Int] -> Variable -> Set.Set Variable -> Variable
 unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as))}
 
+-- | Same as 'unusedVar', but for multiple variables.
+unusedVars :: [Int] -> [Variable] -> Set.Set Variable -> [Variable]
+unusedVars stock as bs  = zipWith (\a i -> a{internal=i}) as (stock \\ map internal (Set.toList bs))
+
 -- | The first variable not in a given set of variables, counting upwards. Used
 -- in substitution, for example.
 freshVar :: Variable -> Set.Set Variable -> Variable
@@ -158,6 +162,9 @@ freshVar = unusedVar [firstInternal..]
 firstVar :: Variable -> Set.Set Variable -> Variable
 firstVar = unusedVar [firstRenamed, firstRenamed - 1 ..]
 
+-- | Same as 'firstVar', but for multiple variables.
+firstVars :: [Variable] -> Set.Set Variable -> [Variable]
+firstVars = unusedVars [firstRenamed, firstRenamed - 1 ..]
 
 -- Levels
 

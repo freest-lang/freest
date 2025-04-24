@@ -119,8 +119,8 @@ import qualified LeaST.LeaST as L
   '*T'    { TkUnTopKind _ }
   '1S'    { TkLinSessionKind _ }
   '*S'    { TkUnSessionKind _ }
-  '1B'    { TkLinBoundedKind _ }
-  '*B'    { TkUnBoundedKind _ }
+  '1C'    { TkLinChannelKind _ }
+  '*C'    { TkUnChannelKind _ }
 
   -- Expression literals
   INT_LIT { TkIntLit _ _ }
@@ -227,10 +227,10 @@ ModuleDecl :: { M.Module -> M.Module }
   | KindSig  { $1 }
 
 DataDecl :: { M.Module -> M.Module }
-  : 'data' UPPER_ID VarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
+  : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
 
 TypeDecl :: { M.Module -> M.Module }
-  : 'type' UPPER_ID VarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
+  : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
 KindSig :: { M.Module -> M.Module }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
@@ -287,12 +287,12 @@ Kind :: { K.Kind }
   | ProperKind                  { $1 }
 
 ProperKind :: { K.Kind }
-  : '1T' { K.Proper (getSpan $1) K.Lin K.Top     }
-  | '*T' { K.Proper (getSpan $1) K.Un  K.Top     }
-  | '1S' { K.Proper (getSpan $1) K.Lin K.Session }
-  | '*S' { K.Proper (getSpan $1) K.Un  K.Session }
-  | '1B' { K.Proper (getSpan $1) K.Lin K.Bounded }
-  | '*B' { K.Proper (getSpan $1) K.Un  K.Bounded }
+  : '1T' { K.lt (getSpan $1) }
+  | '*T' { K.ut (getSpan $1) }
+  | '1S' { K.ls (getSpan $1) }
+  | '*S' { K.us (getSpan $1) }
+  | '1C' { K.lc (getSpan $1) }
+  | '*C' { K.uc (getSpan $1) }
 
 TypePrimary :: { T.Type }
   -- Builtins (necessary?)
@@ -333,7 +333,7 @@ TypePrimary :: { T.Type }
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVar KindedVarListWS '.' Type   { T.variadicQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
+  | Quant KindedVar KindedVarListWS '.' Type   { T.AppQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
@@ -391,7 +391,7 @@ ExpPrimary :: { E.Exp }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
                 -- { let s = spanFromTo $1 $3 in E.DCons s (mkTupleId $2 s) } -- TODO: multiplicities
-  | '(' Exp ',' ExpListComma ')' { tupleExp (spanFromTo $1 $5) ($2 : $4) }
+  | '(' Exp ',' ExpListComma ')' { E.Tuple (spanFromTo $1 $5) ($2 : $4) }
   -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }

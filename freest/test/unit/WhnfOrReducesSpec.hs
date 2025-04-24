@@ -1,13 +1,13 @@
 module WhnfOrReducesSpec (spec) where
 
-import qualified Syntax.Module                 as M
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Normalisation      ( isWhnf, reduce )
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap )
+import Validation.Normalisation ( isWhnf, reduce )
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
-import           UnitSpecUtils
+import Data.Map.Strict qualified as Map
+import Test.Hspec
+import UnitSpecUtils
 
 -- This test should be called with well-formed types only
 
@@ -18,7 +18,7 @@ main = hspec spec
 
 spec :: Spec
 spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
+  ["test/unit/WellFormedTypes.test"] 
   "A given type T is either a whnf or reduces" 
   \(t, _, m) -> whnfOrReduces m t `shouldBe` True
 
