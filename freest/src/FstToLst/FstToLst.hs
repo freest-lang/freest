@@ -141,6 +141,7 @@ altSub target var (L.ACon iden vars, exp) =
     (L.ACon iden vars, exp)
   else
     (L.ACon iden vars, subs target var exp)
+altSub target var (L.AWildCard, exp) = (L.AWildCard, subs target var exp)
 
 -- TODO Verificar que a ordem nao muda
 -- Only called if all are constructor
@@ -185,7 +186,7 @@ patIsEqMix _ _ = False
 -- TODO: relembrar o que isto faz e dar um nome adequado
 foo :: Int -> [B.Variable] -> [[Equation]] -> L.Exp -> [(L.Alt, L.Exp)]
 -- def makes sense here?
-foo num vars [] def = [(L.ADefault, def)]
+foo num vars [] def = [(L.AWildCard, def)]
 -- foo num vars (eqs:eqss) def =
 --   let E.DConsPat _ iden pats = (head . fst . head) eqs
 --       freshVars = (newKVars num (length pats))

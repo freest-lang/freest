@@ -3,7 +3,9 @@ module LeaST.LeaST where
 import qualified Syntax.Base as B
 qs: addEqimport qualified Syntax.Type as T
 import qualified Syntax.Kind as K
+import qualified Syntax.Module as M
 
+type LeastProg = (M.DataDeclList, M.TypeDeclList, M.KindSigList, Exp)
 
 data Exp 
   = Var B.Variable
@@ -25,7 +27,7 @@ data Literal = LInt Int
 
 data Alt = ACon B.Identifier [B.Variable]
   | ALit Literal
-  | ADefault
+  | AWildCard
   deriving Show
 
 -- type Bind = B.Level (B.Variable T.Type Exp) (B.Variable K.Kind Exp)
