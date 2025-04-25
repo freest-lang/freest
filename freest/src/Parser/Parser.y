@@ -19,6 +19,7 @@ import Syntax.Kind qualified as K
 import Syntax.Type qualified as T 
 import Syntax.Module qualified as M
 import UI.Error
+import LeaST.LeaST qualified as L
 
 import Control.Monad.Except
 import Data.Bifunctor
@@ -33,6 +34,7 @@ import Data.List.NonEmpty qualified as NE
 %name parseModule Module
 %name parseEquivalenceTests EquivalenceTestCases
 %name parseKindingTests KindingTestCases
+%name parseLeaST LeastProg
 
 %tokentype { Token }
 %monad { Lexer }
@@ -565,6 +567,67 @@ TypeTestDecl :: { M.Module -> M.Module }
   : KindSig  { $1 }
   | TypeDecl { $1 }
   | DataDecl { $1 }
+
+-- Least
+
+LeastProg :: { L.LeastProg }
+  : '{' LeastDecls '}' LExp { let (dat, ty, kind) = $2 in (dat, ty, kind, $4) }
+  | LExp {([], [], [], $1)}
+
+LeastDecls :: { (M.DataDeclList, M.TypeDeclList, M.KindSigList) }
+  : LeastDataDecl LeastDecls { let (dat, ty, kind) = $2 in (dat++[$1], ty, kind) }
+  | LeastTypeDecl LeastDecls { let (dat, ty, kind) = $2 in (dat, ty++[$1], kind) }
+  | LeastKindSig LeastDecls { let (dat, ty, kind) = $2 in (dat, ty, kind++[$1]) }
+  | {- empty -} { ([], [], []) }
+
+LeastDataDecl :: { (Identifier, T.Lambda M.ConsDeclList) }
+  : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { (mkIdTk $2, ($3, $5)) }
+
+LeastTypeDecl :: { (Identifier, T.Lambda T.Type) }
+  : 'type' UPPER_ID KindedVarListWS '=' Type { (mkIdTk $2, ($3, $5)) }
+
+LeastKindSig :: { ([Identifier], K.Kind) }
+  : 'type' UpperIdListComma ':' Kind { ($2, $4)  }
+
+LExp :: { L.Exp }
+  : '\\' LOWER_ID ':' TypePrimary '->' LExp { L.Abs (mkVarTk $2) $4 $6 }
+  | '\\' '@' LOWER_ID ':' Kind '->' LExp { L.TAbs (mkVarTk $3) $5 $7 }
+-- TODO make use of the case sensitive parser ??
+  | 'case' LExp '{' LAlternatives '}' { L.Case $2 $4 }
+  | LExpApp { $1 }
+
+LExpPrimary :: { L.Exp }
+  : INT_LIT { L.Lit $ L.LInt (read $ getText $1) } 
+  | FLOAT_LIT { L.Lit $ L.LFloat (read $ getText $1) }
+  | CHAR_LIT { L.Lit $ L.LChar (read $ getText $1) }
+  | LOWER_ID { L.Var (mkVarTk $1) }
+  | UPPER_ID { L.Con (mkIdTk $1) }
+  | '(' LExp ')' { $2 }
+  | Op { L.Var $1 }
+  | '(' ')' { L.Con (mkTupleId 0 (spanFromTo $1 $2)) }
+  | '(' LExp ',' LExpListComma ')' { tupleLExp (spanFromTo $1 $5) (length $4) (reverse ($2 : $4)) }
+
+LExpApp :: { L.Exp }
+  : LExpApp LExpPrimary { L.App $1 $2 }
+  | LExpApp '@' TypePrimary { L.TApp $1 (L.Type $3) }
+  | LExpPrimary { $1 }
+
+LAlternatives :: { [(L.Alt, L.Exp)] }
+  : LAlt '->' LExp ',' LAlternatives { ($1, $3):$5 }
+  | LAlt '->' LExp { [($1, $3)] }
+
+LAlt :: { L.Alt }
+  : INT_LIT { L.ALit (L.LInt (read $ getText $1)) }
+  | FLOAT_LIT { L.ALit (L.LFloat (read $ getText $1)) }
+  | CHAR_LIT { L.ALit (L.LChar (read $ getText $1)) }
+  | WILDCARD { L.AWildCard }
+  | UPPER_ID VarListWS { (L.ACon (mkIdTk $1) $2)} 
+-- implement (x, y) syntax for tuples in pattern
+  | '(' Commas ')' VarListWS{ L.ACon (mkTupleId $2 (spanFromTo $1 $3)) $4 }
+
+LExpListComma :: { [L.Exp] }
+  : LExp ',' LExpListComma { $1 : $3 }
+  | LExp                  { [$1] }
 
 {
 

@@ -31,7 +31,7 @@ alternativesStr alts indent = concat $ intersperse "\n" $ map (\(alt, exp) -> re
 altStr :: L.Alt -> String
 altStr (L.ACon iden vars) = getStringFromIdentifier iden ++ " " ++ (unwords $ map getStringFromVariable vars)
 altStr (L.ALit lit) = literalStr lit
-altStr L.ADefault = "_"
+altStr L.AWildCard = "_"
 
 getStringFromVariable :: B.Variable -> String
 getStringFromVariable (B.Variable { B.varSpan=_, B.internal=_, B.external=var}) = var
