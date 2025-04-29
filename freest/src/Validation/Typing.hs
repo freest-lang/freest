@@ -57,14 +57,12 @@ lookupType kctx tctx xi = case tctx Map.!? xi of
     Left  x -> throwE (VarOutOfScope (getSpan x) x)
     Right i -> throwE (ConsOutOfScope (getSpan i) i)
 
--- | Looks up the type of a variable or identifier in a type context without
--- changing it, even if the type of the variable is linear. Use with caution.
-lookupType_ :: TypeCtx -> Either Variable Identifier -> Validation T.Type
-lookupType_ tctx xi = case tctx Map.!? xi of
+-- | Looks up the type of a variable in a type context without changing
+-- said context, even if the type of the variable is linear. Use with caution.
+lookupFunType :: TypeCtx -> Variable -> Validation T.Type
+lookupFunType tctx x = case tctx Map.!? Left x of
   Just t -> return t
-  Nothing -> case xi of
-    Left  x -> throwE (VarOutOfScope (getSpan x) x)
-    Right i -> throwE (ConsOutOfScope (getSpan i) i)
+  Nothing -> throwE (LacksTypeSig (getSpan x) x)
 
 -- | Looks up the declaration of a data constructor, throwing an error if it
 -- has not been declared.
@@ -305,7 +303,7 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
         return (ptctx `Map.union` tctxds, ptctx `Map.union` tctx'')
       E.FnDef x ((ps1,rhs1):psrhss) -> do
         let e = E.Var (getSpan x) x
-        t <- lookupType_ tctx' (Left x)
+        t <- lookupFunType tctx' x
         (t1, kctxps1, tctxps1) <- checkParams e t kctx tctx' (prepareParams ps1) t
         let kctx1 = kctxps1 `Map.union` kctx
         tctxrhs1 <- checkRHS kctx1 (tctxps1 `Map.union` tctx') rhs1 t1
@@ -448,10 +446,10 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
     (i', map fst -> as, ts) <- lookupDConsDecl i
     case normalise tds t of
       T.AppDName _ i'' us | i' == i'' -> do
-        let us = map (subsAll as us) ts
-        let (lus, lps) = (length us, length ps)
-        when (lus /= lps) (throwE (ConstructorArgumentMismatch (getSpan p) i lus lps))
-        foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps us)
+        let ts' = map (subsAll as us) ts
+        let (lts', lps) = (length ts', length ps)
+        when (lts' /= lps) (throwE (ConstructorArgumentMismatch (getSpan p) i lts' lps))
+        foldM (\tctx (p',u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts')
       t' -> throwE (TypeMismatch (getSpan p) t (T.AppDName (getSpan i) i' (map (T.Var (getSpan i)) as)) (Right p))
   -- (&C p)
   E.ChoicePat s i p' -> do 

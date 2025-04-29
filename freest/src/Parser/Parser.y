@@ -209,15 +209,18 @@ MutualDecl :: { E.LetDecl }
   | TypeSig { $1 }
 
 TypeSig :: { E.LetDecl }
-  : FnNameListComma ':' Type { E.TypeSig $1 $3 }
+  : ExpVarListComma ':' Type { E.TypeSig $1 $3 }
 
 FnDef :: { E.LetDecl }
-  : FnName PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
+  : ExpVar PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
   | PatPrimary OpOrMinus PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
 
-FnName :: { Variable }
+ExpVar :: { Variable }
   : LOWER_ID   { mkVarTk $1 }
   | '(' OpOrMinus ')' { $2 }
+
+TypeVar :: { Variable }
+  : LOWER_ID { mkVarTk $1 }
 
 RHS(sep) :: { E.RHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
@@ -232,13 +235,9 @@ Where :: { Maybe [E.LetDecl] }
   : 'where' LetDeclBlock { Just $2 }
   | {- empty -}          { Nothing }
 
--- LowerIdListWS :: { [Variable] }
---   : LOWER_ID LowerIdListWS { mkVarTk $1 : $2 }
---   | {- empty -}            { [] }
-
-FnNameListComma :: { [Variable] }
-  : FnName ',' FnNameListComma { $1 : $3 }
-  | FnName                     { [$1] }
+ExpVarListComma :: { [Variable] }
+  : ExpVar ',' ExpVarListComma { $1 : $3 }
+  | ExpVar                     { [$1] }
 
 UpperIdListComma :: { [Identifier] }
   : UPPER_ID ',' UpperIdListComma { mkIdTk $1 : $3 }
@@ -296,7 +295,7 @@ TypePrimary :: { T.Type }
   | '*' View '{' LabelListComma '}'     { T.SharedChoice (spanFromTo $1 $5) (snd $2) $4 }       -- sorted by SharedChoice
   -- Variables and constructors
   | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
-  | LOWER_ID { T.Var (getSpan $1) (mkVarTk $1) }
+  | TypeVar { T.Var (getSpan $1) $1 }
   -- Lists
   | '[' ']' {% prefixListConsError $1 $2 }
          -- { T.DName (spanFromTo $1 $2) (mkListId (spanFromTo $1 $2)) } -- TODO: multiplicities
@@ -345,22 +344,22 @@ LabelListComma :: { [Identifier] }
 
 VarListWS :: { [Variable] }
   : {- empty -} { [] }
-  | LOWER_ID VarListWS { mkVarTk $1 : $2 }
+  | ExpVar VarListWS { $1 : $2 }
 
 KindedVarListWS :: { [(Variable, K.Kind)] }
   : {- empty -} { [] }
   | KindedVar KindedVarListWS { $1 : $2 }
 
 KindedVar :: { (Variable, K.Kind) }
-  : LOWER_ID { (mkVarTk $1, dummyKindVar $1) }
-  | LOWER_ID ':' Kind { (mkVarTk $1, $3) }
+  : TypeVar { ($1, dummyKindVar $1) }
+  | TypeVar ':' Kind { ($1, $3) }
 
 ExpPrimary :: { E.Exp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
   -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
-  | LOWER_ID    { E.Var    (getSpan $1) (mkVarTk $1) }
+  | ExpVar      { E.Var    (getSpan $1) $1 }
   | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
@@ -371,10 +370,12 @@ ExpPrimary :: { E.Exp }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkMinusVar (spanFromTo $1 $3))}
+  | '(' '-.' ')' { E.Var (spanFromTo $1 $3) (mkMinusDotVar (spanFromTo $1 $3))}
   -- | '(' Op Exp ')' { setSpan (spanFromTo $1 $4) (leftSection $2 $3) } -- TODO: waiting for type inference
   | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) $3) $2) }
   | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
+  | '(' Exp '-.' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusDotVar $3)) $2) }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
   | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
@@ -392,6 +393,7 @@ Exp :: { E.Exp }
   -- * Define precedences:
   --   * à la Haskell (declared by programmer) 
   --   * à la F# (depends on leading chars)
+  | Exp '.'  Exp { binOp $1 (E.Var (getSpan $2) $ mkDotVar $2) $3 }
   | Exp ';'  Exp { binOp $1 (E.Var (getSpan $2) $ mkSemiVar $2) $3 }
   | Exp '$'  Exp { binOp $1 (E.Var (getSpan $2) $ mkDollarVar $2) $3 }
   | Exp '|>' Exp { binOp $1 (E.Var (getSpan $2) $ mkRTriangleVar $2) $3 }
@@ -414,7 +416,8 @@ Exp :: { E.Exp }
   -- Unary minus
   -- Should we do something like GHC's NegativeLiterals or LexicalNegation instead?
   -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/negative_literals.html
-  | '-' ExpApp %prec NEG { unOp (E.Var (getSpan $1) (mkNegateVar $1)) $2 }    
+  | '-' ExpApp  %prec NEG { unOp (E.Var (getSpan $1) (mkNegateVar $1)) $2 }    
+  | '-.' ExpApp %prec NEG { unOp (E.Var (getSpan $1) (mkNegateFVar $1)) $2 }    
   -- Application etc.  
   | ExpApp               { $1 }
 
@@ -443,10 +446,12 @@ Op :: { Variable }
   | '|>' { mkRTriangleVar $1 }
   | '$'  { mkDollarVar $1 }
   | ';'  { mkSemiVar $1 }
+  | '.'  { mkDotVar $1 }
 
 OpOrMinus :: { Variable }
   : Op  { $1 }
   | '-' { mkMinusVar $1 }
+  | '-.' { mkMinusDotVar $1 }
 
 ConsOp :: { Identifier }
   : '::' { mkConsId $1 }
@@ -488,7 +493,7 @@ PatPrimary :: { E.Pat }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
   -- | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
-  | LOWER_ID         { E.VarPat    (getSpan $1) (mkVarTk $1) }
+  | ExpVar           { E.VarPat    (getSpan $1) $1 }
   | '[' ']'          { E.NilPat (spanFromTo $1 $2) }
   | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
@@ -512,10 +517,10 @@ PatPrimaryListWS :: { [E.Pat] }
   | PatPrimary { [$1] }
 
 PatPrimaryOrAtVarListWS :: { [Level E.Pat Variable] } 
-  : PatPrimary   PatPrimaryOrAtVarListWS { ExpLevel $1            : $2 }
-  | '@' LOWER_ID PatPrimaryOrAtVarListWS { TypeLevel (mkVarTk $2) : $3 }
-  | PatPrimary   { [ExpLevel  $1          ] }
-  | '@' LOWER_ID { [TypeLevel (mkVarTk $2)] }
+  : PatPrimary   PatPrimaryOrAtVarListWS { ExpLevel $1 : $2 }
+  | '@' TypeVar PatPrimaryOrAtVarListWS { TypeLevel $2 : $3 }
+  | PatPrimary   { [ExpLevel  $1] }
+  | '@' TypeVar  { [TypeLevel $2] }
 
 PatListComma :: { [E.Pat] }
   : Pat { [$1] }
