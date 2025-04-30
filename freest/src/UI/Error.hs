@@ -176,7 +176,7 @@ instance Show Error where
           "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
           "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f -> 
-          "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++
+          "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++"`"++
           "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error

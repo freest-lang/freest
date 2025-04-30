@@ -58,7 +58,7 @@ freest RunOpts{file=programPath, least=l} = do
     programSrc <- readFile programPath
     -- Parse the source code of both the Prelude and the program, and
     -- include the former in the latter, resulting in a single module.
-    M.include <$> runParseModule preludePath preludeSrc
+    mappend <$> runParseModule preludePath preludeSrc
               <*> runParseModule programPath programSrc
         >>= runScopeModule & \case 
           Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure

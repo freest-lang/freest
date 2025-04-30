@@ -119,6 +119,10 @@ toEVarList :: ScopingCtx -> [Variable]
 toEVarList (_, vctx) = 
   Map.elems $ Map.filterWithKey (\cases EVar{} _ -> True ; _ _ -> False) vctx
 
+toTVarList :: ScopingCtx -> [Variable]
+toTVarList (_, vctx) = 
+  Map.elems $ Map.filterWithKey (\cases TVar{} _ -> True ; _ _ -> False) vctx
+
 -- | Insert a variable name in the context. Use
 -- 
 --     * 'insertTVar' for type variables
@@ -507,9 +511,9 @@ scopeType ctx = \case
 scopeAndQuantifyType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeAndQuantifyType ctx t = do
   t' <- scopeType ctx t
-  let fvt' = Set.toList (freeVars t')        
+  let fvt' = Set.toList (freeVars t' Set.\\ Set.fromList (toTVarList ctx))        
   if null fvt'
-    then scopeType ctx t
+    then return t'
     else do
       aks <- mapM (\a -> (a,) <$> freshKVar a) 
         $ List.sortBy (compare `on` getSpan) fvt'
