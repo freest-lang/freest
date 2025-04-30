@@ -21,7 +21,7 @@ import Validation.Base
 import Validation.Kinding
 import Validation.Typing
 
-import FstToLst.FstToLst ( fstToLst )
+import FstToLst.FstToLst ( fstToLst, removeBuiltins )
 import LeaST.Interpreter ( interpret, Value(VIO) )
 import qualified LeaST.PrettyPrint as LPP
 
@@ -59,16 +59,23 @@ freest RunOpts{file=programPath, least=l} = do
     -- Parse the source code of both the Prelude and the program, and
     -- include the former in the latter, resulting in a single module.
     mappend <$> runParseModule preludePath preludeSrc
-              <*> runParseModule programPath programSrc
+            <*> runParseModule programPath programSrc
         >>= runScopeModule & \case 
-          Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
+          Left es -> do
+            putStrLn "[Scoping failed]"
+            mapM_ print es
+            exitFailure
           Right m -> do 
             putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
             -- Validate the module.
             runValidate m & \case 
-              Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+              Left es -> do
+                putStrLn "[Validation failed]" 
+                mapM_ print es
+                exitFailure     
               Right m -> do
-                let leastAST = fstToLst [m]
+                putStrLn "[Validation passed]" 
+                let leastAST = fstToLst [removeBuiltins m]
                 print leastAST
                 LPP.prettyPrint leastAST
                 res <- interpret leastAST
