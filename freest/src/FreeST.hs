@@ -21,7 +21,7 @@ import Validation.Base
 import Validation.Kinding
 import Validation.Typing
 
-import FstToLst.FstToLst ( fstToLst )
+import FstToLst.FstToLst ( fstToLst, removeBuiltins )
 import LeaST.Interpreter ( interpret, Value(VIO) )
 import qualified LeaST.PrettyPrint as LPP
 
@@ -50,23 +50,38 @@ freest RunOpts{file=programPath, least=l} = do
                      print io2
         res -> print res
     Left err -> print err
-  else
-    runLexer parseModule f source 
-      >>= runScoping scopeModule_ & \case 
-        Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
-        Right m -> do 
-          putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-          -- runValidate m & \case 
-          --   Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-          --   Right m -> putStrLn "[Validation passed]" >> exitSuccess
-          let leastAST = fstToLst [m]
-          print leastAST
-          LPP.prettyPrint leastAST
-          res <- interpret leastAST
-          case res of
-            VIO io -> do io2 <- io
-                         print io2
-            res -> print res
+  else do
+    -- Read the source code of the Prelude.
+    preludeSrc <- getDataFileName preludePath >>= readFile
+    -- Read the source code of the program.
+    programSrc <- readFile programPath
+    -- Parse the source code of both the Prelude and the program, and
+    -- include the former in the latter, resulting in a single module.
+    mappend <$> runParseModule preludePath preludeSrc
+            <*> runParseModule programPath programSrc
+        >>= runScopeModule & \case 
+          Left es -> do
+            putStrLn "[Scoping failed]"
+            mapM_ print es
+            exitFailure
+          Right m -> do 
+            putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+            -- Validate the module.
+            runValidate m & \case 
+              Left es -> do
+                putStrLn "[Validation failed]" 
+                mapM_ print es
+                exitFailure     
+              Right m -> do
+                putStrLn "[Validation passed]" 
+                let leastAST = fstToLst [removeBuiltins m]
+                print leastAST
+                LPP.prettyPrint leastAST
+                res <- interpret leastAST
+                case res of
+                  VIO io -> do io2 <- io
+                               print io2
+                  _ -> print res
 
 lexAll :: Lexer ()
 lexAll = do

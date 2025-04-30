@@ -2,6 +2,7 @@ module FstToLst.FstToLst where
 
 import qualified Syntax.Module as M
 import qualified LeaST.LeaST as L
+import LeaST.Interpreter ( builtins )
 import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 import qualified Syntax.Type as T
@@ -220,3 +221,16 @@ bar patRHS = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filter (\le
 
 generateError :: L.Exp
 generateError = L.Var $ generatePrimitiveVar "error__"
+
+removeBuiltins :: M.Module -> M.Module
+removeBuiltins m = m{M.definitions = filter notBuiltin (M.definitions m)}
+  where notBuiltin = \case
+          (E.ValDef (E.VarPat _ x) _) ->
+            case lookup (B.external x) builtins of
+              Nothing -> True
+              Just _  -> False
+          (E.FnDef x _) ->
+            case lookup (B.external x) builtins of
+              Nothing -> True
+              Just _  -> False
+          _ -> True

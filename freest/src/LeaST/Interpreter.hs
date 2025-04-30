@@ -1,24 +1,26 @@
 module LeaST.Interpreter where
 
-import qualified LeaST.LeaST as L
-import qualified Syntax.Base as B
+import LeaST.LeaST qualified as L
+import Syntax.Base qualified as B
+import Utils (internalError)
 
-import Data.List ( find )
-import Data.Char (chr, ord)
-import GHC.Float
 import Control.Concurrent ( forkIO )
-import Control.Concurrent.Chan as C
+import Control.Concurrent.Chan qualified as Chan
 import Data.Functor ( ($>), (<&>), void )
+import Data.Char (chr, ord)
+import Data.List ( find )
+import Data.Map qualified as Map
+import GHC.Float ( Floating(log1mexp, expm1, log1p, log1pexp) )
 import System.IO ( Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose )
 
 import Debug.Trace
 
 interpret :: L.Exp -> IO Value
-interpret exp = eval builtins exp
+interpret = eval builtins
 
 -- TODO: Fatbar implementation will not work because language is strict
 
-type ChannelEnd = (C.Chan Value, C.Chan Value)
+type ChannelEnd = (Chan.Chan Value, Chan.Chan Value)
 
 data Value = VInt Int
   | VFloat Double
@@ -32,74 +34,73 @@ data Value = VInt Int
   | VFatbar
 
 instance Show Value where
-  show (VInt int) = show int
-  show (VFloat float) = show float
-  show (VChar char) = show char
-  show (VCon iden args) = iden ++ " " ++ unwords (map show args)
-  show (VClosure _ _ _) = "<closure>"
-  show (VBuiltin _ ) = "<builtin>"
-  show (VIO _) = "<vio>"
-  show (VChan chanEnd) = "<channel end>"
-  show VFork = "<vfork>"
-  show VFatbar = "<vfatbar>"
+  show = \case 
+    (VInt   x)  -> show x
+    (VFloat x)  -> show x
+    (VChar  x)  -> show x
+    (VCon c vs) -> "("++c ++ " " ++ unwords (map show vs)++")"
+    VClosure{}  -> "<closure>"
+    VBuiltin{}  -> "<builtin>"
+    VIO{}       -> "<vio>"
+    VChan{}     -> "<channel end>"
+    VFork       -> "<vfork>"
+    VFatbar     -> "<vfatbar>"
 
- 
+
 eval :: Context -> L.Exp -> IO Value
-eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="fork"})) = return VFork
-eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="error__"})) = error "Error"
-eval ctx (L.Var (B.Variable { B.varSpan=_, B.internal=_, B.external="fatbar__"})) = return VFatbar
-eval ctx (L.Var var) = return $ getVar ctx (getStringFromVariable var)
-eval _ (L.Lit (L.LInt int)) = return $ VInt int
-eval _ (L.Lit (L.LFloat float)) = return $ VFloat float
-eval _ (L.Lit (L.LChar char)) = return $ VChar char
-eval ctx (L.Abs var _ exp) = return $ VClosure ctx var exp
-eval ctx (L.App lExp rExp) = do
-  lVal <- eval ctx lExp
-  case lVal of
-    VFork -> forkIO (void $ eval ctx (unpackAbs rExp)) $> VCon "()" []
-    VFatbar -> do
-      rVal <- eval ctx rExp
-      print rVal
-      case rVal of
--- TODO: implement this
-        VCon "Fail__" [] -> undefined
--- TODO: this is wrong
-        _ -> return $ VBuiltin (\_ -> rVal)
-    _ -> do rVal <- eval ctx rExp
-            case lVal of
-              VCon iden consArgs -> return $ VCon iden (consArgs++[rVal])
-              VClosure cctx var cExp -> eval ((getStringFromVariable var, rVal):cctx) cExp
-              VBuiltin builtin -> case builtin rVal of
-                VIO vio -> do vio
-                res -> return res
-              VIO vio -> do vio
-eval _ (L.Con iden) = return $ VCon (getStringFromIdentifier iden) []
-eval ctx (L.Case exp alts) = do
-  val <- eval ctx exp
-  let (nextCtx, nextExp) = patternMatch ctx val alts in
-    eval nextCtx nextExp
-eval ctx (L.TAbs var _ exp) = return $ VClosure ctx var exp
-eval ctx (L.TApp lExp rExp) = do
-  lVal <- eval ctx lExp
-  rVal <- eval ctx rExp
-  case lVal of
-    VClosure cctx _ cExp -> eval cctx cExp
-    _ -> undefined
-eval _ (L.Type _) = return $ VCon "()" []
+eval ctx = \case 
+  L.Var x -> case B.external x of
+    "fork"      -> return VFork
+    "undefined" -> error ("undefined, called at "++show (B.getSpan x))
+    "error__"   -> error "Error"
+    "fatbar__"  -> return VFatbar
+    _ -> return $ getVar ctx (B.external x)
+  L.Lit l -> return case l of 
+    L.LInt   x -> VInt   x
+    L.LFloat x -> VFloat x
+    L.LChar  x -> VChar  x
+  L.Abs x _ e -> return $ VClosure ctx x e
+  L.App e1 e2 -> do
+    v1 <- eval ctx e1
+    case v1 of
+      VFork -> forkIO (void $ eval ctx (unpackAbs e2)) $> VCon "()" []
+      VFatbar -> do
+        v2 <- eval ctx e2
+        print v2
+        case v2 of
+          -- TODO: implement this
+          VCon "Fail__" [] -> undefined
+          -- TODO: this is wrong
+          _ -> return $ VBuiltin (const v2)
+      _ -> do 
+        v2 <- eval ctx e2
+        case v1 of
+          VCon i vs         -> return $ VCon i (vs ++ [v2])
+          VClosure ctx' x e -> eval ((B.external x, v2) : ctx') e
+          VBuiltin f        -> case f v2 of VIO iov -> iov
+                                            v       -> return v
+          VIO iov -> iov
+  L.Con i -> return $ VCon (show i) []
+  L.Case e as -> do
+    v <- eval ctx e
+    uncurry eval $ patternMatch ctx v as
+  L.TAbs x _ e -> return $ VClosure ctx x e
+  L.TApp e1 e2 -> do
+    v1 <- eval ctx e1
+    v2 <- eval ctx e2
+    case v1 of
+      VClosure cctx _ cExp -> eval cctx cExp
+      _ -> undefined
+  L.Type _ -> return $ VCon "()" []
 
 patternMatch :: Context -> Value -> [(L.Alt, L.Exp)] -> (Context, L.Exp)
 patternMatch _ _ [] = error "Pattern matching was not exhaustive"
-patternMatch ctx val@(VInt int2) ((L.ALit (L.LInt int), exp):alts) = if int2 == int then (ctx, exp) else patternMatch ctx val alts
-patternMatch ctx val@(VFloat float2) ((L.ALit (L.LFloat float), exp):alts) = if float2 == float then (ctx, exp) else patternMatch ctx val alts
-patternMatch ctx val@(VChar char2) ((L.ALit (L.LChar char), exp):alts) = if char2 == char then (ctx, exp) else patternMatch ctx val alts
-patternMatch ctx _ ((L.AWildCard, exp):_) = (ctx, exp)
-patternMatch ctx val@(VCon iden2 conArgs) (((L.ACon iden vars), exp):alts) = if iden2 == getStringFromIdentifier iden then (zip (map getStringFromVariable vars) conArgs ++ ctx, exp) else patternMatch ctx val alts
+patternMatch ctx val@(VInt int2) ((L.ALit (L.LInt int), exp) : alts) = if int2 == int then (ctx, exp) else patternMatch ctx val alts
+patternMatch ctx val@(VFloat float2) ((L.ALit (L.LFloat float), exp) : alts) = if float2 == float then (ctx, exp) else patternMatch ctx val alts
+patternMatch ctx val@(VChar char2) ((L.ALit (L.LChar char), exp) : alts) = if char2 == char then (ctx, exp) else patternMatch ctx val alts
+patternMatch ctx _ ((L.AWildCard, exp) : _) = (ctx, exp)
+patternMatch ctx val@(VCon iden2 conArgs) ((L.ACon iden vars, exp) : alts) = if iden2 == show iden then (zip (map B.external vars) conArgs ++ ctx, exp) else patternMatch ctx val alts
 
-getStringFromVariable :: B.Variable -> String
-getStringFromVariable (B.Variable { B.varSpan=_, B.internal=_, B.external=var}) = var
-
-getStringFromIdentifier :: B.Identifier -> String
-getStringFromIdentifier (B.Identifier _ str) = str
 
 unpackAbs :: L.Exp -> L.Exp
 unpackAbs (L.Abs _ _ exp) = exp
@@ -108,11 +109,11 @@ unpackAbs exp = traceShow exp undefined
 type Context = [(String, Value)]
 
 getVar :: Context -> String -> Value
-getVar ctx iden = case find (\(iden2, val) -> iden == iden2) ctx of
-  Just (_, val) -> val
-  Nothing -> error ("Variable `" ++ iden ++ "` not found.")
+getVar ctx x = case lookup x ctx of
+  Just v  -> v
+  Nothing -> internalError ("variable `" ++ x ++ "` not in scope.")
 
-builtins :: [(String, Value)]
+builtins :: Context
 builtins = [
   ("chan", VIO $ do (chanL, chanR) <- chan
                     return $ VCon "(,)" [VChan chanL, VChan chanR]),
@@ -136,6 +137,7 @@ builtins = [
   ("succ", VBuiltin (\(VInt x) -> VInt (succ x))),
   ("pred", VBuiltin (\(VInt x) -> VInt (pred x))),
   ("quot", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (quot x y)))),
+  ("div", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (div x y)))),
   ("even", VBuiltin (\(VInt x) -> hsToLstBool (even x))),
   ("odd", VBuiltin (\(VInt x) -> hsToLstBool (odd x))),
   ("gcd", VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (gcd x y)))),
@@ -146,6 +148,7 @@ builtins = [
   ("(*.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x * y)))),
   ("(/.)", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x / y)))),
   ("negateF", VBuiltin (\(VFloat x) -> VFloat (negate x))),
+  ("absF", VBuiltin (\(VFloat x) -> VFloat (abs x))),
   ("maxF", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (max x y)))),
   ("minF", VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (min x y)))),
   ("truncate", VBuiltin (\(VFloat x) -> VInt (truncate x))),
@@ -215,7 +218,9 @@ builtins = [
   -- ("isEOF", VBuiltin (\(VCon "FileHandle" [VHandle handle]) -> VIO $ hIsEOF handle <&> hsToFstBool)),
   -- ("closeFile", VBuiltin (\(VCon "FileHandle" [VHandle handle]) -> VIO $ hClose handle $> VUnit)),
 
-  ("id", VBuiltin id)
+  ("id", VBuiltin id),
+  ("undefined", VBuiltin undefined),
+  ("fork", VFork)
   ]
 
 -- haskell bool to least bool
@@ -230,25 +235,25 @@ lstToHsBool (VCon "False" []) = False
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do
-  c1 <- C.newChan
-  c2 <- C.newChan
+  c1 <- Chan.newChan
+  c2 <- Chan.newChan
   return ((c1, c2), (c2, c1))
 
 receive :: ChannelEnd -> IO (Value, ChannelEnd)
 receive c = do
-  v <- C.readChan (fst c)
+  v <- Chan.readChan (fst c)
   return (v, c)
 
 send :: Value -> ChannelEnd -> IO ChannelEnd
 send v c = do
-  C.writeChan (snd c) v
+  Chan.writeChan (snd c) v
   return c
 
 wait :: Value -> Value
 wait (VChan c) =
-  VIO $ C.readChan (fst c)
+  VIO $ Chan.readChan (fst c)
 
 close :: Value -> IO Value
 close (VChan c) = do
-  C.writeChan (snd c) (VCon "()" [])
+  Chan.writeChan (snd c) (VCon "()" [])
   return (VCon "()" [])
