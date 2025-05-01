@@ -154,11 +154,11 @@ synth kctx tctx = \case
       checkEquivTypeCtxs e tctxi tctx1
     return (t1, tctx1)
   E.If s e1 e2 e3 -> do
-    tctx' <- check kctx tctx e1 (T.bool (getSpan e1))
-    (t1, tctx1) <- synth kctx tctx' e1
-    tctx2 <- check kctx tctx' e2 t1
-    checkEquivTypeCtxs e2 tctx1 tctx2
-    return (t1, tctx1)
+    tctx1 <- check kctx tctx e1 (T.bool (getSpan e1))
+    (t2, tctx2) <- synth kctx tctx1 e2
+    tctx3 <- check kctx tctx1 e2 t2
+    checkEquivTypeCtxs e2 tctx2 tctx3
+    return (t2, tctx2)
   E.Channel s t -> do
     Kinding.checkSession kctx t
     pure (T.Tuple s [t, T.AppDual s t], tctx)
