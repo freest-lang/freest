@@ -12,11 +12,13 @@ import Data.Maybe ( maybe )
 import Debug.Trace
 
 fstToLst :: [M.Module] -> L.Exp
-fstToLst modules = translateLetDecls (concat (map (\M.Module {M.name=_, M.imports=_, M.dataDecls=_, M.typeDecls=_, M.kindSigs=_, M.definitions=letDecls} -> letDecls) modules)) [] (L.Con $ B.Identifier B.nullSpan "()") 
+fstToLst modules = translateTopLevelLetDecls (concat (map (\M.Module {M.name=_, M.imports=_, M.dataDecls=_, M.typeDecls=_, M.kindSigs=_, M.definitions=letDecls} -> letDecls) modules)) 
+
+translateTopLevelLetDecls :: [E.LetDecl] -> L.Exp
+translateTopLevelLetDecls letDecls = translateLetDecls letDecls [] (L.Var $ generatePrimitiveVar "main")
 
 translateLetDecls :: [E.LetDecl] -> [(B.Variable, T.Type)] -> L.Exp -> L.Exp  
 translateLetDecls [] _ cont = cont
-translateLetDecls ((E.ValDef pat@(E.VarPat _ (B.Variable { B.varSpan=_, B.internal=_, B.external="main"})) rhs):_) _ _ = translateRHS rhs
 translateLetDecls ((E.ValDef pat@(E.VarPat _ var) rhs):letDecls) typeSigs cont = (L.App (translatePat (pat, getTypeFromTypeSigs typeSigs var) (translateLetDecls letDecls typeSigs cont)) (translateRHS rhs))
 translateLetDecls ((E.ValDef pat rhs):letDecls) typeSigs cont = L.App (L.Abs (generatePrimitiveVar "arg0__") (T.Int B.nullSpan) (compileEquations 1 (newKVars 0 0) [([pat], cont)] generateError)) (translateRHS rhs) 
 -- (L.Case (translateRHS rhs) (foo 0 [] (replaceVar (head vars) s)[[([pat], cont)]] generateError))
