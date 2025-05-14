@@ -90,6 +90,7 @@ eval ctx = \case
     v2 <- eval ctx e2
     case v1 of
       VClosure cctx _ cExp -> eval cctx cExp
+      VBuiltin b -> return $ b v2 
       _ -> undefined
   L.Type _ -> return $ VCon "()" []
 
@@ -117,8 +118,8 @@ builtins :: Context
 builtins = [
   ("chan", VIO $ do (chanL, chanR) <- chan
                     return $ VCon "(,)" [VChan chanL, VChan chanR]),
-  ("receive", VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCon "(,)" [val, VChan c])),
-  ("send", VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c))),
+  ("receive", VBuiltin (\_ty1 -> VBuiltin (\_ty2 -> VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCon "(,)" [val, VChan c])))),
+  ("send", VBuiltin (\_ty1 -> VBuiltin (\_ty2 -> VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c))))),
   ("wait", VBuiltin wait),
   ("close", VBuiltin (VIO . close)),
 
@@ -201,7 +202,7 @@ builtins = [
   -- ("readInt", VBuiltin (\(VString x) -> VInt (read x))),
   -- ("readInt", VBuiltin (\(VString c) -> VChar (read c))),
 
-  ("putStrOut", VBuiltin (\val -> VIO $ putStr (show val) $> VCon "()" [])),
+  ("putStrOut", VBuiltin (\_ty -> VBuiltin (\val -> VIO $ putStr (show val) $> VCon "()" []))),
   ("putStrErr", VBuiltin (\val -> VIO $ hPutStr stderr (show val) $> VCon "()" [])),
   -- ("getChar", VIO $ getChar <&> VChar),
   -- ("getLine", VIO $ getLine <&> VString),
