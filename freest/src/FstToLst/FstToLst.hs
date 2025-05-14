@@ -24,9 +24,10 @@ translateLetDecls counter ((E.ValDef pat@(E.VarPat _ var) rhs):letDecls) typeSig
       (translateLetDeclsRes, counter2) = translateLetDecls counter1 letDecls typeSigs cont in
   (L.App (translatePat (pat, getTypeFromTypeSigs typeSigs var) translateLetDeclsRes) rhsExp, counter2)
 translateLetDecls counter ((E.ValDef pat rhs):letDecls) typeSigs cont =
-  let (counter1, var) = nextFreshVar counter
-      (compileEquationsRes, counter2) = compileEquations counter1 [] [([pat], cont)] generateError
-      (translateRhsRes, counter3) = translateRHS counter2 rhs in
+  let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
+      (counter2, var) = nextFreshVar counter1
+      (compileEquationsRes, counter3) = compileEquations counter2 [var] [([pat], translateLetDeclsRes)] generateError
+      (translateRhsRes, counter4) = translateRHS counter3 rhs in
   (L.App (L.Abs var (T.Int B.nullSpan) compileEquationsRes) translateRhsRes, counter3)
 translateLetDecls counter ((E.FnDef var patRhss):letDecls) typeSigs cont =
   let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
@@ -65,7 +66,6 @@ translateExp counter (E.App _ exp args) =
   foldl (\(accExp, accCounter) arg -> case arg of
     B.ExpLevel exp -> let (exp3, counter) = translateExp accCounter exp in (L.App accExp exp3, counter)
     B.TypeLevel ty -> (L.TApp accExp (L.Type ty), accCounter)) (translateExp counter exp) args
--- TODO: implement all patterns on abstractions
 translateExp counter (E.Abs _ levels _ exp) = foldr (\abs (accExp, accCounter) -> case abs of
   B.ExpLevel (pat, ty) ->
     let (counter1, var) = nextFreshVar accCounter
@@ -74,7 +74,7 @@ translateExp counter (E.Abs _ levels _ exp) = foldr (\abs (accExp, accCounter) -
 -- TODO: give the correct type
   B.TypeLevel (var, kind) -> (translatePat (E.VarPat B.nullSpan var, T.Int B.nullSpan) accExp,  accCounter)) (translateExp counter exp) levels
 translateExp counter (E.Let _ letDecls exp) =
-  let (exp2, counter) = translateExp counter exp in translateLetDecls counter letDecls [] exp2
+  let (exp2, counter1) = translateExp counter exp in translateLetDecls counter1 letDecls [] exp2
 translateExp counter (E.If _ cond t f) =
   let (condExp, counter1) = translateExp counter cond
       (tExp, counter2) = translateExp counter1 t
