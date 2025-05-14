@@ -87,7 +87,9 @@ translateExp counter (E.Case _ exp patRhss) =
       (compiledEquationsExp, counter4) = compileEquations counter3 [var] rhss generateError in
   (L.App (L.Abs var (T.Int B.nullSpan) compiledEquationsExp) caseExp, counter4)
 translateExp counter (E.Channel _ _) = (L.App (L.Var $ generatePrimitiveVar "chan") generateUnit, counter)
-translateExp counter (E.Select _ iden exp) = undefined
+translateExp counter (E.Select _ (B.Identifier _ iden) exp) =
+  let (translateExpRes, counter1) = translateExp counter exp in
+  (L.TApp (L.TApp (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "send") generateUnit) generateUnit) (lstString iden)) translateExpRes, counter1)
 
 mapWithCounter :: Int -> (Int -> a -> (b, Int)) -> [a] -> ([b], Int)
 mapWithCounter n _ [] = ([], n)
@@ -104,6 +106,11 @@ generatePrimitiveVar name = B.Variable {B.internal=(-1), B.external=name, B.varS
 
 generateUnit :: L.Exp
 generateUnit = L.Con (B.Identifier B.nullSpan "()")
+
+lstString :: String -> L.Exp
+lstString = foldl (\acc char ->
+  L.App (L.App (L.Var $ generatePrimitiveVar "(::)") (L.Lit $ L.LChar char)) acc)
+  (L.TApp (L.Con $ B.Identifier B.nullSpan "[]") (L.Type $ T.Char B.nullSpan))
 
 -- TODO: necessario um variavel fresca para o wildpat??
 translatePat :: (E.Pat, T.Type) -> L.Exp -> L.Exp
@@ -260,6 +267,7 @@ foo counter vars (eqs:eqss) def =
           (fooRes, counter2) = foo counter1 vars eqss def in
       ((L.ALit $ L.LChar n, compileEquationsRes):fooRes, counter2)
 
+-- TODO: remove this function
 newKVars :: Int -> Int -> [B.Variable]
 newKVars from size = [generatePrimitiveVar ("arg"++(show n)++"__") | n <- [from..from+size]]
 
