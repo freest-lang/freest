@@ -67,7 +67,10 @@ translateExp counter (E.App _ exp args) =
     B.TypeLevel ty -> (L.TApp accExp (L.Type ty), accCounter)) (translateExp counter exp) args
 -- TODO: implement all patterns on abstractions
 translateExp counter (E.Abs _ levels _ exp) = foldr (\abs (accExp, accCounter) -> case abs of
-  B.ExpLevel (pat, ty) -> (translatePat (pat, ty) accExp,  accCounter)
+  B.ExpLevel (pat, ty) ->
+    let (counter1, var) = nextFreshVar accCounter
+        (compileEquationsRes, counter2) = compileEquations counter1 [var] [([pat], accExp)] generateError in
+    ((L.Abs var (T.Int B.nullSpan) compileEquationsRes), counter2)
 -- TODO: give the correct type
   B.TypeLevel (var, kind) -> (translatePat (E.VarPat B.nullSpan var, T.Int B.nullSpan) accExp,  accCounter)) (translateExp counter exp) levels
 translateExp counter (E.Let _ letDecls exp) =
