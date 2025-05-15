@@ -23,6 +23,13 @@ translateLetDecls counter ((E.ValDef pat@(E.VarPat _ var) rhs):letDecls) typeSig
   let (rhsExp, counter1) = translateRHS counter rhs
       (translateLetDeclsRes, counter2) = translateLetDecls counter1 letDecls typeSigs cont in
   (L.App (translatePat (pat, getTypeFromTypeSigs typeSigs var) translateLetDeclsRes) rhsExp, counter2)
+-- TODO: merge this and next equation
+translateLetDecls counter ((E.ValDef (E.AsPat _ asPatVar asPatPat) rhs):letDecls) typeSigs cont =
+  let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
+      (counter2, var) = nextFreshVar counter1
+      (compileEquationsRes, counter3) = compileEquations counter2 [var] [([asPatPat], translateLetDeclsRes)] generateError
+      (translateRhsRes, counter4) = translateRHS counter3 rhs in
+  (L.App (L.Abs var (T.Int B.nullSpan) (L.App (L.Abs asPatVar (T.Int B.nullSpan) compileEquationsRes) (L.Var var))) translateRhsRes, counter3)
 translateLetDecls counter ((E.ValDef pat rhs):letDecls) typeSigs cont =
   let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
       (counter2, var) = nextFreshVar counter1
@@ -34,12 +41,12 @@ translateLetDecls counter ((E.FnDef var patRhss):letDecls) typeSigs cont =
       (eqs, counter2) = bar counter1 patRhss
       argsNum = length $ (fst . head) eqs
       (counter3, vars) = nextFreshVars counter2 argsNum
-      (compileEquationsRes, _) = compileEquations counter3 vars eqs generateError
+      (compileEquationsRes, _) = compileEquations counter3 vars (cleanPats eqs vars) generateError
       (generateArgsRes, counter5) = generateArgs counter2 argsNum compileEquationsRes in
   (L.App (L.Abs var (T.Int B.nullSpan) translateLetDeclsRes) (L.App generateFixPoint (L.Abs var (T.Int B.nullSpan) generateArgsRes)), counter5)
 -- TODO: remover ctx das assinaturas
+translateLetDecls counter ((E.Mutual mutualLetDecls):letDecls) typeSigs cont = undefined
 translateLetDecls counter ((E.TypeSig vars ty):letDecls) typeSigs cont = translateLetDecls counter letDecls [] cont
-translateLetDecls counter (letDecl:_) _ _ = traceShow letDecl undefined
 
 -- TODO: generate TAbs, for now TAbs is an Abs with a varPat
 generateArgs :: Int -> Int -> L.Exp -> (L.Exp, Int)
@@ -48,6 +55,16 @@ generateArgs n size cont =
   let (counter, var) = nextFreshVar n
       (generateArgsRes, counter1) = generateArgs counter (size-1) cont in
   (L.Abs var (T.Int B.nullSpan) generateArgsRes, counter1)
+
+-- Removes AsPats transforming the expression in the equation
+cleanPats :: [Equation] -> [B.Variable] -> [Equation]
+cleanPats [] _ = []
+cleanPats (eq:eqs) vars = cleanPats' eq vars : cleanPats eqs vars
+
+cleanPats' :: Equation -> [B.Variable] -> Equation
+cleanPats' ([], exp) vars = ([], exp)
+cleanPats' ((E.AsPat _ asPatVar asPatPat):pats, exp) (var:vars) = let (patsRes, expRes) = cleanPats' (pats, exp) vars in (asPatPat:patsRes, L.App (L.Abs asPatVar (T.Int B.nullSpan) expRes) (L.Var var))
+cleanPats' (pat:pats, exp) vars = let (patsRes, expRes) = cleanPats' (pats, exp) (tail vars) in (pat:patsRes, expRes)
 
 translateRHS :: Int -> E.RHS -> (L.Exp, Int)
 translateRHS counter (E.UnguardedRHS exp (Just letDecls)) =
@@ -67,6 +84,11 @@ translateExp counter (E.App _ exp args) =
     B.ExpLevel exp -> let (exp3, counter) = translateExp accCounter exp in (L.App accExp exp3, counter)
     B.TypeLevel ty -> (L.TApp accExp (L.Type ty), accCounter)) (translateExp counter exp) args
 translateExp counter (E.Abs _ levels _ exp) = foldr (\abs (accExp, accCounter) -> case abs of
+  -- TODO: merge this case with the next one
+  B.ExpLevel (E.AsPat _ asPatVar asPatPat, ty) ->
+    let (counter1, var) = nextFreshVar accCounter
+        (compileEquationsRes, counter2) = compileEquations counter1 [var] [([asPatPat], accExp)] generateError in
+    ((L.Abs var (T.Int B.nullSpan) (L.App (L.Abs asPatVar (T.Int B.nullSpan) compileEquationsRes) (L.Var var))), counter2)
   B.ExpLevel (pat, ty) ->
     let (counter1, var) = nextFreshVar accCounter
         (compileEquationsRes, counter2) = compileEquations counter1 [var] [([pat], accExp)] generateError in
@@ -83,7 +105,10 @@ translateExp counter (E.If _ cond t f) =
 translateExp counter (E.Case _ exp patRhss) =
   let (caseExp, counter1) = translateExp counter exp
       (counter2, var) = nextFreshVar counter1
-      (rhss, counter3) = mapWithCounter counter2 (\counter (pat, rhs) -> let (rhsExp, counter1) = translateRHS counter rhs in (([pat], rhsExp), counter1)) patRhss
+      (rhss, counter3) = mapWithCounter counter2 (\counter (pat, rhs) -> let (rhsExp, counter1) = translateRHS counter rhs in
+        case pat of
+          E.AsPat _ asPatVar asPatPat -> (([asPatPat], L.App (L.Abs asPatVar (T.Int B.nullSpan) rhsExp) (L.Var var)), counter1)
+          _ -> (([pat], rhsExp), counter1)) patRhss
       (compiledEquationsExp, counter4) = compileEquations counter3 [var] rhss generateError in
   (L.App (L.Abs var (T.Int B.nullSpan) compiledEquationsExp) caseExp, counter4)
 translateExp counter (E.Channel _ _) = (L.App (L.Var $ generatePrimitiveVar "chan") generateUnit, counter)
