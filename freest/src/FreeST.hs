@@ -44,6 +44,7 @@ freest RunOpts{file=programPath, least=l} = do
   if l then case runLexer parseLeaST programPath source of
     Right (_,_,_,leastAST) -> do
       LPP.prettyPrint leastAST
+      --call synth leastAST
       res <- interpret leastAST
       case res of
         VIO io -> do io2 <- io
