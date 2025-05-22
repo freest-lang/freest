@@ -2,6 +2,7 @@ module LeaST.Typing where
 
 import LeaST.LeaST qualified as L
 import qualified Syntax.Base as B
+import Validation.Kinding qualified as Kinding
 
 import qualified Data.Map.Strict as Map
 import Debug.Trace
@@ -78,48 +79,36 @@ synth kctx tctx = \case
 -- TApp Exp Exp  --fazer
 
 
--- TODO Funcção copiada do FreeST, trocar
 -- | Check-against for expressions. Given kind and type contexts, it checks
 -- whether an expression has a given type, throwing an error if it does not.
 -- Returns the updated type context without the linear variables consumed in 
 -- the expression.
 check :: KindCtx -> TypeCtx -> Exp -> T.Type -> Validation TypeCtx
 check kctx tctx e t = gets typeDecls >>= \tds -> case e of
--- Lit Literal 
-  Int s _   -> checkEquivTypes (Left e) t (T.Int s)   >> pure tctx
-  Float s _ -> checkEquivTypes (Left e) t (T.Float s) >> pure tctx
-  Char s _  -> checkEquivTypes (Left e) t (T.Char s)  >> pure tctx
--- Con B.Identifier -- n fazer
--- Var B.Variable 
-  Var s x       -> do
-    (u, tctx') <- lookupType kctx tctx (Left x) 
-    checkEquivTypes (Left e) t u
-    return tctx'
--- App Exp Exp --fazer?
-  App s f as -> do
-    (u, tctx') <- synth kctx tctx f
-    (v, tctx'') <- checkArgs f kctx tctx' u (as, u) --TODO trocar, App funciona diferente no LeaST
-    checkEquivTypes (Left e) t v
-    return tctx''
 -- Abs B.Variable T.Type Exp 
-  Abs s ps m e'  -> do
-    (u, kctxps, tctxps) <- checkParams e t kctx tctx (prepareParams ps) t
-    let kctx' = kctxps `Map.union` kctx
-    tctxe' <- check kctx' (tctxps `Map.union` tctx) e' u
-    tctx' <- typeCtxDifference kctx' tctxe' tctxps
-    unless (m /= K.Un) $ checkEquivTypeCtxs e tctx' tctx
+  Abs x t' e'  -> do
+    Kinding.checkProper kctx t'   --TODO Verificar se isto está bem
+    AppArrow _ _ t1 t2 <- Expose.typeArrow e t
+    -- TODO, ver como mandar o erro correto, ou se ser Validation chega
+    -- case Expose.typeArrow e t of
+    --  _ -> throwE (TypeMismatch s t u (Left e))
+    checkEquivTypes t' t1
+    (t3, tctx') <- synth kctx tctx x 
+    checkEquivTypes t2 t3
+    return typeCtxDifference kctx tctx tctx' --TODO como assim %x? estou a usar isto bem?
+-- TAbs B.Variable K.Kind Exp
+  TAbs a k e'  -> do
+    AppForall _ t' <- Expose.typeArrow e t  --[(Variable, K.Kind)]
+    -- tctx' <- ? chamada ao check e'? o que é o Q:k?
     return tctx'
-    where
-      prepareParams = map (bimap (second Just) (second Just))
---  _ -> do
--- TODO existe remaining cases pq é suposto tirar os outros?
-
--- Case Exp [(Alt, Exp)] --n fazer
--- Type T.Type --n fazer
--- TAbs B.Variable K.Kind Exp  --fazer
--- TApp Exp Type  --fazer
+-- remaining cases
+  _ -> do
+    (u, tctx') <- synth kctx tctx e
+    checkEquivTypes e t u
+    return tctx'
 
 
+-- NOTA: Tirado do Fst, adaptado
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
 -- if they are not. An expression or pattern is provided to locate the error.
 checkEquivTypes :: Exp -> T.Type -> T.Type -> Validation ()
@@ -128,15 +117,6 @@ checkEquivTypes eop t1 t2 = do
   unless (equivalent tds t1 t2) $
     throwE (TypeMismatch (getSpan eop) t1 t2 (Left eop))
 
-
-lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier -> Validation (T.Type, TypeCtx)
-lookupType kctx tctx xi = case tctx Map.!? xi of
-  Just t -> do
-    k <- Kinding.synth kctx t
-    return (t, if K.isStrictlyLin k then Map.delete xi tctx else tctx)
-  Nothing -> case xi of
-    Left  x -> throwE (VarOutOfScope (getSpan x) x)
-    Right i -> throwE (ConsOutOfScope (getSpan i) i)
 
 
 -- NOTA: usar para o %, mas de contextos
