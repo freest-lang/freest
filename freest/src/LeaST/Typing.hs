@@ -35,48 +35,35 @@ type Error = String
 synth :: KindCtx -> TypeCtx -> Exp -> Validation (T.Type, TypeCtx)
 synth kctx tctx = \case
 -- Lit Literal
+  Lit l         -> (typeOf l, tctx)   -- este typeOf ou outra função? (TODO prob outra)
+{- maneira em Fst
   Int s _       -> pure (T.Int s   , tctx)
   Float s _     -> pure (T.Float s , tctx)
   Char s _      -> pure (T.Char s  , tctx)
+-}
 -- Var B.Variable
   Var s x       -> lookupType kctx tctx (Left  x)
+  --TODO Tlin e Tun ?
 -- Abs B.Variable T.Type Exp
-  Abs s ps m e'  -> do
-    (kctxps, tctxps) <- synthParams kctx ps
-    let kctx' = kctxps `Map.union` kctx
-    (t, tctxe) <- synth kctx' (tctxps `Map.union` tctx) e'
-    tctx' <- typeCtxDifference kctx' tctxe tctxps
-    unless (m /= K.Un) $ checkEquivTypeCtxs e' tctx' tctx
-    return (foldr (\cases (ExpLevel  (_, u)) t' -> T.AppArrow s m u t'
-                          (TypeLevel (a, k)) (T.AppForall s aks t') -> 
-                            T.AppForall s ((a, k) : aks) t'
-                          (TypeLevel (a, k)) t' -> T.AppForall s [(a, k)] t')
-                  t ps
-           ,tctx')
-    where
-      synthParams :: KindCtx -> [Level (Pat, T.Type) (Variable, K.Kind)] -> Validation (KindCtx, TypeCtx)
-      synthParams kctx = \case
-        ExpLevel  (p,t) : ps -> do
-          Kinding.checkProper kctx t
-          tctxp <- checkPat kctx p t
-          second (Map.union tctxp) <$> synthParams kctx ps
-        TypeLevel (a,k) : ps ->
-          first  (Map.insert a k) <$> synthParams (Map.insert a k kctx) ps
-        [] -> return (Map.empty, Map.empty)
--- App Exp Exp --fazer?
-  App s f as    -> do
-    (t, tctx') <- synth kctx tctx f
-    t' <- Expose.typeArrow f t
-    checkArgs f kctx tctx' t' (as, t')
--- Con B.Identifier
-  Con s e1 e2 -> do  --é o mesmo?
-    (t', tctx') <- synth kctx tctx e1
-    let t = T.List s t'
-    (t,) <$> check kctx tctx' e2 t
+  Abs x t e     -> do
+    Kinding.checkProper kctx t
+    (u, tctx') <- synth kctx tctx e -- TODO ?n sei se é x ou e
+    return (t, typeCtxDifference kctx tctx tctx')  --como construir t->u? criar um Expose.typeArrow? + estou a fazer o cnt%x bem?
+-- App Exp Exp --fazer
+  App e f    -> do
+    (t, tctx') <- synth kctx tctx e
+    AppArrow _ _ t' u <- Expose.typeArrow e t
+    -- e:T? alterar o Map? (ou seja, tctx)
+    return (u, tctx'')  --TODO tctx'' é criado na linha acima, ainda n feito
+-- Con B.Identifier --n fazer
 -- Case Exp [(Alt, Exp)] --n fazer
 -- Type T.Type --n fazer
 -- TAbs B.Variable K.Kind Exp  --fazer
--- TApp Exp Exp  --fazer
+  TAbs a k e -> do
+    (t, tctx') <- synth kctx tctx e --ñ sei se é isto
+    return (t, tctx') --isto também está mal
+-- TApp Exp Type  --fazer
+  --NOTA: Ainda não está feito na main
 
 
 -- | Check-against for expressions. Given kind and type contexts, it checks
