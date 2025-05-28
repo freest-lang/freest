@@ -187,9 +187,14 @@ compileEquations :: Int -> [B.Variable] -> [Equation] -> L.Exp -> (L.Exp, Int)
 -- compileEquations _ [] eqs def = let (hd:tl) = [e |(_,e) <- eqs] in 
 --   L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") (foldl (\acc exp -> L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") acc) exp) hd tl)) def
 compileEquations counter [] ((_,exp):_) _ = (exp, counter)
-compileEquations counter vars eqs def | allVars eqs = compileEquations counter (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
-                              | allCons eqs = let (fooRes, counter1) = foo counter (tail vars) (groupEqs eqs) def in (L.Case (L.Var (head vars)) fooRes, counter1)
-                              | otherwise = foldr (\groupedEqs (accExp, accCounter) -> compileEquations accCounter vars groupedEqs accExp) (def, counter) (reverse $ mixtureGroup eqs)
+compileEquations counter vars eqs def | traceShow eqs $ allVars eqs =
+                                        compileEquations counter (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
+                                      | allCons eqs && firstEqIsChoicePat eqs =
+                                        let (counter1, freshVars) = nextFreshVars counter 2
+                                            (fooRes, counter2) = foo counter1 (tail freshVars ++ tail vars ) (groupEqs eqs) def
+                                        in (L.Case (generateReceive generateUnit generateUnit (L.Var $ head vars)) [(L.ACon (B.Identifier B.nullSpan "(,)") freshVars, (L.Case (L.Var (head freshVars)) fooRes))], counter2)
+                                      | allCons eqs = let (fooRes, counter1) = foo counter (tail vars) (groupEqs eqs) def in (L.Case (L.Var (head vars)) fooRes, counter1)
+                                      | otherwise = foldr (\groupedEqs (accExp, accCounter) -> compileEquations accCounter vars groupedEqs accExp) (def, counter) (reverse $ mixtureGroup eqs)
 
 allVars :: [Equation] -> Bool
 allVars [] = True 
@@ -205,7 +210,15 @@ allCons (eq:eqs) = case (head . fst) eq of
   E.IntPat _ _ -> allCons eqs
   E.FloatPat _ _ -> allCons eqs
   E.CharPat _ _ -> allCons eqs
+  E.ChoicePat _ _ _ -> allCons eqs
   _ -> False
+
+firstEqIsChoicePat :: [Equation] -> Bool
+firstEqIsChoicePat ((((E.ChoicePat _ _ _):_), _):_) = True
+firstEqIsChoicePat _ = False
+
+generateReceive :: L.Exp -> L.Exp -> L.Exp -> L.Exp
+generateReceive arg1 arg2 arg3 = L.App (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "receive") arg1) arg2) arg3
 
 replaceVar :: B.Variable -> [Equation] -> [Equation]
 replaceVar var eqs = map (\(pats, exp) -> case pats of
@@ -298,6 +311,15 @@ foo counter vars (eqs:eqss) def =
       let (compileEquationsRes, counter1) = compileEquations counter vars (updateHeadPattern eqs) def
           (fooRes, counter2) = foo counter1 vars eqss def in
       ((L.ALit $ L.LChar n, compileEquationsRes):fooRes, counter2)
+    E.ChoicePat _ label (E.VarPat _ var) ->
+      let (compileEquationsRes, counter1) = compileEquations counter vars (updateHeadPattern eqs) def 
+          (fooRes, counter2) = foo counter1 vars eqss def in
+      ((L.ACon label [], compileEquationsRes):fooRes, counter2)
+    E.ChoicePat _ label (E.WildPat _ var) ->
+      let (compileEquationsRes, counter1) = compileEquations counter vars (updateHeadPattern eqs) def 
+          (fooRes, counter2) = foo counter1 vars eqss def in
+      ((L.ACon label [], compileEquationsRes):fooRes, counter2)
+    E.ChoicePat _ _ _ -> undefined
 
 -- TODO: remove this function
 newKVars :: Int -> Int -> [B.Variable]
@@ -309,6 +331,9 @@ updateHeadPattern eqs = map (\(pats, exp) -> (updateHeadPattern' pats, exp)) eqs
 updateHeadPattern' :: [E.Pat] -> [E.Pat]
 updateHeadPattern' ((E.DConsPat _ _ []):pats) = pats 
 updateHeadPattern' ((E.DConsPat _ _ innerPats):pats) = innerPats++pats 
+updateHeadPattern' ((E.ChoicePat _ _ varPat@(E.VarPat _ _)):pats) = varPat:pats 
+updateHeadPattern' ((E.ChoicePat _ _ varPat@(E.WildPat _ _)):pats) = varPat:pats 
+updateHeadPattern' ((E.ChoicePat _ _ pat):pats) = undefined 
 updateHeadPattern' (pat:pats) = pats
 
 -- TODO: rename this for function for something better
@@ -335,3 +360,4 @@ removeBuiltins m = m{M.definitions = filter notBuiltin (M.definitions m)}
               Nothing -> True
               Just _  -> False
           _ -> True
+  
