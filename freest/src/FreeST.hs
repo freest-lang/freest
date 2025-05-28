@@ -21,6 +21,9 @@ import Validation.Base
 import Validation.Kinding
 import Validation.Typing
 
+import FstToLst.FstToLst ( fstToLst, removeBuiltins )
+import LeaST.Interpreter ( interpret, Value(VIO) )
+import qualified LeaST.PrettyPrint as LPP
 
 import Control.Monad.State ( runState )
 import Data.Function ( (&) )
@@ -37,24 +40,49 @@ main = do
 
 -- | The FreeST compiler pipeline.
 freest :: RunOpts -> IO ()
-freest RunOpts{file=programPath} = do
-  -- Read the source code of the Prelude.
-  preludeSrc <- getDataFileName preludePath >>= readFile
-  -- Read the source code of the program.
-  programSrc <- readFile programPath
-  -- Parse the source code of both the Prelude and the program, and
-  -- include the former in the latter, resulting in a single module.
-  mappend <$> runParseModule preludePath preludeSrc
-          <*> runParseModule programPath programSrc
-    -- Scope the module.
-    >>= runScopeModule & \case 
-      Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
-      Right m -> do 
-        putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-        -- Validate the module.
-        runValidate m & \case 
-          Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-          Right m -> putStrLn "[Validation passed]" >> exitSuccess
+freest RunOpts{file=programPath, least=l} = do
+  source <- readFile programPath
+  if l then case runLexer parseLeaST programPath source of
+    Right (_,_,_,leastAST) -> do
+      LPP.prettyPrint leastAST
+      res <- interpret leastAST
+      case res of
+        VIO io -> do io2 <- io
+                     print io2
+        res -> print res
+    Left err -> print err
+  else do
+    -- Read the source code of the Prelude.
+    preludeSrc <- getDataFileName preludePath >>= readFile
+    -- Read the source code of the program.
+    programSrc <- readFile programPath
+    -- Parse the source code of both the Prelude and the program, and
+    -- include the former in the latter, resulting in a single module.
+    mappend <$> runParseModule preludePath preludeSrc
+            <*> runParseModule programPath programSrc
+        >>= runScopeModule & \case 
+          Left es -> do
+            putStrLn "[Scoping failed]"
+            mapM_ print es
+            exitFailure
+          Right m -> do 
+            putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+            -- Validate the module.
+            runValidate m & \case 
+              Left es -> do
+                putStrLn "[Validation failed]" 
+                mapM_ print es
+                exitFailure     
+              Right m -> do
+                putStrLn "[Validation passed]" 
+                let leastAST = fstToLst [removeBuiltins m]
+                print leastAST
+                LPP.prettyPrint leastAST
+                res <- interpret leastAST
+                case res of
+                  VIO io -> do io2 <- io
+                               print io2
+                  _ -> print res
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath

@@ -16,6 +16,7 @@ import Syntax.Names
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
+import LeaST.LeaST qualified as L
 
 import Data.List.NonEmpty qualified as NE
 
@@ -54,3 +55,7 @@ addArgExp a e              = E.App (spanFromTo e a) e [a]
 addArgType :: T.Type -> T.Type -> T.Type
 addArgType t (T.App s u us)   = T.App s u (us ++ [t])
 addArgType t u                = T.App (spanFromTo u t) u [t]
+
+tupleLExp :: Span -> Int -> [L.Exp] -> L.Exp
+tupleLExp s n [e] = L.App (L.Con (mkTupleId n s)) e
+tupleLExp s n (e:es) = L.App (tupleLExp s n es) e
