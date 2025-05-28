@@ -1,6 +1,7 @@
 module LeaST.Typing where
 
 import LeaST.LeaST qualified as L
+import Syntax.Kind qualified as K
 import qualified Syntax.Type as T
 import qualified Syntax.Base as B
 import Validation.Kinding qualified as Kinding
@@ -40,8 +41,8 @@ synth kctx tctx = \case
   Abs x t e     -> do
     Kinding.checkProper kctx t
     (u, tctx') <- synth kctx (Map.insert x t tctx) e 
-    return (AppArrow B.nullSpan K.Un t u, typeCtxDifference kctx tctx tctx')  --TODO usar o difference
--- App Exp Exp   --NOTA abstração no de cima
+    return (AppArrow B.nullSpan K.Un t u, difference kctx tctx x) --NOTA abstração 
+-- App Exp Exp   
   App e f    -> do
     (t, tctx') <- synth kctx tctx e
     AppArrow _ _ t' u <- Expose.typeArrow e t
@@ -71,12 +72,11 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     checkEquivTypes t' t1
     (t3, tctx') <- synth kctx tctx x 
     checkEquivTypes t2 t3
-    return typeCtxDifference kctx tctx tctx' --TODO usar difference
+    return difference kctx tctx x 
 -- TAbs B.Variable K.Kind Exp
   TAbs a k e'  -> do
-    AppForall s t':ts <- Expose.typeArrow e' t  --[(Variable, K.Kind)]
-    -- tctx' <- ? chamada ao check e'? o que é o Q:k?
-    -- TODO fold para chamar cada t':ts
+    AppForall _ ts t' <- Expose.typeArrow e' t  
+    tctx' <- check (Map.insert a k kctx) tctx e' t'
     return tctx'
 -- remaining cases
   _ -> do
@@ -115,11 +115,14 @@ typeCtxDifference kctx tctx1 tctx2 = do
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
 
+
 difference :: KindCtx -> TypeCtx -> B.Variable -> Validation TypeCtx
-difference kctx tctx v = do
--- usar o anterior com um singleton (podes ter q receber o tipo)
-
-
+difference kctx tctx v = case tctx Map.!? v of
+  Just t -> do
+    k <- Kinding.synth kctx t
+    return (if K.isStrictlyLin k then Map.delete v tctx else tctx)
+  Nothing -> throwE (VarOutOfScope (getSpan v) v)   
+--TODO deixo o getSpan ou troco já por nullSpan?
 
 -- NOTA: usar para o % em tipos
 -- | Looks up the type of a variable or identifier in a type context,
