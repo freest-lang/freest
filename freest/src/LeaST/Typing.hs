@@ -1,6 +1,7 @@
 module LeaST.Typing where
 
 import LeaST.LeaST qualified as L
+import qualified Syntax.Type as T
 import qualified Syntax.Base as B
 import Validation.Kinding qualified as Kinding
 
@@ -15,8 +16,6 @@ type TypeCtx = Map.Map (Either Variable Identifier) T.Type
 -- kinds.
 type KindCtx = Map.Map Variable K.Kind
 
-type Error = String
-
 -- Var B.Variable   --x
 -- Lit Literal      --1
 -- Abs B.Variable T.Type Exp --\x:Int -> x 
@@ -28,40 +27,33 @@ type Error = String
 -- TApp Exp Type  -- (\@a:*T -> (\x:B -> x)) @Int
 
 
--- TODO Funcção copiada do FreeST, trocar
 -- | Synthesis for expressions. Given kind and type contexts, it synthesizes 
 -- the type of an expression, returning its type and the updated type context 
 -- without the linear variables consumed in it.
 synth :: KindCtx -> TypeCtx -> Exp -> Validation (T.Type, TypeCtx)
 synth kctx tctx = \case
 -- Lit Literal
-  Lit l         -> (typeOf l, tctx)   -- este typeOf ou outra função? (TODO prob outra)
-{- maneira em Fst
-  Int s _       -> pure (T.Int s   , tctx)
-  Float s _     -> pure (T.Float s , tctx)
-  Char s _      -> pure (T.Char s  , tctx)
--}
+  Lit l         -> (typeOf l, tctx) 
 -- Var B.Variable
   Var s x       -> lookupType kctx tctx (Left  x)
-  --TODO Tlin e Tun ?
 -- Abs B.Variable T.Type Exp
   Abs x t e     -> do
     Kinding.checkProper kctx t
-    (u, tctx') <- synth kctx tctx e -- TODO ?n sei se é x ou e
-    return (t, typeCtxDifference kctx tctx tctx')  --como construir t->u? criar um Expose.typeArrow? + estou a fazer o cnt%x bem?
--- App Exp Exp --fazer
+    (u, tctx') <- synth kctx (Map.insert x t tctx) e 
+    return (AppArrow B.nullSpan K.Un t u, typeCtxDifference kctx tctx tctx')  --TODO usar o difference
+-- App Exp Exp   --NOTA abstração no de cima
   App e f    -> do
     (t, tctx') <- synth kctx tctx e
     AppArrow _ _ t' u <- Expose.typeArrow e t
-    -- e:T? alterar o Map? (ou seja, tctx)
-    return (u, tctx'')  --TODO tctx'' é criado na linha acima, ainda n feito
+    tctx'' <- check kctx tctx' f t'  
+    return (u, tctx'')  
 -- Con B.Identifier --n fazer
 -- Case Exp [(Alt, Exp)] --n fazer
 -- Type T.Type --n fazer
--- TAbs B.Variable K.Kind Exp  --fazer
+-- TAbs B.Variable K.Kind Exp  
   TAbs a k e -> do
-    (t, tctx') <- synth kctx tctx e --ñ sei se é isto
-    return (t, tctx') --isto também está mal
+    (t, tctx') <- synth (Map.insert a k kctx) tctx e
+    return (AppForall B.nullSpan [(a, k)] t, tctx')
 -- TApp Exp Type  --fazer
   --NOTA: Ainda não está feito na main
 
@@ -74,19 +66,17 @@ check :: KindCtx -> TypeCtx -> Exp -> T.Type -> Validation TypeCtx
 check kctx tctx e t = gets typeDecls >>= \tds -> case e of
 -- Abs B.Variable T.Type Exp 
   Abs x t' e'  -> do
-    Kinding.checkProper kctx t'   --TODO Verificar se isto está bem
+    Kinding.checkProper kctx t'   
     AppArrow _ _ t1 t2 <- Expose.typeArrow e t
-    -- TODO, ver como mandar o erro correto, ou se ser Validation chega
-    -- case Expose.typeArrow e t of
-    --  _ -> throwE (TypeMismatch s t u (Left e))
     checkEquivTypes t' t1
     (t3, tctx') <- synth kctx tctx x 
     checkEquivTypes t2 t3
-    return typeCtxDifference kctx tctx tctx' --TODO como assim %x? estou a usar isto bem?
+    return typeCtxDifference kctx tctx tctx' --TODO usar difference
 -- TAbs B.Variable K.Kind Exp
   TAbs a k e'  -> do
-    AppForall _ t' <- Expose.typeArrow e t  --[(Variable, K.Kind)]
+    AppForall s t':ts <- Expose.typeArrow e' t  --[(Variable, K.Kind)]
     -- tctx' <- ? chamada ao check e'? o que é o Q:k?
+    -- TODO fold para chamar cada t':ts
     return tctx'
 -- remaining cases
   _ -> do
@@ -94,6 +84,11 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     checkEquivTypes e t u
     return tctx'
 
+
+typeOf :: Literal -> T.Type
+typeOf (LInt _)   = Int B.nullSpan
+typeOf (LFloat _) = Float B.nullSpan
+typeOf (LChar _)  = Char B.nullSpan
 
 -- NOTA: Tirado do Fst, adaptado
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
@@ -119,6 +114,12 @@ typeCtxDifference kctx tctx1 tctx2 = do
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
+
+difference :: KindCtx -> TypeCtx -> B.Variable -> Validation TypeCtx
+difference kctx tctx v = do
+-- usar o anterior com um singleton (podes ter q receber o tipo)
+
+
 
 -- NOTA: usar para o % em tipos
 -- | Looks up the type of a variable or identifier in a type context,
