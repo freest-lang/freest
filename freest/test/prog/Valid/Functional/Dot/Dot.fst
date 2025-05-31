@@ -1,7 +1,7 @@
 module Dot where
 
-dot : forall a . forall b . forall c . (b -> c) -> (a -> b) -> a -> c
-dot f g x = f (g x)
+dot : forall (a b c : 1T). (b -> c) -> (a -> b) -> a -> c
+dot @a @b @c f g x = f (g x)
 
 double : Int -> Int
 double x = 2 * x

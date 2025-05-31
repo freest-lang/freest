@@ -244,7 +244,7 @@ scopeDataDecls ctx dds = do
         as' <- mapM freshInternal as 
         ks' <- mapM scopeKind ks
         (ctx''',cds') <- scopeConsDecls (fromTVarList as' `union` ctx') cds
-        return (ctx''', (ti, (zip as' ks', cds')) : dds')
+        return (foldr deleteTVar ctx''' as', (ti, (zip as' ks', cds')) : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
       where
         scopeConsDecl (ctx',cds') (ci,ts)
@@ -506,7 +506,7 @@ scopeType ctx = \case
   T.DName s i -> return (T.DName s i)
   t -> pure t
 
--- | Scope a type, universally quantifying any free variables it might have.
+-- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.
 scopeAndQuantifyType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeAndQuantifyType ctx t = do
@@ -517,8 +517,7 @@ scopeAndQuantifyType ctx t = do
     else do
       aks <- mapM (\a -> (a,) <$> freshKVar a) 
         $ List.sortBy (compare `on` getSpan) fvt'
-      T.AppForall (getSpan t) aks <$> 
-        scopeType (fromTVarList fvt' `union` ctx) t'
+      scopeType ctx $ T.AppForall (getSpan t) aks t
 
 -- | Scope a kind.
 scopeKind :: K.Kind -> Scoping K.Kind

@@ -167,7 +167,7 @@ instance Show Error where
         ExposeError _ s e t -> 
           "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
-          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
+          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"`"++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
           "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++

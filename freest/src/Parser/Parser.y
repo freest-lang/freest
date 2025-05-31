@@ -64,7 +64,6 @@ import Data.List.NonEmpty qualified as NE
   'else'   { TkElse _ }
   'forall' { TkForall _ }
   'exists' { TkExists _ }
-  'rec'    { TkRec _ }
   -- Punctuation
   '.'     { TkDot _ }
   '='     { TkEqual _ }
@@ -222,6 +221,10 @@ ExpVar :: { Variable }
 TypeVar :: { Variable }
   : LOWER_ID { mkVarTk $1 }
 
+TypeVarNEListWS :: { [Variable] }
+  : TypeVar { [$1] }
+  | TypeVar TypeVarNEListWS { $1 : $2 }
+
 RHS(sep) :: { E.RHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
   | GuardedExps(sep) Where { E.GuardedRHS $1 $2   }
@@ -306,7 +309,7 @@ TypePrimary :: { T.Type }
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVar KindedVarListWS '.' Type   { T.AppQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
+  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
@@ -342,17 +345,19 @@ LabelListComma :: { [Identifier] }
   : UPPER_ID ',' LabelListComma { mkIdTk $1 : $3 }
   | UPPER_ID                    { [mkIdTk $1] }
 
-VarListWS :: { [Variable] }
-  : {- empty -} { [] }
-  | ExpVar VarListWS { $1 : $2 }
-
 KindedVarListWS :: { [(Variable, K.Kind)] }
   : {- empty -} { [] }
   | KindedVar KindedVarListWS { $1 : $2 }
 
+KindedVars :: { [(Variable, K.Kind)] }
+  : TypeVar KindedVars { ($1, dummyKindVar $1) : $2 }
+  | '(' TypeVarNEListWS ':' Kind ')' KindedVars { map (, $4) $2 ++ $6 }
+  | TypeVar { [($1, dummyKindVar $1)] }
+  | '(' TypeVarNEListWS ':' Kind ')' { map (, $4) $2 }
+
 KindedVar :: { (Variable, K.Kind) }
   : TypeVar { ($1, dummyKindVar $1) }
-  | TypeVar ':' Kind { ($1, $3) }
+  | '(' TypeVar ':' Kind ')' { ($2, $4) }
 
 ExpPrimary :: { E.Exp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
@@ -471,10 +476,14 @@ Arrow :: { (Span, K.Multiplicity) }
   : UnArrow  { $1 }
   | LinArrow { $1 }
 
+TypedPat :: { (E.Pat, T.Type) }
+  : '(' Pat ':' Type ')' { ($2, $4) }
+  -- | PatPrimary { ($1, ?) } -- TODO: type inference var?
+
 PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.Type) (Variable, K.Kind)], K.Multiplicity) } 
-  : PatPrimary ':' TypePrimary PatTypeOrKindedVarListArrow { first (ExpLevel ($1, $3) :) $4 }
+  : TypedPat PatTypeOrKindedVarListArrow { first (ExpLevel $1 :) $2 }
   | '@' KindedVar PatTypeOrKindedVarListArrow { first (TypeLevel $2 :) $3 }
-  | PatPrimary ':' TypePrimary Arrow { ([ExpLevel  ($1, $3)], snd $4) }
+  | TypedPat Arrow { ([ExpLevel $1], snd $2) }
   | '@' KindedVar UnArrow { ([TypeLevel $2], snd $3) }
 
 CaseBlock :: { [(E.Pat, E.RHS)] }

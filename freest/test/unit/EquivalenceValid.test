@@ -98,14 +98,14 @@ where
 case !(!Int;Close) 
   == !(!Int;Skip;Close;?Int) : 1S 
 
-case forall a:1S. Close ; a ; !Int 
-  == forall a:1S. (Close ; a) ; Skip : 1C
+case forall (a : 1S). Close ; a ; !Int 
+  == forall (a : 1S). (Close ; a) ; Skip : 1C
 
-case forall a:1S. Close;a;!Int 
-  == forall b:1S. (Close;b);Skip : 1C
+case forall (a : 1S). Close;a;!Int 
+  == forall (b : 1S). (Close;b);Skip : 1C
 
-case forall a:1S. T a
-  == forall b: 1S. U b : 1S
+case forall (a : 1S). T a
+  == forall (b : 1S). U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -121,21 +121,29 @@ where
 
 case Dual (Dual !Int) == !Int : 1S
 
-case Dual (exists a:1S. a) == forall b:1S. (Dual b) : 1S
+case Dual (exists (a : 1S). a) 
+  == forall (b : 1S). (Dual b) 
+   : 1S
 
-case exists a:1S. exists b:1S. Dual (a ; b) ==
-     exists a:1S. exists b:1S. Dual a ; Dual b :1S
+case exists (a : 1S). exists (b : 1S). Dual (a ; b) 
+  == exists (a : 1S). exists (b : 1S). Dual a ; Dual b 
+   : 1S
 
-case Dual(exists a:1S. exists b:1S. a ; b) ==
-     forall a:1S. forall b:1S. Dual a ; Dual b : 1S
+case Dual(exists (a : 1S). exists (b : 1S). a ; b) 
+  == forall (a : 1S). forall (b : 1S). Dual a ; Dual b 
+   : 1S
 
-case Dual(exists a:1S. exists b:1S. a ; b) ==
-     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+case Dual(exists (a : 1S). exists (b : 1S). a ; b) 
+  == forall (a : 1S). Dual (exists (b : 1S). a ; b) 
+   : 1S
 
-case Dual(exists a:1S. exists b:1S. a ; b) ==
-     forall a:1S. Dual (exists b:1S. a ; b) : 1S
+case Dual(exists (a : 1S). exists (b : 1S). a ; b) 
+  == forall (a : 1S). Dual (exists (b : 1S). a ; b) 
+   : 1S
 
-case Dual (exists a:1S. Dual a) == forall b:1S. b : 1S
+case Dual (exists (a : 1S). Dual a) 
+  == forall (b : 1S). b 
+   : 1S
 
 
 -- Unrestricted sessions
@@ -200,7 +208,9 @@ where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
 
-case forall a:1S. Maybe a == forall b:1S. Maybe b : 1T
+case forall (a : 1S). Maybe a 
+  == forall (b : 1S). Maybe b 
+   : 1T
 where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
@@ -220,73 +230,118 @@ where
 
 -- Unreachable type vars
 
-case forall a:1S. Wait ; a == forall b:1S. Wait : 1S
+case forall (a : 1S). Wait ; a 
+  == forall (b : 1S). Wait 
+   : 1S
 
-case !Int ; forall a:1S. Wait ; a == !Int ; forall b:1S. Wait : 1S
+case !Int ; forall (a : 1S). Wait ; a 
+  == !Int ; forall (b : 1S). Wait 
+   : 1S
 
-case forall a:1S. ?Char ; Wait ; a == forall b:1S. ?Char ; Wait : 1S
+case forall (a : 1S). ?Char ; Wait ; a 
+  == forall (b : 1S). ?Char ; Wait 
+   : 1S
 
-case forall a:1S. Wait ; a == forall b:1S. Dual Close : 1S
+case forall (a : 1S). Wait ; a 
+  == forall (b : 1S) . Dual Close 
+   : 1S
 
-case forall a:1S. forall b:1S. Wait ; a ; b == forall a:1S. forall b:1S. Wait : 1S
+case forall (a : 1S). forall (b : 1S). Wait ; a ; b 
+  == forall (a : 1S). forall (b : 1S). Wait 
+   : 1S
 
-case forall a:1S. forall b:*T. !b ; Wait ; a == forall a:1S. forall c:*T. !c ; Wait : 1S
+case forall (a : 1S). forall (b : *T). !b ; Wait ; a 
+  == forall (a : 1S). forall (c : *T). !c ; Wait 
+   : 1S
 
-case ?(forall a:1S. Wait ; a) == ?(forall b:1S. Wait) : 1S
+case ?(forall (a : 1S). Wait ; a) 
+  == ?(forall (b : 1S). Wait) 
+   : 1S
 
-case forall a:1S. Wait ; a -> Char == forall b:1S. Wait -> Char : *T
+case forall (a : 1S). Wait ; a -> Char 
+  == forall (b : 1S). Wait     -> Char 
+   : *T
 
-case (forall a:1S. Wait ; a) -> (forall b:1S. Wait    ) ==
-     (forall b:1S. Wait    ) -> (forall a:1S. Wait ; a) : *T
+case (forall (a : 1S). Wait ; a) -> (forall (b : 1S). Wait    ) 
+  == (forall (b : 1S). Wait    ) -> (forall (a : 1S). Wait ; a) 
+   : *T
 
-case &{A: forall a:1S. Wait ; a, B: Skip} == &{A: forall b:1S. Wait, B: Skip} : 1S
+case &{A: forall (a : 1S). Wait ; a, B: Skip} 
+  == &{A: forall (b : 1S). Wait, B: Skip} 
+   : 1S
 
-case +{A: forall a:1S. Wait ; a, B: forall b:1S. Wait    } ==
-     +{A: forall b:1S. Wait,     B: forall a:1S. Wait ; a} : 1S
+case +{A: forall (a : 1S). Wait ; a, B: forall (b : 1S). Wait    } 
+  == +{A: forall (b : 1S). Wait,     B: forall (a : 1S). Wait ; a} 
+   : 1S
 
-case forall a:1S. Wait ; forall b:1S. a ; b == forall b:1S. Wait : 1S
+case forall (a : 1S). Wait ; forall (b : 1S). a ; b 
+  == forall (b : 1S). Wait 
+   : 1S
 
-case forall a:1S. Wait ; Close ; a == forall b:1S. Wait : 1S
+case forall (a : 1S). Wait ; Close ; a 
+  == forall (b : 1S). Wait 
+  : 1S
 
-case forall a:1S. Wait ; !Int ; Close ; a == forall b:1S. Wait : 1S
+case forall (a : 1S). Wait ; !Int ; Close ; a 
+  == forall (b : 1S). Wait 
+   : 1S
 
-case forall a:1S. forall b:1S. Wait ; a ;!Int ; Close ; b ==
-     forall a:1S. forall a:1S. Wait : 1S
+case forall (a : 1S). forall (b : 1S). Wait ; a ;!Int ; Close ; b 
+  == forall (a : 1S). forall (a : 1S). Wait 
+   : 1S
 
-case forall a:1S. *!Int ; a == forall b:1S. *!Int : 1S
+case forall (a : 1S). *!Int ; a 
+  == forall (b : 1S). *!Int 
+   : 1S
 
-case forall a:1S. *+{A,B} ; a == forall b:1S. *+{B,A} : 1S
+case forall (a : 1S). *+{A,B} ; a 
+  == forall (b : 1S). *+{B,A} 
+   : 1S
 
-case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+case forall (a : 1S). T ; a 
+  == forall (b : 1S). T ; !Int 
+   : 1S
 where
   type T : 1S
   type T = !Int ; T
 
-case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+case forall (a : 1S). T ; a 
+  == forall (b : 1S). T ; !Int 
+   : 1S
 where
   type T, U : 1S
   type T = !Int ; U
   type U = ?Char ; T
 
-case forall a:1S. T ; a == forall b:1S. T ; !Int : 1S
+case forall (a : 1S). T ; a 
+  == forall (b : 1S). T ; !Int 
+   : 1S
 where
   type T, U : 1S
   type T = !Int ; U
   type U = ?Char ; U
 
-case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+case exists (a : *S). T a ; a 
+  == exists (b : *S). T b ; !Int ; T Skip 
+   : 1S
 where
   type T : *S -> 1S
   type T c = !c ; T c
 
-case exists a:*S. T a ; a == exists b:*S. T b ; !Int ; T Skip : 1S
+case exists (a : *S). T a ; a 
+  == exists (b : *S). T b ; !Int ; T Skip 
+   : 1S
 where
   type T : *S -> 1S
   type T c = !c ; T c
 
-case exists a:1S. Dual Close ; a == exists a:1S. Dual Close : 1S
+case exists (a : 1S). Dual Close ; a 
+  == exists (a : 1S). Dual Close 
+   : 1S
 
-case exists a:1S. Dual Close ; a == exists a:1S. Wait : 1S
+case exists (a : 1S). Dual Close ; a 
+  == exists (a : 1S). Wait 
+   : 1S
 
 case W == Skip ; W : 1S -- Recursion on the argument of a type constructor
 where
@@ -333,9 +388,9 @@ where
 case OutStream == Dual InStream : 1C
 where
   type OutStream : 1C
-  type OutStream = exists a:*T. !a ; OutStream
+  type OutStream = exists (a : *T). !a ; OutStream
   type InStream : 1C
-  type InStream = forall a:*T. ?a ; InStream
+  type InStream = forall (a : *T). ?a ; InStream
 
 case Stream Skip == Stream (Skip; Skip) : 1S
 where
