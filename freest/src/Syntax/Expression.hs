@@ -79,7 +79,7 @@ data Exp
   | Case   Span Exp [(Pat, RHS)]
   | If     Span Exp Exp Exp
   | Channel Span Type
-  | Select Span Identifier Exp
+  | Select Span Identifier
 
 pattern Tuple :: Span -> [Exp] -> Exp
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
@@ -137,7 +137,7 @@ instance Located Exp where
     Case s _ _   -> s
     If s _ _ _   -> s
     Channel s _  -> s
-    Select s _ _ -> s
+    Select s _ -> s
 
   setSpan s = \case
     Int _ i       -> Int s i
@@ -151,7 +151,7 @@ instance Located Exp where
     Case _ e cs   -> Case s e cs
     If _ e1 e2 e3 -> If s e1 e2 e3
     Channel _ t   -> Channel s t
-    Select _ i e  -> Select s i e
+    Select _ i -> Select s i
 
 instance Located RHS where
   getSpan = \case
@@ -219,4 +219,4 @@ instance Show Exp where
                       where showCase (p, e) = show p ++ " -> " ++ show e
     If _ e1 e2 e3  -> "(if "++show e1++" then "++show e2++" else "++show e3++")"
     Channel _ t    -> "(channel @"++show t++")"
-    Select _ i e   -> "select "++show i++" "++show e
+    Select _ i     -> "(select "++show i++")"

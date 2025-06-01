@@ -409,8 +409,6 @@ scopeExp ctx = \case
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
   E.Channel s t ->
     E.Channel s <$> scopeType ctx t
-  E.Select s i e ->
-    E.Select s i <$> scopeExp ctx e
   e -> pure e
 
 -- | Scope a pattern. This function takes two contexts: the first being the main

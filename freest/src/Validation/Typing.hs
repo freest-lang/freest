@@ -109,9 +109,18 @@ synth kctx tctx = \case
     (t,) <$> check kctx tctx' e2 t
   E.DCons s i     -> lookupType kctx tctx (Right i)
   E.Var s x       -> lookupType kctx tctx (Left  x)
+  E.App s f@(E.Select _ i) as ->
+    case as of
+      [] -> throwE (PartiallyAppliedSelect s i)
+      (TypeLevel t : _  ) -> 
+        throwE (UnexpectedArg (getSpan t) (ExpLevel Nothing) (TypeLevel t) 1 f)
+      (ExpLevel  e : as') -> do
+        (u, tctx') <- synth kctx tctx e
+        ui <- Expose.internalChoice e u i
+        checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
-    t' <- Expose.typeArrow f t
+    t' <- Expose.functionOrPolyExp f t
     checkArgs f kctx tctx' t' (as, t')
   E.Abs s ps m e'  -> do
     -- TODO: detect incomplete patterns
@@ -161,9 +170,8 @@ synth kctx tctx = \case
   E.Channel s t -> do
     Kinding.checkSession kctx t
     pure (T.Tuple s [t, T.AppDual s t], tctx)
-  E.Select s i e -> do
-    (t,tctx') <- synth kctx tctx e
-    Expose.internalChoice e t i <&> (,tctx')
+  E.Select s i -> do
+    throwE (PartiallyAppliedSelect s i)
 
 -- | Synthesis for right-hand sides of case expressions and value/function
 -- definitions. Given kind and type contexts, it synthesizes the type of a
@@ -227,6 +235,17 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     (u, tctx') <- lookupType kctx tctx (Left x)
     checkEquivTypes (Left e) t u
     return tctx'
+  E.App s f@(E.Select _ i) as -> do
+    case as of
+      [] -> throwE (PartiallyAppliedSelect s i)
+      (TypeLevel t : _  ) -> 
+        throwE (UnexpectedArg (getSpan t) (ExpLevel Nothing) (TypeLevel t) 1 f)
+      (ExpLevel  e : as') -> do
+        (u, tctx') <- synth kctx tctx e
+        ui <- Expose.internalChoice e u i
+        (ui', tctx'') <- checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
+        checkEquivTypes (Left e) t ui'
+        return tctx''
   E.App s f as -> do
     (u, tctx') <- synth kctx tctx f
     (v, tctx'') <- checkArgs f kctx tctx' u (as, u)
@@ -272,11 +291,17 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
-  E.Select s i e' -> do
-    (u,tctx') <- synth kctx tctx e'
-    ui <- Expose.internalChoice e u i
-    checkEquivTypes (Left e) t ui
-    return tctx'
+  E.Select s i -> do
+    case normalise tds t of
+      T.AppArrow s m u v -> do
+        case normalise tds u of
+          T.AppLinChoice s T.Out us ->
+            case lookup i us of
+              Just ui -> checkEquivTypes (Left e) ui v >> return tctx
+              Nothing -> throwE (IllegalChoice s i t)
+          _ -> throwE (TypeMismatchSelect s t i e)
+      _ -> throwE (TypeMismatchSelect s t i e)
+
 
 -- | Checking for declarations. Given kind and type contexts, it validates a
 -- list of declarations in sequence. Variables introduced by a declaration
@@ -345,7 +370,7 @@ checkArgs = checkArgs' 1
         checkArgs' (n+1) f kctx tctx' t0 (as,v)
       -- expected expression, given type
       (TypeLevel t:as, normalise tds -> T.AppArrow s' m u v) -> do
-        throwE (UnexpectedArg (getSpan t) (ExpLevel u) (TypeLevel t) n f)
+        throwE (UnexpectedArg (getSpan t) (ExpLevel (Just u)) (TypeLevel t) n f)
       -- expected type, given expression (to be inferred...)
       (ExpLevel  e:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         throwE (UnexpectedArg (getSpan e) (TypeLevel k) (ExpLevel e) n f)

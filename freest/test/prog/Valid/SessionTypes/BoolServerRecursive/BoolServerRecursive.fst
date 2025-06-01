@@ -1,5 +1,6 @@
 module BoolServerRecursive where
 
+type BoolServer, BoolClient : 1S
 type BoolServer = &{ And : ?Bool; ?Bool; !Bool; BoolServer
                    , Or  : ?Bool; ?Bool; !Bool; BoolServer
                    , Not : ?Bool; !Bool; BoolServer
@@ -29,20 +30,18 @@ boolServer c =
 
 client1 : BoolClient -> Bool
 client1 c =
-  let (x, c) = 
-    select And c
-    |> send True
-    |> send True
-    |> receive in 
-  let (y, c) = 
-    select Not c
-    |> send x 
-    |> receive in
-  select Done c |> close ;
+  let (x, c) = c |> select And
+                 |> send True
+                 |> send True
+                 |> receive in 
+  let (y, c) = c |> select Not
+                 |> send x 
+                 |> receive in
+  c |> select Done |> close ;
   y
 
 main : Bool
 main =
   let (w, r) = channel @BoolClient in
-  let x = fork @() (\_:()1-> boolServer r) in
+  let x = fork @() (\(_:()) 1-> boolServer r) in
   client1 w

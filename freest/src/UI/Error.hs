@@ -41,7 +41,7 @@ data Error
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
   | ExposeError Span String (Either E.Exp E.Pat) T.Type
-  | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
+  | UnexpectedArg Span (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type) Int E.Exp
   | UnexpectedParam Span (Level T.Type K.Kind) (Level E.Pat Variable) Int E.Exp
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
@@ -51,12 +51,14 @@ data Error
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
   | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
+  | TypeMismatchSelect Span T.Type Identifier E.Exp
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
   | TypeCtxMismatch Span E.Exp [(Either Variable Identifier, T.Type)] 
                                [(Either Variable Identifier, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
   | IllegalChoice Span Identifier T.Type
+  | PartiallyAppliedSelect Span Identifier
   | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
   | UnsupportedError Span String
   | SigLacksDef Span Variable
@@ -95,12 +97,14 @@ instance Located Error where
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
     TypeMismatch s _ _ _ -> s
+    TypeMismatchSelect s _ _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchTuple s _ _ _ -> s
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
     IllegalChoice s _ _ -> s
+    PartiallyAppliedSelect s _ -> s
     UnsupportedError s _ -> s
     SigLacksDef s _ -> s
   -- | There should be no need to relocate an error. (At least for now...)
@@ -170,7 +174,7 @@ instance Show Error where
           "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"`"++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
-          "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
+          "\n  Expecting a value argument "++maybe "" (\t -> "of type `"++show t++"`") t++", but got type argument `"++show u++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
           "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
@@ -194,6 +198,8 @@ instance Show Error where
           "\n  Invalid type: `"++show t++"`"
         TypeMismatch s t u ep ->
           "\n  Couldn't match expected type `"++show t++"` with actual type `"++show u++"` in the "++showExpPat ep++"."
+        TypeMismatchSelect s t i e ->
+          "\n  Couldn't match expected type `"++show t++"` with selection of choice `"++show i++"` in the expression "++show e++"."
         TypeMismatchList _ t ep ->
           "\n  Couldn't match expected type `"++show t++"` with a list type in the "++showExpPat ep++"."
         TypeMismatchTuple _ n t ep ->
@@ -218,6 +224,8 @@ instance Show Error where
                                     Right i -> "Constructor `"++show i++"`"
         IllegalChoice s i t ->
           "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
+        PartiallyAppliedSelect s i -> 
+          "\n  Cannot synthesize type of partially applied `select` expression."
         UnsupportedError _ m ->
           "\n  " ++ m
 

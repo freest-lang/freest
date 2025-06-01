@@ -1,6 +1,8 @@
 module Validation.Expose 
   ( kindArrow
-  , typeArrow
+  , functionOrPolyExp
+  , function
+  , polyExp
   , internalChoice
   )
 where
@@ -24,13 +26,27 @@ kindArrow :: K.Kind -> ([K.Kind], K.Kind)
 kindArrow (K.Arrow _ k1 k2) = first (k1:) (kindArrow k2)
 kindArrow k = ([], k)
 
-typeArrow :: E.Exp -> T.Type -> Validation T.Type
-typeArrow e t = do
+functionOrPolyExp :: E.Exp -> T.Type -> Validation T.Type
+functionOrPolyExp e t = do
   ds <- gets typeDecls
   case normalise ds t of
-    t'@T.AppArrow{} -> pure t'
-    t'@T.AppForall{} -> pure t' -- TODO: Why T.AppForall only?
+    t'@(T.AppArrow s m u v) -> pure t'
+    t'@(T.AppForall s aks u) -> pure t'
+    _ -> throwE (ExposeError (getSpan e) "a function or polymorphic expression" (Left e) t)
+
+function :: E.Exp -> T.Type -> Validation (K.Multiplicity, T.Type, T.Type)
+function e t = do
+  ds <- gets typeDecls
+  case normalise ds t of
+    t'@(T.AppArrow s m u v) -> pure (m, u, v)
     _ -> throwE (ExposeError (getSpan e) "a function" (Left e) t)
+
+polyExp :: E.Exp -> T.Type -> Validation ([(Variable, K.Kind)], T.Type)
+polyExp e t = do -- named it `polyExp` because `forall` is a keyword (and aligns better with error)
+  ds <- gets typeDecls
+  case normalise ds t of
+    t'@(T.AppForall s aks u) -> pure (aks, u)
+    _ -> throwE (ExposeError (getSpan e) "a polymorphic expression" (Left e) t)
 
 internalChoice :: E.Exp -> T.Type -> Identifier -> Validation T.Type
 internalChoice e t i = do
