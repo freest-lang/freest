@@ -25,7 +25,6 @@ import Validation.Typing
 import Control.Monad.State ( runState )
 import Data.Function ( (&) )
 import Data.Map qualified as Map
-import Debug.Trace ( traceM )
 import Options.Applicative
 import System.Exit ( exitFailure, exitSuccess )
 
@@ -50,11 +49,11 @@ freest RunOpts{file=programPath} = do
     >>= runScopeModule & \case 
       Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
       Right m -> do 
-        putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+        -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
         -- Validate the module.
         runValidate m & \case 
           Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-          Right m -> putStrLn "[Validation passed]" >> exitSuccess
+          Right m -> {- putStrLn "[Validation passed]" >> -} exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath

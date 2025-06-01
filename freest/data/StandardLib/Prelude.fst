@@ -208,14 +208,51 @@ receive = undefined @(forall (a : 1T) (b : 1S). ?a;b -> (a, b))
 wait : Wait -> ()
 wait = undefined @(Wait -> ())
 
-receiveAndWait : forall (a : 1T). ?a ; Wait -> a
-receiveAndWait @a c = let (x, c) = receive @a @Wait c in (;) @() @a (wait c) x
-
 close : Close -> ()
 close = undefined @(Close -> ())
 
-receiveAndClose : forall (a : 1T). ?a ; Close -> a
-receiveAndClose @a c = let (x, c) = receive @a @Close c in (;) @() @a (close c) x
+-- | Receives a value from a channel that continues to `Wait`, closes the 
+-- | continuation and returns the value.
+-- | 
+-- | ```
+-- | main : ()
+-- | main =
+-- |   -- create channel endpoints
+-- |   let (c, s) = new @(?String ; Wait) () in
+-- |   -- fork a thread that prints the received value (and closes the channel)
+-- |   fork (\_:() 1-> c |> receiveAndWait @String |> putStrLn);
+-- |   -- send a string through the channel (and close it)
+-- |   s |> send "Hello!" |> close
+-- | ```
+receiveAndWait : forall (a : 1T). ?a ; Wait -> a 
+receiveAndWait @a c =
+  let (x, c) = receive @a @Wait c in 
+  let _ = wait c in
+  x
+
+-- | As in receiveAndWait only that the type is Wait and the function closes the
+-- | channel rather the waiting for the channel to be closed.
+receiveAndClose : forall (a : 1T). ?a ; Close -> a 
+receiveAndClose @a c =
+  let (x, c) = receive @a @Close c in 
+  let _ = close c in
+  x
+
+-- | Sends a value on a given channel and then waits for the channel to be
+-- | closed. Returns ().
+sendAndWait : forall (a : 1T). a -> !a ; Wait 1-> ()
+sendAndWait @a x c = wait (send @a x @Wait c)
+
+-- | Sends a value on a given channel and then closes the channel.
+-- | Returns ().
+sendAndClose : forall (a : 1T). a -> !a ; Close 1-> ()
+sendAndClose @a x c = close (send @a x @Close c)
+
+forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
+forkWith @a @b f =
+  let (x, y) = channel @a in
+  let _ = fork @b (\(_ : ()) 1-> f y) in 
+  x
 
 -- ** Standard I/O
 

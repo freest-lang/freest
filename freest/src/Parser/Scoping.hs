@@ -41,7 +41,6 @@ import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
-import Debug.Trace ( traceM )
 
 -- = Scoping context
 -- The scoping context keeps track of variable and indentifier names.

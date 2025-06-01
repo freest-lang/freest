@@ -24,7 +24,6 @@ import Data.List ( intersperse, union )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
-import Debug.Trace ( trace )
 
 -- | The set of free variables ocurring in a type.
 freeVars :: T.Type -> Set.Set Variable

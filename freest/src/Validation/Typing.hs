@@ -32,7 +32,6 @@ import Data.Functor
 import Data.List qualified as List
 import Data.List.Extra qualified as List
 import Data.Map.Strict qualified as Map
-import Debug.Trace ( traceM )
 
 
 -- The type context. It keeps track of the variables and constructors in scope
