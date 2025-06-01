@@ -297,8 +297,11 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
         case normalise tds u of
           T.AppLinChoice s T.Out us ->
             case lookup i us of
-              Just ui -> checkEquivTypes (Left e) ui v >> return tctx
-              Nothing -> throwE (IllegalChoice s i t)
+              Just ui -> do 
+                checkEquivTypes (Left e) (T.AppArrow s m u ui) 
+                                         (T.AppArrow s m u v ) 
+                return tctx
+              Nothing -> throwE (IllegalChoice s i u)
           _ -> throwE (TypeMismatchSelect s t i e)
       _ -> throwE (TypeMismatchSelect s t i e)
 
