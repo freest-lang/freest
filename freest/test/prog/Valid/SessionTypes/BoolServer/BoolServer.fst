@@ -35,7 +35,7 @@ client1 w = w |> select And
 startClient : (BoolClient -> Bool) -> Bool
 startClient client =
   let (w,r) = channel @BoolClient in
-  let x = fork @() (\_:()1-> boolServer r) in
+  let x = fork @() (\(_ : ()) 1-> boolServer r) in
   client w
 
 main : Bool

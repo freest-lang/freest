@@ -1,5 +1,6 @@
 module PingPongDiverge where 
 
+type Ping, Pong : 1C
 type Ping = !Int ; Pong
 type Pong = ?Int ; Ping
 

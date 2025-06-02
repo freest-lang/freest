@@ -29,8 +29,8 @@ main =
 
 -- Now let's try with send, rather than unsend:
   -- let sendFive = send @Int 5 @Close in
-  -- fork (\_:() 1-> sendFive s1 |> close);
-  -- fork (\_:() 1-> sendFive s2 |> close);
+  -- fork (\(_ : ()) 1-> sendFive s1 |> close);
+  -- fork (\(_ : ()) 1-> sendFive s2 |> close);
 -- Variable or data constructor not in scope: 'sendFive'
 
       (receiveAndWait @Int r1 + receiveAndWait @Int r2))

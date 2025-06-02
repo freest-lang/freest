@@ -5,6 +5,6 @@ f : (Int 1-> Int) -> Int 1-> Int
 f g n = g n 
 
 main : Int
-main = f (\n:Int -> n + 10) 4 -- here it is given an unrestricted one
+main = f (\(n : Int) -> n + 10) 4 -- here it is given an unrestricted one
 
 -- since unrestricted functions can be used linearly, no error should be thrown

@@ -53,6 +53,9 @@ type String = [Char]
 show : forall (a : *T). a -> String
 show = undefined @(forall (a : *T). a -> String)
 
+type Diverge : *T
+type Diverge = ()
+
 -- ** Tuples
 
 fst : forall (a : 1T) (b : *T) . (a, b) -> a
@@ -220,7 +223,7 @@ close = undefined @(Close -> ())
 -- |   -- create channel endpoints
 -- |   let (c, s) = new @(?String ; Wait) () in
 -- |   -- fork a thread that prints the received value (and closes the channel)
--- |   fork (\_:() 1-> c |> receiveAndWait @String |> putStrLn);
+-- |   fork (\(_ : ()) 1-> c |> receiveAndWait @String |> putStrLn);
 -- |   -- send a string through the channel (and close it)
 -- |   s |> send "Hello!" |> close
 -- | ```

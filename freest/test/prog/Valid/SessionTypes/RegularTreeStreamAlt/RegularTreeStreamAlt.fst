@@ -141,7 +141,7 @@ badClientSendOnlyValue c =
 main : Tree
 main =
   let (w, r) = channel @TreeC in
-  fork @() (\_:() 1-> treeClient w);
+  fork @() (\(_ : ()) 1-> treeClient w);
   --fork @() $ badClientPrematureEnd w;
   --fork @() $ badClientSendExtraValue w;
   --fork @() $ badClientSendExtraLeaf w;

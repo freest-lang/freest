@@ -31,7 +31,7 @@ type TreeC = +{LeafC: Skip, NodeC: !Int;TreeC;TreeC;?Int}
   returns a tree isomorphic to the input where each integer in nodes
   is read from the channel.
 -}
-transform : Tree -> TreeC ; a -> (Tree, a)
+transform : forall (a : 1S). Tree -> TreeC ; a -> (Tree, a)
 transform tree c =
   case tree of
     Leaf ->
@@ -49,7 +49,7 @@ transform tree c =
   writes back on the channel the sum of the elements in the tree;
   returns this sum.
 -}
-treeSum : Dual TreeC ; a -> (Int, a)
+treeSum : forall (a : 1S). Dual TreeC ; a -> (Int, a)
 treeSum c =
   case c of
     LeafC c ->
@@ -67,7 +67,7 @@ aTree = Node 1 (Node 2 (Node 8 Leaf Leaf) (Node 3 (Node 5 Leaf Leaf) (Node 4 Lea
 
 main =
   let (w, r) = channel @(TreeC;Wait) in
-  fork @() (\_:()1-> close $ snd @Int @Close $ treeSum @Close r);
+  fork @() (\(_ : ()) 1-> close $ snd @Int @Close $ treeSum @Close r);
   let (t, w) = transform @Wait aTree w in
   wait w;
   t

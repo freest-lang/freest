@@ -1,7 +1,7 @@
 module PolySUTL where
 
-id' : a -> a
-id' x = x
+id' : forall (a : 1T). a -> a
+id' @a x = x
 
 f : Int 1-> Int
 f x = 2 * x

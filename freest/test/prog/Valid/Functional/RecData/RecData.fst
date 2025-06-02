@@ -5,7 +5,7 @@ data T = C T
 
 -- Not bound to terminate
 main : T
-main = C main
-
--- main : Int
--- main = 2
+main = go ()
+  where 
+    go : () -> T
+    go _ = C (main ())

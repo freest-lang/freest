@@ -16,7 +16,7 @@ type TreeChannel = +{
   NodeC: !Int ; TreeChannel ; TreeChannel
  }
 
-write : Tree -> TreeChannel; a -> a
+write : forall (a : 1S). Tree -> TreeChannel; a -> a
 write t c =
   case t of
     Leaf ->
@@ -44,7 +44,7 @@ aTree = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf
 
 main =
   let (writer, reader) = channel @(TreeChannel;Close) in
-  fork  @() (\_:()1-> write  @Close aTree writer |> close);
+  fork  @() (\(_ : ()) 1-> write  @Close aTree writer |> close);
   let (tree, reader) = read  @Wait reader in 
   wait reader;
   tree
