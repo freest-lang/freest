@@ -9,7 +9,7 @@ ints @c n c =
     then select Done c
     else ints @c (n - 1) (send @Int n @(Dual FiniteStream; c) (select More c))
 
-type Fold : 1S
+type Fold : 1C
 type Fold = FiniteStream;!Int;Wait
 
 foldClient : Int -> Dual Fold -> Int

@@ -11,7 +11,7 @@ module SendTreeHO where
 
 -- The channel type, as seen from the producer side
 
-type TreeChannel : 1S
+type TreeChannel : 1C
 type TreeChannel = TreeC ; Close
 
 type TreeC : 1S
