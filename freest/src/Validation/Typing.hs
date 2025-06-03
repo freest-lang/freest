@@ -368,7 +368,7 @@ checkParams :: E.Exp
             -> [Level (E.Pat, Maybe T.Type) (Variable, Maybe K.Kind)]
             -> T.Type
             -> Validation (T.Type, KindCtx, TypeCtx)
-checkParams e t kctx tctx = checkParams' 1 kctx tctx
+checkParams e t kctx tctx = checkParams' 0 kctx tctx
   where
     checkParams' n kctx' tctx' ps t' = gets typeDecls >>= \tds -> case (ps, t') of
     -- regular cases first
@@ -396,7 +396,7 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
       ([], t') -> return (t', kctx' Map.\\ kctx, tctx' Map.\\ tctx)
       -- too many arguments
       (as, t') -> do
-        throwE (GivenTooManyArgs (getSpan e) e t n (n+length as))
+        throwE (ExpectsTooManyArgs (getSpan e) e t n (n + length as))
 
 -- | Check-against for patterns. Given a kind context, it checks whether a 
 -- pattern can match a given type, throwing an error if it cannot. It returns a 
