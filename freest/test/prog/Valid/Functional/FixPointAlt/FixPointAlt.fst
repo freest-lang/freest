@@ -7,11 +7,11 @@ module FixPointAlt where
 -- fix' : forall a . ((a -> a) -> (a -> a)) -> (a -> a)
 -- fix' f = f (fix' @a f) 
 
-fix' : ((a -> a) -> (a -> a)) -> a -> a
-fix' f x = f (fix' @a f) x
+fix' : forall (a : *T). ((a -> a) -> (a -> a)) -> a -> a
+fix' @a f x = f (fix' @a f) x
 
 fact : Int -> Int
-fact = fix'  @Int (\f:(Int -> Int) -> (\n:Int ->
+fact = fix'  @Int (\(f : Int -> Int) -> (\(n : Int) ->
   if n == 0 then 1 else n * f (n - 1)))
 
 main : Int

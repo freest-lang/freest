@@ -11,6 +11,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
+import Syntax.Names 
 import Syntax.Type qualified as T
 import UI.Error
 import Utils
@@ -109,6 +110,26 @@ synth kctx tctx = \case
     (t,) <$> check kctx tctx' e2 t
   E.DCons s i     -> lookupType kctx tctx (Right i)
   E.Var s x       -> lookupType kctx tctx (Left  x)
+  -- send e1 e2
+  E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do  -- TODO: remove magic constants (and refactor Syntax.Names).
+    (t, tctx') <- synth kctx tctx e2                                            -- (or not, since these cases are temporary...)
+    (t1, t2) <- Expose.output e2 t
+    (t2,) <$> check kctx tctx' e1 t1
+  -- receive e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
+    (t, tctx') <- synth kctx tctx e
+    (t1, t2) <- Expose.input e t
+    return (T.Tuple s [t1,t2], tctx')
+  -- fork e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
+    (t, tctx') <- synth kctx tctx e
+    (m, t1, t2) <- Expose.function e t
+    Kinding.check kctx t2 (K.ut (getSpan e))
+    checkEquivTypes (Left e) 
+      (T.AppArrow (getSpan e) m t1 t2) 
+      (T.AppArrow (getSpan e) K.Lin (T.DName s (mkUnitId s)) t2)
+    return (T.DName s (mkUnitId s), tctx')
+  -- select l e1 ... en
   E.App s f@(E.Select _ i) as ->
     case as of
       [] -> throwE (PartiallyAppliedSelect s i)
@@ -235,6 +256,22 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     (u, tctx') <- lookupType kctx tctx (Left x)
     checkEquivTypes (Left e) t u
     return tctx'
+  -- send e1 e2
+  E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do -- TODO: remove magic constants (and refactor Syntax.Names).
+    (u, tctx') <- synth kctx tctx e                                            -- (or not, since these cases are temporary...)
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- receive e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
+    (u, tctx') <- synth kctx tctx e
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- fork e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
+    (u, tctx') <- synth kctx tctx e
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- select l e1 ... en
   E.App s f@(E.Select _ i) as -> do
     case as of
       [] -> throwE (PartiallyAppliedSelect s i)
@@ -396,7 +433,7 @@ checkParams :: E.Exp
             -> [Level (E.Pat, Maybe T.Type) (Variable, Maybe K.Kind)]
             -> T.Type
             -> Validation (T.Type, KindCtx, TypeCtx)
-checkParams e t kctx tctx = checkParams' 1 kctx tctx
+checkParams e t kctx tctx = checkParams' 0 kctx tctx
   where
     checkParams' n kctx' tctx' ps t' = gets typeDecls >>= \tds -> case (ps, t') of
     -- regular cases first
@@ -424,7 +461,7 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
       ([], t') -> return (t', kctx' Map.\\ kctx, tctx' Map.\\ tctx)
       -- too many arguments
       (as, t') -> do
-        throwE (GivenTooManyArgs (getSpan e) e t n (n+length as))
+        throwE (ExpectsTooManyArgs (getSpan e) e t n (n + length as))
 
 -- | Check-against for patterns. Given a kind context, it checks whether a 
 -- pattern can match a given type, throwing an error if it cannot. It returns a 

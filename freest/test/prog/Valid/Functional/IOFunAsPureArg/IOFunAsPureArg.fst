@@ -9,5 +9,5 @@ sender c i = send (i * 2) c |> close
 main : Bool
 main =
   let (s, r) = channel @(!Int;Close) in
-  fork @() (\_:()1-> sender s 5);
+  fork @() (\(_ : ()) 1-> sender s 5);
   (div (f r) 2) == 5

@@ -10,6 +10,7 @@ type Stream = +{
 -}
 module ArithExprServerRegular1 where 
 
+type StreamClient, StreamServer : 1C
 type StreamClient = +{ Add  : StreamClient
                      , Mult : StreamClient
                      , Const: !Int ; StreamClient
@@ -37,6 +38,7 @@ client c = c |> select Const
   The evaluator reads from a stream and returns the result.
 -}
 
+type IntList : *T
 data IntList = Nil | Cons Int IntList
 
 err : Int
@@ -61,7 +63,7 @@ head2 l =
 evaluate : StreamServer -> IntList 1-> ()
 evaluate s l =
   case s of
-    &Const s -> let (n, s) = receive s in evaluate s (Cons n l),
+    &Const s -> let (n, s) = receive s in evaluate s (Cons n l)
     &Add s   -> let (p, l) = head2 l in let (x, y) = p in evaluate s (Cons (x + y) l)
     &Mult s  -> let (p, l) = head2 l in let (x, y) = p in evaluate s (Cons (x * y) l)
     &EOS s   -> send (headSingleton l) s |> wait
@@ -71,5 +73,5 @@ evaluate s l =
 main : Int
 main =
   let (c, s) = channel @StreamClient in
-  let _ = fork @() (\_:() 1-> evaluate s Nil) in
+  let _ = fork @() (\(_ : ()) 1-> evaluate s Nil) in
   client c

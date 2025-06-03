@@ -145,6 +145,36 @@ case Dual (exists (a : 1S). Dual a)
   == forall (b : 1S). b 
    : 1S
 
+case InCharStream;Wait == Dual (OutCharStream;Close) : 1C
+where
+  type InCharStream, OutCharStream : 1S
+  type InCharStream = &{Done: Skip, More: ?Char;InCharStream}
+  type OutCharStream = Dual InCharStream
+  
+
+case (Dual TreeC);Wait == Dual TreeChannel : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close); TreeC
+    }
+
+case Dual (?Int; NEStack; NEStack); Dual EStack; Close == !Int; Dual (NEStack; NEStack; EStack); Close : 1C
+where
+  type EStack, NEStack : 1S
+  type  EStack = &{Push: ?Int; NEStack; EStack,  Stop: Skip}
+  type NEStack = &{Push: ?Int; NEStack; NEStack, Pop: !Int}
+
+case Dual Fold == Dual FiniteStream; ?Int; Close : 1C
+where
+  type FiniteStream : 1S
+  type FiniteStream = &{Done: Skip, More: ?Int;FiniteStream}
+  type Fold : 1C
+  type Fold = FiniteStream;!Int;Wait
 
 -- Unrestricted sessions
 

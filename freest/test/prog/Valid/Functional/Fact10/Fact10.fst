@@ -9,7 +9,7 @@ sendInt @a i c =
     select {- abc -} Enough c -- abc
   else
     let c = select More c in
-    let c = send @Int @(Choice;a) i c in
+    let c = send @Int i @(Choice;a) c in
     sendInt @a (i - 1) c
 
 rcvInt : forall (a : 1S). Int -> (Dual Choice);a -> (Int, a)
@@ -24,6 +24,6 @@ rcvInt @a acc c =
 main : Int
 main =
   let (w, r) = channel @(Choice;Close)
-      _ = fork @() (\_:() 1-> sendInt @Close 10 w |> close)
+      _ = fork @() (\(_ : ()) 1-> sendInt @Close 10 w |> close)
       (i, r) = rcvInt @Wait 1 r 
   in wait r; i

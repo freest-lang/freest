@@ -6,6 +6,10 @@ module Prelude where
 undefined : forall (a : *T). a
 undefined @a = undefined @a
 
+-- * Error
+error : forall (a : *T) . String -> a
+error = undefined @(forall (a : *T) . String -> a)
+
 -- * Standard types, classes and related functions
 
 -- ** Basic datatypes
@@ -52,6 +56,9 @@ type String = [Char]
 
 show : forall (a : *T). a -> String
 show = undefined @(forall (a : *T). a -> String)
+
+type Diverge : *T
+type Diverge = ()
 
 -- ** Tuples
 
@@ -220,7 +227,7 @@ close = undefined @(Close -> ())
 -- |   -- create channel endpoints
 -- |   let (c, s) = new @(?String ; Wait) () in
 -- |   -- fork a thread that prints the received value (and closes the channel)
--- |   fork (\_:() 1-> c |> receiveAndWait @String |> putStrLn);
+-- |   fork (\(_ : ()) 1-> c |> receiveAndWait @String |> putStrLn);
 -- |   -- send a string through the channel (and close it)
 -- |   s |> send "Hello!" |> close
 -- | ```

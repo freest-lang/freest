@@ -7,8 +7,8 @@ type SendList, RecvList : 1S
 type SendList = +{Nil: Skip, Cons: !Int;SendList}
 type RecvList = Dual SendList
 
-flatten : List -> SendList;a -> a
-flatten l c =
+flatten : forall (a : 1S). List -> SendList;a -> a
+flatten @a l c =
   case l of
     Nil -> select Nil c
     Cons h t ->
@@ -16,8 +16,8 @@ flatten l c =
       let c = send h c in
       flatten @a t c
 
-reconstruct : RecvList;a -> (List, a)
-reconstruct c =
+reconstruct : forall (a : 1S). RecvList;a -> (List, a)
+reconstruct @a c =
   case c of
     &Nil c -> (Nil, c)
     &Cons c ->
@@ -31,7 +31,7 @@ aList = Cons 5 (Cons 7 (Cons 2 (Cons 6 (Cons 3 Nil))))
 
 main =
   let (w, r) = channel @(SendList;Close) in
-  fork @() (\_:()1-> flatten @Close aList w |> close);
+  fork @() (\(_ : ()) 1-> flatten @Close aList w |> close);
   let (l, c) = reconstruct @Wait r in 
   wait c;
   l

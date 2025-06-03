@@ -13,6 +13,7 @@ computes its value and returns the value on the same channel.
 -}
 module ArithExprServer where
 
+type TermChannel : 1S
 type TermChannel  = +{
    Const: !Int,
    Add: TermChannel;TermChannel,
@@ -58,5 +59,5 @@ client c = c |> select Add
 main : Int
 main =
   let (w, r) = channel @(Dual TermChannel ; !Int ; Close) in
-  fork @() (\_:() 1-> computeService w);
+  fork @() (\(_ : ()) 1-> computeService w);
   client r
