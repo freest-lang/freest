@@ -24,126 +24,119 @@ type D = +{ Lt : T;D, Dollar : Skip }
 type T = +{ Lt : T;T, Gt : Skip }
 
 -- Read from a channel; print what is read
-readT : forall (a : 1S). Dual T;a -> a
+readT : forall (a : 1S). (Dual T; a) -> a
 readT @a c =
   case c of
     &Lt c ->
-      (;) @() @a 
-        (putStr (show @Char '<'))
-        (readT @a (readT @(Dual T ; a) c))
+      putStr (show @Char '<');
+      readT @a (readT @(Dual T; a) c)
     &Gt c ->
-      (;) @() @a
-        (putStr (show @Char '>'))
-        c
+      putStr (show @Char '>');
+      c
 
-readD : forall (a : 1S). Dual D;a -> a
+readD : forall (a : 1S). (Dual D; a) -> a
 readD @a c =
   case c of
     &Lt c ->
-      (;) @() @a
-        (print @Char '<')
-        (readD @a (readT @(Dual D ; a) c))
+      print @Char '<';
+      readD @a (readT @(Dual D; a) c)
     &Dollar c ->
-      (;) @() @a
-        (putStr (show  @Char '$'))
-        c
+      putStr (show  @Char '$');
+      c
 
-forwardT : forall (a b : 1S). Dual T;a -> T;b 1-> (a, b)
+forwardT : forall (a b : 1S). (Dual T; a) -> (T; b) 1-> (a, b)
 forwardT @a @b i o =
   case i of
     &Lt i ->
-      let o = select Lt o in
-      let (i, o) = forwardT @(Dual T ; a) @(T ; b) i o in
+      let (i, o) = forwardT @(Dual T; a) @(T; b) i (select Lt o) in
       forwardT @a @b i o
-    &Gt i ->
-      let o = select Gt o in
-      (i, o)
+    &Gt i -> 
+      (i, select Gt o)
 
 -- Read from a channel and immediately write on another channel
-forwardD : forall (a b : 1S). Dual D;a -> D;b 1-> (a, b)
+forwardD : forall (a b : 1S). (Dual D; a) -> (D; b) 1-> (a, b)
 forwardD @a @b i o =
   case i of
     &Lt i ->
-      let o = select Lt o in
-      let (i, o) = forwardT @(Dual D ; a) @(D ; b) i o in
+      let (i, o) = forwardT @(Dual D; a) @(D; b) i (select Lt o ) in
         forwardD @a @b i o
-    &Dollar i ->
-      let o = select Dollar o in
-         (i, o)
+    &Dollar i -> 
+      (i, select Dollar o)
 
-concatT : forall (a b c : 1S). Dual T;a -> b 1-> T;c 1-> (a, (b, c))
+concatT : forall (a b c : 1S). (Dual T; a) -> b 1-> (T; c) 1-> (a, b, c)
 concatT @a @b @c i1 i2 o =
   case i1 of
     &Lt i1 ->
-      let o = select Lt o in
-      let (i1, i2o) = concatT @(Dual T ; a) @b @(T ; c) i1 i2 o in
-      let (i2, o) = i2o in
+      let (i1, i2, o) = concatT @(Dual T ; a) @b @(T ; c) i1 i2 (select Lt o) in
       concatT @a @b @c i1 i2 o
     &Gt i1 ->
       let o = select Gt o in
-      (i1, (i2, o))
+      (i1, i2, o)
 
 -- Read from a channel; read from a second channel; while writing on a
 -- third channel
-concatD : forall (a b c : 1S). Dual D;a -> Dual D;b 1-> D;c 1-> (a, (b, c))
+concatD : forall (a b c : 1S). (Dual D; a) -> (Dual D; b) 1-> (D; c) 1-> (a, b, c)
 concatD @a @b @c in1 in2 out =
   case in1 of 
     &Lt in1 ->
       let out = select Lt out in
-      let (in1, in2out) = concatT @(Dual D ; a) @(Dual D ; b) @(D ; c) in1 in2 out in
-      let (in2, out) = in2out in
+      let (in1, in2, out) = concatT @(Dual D ; a) @(Dual D ; b) @(D ; c) in1 in2 out in
       concatD @a @b @c in1 in2 out
     &Dollar in1 ->
       let (in2, out) = forwardD @b @c in2 out in
-      (in1, (in2, out))
+      (in1, in2, out)
     -- forwardD : forall a . forall b . Dual D;a -> D;b -> (a, b)
 
 -- A few functions to write on channels
-writeLtGt, writeDollar, writeLtLtGtGtLtGt, writeLtLtGtLtGtGt : D;Close -> Close
+writeLtGt, writeDollar, writeLtLtGtGtLtGt, writeLtLtGtLtGtGt : (D; Close) -> Close
 
 writeLtGt c =
-  select Dollar (select Gt (select Lt c))
+  c |> select Lt |> select Gt |> select Dollar
 
-writeDollar c = select Dollar c
+writeDollar c = 
+  c |> select Dollar
 
 writeLtLtGtGtLtGt c =
-  select Dollar (select Gt (select Lt (select Gt (select Gt (select Lt (select Lt c))))))
+  c |> select Lt |> select Lt 
+                 |> select Gt 
+    |> select Gt 
+    |> select Lt 
+    |> select Gt 
+    |> select Dollar
 
 writeLtLtGtLtGtGt c =
-  select Dollar (select Gt (select Gt (select Lt (select Gt (select Lt (select Lt c))))))
+  c |> select Lt |> select Lt
+                 |> select Gt 
+                 |> select Lt
+                 |> select Gt
+    |> select Gt
+    |> select Dollar
 
 -- Putting it all together: out1 -> in1-out2 --> in2
 mainForward : ()
 mainForward =
-  let (out1, in1) = channel @(D;Close) in
-  let (out2, in2) = channel @(D;Close) in
-  (;) @() @()
-    (fork @() (\(_:()) 1-> close (writeLtLtGtGtLtGt out1)))
-    ((;) @() @()
-      (fork @() (\(_:()) 1-> 
-        let (c1, c2) = forwardD @Wait @Close in1 out2 in 
-        (;) @() @() 
-          (wait c1) 
-          (close c2)))
-      (wait (readD @Wait in2)))
+  let (out1, in1) = channel @(D; Close) in
+  let (out2, in2) = channel @(D; Close) in
+  fork (\(_ : ()) 1-> out1 |> writeLtLtGtGtLtGt |> close);
+  fork (\(_ : ()) 1-> 
+      let (c1, c2) = forwardD @Wait @Close in1 out2 in 
+      wait c1;
+      close c2
+    );
+  in2 |> readD @Wait |> wait
 
 -- Putting it all together: (out1 | out2) --> in1-in2-out3 --> in3
 main : ()
 main =
-  let (out1, in1) = channel @(D;Close) in
-  let (out2, in2) = channel @(D;Close) in
-  let (out3, in3) = channel @(D;Close) in
-  (;) @() @()
-    (fork @() (\(_:()) 1-> close (writeLtLtGtGtLtGt out1)))
-    ((;) @() @() 
-      (fork @() (\(_:()) 1-> close (writeLtLtGtLtGtGt out2)))
-      ((;) @() @() 
-        (fork @() (\(_:()) 1-> 
-          let (c1, c23) = concatD @Wait @Wait @Close in1 in2 out3 in 
-          let (c2, c3 ) = c23 in 
-          (;) @() @()
-            (wait c1)
-            ((;) @() @() 
-              (wait c2)
-              (close c3))))
-        (wait (readD @Wait in3))))
+  let (out1, in1) = channel @(D; Close) in
+  let (out2, in2) = channel @(D; Close) in
+  let (out3, in3) = channel @(D; Close) in
+  fork @() (\(_ : ()) 1-> out1 |> writeLtLtGtGtLtGt |> close);
+  fork @() (\(_ : ()) 1-> out1 |> writeLtLtGtLtGtGt |> close);
+  fork @() (\(_ : ()) 1-> 
+      let (c1, c2, c3) = concatD @Wait @Wait @Close in1 in2 out3 in
+      wait c1; 
+      wait c2; 
+      close c3
+    );
+  in3 |> readD @Wait |> wait

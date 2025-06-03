@@ -6,5 +6,5 @@ apply f = f
 main : ()
 main =
     let (r, w) = channel @(?Int;Wait) in
-    let _ = fork  @() (\(_:())1-> wait (snd @Int @Wait (apply (receive  @Int @Wait) r))) in
-    close (send @Int 5 @Close w)
+    fork  @() (\(_ : ()) 1-> r |> apply (receive @Int @Wait) |> snd @Int @Wait |> wait);
+    w |> send 5 |> close

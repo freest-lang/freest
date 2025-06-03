@@ -14,18 +14,16 @@ boolServer c =
     &And c ->
       let (n1, c) = receive c in
       let (n2, c) = receive c in
-      let c = send (n1 && n2) c in
-      boolServer c
+      c |> send (n1 && n2) |> boolServer
     &Or c ->
       let (n1, c) = receive c in
       let (n2, c) = receive c in
-      let c = send (n1 || n2) c in
-      boolServer c
+      c |> send (n1 || n2) |> boolServer
     &Not c ->
       let (n, c) = receive c in
       -- let c = send c (not n) in
       -- boolServer c,
-      (boolServer (send (not n) c))
+      c |> send (not n)   |> boolServer
     &Done c -> wait c
 
 client1 : BoolClient -> Bool
@@ -37,11 +35,11 @@ client1 c =
   let (y, c) = c |> select Not
                  |> send x 
                  |> receive in
-  c |> select Done |> close ;
+  c |> select Done |> close;
   y
 
 main : Bool
 main =
   let (w, r) = channel @BoolClient in
-  let x = fork @() (\(_ : ()) 1-> boolServer r) in
+  fork (\(_ : ()) 1-> boolServer r);
   client1 w

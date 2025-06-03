@@ -9,14 +9,14 @@ type IListW = +{NilC: Skip, ConsC: !Int; IListW}
 iListW : forall (a : 1S). IList -> IListW;a -> a
 iListW @a xs c =
   case xs of
-    Nil -> select NilC c
-    Cons x xs -> iListW  @a xs (send @Int x @(IListW;a) (select ConsC c))
+    Nil -> c |> select NilC
+    Cons x xs -> c |> select ConsC |> send x |> iListW @a xs
 
 iListR : forall (a : 1S). (Dual IListW);a -> (IList, a)
 iListR @a c =
   case c of
     &NilC c  -> (Nil, c)
-    &ConsC c -> let (x, c) = receive @Int @((Dual IListW);a) c in
+    &ConsC c -> let (x, c) = receive c in
                 let (xs, c) = iListR @a c in
                 (Cons x xs, c)
 
@@ -24,7 +24,7 @@ iFold : forall (a : 1T) (b : 1S). a -> (Int -> a -> a) 1-> (Dual IListW);b 1-> (
 iFold @a @b n f c =
   case c of
     &NilC c  -> (n, c)
-    &ConsC c -> let (m, c) = receive @Int @((Dual IListW);b) c in
+    &ConsC c -> let (m, c) = receive c in
                 let (n, c) = iFold  @a @b n f c in
                 (f m n, c)
 
@@ -35,7 +35,7 @@ iLength : forall (a : 1S). (Dual IListW);a -> (Int, a)
 iLength @a c =
   case c of
     &NilC c  -> (0, c)
-    &ConsC c -> let (m, c) = receive @Int @((Dual IListW);a) c in
+    &ConsC c -> let (m, c) = receive c in
                 let (n, c) = iLength  @a c in
                 (m + n, c)
 
@@ -48,6 +48,7 @@ aList = Cons 5 (Cons 3 (Cons 7 (Cons 1 Nil)))
 main : Int
 main = 
   let (w, r) = channel @(IListW;Close) in
-  (;) @() @() 
-    (fork @() (\(_ : ()) 1-> close (iListW @Close aList w)))
-    (let (i, r) = iLength' @Wait r in (;) @() @Int (wait r) i)
+  fork (\(_ : ()) 1-> iListW @Close aList w |> close);
+  let (i, r) = iLength' @Wait r in 
+  wait r;
+  i

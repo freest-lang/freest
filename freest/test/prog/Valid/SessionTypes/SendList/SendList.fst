@@ -8,20 +8,22 @@ type ListC = &{NilC: Wait, ConsC: ?Int ; ListC}
 
 read : ListC -> List
 read (&ConsC c) =
-  let (x, c) = receive @Int @ListC c in
+  let (x, c) = receive c in
   Cons x (read c)
-read (&NilC c) = 
-  let _ = wait c in 
-  Nil
+read (&NilC c) = wait c; Nil
 
 write : List -> Dual ListC -> ()
 write (Cons x xs) c =
-  write xs (send @Int x @(Dual ListC) (select ConsC c))
+  c |> select ConsC
+    |> send x
+    |> write xs
 write Nil c =
-  close (select NilC c)
+  c |> select NilC
+    |> close
 
-aList, main : List
-
+aList : List
 aList = Cons 2 (Cons 3 (Cons 4 (Cons 5 Nil)))
-main = read (forkWith @ListC @() (write aList))
+
+main : List
+main = forkWith @ListC @() (write aList) |> read
 

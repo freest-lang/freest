@@ -234,7 +234,7 @@ close = undefined @(Close -> ())
 receiveAndWait : forall (a : 1T). ?a ; Wait -> a 
 receiveAndWait @a c =
   let (x, c) = receive @a @Wait c in 
-  let _ = wait c in
+  wait c;
   x
 
 -- | As in receiveAndWait only that the type is Wait and the function closes the
@@ -242,23 +242,23 @@ receiveAndWait @a c =
 receiveAndClose : forall (a : 1T). ?a ; Close -> a 
 receiveAndClose @a c =
   let (x, c) = receive @a @Close c in 
-  let _ = close c in
+  close c;
   x
 
 -- | Sends a value on a given channel and then waits for the channel to be
 -- | closed. Returns ().
 sendAndWait : forall (a : 1T). a -> !a ; Wait 1-> ()
-sendAndWait @a x c = wait (send @a x @Wait c)
+sendAndWait @a x c = c |> send x |> wait
 
 -- | Sends a value on a given channel and then closes the channel.
 -- | Returns ().
 sendAndClose : forall (a : 1T). a -> !a ; Close 1-> ()
-sendAndClose @a x c = close (send @a x @Close c)
+sendAndClose @a x c = c |> send x |> close
 
 forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
 forkWith @a @b f =
   let (x, y) = channel @a in
-  let _ = fork @b (\(_ : ()) 1-> f y) in 
+  fork (\(_ : ()) 1-> f y);
   x
 
 -- ** Standard I/O

@@ -19,35 +19,35 @@ type NEStack = &{Push: ?Int; NEStack; NEStack, Pop: !Int}
 neStack : forall (a : 1S). Int -> NEStack;a -> a
 neStack @a x c =
   case c of
-    &Push c -> let (y, c) = receive @Int @(NEStack; NEStack; a) c in neStack @a x (neStack @(NEStack ; a) y c)
-    &Pop  c -> send @Int x @a c
+    &Push c -> let (y, c) = receive c in neStack @a x (neStack @(NEStack; a) y c)
+    &Pop  c -> send x c
 
 eStack : forall (a : 1S). EStack;a -> a
 eStack @a c =
   case c of 
-    &Push c -> let (x, c) = receive @Int @(NEStack; EStack; a) c in eStack @a (neStack @(EStack ; a) x c)
-    &Stop  c -> c
+    &Push c -> let (x, c) = receive c in eStack @a (neStack @(EStack; a) x c)
+    &Stop c -> c
 
 aStackClient : Dual EStack;Close -> Int
 aStackClient c =
-  let c = select Push c in let c      = send @Int 5 @(Dual (NEStack; EStack); Close) c in
-  let c = select Pop  c in let (_, c) = receive @Int @(Dual EStack; Close) c in
-  let c = select Push c in let c      = send @Int 7  @(Dual (NEStack; EStack); Close) c in
-  let c = select Push c in let c      = send @Int 9  @(Dual (NEStack; NEStack; EStack); Close) c in
-  let c = select Push c in let c      = send @Int 11 @(Dual (NEStack; NEStack; NEStack; EStack); Close) c in
-  let c = select Push c in let c      = send @Int 13 @(Dual (NEStack; NEStack; NEStack; NEStack; EStack); Close) c in
-  let c = select Pop  c in let (_, c) = receive @Int @(Dual (NEStack; NEStack; NEStack; EStack); Close) c in
-  let c = select Pop  c in let (_, c) = receive @Int @(Dual (NEStack; NEStack; EStack); Close) c in
-  let c = select Pop  c in let (_, c) = receive @Int @(Dual (NEStack; EStack); Close) c in
-  let c = select Pop  c in let (x, c) = receive @Int @(Dual (EStack); Close) c in
+  let c = select Push c in let c      = send  5 c in
+  let c = select Pop  c in let (_, c) = receive c in
+  let c = select Push c in let c      = send  7 c in
+  let c = select Push c in let c      = send  9 c in
+  let c = select Push c in let c      = send 11 c in
+  let c = select Push c in let c      = send 13 c in
+  let c = select Pop  c in let (_, c) = receive c in
+  let c = select Pop  c in let (_, c) = receive c in
+  let c = select Pop  c in let (_, c) = receive c in
+  let c = select Pop  c in let (x, c) = receive c in
   -- let c = select Pop  c in let (_, c) = receive c in
   -- Error: Branch Pop not present in internal choice type Dual EStack
-  let _ = close (select Stop  c) in 
-  x 
+  c |> select Stop |> close;
+  x
 
 main : Int
 main =
   let (r, w) = channel @(EStack;Wait) in
-  let _ = fork @() (\(_:()) 1-> wait (eStack @Wait r)) in
+  fork (\(_ : ()) 1-> r |> eStack @Wait |> wait);
   aStackClient w
     

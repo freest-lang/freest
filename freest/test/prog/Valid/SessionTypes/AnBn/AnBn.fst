@@ -23,18 +23,12 @@ type S1 = +{A: S1; +{B: Skip}, B: Skip}
 
 -- for each A selected a B is also selected
 client' : forall (a : 1S). Int -> S1;a -> a
-client' @a n c =
-  if n == 0
-  then
-    select B c                                  -- a
-  else
-    let c = select A c in                       -- S1; +{B: Skip}; a
-    let c = client' @(+{B: Skip} ; a) (n - 1) c in -- +{B: Skip}; a
-    select B c                                  -- a
+client' @a 0 c = c |> select B
+client' @a n c = c |> select A |> client' @(+{B: Skip} ; a) (n - 1) |> select B
 
 -- The client selects a given number of A's
 client : Int -> S0;Close -> ()
-client n c = close (client' @Close (n - 1) (select A c) )
+client n c = c |> select A |> client' @Close (n - 1) |> close
 
 -- For each A selected, a choice for B is also offered
 server' : forall (a : 1S). Dual S1; a -> a
@@ -47,11 +41,10 @@ server' @a c =
 
 -- The server offers the choice composed by A
 server : Dual S0;Wait -> ()
-server c = case c of &A c -> wait (server' @Wait c)
+server c = case c of &A c -> c |> server' @Wait |> wait
 
 main : ()
 main =
   let (w, r) = channel @(S0;Close) in
-  (;) @() @() 
-    (fork @() (\(_:()) 1-> client 25 w)) 
-    (server r)
+  fork (\(_ : ()) 1-> w |> client 25);
+  server r

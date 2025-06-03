@@ -7,4 +7,4 @@ const' : a -> forall b . b -> a
 const' x y = x 
 
 main : ()
-main = id' @() (const' @() () @Int 0) 
+main = id' @() (const' @() () @Int 0)

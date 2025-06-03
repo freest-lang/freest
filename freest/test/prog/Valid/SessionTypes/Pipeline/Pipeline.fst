@@ -26,7 +26,7 @@ type TermChannel  = +{
 -- Read an arithmetic expression in the front of a channel; compute
 -- its value; return the pair composed of this value and the channel
 -- residual.
-receiveEval : forall (a : 1S). Dual TermChannel;a -> (Int, a)
+receiveEval : forall (a : 1S). (Dual TermChannel; a) -> (Int, a)
 receiveEval @a c =
   case c of
     &Const c ->
@@ -42,26 +42,25 @@ receiveEval @a c =
 
 -- Read an arithmetic expression from a channel; compute its value;
 -- return the value on the same channel.
-computeService : Dual TermChannel;!Int;Close -> ()
+computeService : (Dual TermChannel; !Int; Close) -> ()
 computeService c =
   let (n1, c1) = receiveEval @(!Int ; Close) c in
   close (send @Int n1 @Close c1)
 
 -- Compute 5 + (7 * 9); return the result
-client : TermChannel;?Int;Wait -> Int
-client c =
-  receiveAndWait @Int
-    (send @Int 9 @(?Int;Wait)
-      (select Const
-        (send @Int 7 @(TermChannel;?Int;Wait)
-          (select Const 
-            (select Mult
-              (send @Int 5 @(TermChannel;?Int;Wait)
-                (select Const
-                  (select Add c))))))))
+client : (TermChannel; ?Int; Wait) -> Int
+client c = c |> select Add
+             |> select Const
+             |> send 5
+             |> select Mult
+             |> select Const
+             |> send 7
+             |> select Const
+             |> send 9
+             |> receiveAndWait @Int 
 
 main : Int
 main =
-  let (w, r) = channel @(Dual TermChannel;!Int;Close) in
-  let _ = fork @() (\(_:()) 1-> computeService w) in
+  let (w, r) = channel @(Dual TermChannel; !Int; Close) in
+  fork (\(_ : ()) 1-> computeService w);
   client r

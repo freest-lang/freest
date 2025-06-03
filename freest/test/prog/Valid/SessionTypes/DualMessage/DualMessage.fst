@@ -1,13 +1,13 @@
 module DualMessage where
 
 sendInt : !Int;Close -> ()
-sendInt c = close (send @Int 5 @Close c)
+sendInt c = c |> send 5 |> close
 
-receiveInt : Dual (Dual (Dual !Int;Wait)) -> Int
+receiveInt : Dual (Dual (Dual !Int; Wait)) -> Int
 receiveInt c = receiveAndWait @Int c
 
 main : Int
 main =
   let (w,r) = channel @(Dual !Int;Wait) in
-  let _ = fork @() (\(_:()) 1-> sendInt r) in 
+  fork @() (\(_ : ()) 1-> sendInt r);
   receiveInt w

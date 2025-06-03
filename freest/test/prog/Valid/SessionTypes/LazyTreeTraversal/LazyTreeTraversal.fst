@@ -49,7 +49,7 @@ mutual
   exploreNode @a c x l r =
     case c of
       &Value c ->
-        exploreNode @a (send @Int x @(XploreNodeChan;a) c) x l r
+        exploreNode @a (send x c) x l r
       &Left c ->
         let c = exploreTree @(XploreNodeChan ; a) c l in
         exploreNode @a c x l r
@@ -70,7 +70,7 @@ mutual
 
   serverNode : forall (a : 1S). Dual XploreNodeChan;a -> Int 1-> (a, Int)
   serverNode @a c n =
-    let (m, c) = receive @Int @(Dual XploreNodeChan ; a) (select Value c) in
+    let (m, c) = c |> select Value |> receive in
     if m == 0
     then (select Exit c, 0)
     else
@@ -85,9 +85,7 @@ aTree = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf
 main : Int
 main =
   let (writer, reader) = channel @(XploreTreeChan;Close) in
-  (;) @() @Int
-    (fork @() (\(_:()) 1-> close (exploreTree @Close writer aTree)))
-    (let (reader, n) = server @Wait reader 1 in
-    (;) @() @Int 
-      (wait reader) 
-      n)
+  fork @() (\(_:()) 1-> close (exploreTree @Close writer aTree));
+  let (reader, n) = server @Wait reader 1 in
+  wait reader;
+  n

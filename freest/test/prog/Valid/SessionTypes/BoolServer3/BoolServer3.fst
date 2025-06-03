@@ -13,29 +13,33 @@ boolServer :  BoolServer -> ()
 boolServer c =
   case c of
     &And c1 ->
-      let (n1, c2) = receive @Bool @(?Bool;!Bool;Wait) c1 in
-      let (n2, c3) = receive @Bool @(!Bool;Wait) c2 in
-      wait (send @Bool (n1 && n2) @Wait c3)
+      let (n1, c2) = receive c1 in
+      let (n2, c3) = receive c2 in
+      c3 |> send (n1 && n2) |> wait
     &Or c1 ->
-      let (n1, c2) = receive @Bool @(?Bool;!Bool;Wait) c1 in
-      let (n2, c3) = receive @Bool @(!Bool;Wait) c2 in
-      wait (send @Bool (n1 || n2) @Wait c3)
+      let (n1, c2) = receive c1 in
+      let (n2, c3) = receive c2 in
+      c3 |> send (n1 || n2) |> wait
     &Not c1 ->
-      let (n1, c2) = receive @Bool @(!Bool;Wait) c1 in
-      wait (send @Bool (not n1) @Wait c2)
+      let (n1, c2) = receive c1 in
+      c2 |> send (not n1)   |> wait
 
 client1 : BoolClient -> Bool
-client1 w = receiveAndClose @Bool (send @Bool False @(?Bool;Close) (send @Bool True @(!Bool;?Bool;Close) (select And w)))
+client1 w = w |> select And
+              |> send True
+              |> send False
+              |> receiveAndClose @Bool
 
 client2 : BoolClient -> Bool
-client2 w = receiveAndClose @Bool (send @Bool True @(?Bool;Close) (select Not w))
+client2 w = w |> select Not
+              |> send True
+              |> receiveAndClose @Bool
 
 startClient : (BoolClient -> Bool) -> Bool
 startClient client =
   let (w,r) = channel @BoolClient in
-  (;) @() @Bool
-    (fork @() (\(_:()) 1-> boolServer r))
-    (client w)
+  fork (\(_ : ()) 1-> boolServer r);
+  client w
 
 s1 : Bool
 s1 =

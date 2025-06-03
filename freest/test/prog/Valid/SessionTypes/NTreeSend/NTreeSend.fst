@@ -28,7 +28,7 @@ mutual
       Empty ->
         select Empty c
       Node i children ->
-        sendTreeList @a children (send @Int i @(TreeListChannel;a) (select Node c))
+        c |> select Node |> send i |> sendTreeList @a children
 
   sendTreeList : forall (a : 1S). TreeList -> TreeListChannel;a -> a
   sendTreeList @a list c =
@@ -36,7 +36,7 @@ mutual
       Nil ->
         select Nil c
       Cons tree rest ->
-        sendTreeList @a rest (sendTree @(TreeListChannel ; a) tree (select Cons c))
+        c |> select Cons |> sendTree @(TreeListChannel ; a) tree |> sendTreeList @a rest
 
 -- ===== RECEIVING =====
 
@@ -47,7 +47,7 @@ mutual
       &Empty c ->
         (Empty, c)
       &Node c ->
-        let (i, c)        = receive @Int @(Dual TreeListChannel; a) c in
+        let (i, c)        = receive c in
         let (children, c) = receiveTreeList @a c in
         (Node i children, c)
 
@@ -69,32 +69,26 @@ mutual
 --    7      8    6           4 5
 --   13    11 20
 aTree : Tree
-aTree = 
-  Node  0 
-        (Cons (Node 1 
-                    (Cons (Node 7 
-                                (Cons (Node 13 Nil) 
-                                Nil)) 
-                    (Cons (Node 8 
-                                (Cons (Node 11 Nil)
-                                (Cons (Node 20 Nil) 
-                                Nil))) 
-                    (Cons (Node 6 Nil) 
-                    Nil)))) 
-        (Cons (Node 2 Nil)
-        (Cons (Node 3 
-                    (Cons (Node 4 Nil) 
-                    (Cons (Node 5 Nil) 
-                    Nil))) 
-        Nil)))
+aTree = Node 0 $ Cons (Node 1 $ Cons (Node 7 $ Cons (Node 13 Nil)
+                                               Nil) $
+                                Cons (Node 8 $ Cons (Node 11 Nil) $
+                                               Cons (Node 20 Nil)
+                                               Nil) $
+                                Cons (Node 6 Nil)
+                                Nil) $
+                 Cons (Node 2 Nil) $
+                 Cons (Node 3 $ Cons (Node 4 Nil) $
+                                Cons (Node 5 Nil)
+                                Nil)
+                 Nil
 
 clientSendTree : TreeChannel;Close -> ()
-clientSendTree c = close (sendTree @Close aTree c)
+clientSendTree c = c |> sendTree @Close aTree c |> close
 
 main : Tree
 main =
   let (client, server) = channel @(TreeChannel;Close) in
-  fork @() (\(_:()) 1-> clientSendTree client);
+  fork (\(_ : ()) 1-> clientSendTree client);
   let (t, server) = receiveTree @Wait server in
-  let _ = wait server in
+  wait server;
   t

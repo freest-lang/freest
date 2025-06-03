@@ -21,22 +21,23 @@ type TreeC = &{
  }
 
 read : TreeC -> Tree
-read (&LeafC c) = (;) @() @Tree (wait c) Leaf
+read (&LeafC c) = wait c; Leaf
 read (&NodeC c) =
-  let (l, c) = receive @TreeC @(?Int;?TreeC;Wait) c in
-  let (x, c) = receive @Int @(?TreeC;Wait) c in
+  let (l, c) = receive c in
+  let (x, c) = receive c in
   let  r     = receiveAndWait @TreeC c in 
   Node (read l) x (read r)
 
-write : Tree -> Dual TreeC 1-> ()
-write Leaf c = close (select LeafC c)
+write : Tree -> Dual TreeC -> ()
+write Leaf c = c |> select LeafC |> close
 write (Node l x r) c =
-  close 
-    (send @TreeC (forkWith @TreeC @() (write r)) @Close
-      (send @Int x @(!TreeC;Close)
-        (send @TreeC (forkWith @TreeC @() (write l)) @(!Int;!TreeC;Close)
-          (select NodeC c))))
+  c |> select NodeC
+    |> send (forkWith @TreeC @() (write l))
+    |> send x
+    |> send (forkWith @TreeC @() (write r))
+    |> close
 
 main : Tree
 main =
-  read (forkWith @TreeC @() (write aTree))
+  forkWith @TreeC @() (write aTree) 
+    |> read
