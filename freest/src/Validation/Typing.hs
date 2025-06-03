@@ -11,6 +11,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
+import Syntax.Names 
 import Syntax.Type qualified as T
 import UI.Error
 import Utils
@@ -109,6 +110,25 @@ synth kctx tctx = \case
     (t,) <$> check kctx tctx' e2 t
   E.DCons s i     -> lookupType kctx tctx (Right i)
   E.Var s x       -> lookupType kctx tctx (Left  x)
+  -- send
+  E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do  -- TODO: remove magic constants (and refactor Syntax.Names).
+    (t, tctx') <- synth kctx tctx e2                                            -- (or not, since these cases are temporary...)
+    (t1, t2) <- Expose.output e2 t
+    (t2,) <$> check kctx tctx' e1 t1
+  -- receive
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
+    (t, tctx') <- synth kctx tctx e
+    (t1, t2) <- Expose.input e t
+    return (T.Tuple s [t1,t2], tctx')
+  -- fork
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
+    (t, tctx') <- synth kctx tctx e
+    (m, t1, t2) <- Expose.function e t
+    Kinding.check kctx t2 (K.ut (getSpan e))
+    checkEquivTypes (Left e) 
+      (T.AppArrow (getSpan e) m t1 t2) 
+      (T.AppArrow (getSpan e) K.Lin (T.DName s (mkUnitId s)) t2)
+    return (T.DName s (mkUnitId s), tctx')
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
     t' <- Expose.typeArrow f t
@@ -225,6 +245,19 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     return tctx'
   E.Var s x       -> do
     (u, tctx') <- lookupType kctx tctx (Left x)
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- send
+  E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do -- TODO: remove magic constants (and refactor Syntax.Names).
+    (u, tctx') <- synth kctx tctx e                                            -- (or not, since these cases are temporary...)
+    checkEquivTypes (Left e) t u
+    return tctx'
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
+    (u, tctx') <- synth kctx tctx e
+    checkEquivTypes (Left e) t u
+    return tctx'
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
+    (u, tctx') <- synth kctx tctx e
     checkEquivTypes (Left e) t u
     return tctx'
   E.App s f as -> do

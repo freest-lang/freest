@@ -15,6 +15,7 @@ import Syntax.Base
   mkPlusDotVar, mkMinusDotVar, mkTimesDotVar, mkDivDotVar, mkTimesTimesVar, mkNegateFVar,
   mkDollarVar, mkRTriangleVar, mkSemiVar, mkDotVar,
   mkPlusPlusVar, mkCaretCaretVar,
+  mkSend, mkReceive, mkFork,
   mkUndefinedVar
   :: Located a => a -> Variable
 mkOrVar = mkDefaultVar "(||)"
@@ -37,6 +38,9 @@ mkSemiVar = mkDefaultVar "(;)"
 mkDotVar = mkDefaultVar "(.)"
 mkPlusPlusVar = mkDefaultVar "(++)"
 mkCaretCaretVar = mkDefaultVar "(^^)"
+mkSend = mkDefaultVar "send"
+mkReceive = mkDefaultVar "receive"
+mkFork = mkDefaultVar "fork"
 mkUndefinedVar = mkDefaultVar "undefined"
 
 mkCmpVar :: Located a => String -> a -> Variable
