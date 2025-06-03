@@ -13,6 +13,8 @@ module Syntax.Expression
        , ConsPat
        , TuplePat
        )
+  , listPat
+  , stringPat
   , RHS(..)
   , LetDecl(..)
   , Exp( ..
@@ -20,6 +22,7 @@ module Syntax.Expression
        , Nil
        , Cons
        )
+  , listExp
   )
 where
 
@@ -52,10 +55,13 @@ pattern TuplePat :: Span -> [Pat] -> Pat
 pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
   where TuplePat s ps =  DConsPat s (mkTupleId (length ps - 1) s) ps
 
+listPat :: Span -> [Pat] -> Pat
+listPat s = \case
+  []       -> NilPat s
+  (p : ps) -> ConsPat s p (listPat s ps)
+
 stringPat :: Span -> String -> Pat
-stringPat s = \case
-  []     -> DConsPat s (mkNilId s) []
-  (c:cs) -> DConsPat s (mkConsId s) [CharPat s c, stringPat s cs]
+stringPat s = listPat s . map (CharPat s)
 
 data LetDecl
   = ValDef Pat      RHS
@@ -95,6 +101,9 @@ pattern Nil s t <- App s (DCons _ ((== mkNilId s) -> True)) [TypeLevel t]
 pattern Cons :: Span -> Exp -> Exp -> Exp 
 pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, ExpLevel e2]
   where Cons s e1 e2 =  App s (DCons s (mkConsId s)) (map ExpLevel [e1,e2])
+
+listExp :: Span -> Type -> [Exp] -> Exp
+listExp s t = foldr (Cons s) (Nil s t)
 
 instance Located Pat where
   getSpan = \case

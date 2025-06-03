@@ -44,9 +44,6 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 unOp :: E.Exp -> E.Exp -> E.Exp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
-listExp :: Span -> T.Type -> [E.Exp] -> E.Exp
-listExp s t = foldr (E.Cons s) (E.Nil s t)
-
 addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp
 addArgExp a (E.App s e as) = E.App s e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]

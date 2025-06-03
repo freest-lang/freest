@@ -124,7 +124,7 @@ import Data.List.NonEmpty qualified as NE
   INT_LIT { TkIntLit _ _ }
   FLOAT_LIT { TkFloatLit _ _ }
   CHAR_LIT { TkCharLit _ _ }
-  -- STRING_LIT {TkStringLit _ _ }
+  STRING_LIT {TkStringLit _ _ }
 
   -- Identifiers
   UPPER_ID { TkUpperId _ _ }  
@@ -363,7 +363,7 @@ ExpPrimary :: { E.Exp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
-  -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
+  | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1)) (map (E.Char (getSpan $1)) (getText $1)) }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
@@ -382,7 +382,7 @@ ExpPrimary :: { E.Exp }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
   | '(' Exp '-.' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusDotVar $3)) $2) }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
-  | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
+  | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
 Exp :: { E.Exp }
@@ -500,11 +500,11 @@ PatPrimary :: { E.Pat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
-  -- | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
+  | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
-  | '[' ']'          { E.NilPat (spanFromTo $1 $2) }
-  | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
+  | '[' PatListComma ']' { E.listPat (spanFromTo $1 $3) $2 }
+  | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
@@ -532,8 +532,12 @@ PatPrimaryOrAtVarListWS :: { [Level E.Pat Variable] }
   | '@' TypeVar  { [TypeLevel $2] }
 
 PatListComma :: { [E.Pat] }
+  : {- empty -} { [] }
+  | PatNEListComma { $1 }
+
+PatNEListComma :: { [E.Pat] }
   : Pat { [$1] }
-  | Pat ',' PatListComma { $1 : $3 }
+  | Pat ',' PatNEListComma { $1 : $3 }
 
 LetDeclBlock :: { [E.LetDecl] }
   : OPEN LetDeclListPIPE Close { $2 }
