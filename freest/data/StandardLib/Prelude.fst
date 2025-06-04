@@ -77,6 +77,30 @@ curry @a @b @c f x y =  f (x, y)
 uncurry : forall (a b c : 1T). (a -> b -> c) -> ((a, b) -> c)
 uncurry @a @b @c f (x, y) =  f x y
 
+-- ** Lists
+(++) : forall (a : 1T). [a] -> [a] -> [a]
+(++) @a []      ys = ys
+(++) @a (x::xs) ys = x :: ((++) @a xs ys) 
+
+head : forall (a : *T). [a] -> a
+head @a []       = error @a "*** List.head: empty list"
+head @a (x :: _) = x
+
+last : forall (a : *T). [a] -> a
+last @a []        = error @a "*** List.last: empty list"
+last @a (x :: []) = x
+last @a (_ :: xs) = last @a xs
+
+tail : forall (a : *T). [a] -> [a]
+tail @a []        = error @[a] "*** List.tail: empty list"
+tail @a (_ :: []) = [] @a
+tail @a (_ :: xs) = xs
+
+init : forall (a : *T). [a] -> [a]
+init @a []        = error @[a] "*** List.init: empty list"
+init @a (_ :: []) = [] @a
+init @a (x::xs)   = x :: init @a xs
+
 -- ** Comparison (only Int and Float, for now)
 (<), (<=), (==), (>=), (>), (/=) : Int -> Int -> Bool
 (< ) = undefined @(Int -> Int -> Bool)
@@ -201,7 +225,7 @@ until @a p f = go
 (;) : forall (a : *T) (b : 1T). a -> b -> b
 (;) @a @b _ x = x
 
--- ** Concurrency
+-- * Concurrency
 
 fork : forall (a : *T). (() 1-> a) -> ()
 fork = undefined @(forall (a : *T). (() 1-> a) -> ())
@@ -217,6 +241,16 @@ wait = undefined @(Wait -> ())
 
 close : Close -> ()
 close = undefined @(Close -> ())
+
+-- | Sends a value on a given channel and then waits for the channel to be
+-- | closed. Returns ().
+sendAndWait : forall (a : 1T). a -> !a ; Wait 1-> ()
+sendAndWait @a x c = c |> send x |> wait
+
+-- | Sends a value on a given channel and then closes the channel.
+-- | Returns ().
+sendAndClose : forall (a : 1T). a -> !a ; Close 1-> ()
+sendAndClose @a x c = c |> send x |> close
 
 -- | Receives a value from a channel that continues to `Wait`, closes the 
 -- | continuation and returns the value.
@@ -245,15 +279,38 @@ receiveAndClose @a c =
   close c;
   x
 
--- | Sends a value on a given channel and then waits for the channel to be
--- | closed. Returns ().
-sendAndWait : forall (a : 1T). a -> !a ; Wait 1-> ()
-sendAndWait @a x c = c |> send x |> wait
+-- | Receives a value from a linear channel and applies a function to it.
+-- | Discards the result and returns the continuation channel.
+-- | 
+-- | ```
+-- | main : ()
+-- | main =
+-- |   -- create channel endpoints
+-- |   let (c, s) = new @(?String ; Wait) () in
+-- |   -- fork a thread that prints the received value (and closes the channel)
+-- |   fork (\_:() 1-> c |> readApply @String @End putStrLn |> wait);
+-- |   -- send a string through the channel (and close it)
+-- |   s |> send "Hello!" |> close
+-- | ```
+readApply : forall (a : *T) (b : 1S) . (a -> ()) {- Consumer a -} -> ?a ; b 1-> b
+readApply @a @b f c =
+  let (x, c) = receive c in
+  f x;
+  c
 
--- | Sends a value on a given channel and then closes the channel.
--- | Returns ().
-sendAndClose : forall (a : 1T). a -> !a ; Close 1-> ()
-sendAndClose @a x c = c |> send x |> close
+-- | Sends a value on a star channel. Unrestricted version of `send`.
+send_ : forall (a : 1T) . a -> *!a 1-> ()
+send_ = undefined @(forall (a : 1T) . a -> *!a 1-> ()) -- @a x c = c |> send x |> sink @*!a
+
+-- | Receives a value from a star channel. Unrestricted version of `receive`.
+receive_ : forall (a : 1T) . *?a -> a
+receive_ = undefined @(forall (a : 1T) . *?a -> a) -- @a c =  c |> receive @a @*?a |> fst @a @*?a
+
+accept : forall (a : 1C). *!a -> Dual a
+accept @a c =
+  let (x, y) = channel @a in
+  send x c;
+  y
 
 forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
 forkWith @a @b f =
@@ -261,13 +318,279 @@ forkWith @a @b f =
   fork (\(_ : ()) 1-> f y);
   x
 
+-- | Runs an infinite shared server thread given a function to serve a client (a
+-- | handle), the initial state, and the server's shared channel endpoint. It can
+-- | be seen as an infinite sequential application of the handle function over a
+-- | newly accepted session, while continuously updating the state.
+-- |   
+-- | Note: this only works with session types that use session initiation.
+-- | 
+-- | ```
+-- | type SharedCounter : *S = *?Counter
+-- | type Counter : 1S = +{ Inc: Close
+-- |                      , Dec: Close
+-- |                      , Get: ?Int ; Close
+-- |                      }
+-- | 
+-- | -- | Handler for a counter
+-- | counterService : Int -> dualof Counter 1-> Int
+-- | counterService i (Inc c) = wait c ; i + 1 
+-- | counterService i (Dec c) = wait c ; i - 1
+-- | counterService i (Get c) = c |> send i |> wait ; i
+-- | 
+-- | -- | Counter server
+-- | runCounterServer : dualof SharedCounter -> Diverge
+-- | runCounterServer = runServer @Counter @Int counterService 0 
+-- | ```
+runServer : forall (a : 1C) (b : *T). (b -> Dual a 1-> b) -> b -> *!a -> Diverge
+runServer @a @b handle state c =
+  runServer @a @b handle (handle state (accept @a c)) c 
+
+-- * I/O
+
+-- ** I/O Streams
+
+-- *** Input Stream
+
+-- | The `InStream` type describes input streams (such as `stdin` and read
+-- | files). `GetChar` reads a single character, `GetLine` reads a line, and
+-- | `IsEOF` checks for the EOF (End-Of-File) token, i.e., if an input stream
+-- | reached the end. Operations in this channel end with the `SWait` option.
+type InStream : 1C
+type InStream = +{ GetChar: ?Char   ; InStream
+                 , GetLine: ?String ; InStream
+                 , IsEOF  : ?Bool   ; InStream
+                 , SWait  : Wait
+                 }
+
+-- | Unrestricted session type for the `OutStream` type.
+type InStreamProvider : *C
+type InStreamProvider = *?InStream
+
+-- | Closes an `InStream` channel endpoint. Behaves as a `close`.
+hCloseIn : InStream -> ()
+hCloseIn c = c |> select SWait |> wait
+
+hGenericGet : forall (a : *T). (InStream -> ?a; InStream) -> InStream -> (a, InStream)
+hGenericGet @a sel c = receive @a @InStream (sel c)
+
+-- | Reads a character from an `InStream` channel endpoint. Behaves as 
+-- | `|> select GetChar |> receive`.
+hGetChar : InStream -> (Char, InStream)
+hGetChar = hGenericGet @Char (\(c : InStream) -> select GetChar c)
+
+-- | Reads a line (as a string) from an `InStream` channel endpoint. Behaves as 
+-- | `|> select GetLine |> receive`.
+hGetLine : InStream -> (String, InStream)
+hGetLine = hGenericGet @String (\(c : InStream) -> select GetLine c)
+
+-- | Checks if an `InStream` reached the EOF token that marks where no more input can be read. 
+-- | Does the same as `|> select IsEOF |> receive`.
+hIsEOF : InStream -> (Bool, InStream)
+hIsEOF = hGenericGet @Bool (\(c : InStream) -> select IsEOF c)
+
+-- | Reads the entire content from an `InStream` (i.e. until EOF is reached). Returns the content
+-- | as a single string and the continuation channel.
+hGetContent : InStream -> (String, InStream)
+hGetContent c = 
+  let (isEOF, c) = hIsEOF c in
+  if isEOF
+  then ("", c)
+  else 
+    let (line, c) = hGetLine c in 
+    let (contents, c) = hGetContent c in
+    ((++) @Char ((++) @Char line "\n") contents, c)
+
+hGenericGet_ : forall (a : *T) . (InStream -> (a, InStream)) -> InStreamProvider -> a
+hGenericGet_ @a getF inp = 
+  let (x, c) = getF $ receive_ @InStream inp in
+  hCloseIn c; 
+  x
+
+-- | Unrestricted version of `hGetChar`. Behaves the same, except it first receives an `InStream` 
+-- | channel endpoint (via session initiation), executes an `hGetChar` and then closes the 
+-- | enpoint with `hCloseIn`.
+hGetChar_ : InStreamProvider -> Char
+hGetChar_ = hGenericGet_ @Char hGetChar
+
+-- | Unrestricted version of `hGetLine`. Behaves the same, except it first receives an `InStream` 
+-- | channel endpoint (via session initiation), executes an `hGetLine` and then closes the 
+-- | enpoint with `hCloseIn`.
+hGetLine_ : InStreamProvider -> String
+hGetLine_ = hGenericGet_ @String hGetLine
+
+-- | Unrestricted version of `hGetContent`. Behaves the same, except it first receives an `InStream`
+-- | channel endpoint (via session initiation), executes an `hGetContent` and then closes the
+-- | endpoint with `hCloseIn`.
+hGetContent_ : InStreamProvider -> String
+hGetContent_ inp = 
+  let (s, c) = receive_ @InStream inp |> hGetContent in
+  hCloseIn c;
+  s
+
+-- *** Output Stream
+
+-- | The `OutStream` type describes output streams (such as `stdout`, `stderr`
+-- | and write mode files). `PutChar` outputs a character, `PutStr` outputs a string,
+-- | and `PutStrLn` outputs a string followed by the newline character (`\n`).
+-- | Operations in this channel must end with the `Close` option.
+type OutStream : 1C
+type OutStream = +{ PutChar : !Char ; OutStream
+                  , PutStr  : !String ; OutStream
+                  , PutStrLn: !String ; OutStream
+                  , SWait   : Wait
+                  }
+
+-- | Unrestricted session type for the `OutStream` type.
+type OutStreamProvider : *C
+type OutStreamProvider = *?OutStream
+
+-- | Closes an `OutStream` channel endpoint. Behaves as a `close`.
+hCloseOut : OutStream -> ()
+hCloseOut c = c |> select SWait |> wait
+
+hGenericPut : forall (a : *T) . (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
+hGenericPut @a sel x outStream = sel outStream |> send x
+
+-- | Sends a character through an `OutStream` channel endpoint. Behaves as 
+-- | `|> select PutChar |> send`.
+hPutChar : Char -> OutStream -> OutStream
+hPutChar = hGenericPut @Char (\(ch : OutStream) -> select PutChar ch)
+
+-- | Sends a String through an `OutStream` channel endpoint. Behaves as 
+-- | `|> select PutString |> send`.
+hPutStr : String -> OutStream -> OutStream
+hPutStr = hGenericPut @String (\(c : OutStream) -> select PutStr c)
+
+-- | Sends a string through an `OutStream` channel endpoint, to be output with
+-- | the newline character. Behaves as `|> select PutStringLn |> send`.
+hPutStrLn : String -> OutStream -> OutStream
+hPutStrLn = hGenericPut @String (\(c : OutStream) -> select PutStrLn c)
+
+-- | Sends the string representation of a value through an `OutStream` channel
+-- | endpoint, to be outputed with the newline character. Behaves as `hPutStrLn
+-- | (show @t v)`, where `v` is the value to be sent and `t` its type.
+hPrint : forall (a : *T). a -> OutStream -> OutStream
+hPrint @a x = hPutStrLn (show @a x)
+
+hGenericPut_ : forall (a : *T). (a -> OutStream -> OutStream) -> a -> OutStreamProvider -> ()
+hGenericPut_ @a putF x outProv = 
+  hCloseOut $ putF x $ receive_ @OutStream outProv 
+
+-- | Unrestricted version of `hPutChar`. Behaves the same, except it first
+-- | receives an `OutStream` channel endpoint (via session initiation), executes
+-- | an `hPutChar` and then closes the enpoint with `hCloseOut`.
+hPutChar_ : Char -> OutStreamProvider -> ()
+hPutChar_ = hGenericPut_ @Char hPutChar
+
+-- | Unrestricted version of `hPutStr`. Behaves similarly, except that it first
+-- | receives an `OutStream` channel endpoint (via session initiation), executes
+-- | an `hPutStr` and then closes the enpoint with `hCloseOut`.
+hPutStr_ : String -> OutStreamProvider -> ()
+hPutStr_ = hGenericPut_ @String hPutStr
+
+-- | Unrestricted version of `hPutStrLn`. Behaves similarly, except that it
+-- | first receives an `OutStream` channel endpoint (via session initiation),
+-- | executes an `hPutStrLn` and then closes the enpoint with `hCloseOut`.
+hPutStrLn_ : String -> OutStreamProvider -> ()
+hPutStrLn_ = hGenericPut_ @String hPutStrLn
+
+-- | Unrestricted version of `hPrint`. Behaves similarly, except that it first
+-- | receives an `OutStream` channel endpoint (via session initiation), executes
+-- | an `hPrint` and then closes the enpoint with `hCloseOut`.
+hPrint_ : forall (a : *T). a -> OutStreamProvider -> ()
+hPrint_ @a x c = hGenericPut_ @a (hPrint @a) x c
+
 -- ** Standard I/O
 
+-- *** stdin
+
+-- | Standard input stream. Reads from the console.
+stdinChan : (InStreamProvider, Dual InStreamProvider)
+stdinChan = channel @InStreamProvider
+
+stdin : InStreamProvider
+stdin = let (i,_) = stdinChan in i
+
+dualStdin : Dual InStreamProvider
+dualStdin = let (_,o) = stdinChan in o
+
+-- | Reads a single character from `stdin`.
+getChar : () -> Char
+getChar _ = hGetChar_ stdin
+
+-- | Reads a single line from `stdin`. 
+getLine : () -> String
+getLine _ = hGetLine_ stdin
+
+-- **** Internal stdin functions
+
+internalGetChar : () -> Char
+internalGetChar = undefined @(() -> Char)
+internalGetLine : () -> String
+internalGetLine = undefined @(() -> String)
+internalGetContents : () -> String
+internalGetContents = undefined @(() -> String)
+
+runReader : () -> Dual InStream 1-> ()
+runReader _ (&GetChar reader) = runReader () $ send (internalGetChar ()) reader
+runReader _ (&GetLine reader) = runReader () $ send (internalGetLine ()) reader
+runReader _ (&IsEOF   reader) = runReader () $ send False reader -- stdin is always open
+runReader _ (&SWait   reader) = close reader
+
+runStdin : ()
+runStdin = fork (\(_ : ()) 1-> runServer @InStream @() runReader () dualStdin)
+
+-- *** stdout
+
+-- | Standard output stream. Prints to the console.
+stdoutChan : (OutStreamProvider, Dual OutStreamProvider)
+stdoutChan = channel @OutStreamProvider
+
+stdout : OutStreamProvider
+stdout = let (o,_) = stdoutChan in o
+
+dualStdout : Dual OutStreamProvider
+dualStdout = let (_,i) = stdoutChan in i
+
+-- | Prints a character to `stdout`. Behaves the same as `hPutChar_ c stdout`, where `c`
+-- | is the character to be printed.
+putChar : Char -> ()
+putChar = flip @Char @OutStreamProvider @() hPutChar_ stdout
+
+-- | Prints a string to `stdout`. Behaves the same as `hPutStr_ s stdout`, where `s` is
+-- | the string to be printed.
 putStr : String -> ()
-putStr = undefined @(String -> ())
+putStr = flip @String @OutStreamProvider @() hPutStr_ stdout
 
+-- | Prints a string to `stdout`, followed by the newline character `\n`. Behaves
+-- | as `hPutStrLn_ s stdout`, where `s` is the string to be printed.
 putStrLn : String -> ()
-putStrLn = undefined @(String -> ())
+putStrLn = flip @String @OutStreamProvider @() hPutStrLn_ stdout
 
-print : forall (a : *T). a -> ()
-print = undefined @(forall (a : *T). a -> ())
+-- | Prints the string representation of a given value to `stdout`, followed by
+-- | the newline character `\n`. Behaves the same as `hPrint_ @t v stdout`, where `v` is
+-- | the value to be printed and `t` its type.
+print : forall (a : *T) . a -> ()
+print @a x = putStrLn $ show @a x
+
+-- **** Internal stdout functions
+
+internalPutStrOut : String -> ()
+internalPutStrOut = undefined @(String -> ())
+
+runPrinter : () -> Dual OutStream 1-> ()
+runPrinter _ (&PutChar printer) = 
+  readApply @Char   @(Dual OutStream) (\(c : Char) -> internalPutStrOut (show @Char c)) printer 
+    |> runPrinter ()
+runPrinter _ (&PutStr printer) = 
+  readApply @String @(Dual OutStream) internalPutStrOut printer 
+    |> runPrinter ()
+runPrinter _ (&PutStrLn printer) = 
+  readApply @String @(Dual OutStream) (\(s : String) -> internalPutStrOut ((++) @Char s "\n")) printer 
+    |> runPrinter ()
+runPrinter _ (&SWait printer) = 
+  close printer
+
+runStdout  : ()
+runStdout = fork (\(_ : ()) 1-> runServer @OutStream @() runPrinter () dualStdout)

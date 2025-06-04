@@ -47,6 +47,7 @@ data Error
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
   | SessionTypeMismatch Span T.Type K.Kind
+  | ArrowMultiplicityMismatch Span E.Exp Int K.Multiplicity T.Type K.Multiplicity
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
@@ -93,6 +94,7 @@ instance Located Error where
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     SessionTypeMismatch s _ _ -> s
+    ArrowMultiplicityMismatch s _ _ _ _ _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
@@ -185,11 +187,14 @@ instance Show Error where
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
-          "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
+          "\n  Expected kind `"++show k1++"` for type `"++show t++"`, but got kind `"++show k2++"`."
         ProperKindMismatch s t k -> 
-          "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`"
+          "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`."
         SessionTypeMismatch s t k -> 
           "\n Expected a session type, but found type `"++show t++"` of kind `"++show k++"`."
+        ArrowMultiplicityMismatch s e n m t m' ->
+          "\n Expected a"++showMult m++" function of type `"++show t++"`, but got "++showMult m'++" function after the "++ordinal n++" parameter of `"++ show e++"`."
+          where showMult = \case K.Lin -> " linear"; K.Un -> "n unrestricted"; K.VarM x -> " multiplicity `"++show x++"`"
         GivenTooManyArgsK s t n m ->
           "\n  Type `"++show t++"` expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->
