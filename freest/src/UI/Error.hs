@@ -47,6 +47,7 @@ data Error
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
   | SessionTypeMismatch Span T.Type K.Kind
+  | ChannelTypeMismatch Span T.Type K.Kind
   | ArrowMultiplicityMismatch Span E.Exp Int K.Multiplicity T.Type K.Multiplicity
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
@@ -94,6 +95,7 @@ instance Located Error where
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     SessionTypeMismatch s _ _ -> s
+    ChannelTypeMismatch s _ _ -> s
     ArrowMultiplicityMismatch s _ _ _ _ _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
@@ -192,6 +194,8 @@ instance Show Error where
           "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`."
         SessionTypeMismatch s t k -> 
           "\n Expected a session type, but found type `"++show t++"` of kind `"++show k++"`."
+        ChannelTypeMismatch s t k -> 
+          "\n Expected a channel type, but found type `"++show t++"` of kind `"++show k++"`."
         ArrowMultiplicityMismatch s e n m t m' ->
           "\n Expected a"++showMult m++" function of type `"++show t++"`, but got "++showMult m'++" function after the "++ordinal n++" parameter of `"++ show e++"`."
           where showMult = \case K.Lin -> " linear"; K.Un -> "n unrestricted"; K.VarM x -> " multiplicity `"++show x++"`"

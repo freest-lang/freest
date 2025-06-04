@@ -189,7 +189,7 @@ synth kctx tctx = \case
     checkEquivTypeCtxs e2 tctx2 tctx3
     return (t2, tctx2)
   E.Channel s t -> do
-    Kinding.checkSession kctx t
+    Kinding.checkChannel kctx t
     pure (T.Tuple s [t, T.AppDual s t], tctx)
   E.Select s i -> do
     throwE (PartiallyAppliedSelect s i)
@@ -319,7 +319,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     checkEquivTypeCtxs e tctx2 tctx3
     return tctx2
   E.Channel s u -> do
-    Kinding.checkSession kctx u
+    Kinding.checkChannel kctx u
     case normalise tds t of
       T.Tuple _ [t1,t2] -> do
         checkEquivTypes (Left e) u t1
