@@ -12,10 +12,10 @@ import Data.Maybe ( maybe )
 import Debug.Trace
 
 fstToLst :: [M.Module] -> L.Exp
-fstToLst modules = translateTopLevelLetDecls (concat (map (\M.Module {M.name=_, M.imports=_, M.dataDecls=_, M.typeDecls=_, M.kindSigs=_, M.definitions=letDecls} -> letDecls) modules)) 
+fstToLst modules = translateTopLevelLetDecls (concatMap M.definitions modules) 
 
 translateTopLevelLetDecls :: [E.LetDecl] -> L.Exp
-translateTopLevelLetDecls letDecls = fst $ translateLetDecls 0 letDecls [] (L.Var $ generatePrimitiveVar "main")
+translateTopLevelLetDecls letDecls = fst $ translateLetDecls 0 letDecls [] generateUnit
 
 translateLetDecls :: Int -> [E.LetDecl] -> [(B.Variable, T.Type)] -> L.Exp -> (L.Exp, Int)
 translateLetDecls counter [] _ cont = (cont, counter)

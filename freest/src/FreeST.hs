@@ -47,9 +47,9 @@ freest RunOpts{file=programPath, least=l} = do
       LPP.prettyPrint leastAST
       res <- interpret leastAST
       case res of
-        VIO io -> do io2 <- io
-                     print io2
-        res -> print res
+        VIO io -> do _ <- io
+                     return ()
+        _ -> return ()
     Left err -> print err
   else do
     -- Read the source code of the Prelude.
@@ -80,9 +80,9 @@ freest RunOpts{file=programPath, least=l} = do
                 LPP.prettyPrint leastAST
                 res <- interpret leastAST
                 case res of
-                  VIO io -> do io2 <- io
-                               print io2
-                  _ -> print res
+                  VIO io -> do _ <- io
+                               return ()
+                  _ -> return ()
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath
