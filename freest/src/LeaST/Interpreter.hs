@@ -31,21 +31,20 @@ data Value = VInt Int
   | VIO (IO Value)
   | VChan ChannelEnd
   | VFork
-  | VFatbar
+  | VIf [(L.Exp, Context)]
+  | VFatbar [(L.Exp,Context)]
 
 instance Show Value where
   show = \case 
     (VInt   x)  -> show x
     (VFloat x)  -> show x
     (VChar  x)  -> show x
-    (VCon c vs) -> "("++c ++ " " ++ unwords (map show vs)++")"
+    (VCon c vs) -> c ++ if null vs then "" else " " ++ "(" ++ unwords (map show vs)++")"
     VClosure{}  -> "<closure>"
     VBuiltin{}  -> "<builtin>"
     VIO{}       -> "<vio>"
     VChan{}     -> "<channel end>"
     VFork       -> "<vfork>"
-    VFatbar     -> "<vfatbar>"
-
 
 eval :: Context -> L.Exp -> IO Value
 eval ctx = \case 
@@ -53,7 +52,8 @@ eval ctx = \case
     "fork"      -> return VFork
     "undefined" -> error ("undefined, called at "++show (B.getSpan x))
     "error__"   -> error "Error"
-    "fatbar__"  -> return VFatbar
+    "fatbar__"  -> return $ VFatbar []
+    "if__" -> return $ VIf []
     _ -> return $ getVar ctx (B.external x)
   L.Lit l -> return case l of 
     L.LInt   x -> VInt   x
@@ -64,14 +64,21 @@ eval ctx = \case
     v1 <- eval ctx e1
     case v1 of
       VFork -> forkIO (void $ eval ctx (unpackAbs e2)) $> VCon "()" []
-      VFatbar -> do
-        v2 <- eval ctx e2
-        print v2
-        case v2 of
-          -- TODO: implement this
-          VCon "Fail__" [] -> undefined
-          -- TODO: this is wrong
-          _ -> return $ VBuiltin (const v2)
+      VIf args -> if length args == 2
+        then do
+          let (condExp, condCtx) = head args
+          let (tExp, tCtx) = args!!1
+          condVal <- eval condCtx condExp 
+          if lstToHsBool condVal then eval tCtx tExp else eval ctx e2
+        else return $ VIf (args++[(e2, ctx)])
+      VFatbar args -> if length args == 1
+        then do
+          let (leftExp, leftCtx) = head args
+          leftVal <- eval leftCtx leftExp
+          case leftVal of
+            VCon "Fail__" [] -> eval ctx e2
+            _ -> return leftVal
+        else return $ VFatbar (args++[(e2, ctx)])
       _ -> do 
         v2 <- eval ctx e2
         case v1 of
@@ -83,24 +90,45 @@ eval ctx = \case
   L.Con i -> return $ VCon (show i) []
   L.Case e as -> do
     v <- eval ctx e
-    uncurry eval $ patternMatch ctx v as
+    -- uncurry eval $ patternMatch ctx v as
+    baz ctx v as
   L.TAbs x _ e -> return $ VClosure ctx x e
   L.TApp e1 e2 -> do
     v1 <- eval ctx e1
     v2 <- eval ctx e2
+    -- TODO: make sure all cases are handled (lists causes troble here)
     case v1 of
       VClosure cctx _ cExp -> eval cctx cExp
       VBuiltin b -> return $ b v2 
       _ -> undefined
   L.Type _ -> return $ VCon "()" []
 
-patternMatch :: Context -> Value -> [(L.Alt, L.Exp)] -> (Context, L.Exp)
-patternMatch _ _ [] = error "Pattern matching was not exhaustive"
-patternMatch ctx val@(VInt int2) ((L.ALit (L.LInt int), exp) : alts) = if int2 == int then (ctx, exp) else patternMatch ctx val alts
-patternMatch ctx val@(VFloat float2) ((L.ALit (L.LFloat float), exp) : alts) = if float2 == float then (ctx, exp) else patternMatch ctx val alts
-patternMatch ctx val@(VChar char2) ((L.ALit (L.LChar char), exp) : alts) = if char2 == char then (ctx, exp) else patternMatch ctx val alts
-patternMatch ctx _ ((L.AWildCard, exp) : _) = (ctx, exp)
-patternMatch ctx val@(VCon iden2 conArgs) ((L.ACon iden vars, exp) : alts) = if iden2 == show iden then (zip (map B.external vars) conArgs ++ ctx, exp) else patternMatch ctx val alts
+-- patternMatch :: Context -> Value -> [(L.Alt, L.Exp)] -> (Context, L.Exp)
+-- patternMatch _ _ [] = error "Pattern matching was not exhaustive"
+-- patternMatch ctx val@(VInt int2) ((L.ALit (L.LInt int), exp) : alts) = if int2 == int then (ctx, exp) else patternMatch ctx val alts
+-- patternMatch ctx val@(VFloat float2) ((L.ALit (L.LFloat float), exp) : alts) = if float2 == float then (ctx, exp) else patternMatch ctx val alts
+-- patternMatch ctx val@(VChar char2) ((L.ALit (L.LChar char), exp) : alts) = if char2 == char then (ctx, exp) else patternMatch ctx val alts
+-- patternMatch ctx _ ((L.AWildCard, exp) : _) = (ctx, exp)
+-- patternMatch ctx val@(VCon iden2 conArgs) ((L.ACon iden vars, exp) : alts) = if iden2 == show iden then (zip (map B.external vars) conArgs ++ ctx, exp) else patternMatch ctx val alts
+
+patternMatch :: Context -> Value -> (L.Alt, L.Exp) -> Maybe (Context, L.Exp)
+patternMatch ctx val@(VInt int2) (L.ALit (L.LInt int), exp) = if int2 == int then Just (ctx, exp) else Nothing
+patternMatch ctx val@(VFloat int2) (L.ALit (L.LFloat int), exp) = if int2 == int then Just (ctx, exp) else Nothing
+patternMatch ctx val@(VChar int2) (L.ALit (L.LChar int), exp) = if int2 == int then Just (ctx, exp) else Nothing
+patternMatch ctx _ (L.AWildCard, exp) = Just (ctx, exp)
+patternMatch ctx val@(VCon iden2 conArgs) (L.ACon iden vars, exp) = if iden2 == show iden then Just (zip (map B.external vars) conArgs ++ ctx, exp) else Nothing
+
+-- TODO: better name
+baz :: Context -> Value -> [(L.Alt, L.Exp)] -> IO Value
+baz _ _ [] = undefined
+baz ctx val (alt:alts) = case patternMatch ctx val alt of
+    Just (ctx, exp) -> do
+      altVal <- eval ctx exp
+      case altVal of
+        VCon "Fail__" [] -> baz ctx val alts
+        _ -> return altVal
+    Nothing -> baz ctx val alts
+  
 
 
 unpackAbs :: L.Exp -> L.Exp
@@ -221,7 +249,8 @@ builtins = [
 
   ("id", VBuiltin id),
   ("undefined", VBuiltin undefined),
-  ("fork", VFork)
+  ("fork", VFork),
+  ("if_", VIf [])
   ]
 
 -- haskell bool to least bool
