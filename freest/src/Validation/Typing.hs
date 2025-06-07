@@ -113,17 +113,17 @@ synth kctx tctx = \case
   -- send e1 e2
   E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do  -- TODO: remove magic constants (and refactor Syntax.Names).
     (t, tctx') <- synth kctx tctx e2                                            -- (or not, since these cases are temporary...)
-    (t1, t2) <- Expose.output e2 t
+    (t1, t2) <- Expose.output e2 t `Expose.onExpression` e2
     (t2,) <$> check kctx tctx' e1 t1
   -- receive e
   E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
     (t, tctx') <- synth kctx tctx e
-    (t1, t2) <- Expose.input e t
+    (t1, t2) <- Expose.input e t `Expose.onExpression` e
     return (T.Tuple s [t1,t2], tctx')
   -- fork e
   E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
     (t, tctx') <- synth kctx tctx e
-    (m, t1, t2) <- Expose.function e t
+    (m, t1, t2) <- Expose.function e t `Expose.onExpression` e
     Kinding.check kctx t2 (K.ut (getSpan e))
     checkEquivTypes (Left e) 
       (T.AppArrow (getSpan e) m t1 t2) 
@@ -141,7 +141,7 @@ synth kctx tctx = \case
         checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
-    t' <- Expose.functionOrPolyExp f t
+    t' <- Expose.functionOrPolyExp f t `Expose.onExpression` f
     checkArgs f kctx tctx' t' (as, t')
   E.Abs s ps m e'  -> do
     -- TODO: detect incomplete patterns
@@ -534,7 +534,7 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
       (T.AppSemi _ t'@(T.SharedChoice _ T.In ls) u) 
         | i `elem` ls -> checkPat kctx p' t'
         | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-      _ -> throwE (ExposeError (getSpan p) "an internal choice" (Right p) t)
+      _ -> throwE (ExposeError (getSpan p) ("an internal choice type for pattern `" ++ show p ++"`") t)
   -- x@p
   E.AsPat s x p'     -> do
     k <- Kinding.synth kctx t

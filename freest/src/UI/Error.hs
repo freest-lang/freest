@@ -40,7 +40,7 @@ data Error
   | ExpectsTooManyArgs Span E.Exp T.Type Int Int
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
-  | ExposeError Span String (Either E.Exp E.Pat) T.Type
+  | ExposeError Span String T.Type
   | UnexpectedArg Span (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type) Int E.Exp
   | UnexpectedParam Span (Level T.Type K.Kind) (Level E.Pat Variable) Int E.Exp
   | NonLinPat Span E.Pat T.Type
@@ -88,7 +88,7 @@ instance Located Error where
     ExpectsTooManyArgs s _ _ _ _ -> s
     LinVarsConsumedInUnFun s _ _ -> s
     LinVarsCreatedInUnFun s _ _ -> s
-    ExposeError s _ _ _ -> s
+    ExposeError s _ _ -> s
     UnexpectedArg s _ _ _ _ -> s
     UnexpectedParam s _ _ _ _ -> s
     NonLinPat s _ _ -> s
@@ -172,8 +172,8 @@ instance Show Error where
         LinVarsCreatedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
-        ExposeError _ s e t -> 
-          "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
+        ExposeError _ s t -> 
+          "\n  Expecting "++s++", but got type `"++show t++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
           "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"`"++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
