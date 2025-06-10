@@ -14,9 +14,9 @@ data Exp
   | App Exp Exp
   | Con B.Identifier
   | Case Exp [(Alt, Exp)]
-  | Type T.Type   -- TODO tirar
+  -- | Type T.Type  
   | TAbs B.Variable K.Kind Exp
-  | TApp Exp Exp -- TODO trocar: TApp Exp T.Type
+  | TApp Exp T.Type
   -- | Source B.Span Exp
   deriving Show
 
