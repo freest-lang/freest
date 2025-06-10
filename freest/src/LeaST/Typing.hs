@@ -62,7 +62,7 @@ synth kctx tctx = \case
 -- Con B.Identifier 
   L.Con i        -> do
     (i', vsks, ts) <- Typing.lookupDConsDecl i --vsks = [(var,kind)] 
-    return (T.DName B.nullSpan i', tctx) --i? i'? o 1º tipo?
+    return (T.DName B.nullSpan i', tctx) --TODO i? i'? o 1º tipo?
 -- Case Exp [(Alt, Exp)]
   L.Case e ((a, e') : rest) -> do
     (t, tctx') <- synth kctx tctx e
@@ -126,28 +126,9 @@ check kctx tctx e t = case e of
   L.ALit l -> do
     (t', tctx') <- synth l
     Typing.checkEquivTypes (Left e) t t'
-    return tctx'  --TODO t|tctx'? tenho que adicionar/tirar t do tctx?
+    return tctx' 
 -- AWildCard
   L.AWildCard -> return (tctx)
-
--- Abs B.Variable T.Type Exp 
-  L.Abs x t' e'  -> do
-    Kinding.checkProper kctx t'   
-    T.AppArrow _ _ t1 t2 <- Expose.typeArrow e t
-    Typing.checkEquivTypes (Left e') t' t1   
-    (t3, tctx') <- synth kctx tctx x 
-    Typing.checkEquivTypes (Left e') t2 t3   
-    return $ difference kctx tctx x 
--- TAbs B.Variable K.Kind Exp
-  L.TAbs a k e'  -> do
-    T.AppForall _ _ t' <- Expose.typeArrow e' t  --[(var,kind)]
-    tctx' <- check (Map.insert a k kctx) tctx e' t'
-    return tctx'
--- remaining cases
-  _ -> do
-    (u, tctx') <- synth kctx tctx e
-    Typing.checkEquivTypes (Left e) t u
-    return tctx'
 
 
 typeOf :: L.Literal -> T.Type
