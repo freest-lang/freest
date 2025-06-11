@@ -11,7 +11,7 @@ type Stream = +{
 
 module ArithExprServerRegular where
 
-type StreamClient, StreamServer : 1S
+type StreamClient, StreamServer : 1C
 type StreamClient = +{ Add  : StreamClient
                      , Mult : StreamClient
                      , Const: !Int; StreamClient

@@ -7,7 +7,7 @@ f @a c = send 'a' c
 g : forall (a : 1S). ?Char;a -> a
 g @a c = let (_, c) = receive c in c
 
-type T : 1S
+type T : 1C
 type T = !Int; T; ?Int
 
 writer : Int -> T -> ()

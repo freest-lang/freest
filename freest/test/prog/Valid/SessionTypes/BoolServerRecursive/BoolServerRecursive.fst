@@ -1,6 +1,6 @@
 module BoolServerRecursive where
 
-type BoolServer, BoolClient : 1S
+type BoolServer, BoolClient : 1C
 type BoolServer = &{ And : ?Bool; ?Bool; !Bool; BoolServer
                    , Or  : ?Bool; ?Bool; !Bool; BoolServer
                    , Not : ?Bool; !Bool; BoolServer

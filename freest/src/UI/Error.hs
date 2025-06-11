@@ -56,8 +56,8 @@ data Error
   | TypeMismatchSelect Span T.Type Identifier E.Exp
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
-  | TypeCtxMismatch Span E.Exp [(Either Variable Identifier, T.Type)] 
-                               [(Either Variable Identifier, T.Type)]
+  | TypeCtxMismatch Span E.Exp (Map.Map (Either Variable Identifier) T.Type) 
+                               (Map.Map (Either Variable Identifier) T.Type)
   | ConstructorArgumentMismatch Span Identifier Int Int
   | IllegalChoice Span Identifier T.Type
   | PartiallyAppliedSelect Span Identifier
@@ -198,7 +198,7 @@ instance Show Error where
           "\n Expected a channel type, but found type `"++show t++"` of kind `"++show k++"`."
         ArrowMultiplicityMismatch s e n m t m' ->
           "\n Expected a"++showMult m++" function of type `"++show t++"`, but got "++showMult m'++" function after the "++ordinal n++" parameter of `"++ show e++"`."
-          where showMult = \case K.Lin -> " linear"; K.Un -> "n unrestricted"; K.VarM x -> " multiplicity `"++show x++"`"
+          where showMult = \case K.Lin -> "a linear"; K.Un -> "an unrestricted"; K.VarM x -> "a multiplicity `"++show x++"`"
         GivenTooManyArgsK s t n m ->
           "\n  Type `"++show t++"` expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->
@@ -217,14 +217,19 @@ instance Show Error where
                        2 -> "a pair type"
                        n -> "a "++show n++"-tuple type.")
           ++" in the "++showExpPat ep++"."
-        TypeCtxMismatch s e tctx1 tctx2 -> 
-          -- TODO: different messages for abstractions, cases and conditional expressions; ideally better than Freest 3.
-          "\n  Couldn't match the final contexts in two distinct branches in a case expression " ++
-          "\n  \t       One context is " ++ show tctx1 ++
-          "\n  \t         the other is " ++ show tctx2 ++
-          "\n  \tand the expression is " ++ show e ++
+        TypeCtxMismatch s e tctx1 tctx2 -> -- TODO: better error message, ideally better than freest 3
+          "\n  Couldn't match "++ (case e of E.Case{} -> "the final contexts in two distinct branches in a `case` expression"
+                                             E.Abs {} -> "the initial and final contexts in an unrestricted function"
+                                             _        -> "contexts in an expression") ++"."++
+          "\n  \tWhere the former contains " ++ showCtx (tctx1 Map.\\ tctx2) ++
+          "\n  \t      The latter contains " ++ showCtx (tctx2 Map.\\ tctx1) ++
+          "\n  \tIn the expression `" ++ show e ++"`"++
           "\n  \t(was a variable consumed in one branch and not in the other?)" ++
           "\n  \t(is there a variable with different types in the two contexts?)"
+          where showCtx tctx = case Map.foldrWithKey (\cases (Left  x) t ss -> ("`"++show x++" : "++show t++"`") : ss
+                                                             (Right c) t ss -> ("`"++show c++" : "++show t++"`") : ss) [] tctx of
+                                [] -> "nothing"
+                                ss -> intercalate "," ss
         ConstructorArgumentMismatch _ i n m ->
           "\n  The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
         LinVarAtEndOfScope _ xi t -> 

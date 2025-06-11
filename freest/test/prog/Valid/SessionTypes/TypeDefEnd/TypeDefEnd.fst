@@ -1,6 +1,6 @@
 module TypeDefEnd where
 
-type T : 1S
+type T : 1C
 type T = Wait
 
 main : ()

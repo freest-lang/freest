@@ -78,7 +78,7 @@ uncurry : forall (a b c : 1T). (a -> b -> c) -> ((a, b) -> c)
 uncurry @a @b @c f (x, y) =  f x y
 
 -- ** Lists
-(++) : forall (a : 1T). [a] -> [a] -> [a]
+(++) : forall (a : *T). [a] -> [a] -> [a]
 (++) @a []      ys = ys
 (++) @a (x::xs) ys = x :: ((++) @a xs ys) 
 
@@ -200,7 +200,7 @@ fromInteger = undefined @(Int -> Float)
 id : forall (a : 1T). a -> a
 id @a x = x
 
-const : forall (a : 1T) (b : *T). a -> b -> a
+const : forall (a : *T) (b : *T). a -> b -> a
 const @a @b x _ = x
 
 (.) : forall (a b c : *T). (b -> c) -> (a -> b) -> a -> c
@@ -212,7 +212,7 @@ flip @a @b @c f x y = f y x
 ($) : forall (a b : 1T). (a -> b) -> a -> b
 ($) @a @b f = f
 
-(|>) : forall (a b : 1T). a -> (a -> b) -> b
+(|>) : forall (a b : *T). a -> (a -> b) -> b
 (|>) @a @b x f = f x
 
 until : forall (a : *T). (a -> Bool) -> (a -> a) -> a -> a

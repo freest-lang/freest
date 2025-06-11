@@ -49,15 +49,15 @@ transform @a tree c =
   writes back on the channel the sum of the elements in the tree;
   returns this sum.
 -}
-treeSum : forall (a : 1S). Dual TreeC ; a -> (Int, a)
+treeSum : forall (a : 1S). Dual TreeC; a -> (Int, a)
 treeSum @a c =
   case c of
-    LeafC c ->
+    &LeafC c ->
      (0, c)
-    NodeC c ->
+    &NodeC c ->
       let (x, c) = receive c in
-      let (l, c) = treeSum  @(Dual TreeC ; !Int ; a) c in
-      let (r, c) = treeSum  @(!Int ; a) c in
+      let (l, c) = treeSum  @(Dual TreeC; !Int; a) c in
+      let (r, c) = treeSum  @(!Int; a) c in
       let c = send (x + l + r) c in
       (x + l + r, c)
 

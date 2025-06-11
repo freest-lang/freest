@@ -3,7 +3,7 @@ module PartiallyAppliedSelect where
 type T : 1S
 type T = +{A: !Int, B: ?Int}
 
-(|>) : forall (a b : 1T). a -> (a 1-> b) -> b
+(|>) : forall (a b : 1T). a -> (a 1-> b) 1-> b
 (|>) @a @b x f = f x
 
 main : ()

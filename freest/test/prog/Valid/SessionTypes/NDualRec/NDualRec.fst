@@ -1,9 +1,9 @@
 module NDualRec where
 
-type Choice : 1S
+type Choice : 1C
 type Choice = +{More: !Int;DD, Enough: Close}
 
-type DD : 1S
+type DD : 1C
 type DD = Dual (Dual Choice)
 
 sendInt : Int -> DD -> ()

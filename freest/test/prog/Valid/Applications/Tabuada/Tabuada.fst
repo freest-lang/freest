@@ -30,7 +30,7 @@ tabuadaSimples i = tabuadaAte i 10
 
 -- Tipo do canal (os parentesis fazem diferenca)
 
-type TabuadaServer, TabuadaClient : 1S
+type TabuadaServer, TabuadaClient : 1C
 type TabuadaServer = &{ TabuadaSimples: ?Int ;             TabuadaServer
                       , TabuadaAte    : ?Int ; ?Int;       TabuadaServer
                       , MultiplosEntre: ?Int ; ?Int; ?Int; TabuadaServer
