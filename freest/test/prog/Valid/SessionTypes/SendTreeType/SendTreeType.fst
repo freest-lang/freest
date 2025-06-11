@@ -16,8 +16,8 @@ type TreeChannel = +{
   NodeC: !Int ; TreeChannel ; TreeChannel
  }
 
-write : Tree -> TreeChannel; a -> a
-write t c =
+write : forall (a : 1S). Tree -> TreeChannel; a -> a
+write @a t c =
   case t of
     Leaf ->
       select LeafC c
@@ -27,14 +27,14 @@ write t c =
       |> write  @(TreeChannel ; a) l
       |> write @a r
 
-read : Dual TreeChannel; a -> (Tree, a)
-read c =
+read : forall (a : 1S). Dual TreeChannel; a -> (Tree, a)
+read @a c =
   case c of
-    LeafC c ->
+    &LeafC c ->
       (Leaf, c)
-    NodeC c ->
+    &NodeC c ->
       let (x, c) = receive c in
-      let (left, c) = read  @(Dual TreeChannel ; a) c in
+      let (left, c) = read  @(Dual TreeChannel; a) c in
       let (right, c) = read  @a c in
       (Node x left right, c)
 
@@ -44,7 +44,7 @@ aTree = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf
 
 main =
   let (writer, reader) = channel @(TreeChannel;Close) in
-  fork  @() (\_:()1-> write  @Close aTree writer |> close);
+  fork  @() (\(_ : ()) 1-> write  @Close aTree writer |> close);
   let (tree, reader) = read  @Wait reader in 
   wait reader;
   tree

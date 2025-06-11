@@ -1,5 +1,6 @@
 module ChainOfChannelOps where
 
+type T : 1C
 type T = +{More: !Int;T, Stop: Close}
 
 g : Dual T -> Int
@@ -10,9 +11,12 @@ g r =
       v + g r
     &Stop r -> wait r; 0
 
-
 main : Int
 main =
   let (w, r) = channel @T in
-  fork @() (\_:()1-> select More w |> send 5 |> select More |> send 2 |> select Stop |> close);
+  fork (\(_:()) 1-> 
+      w |> select More |> send 5 
+        |> select More |> send 2 
+        |> select Stop |> close
+    );
   g r

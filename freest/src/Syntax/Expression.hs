@@ -13,6 +13,8 @@ module Syntax.Expression
        , ConsPat
        , TuplePat
        )
+  , listPat
+  , stringPat
   , RHS(..)
   , LetDecl(..)
   , Exp( ..
@@ -20,6 +22,7 @@ module Syntax.Expression
        , Nil
        , Cons
        )
+  , listExp
   )
 where
 
@@ -52,10 +55,13 @@ pattern TuplePat :: Span -> [Pat] -> Pat
 pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
   where TuplePat s ps =  DConsPat s (mkTupleId (length ps - 1) s) ps
 
+listPat :: Span -> [Pat] -> Pat
+listPat s = \case
+  []       -> NilPat s
+  (p : ps) -> ConsPat s p (listPat s ps)
+
 stringPat :: Span -> String -> Pat
-stringPat s = \case
-  []     -> DConsPat s (mkNilId s) []
-  (c:cs) -> DConsPat s (mkConsId s) [CharPat s c, stringPat s cs]
+stringPat s = listPat s . map (CharPat s)
 
 data LetDecl
   = ValDef Pat      RHS
@@ -79,7 +85,7 @@ data Exp
   | Case   Span Exp [(Pat, RHS)]
   | If     Span Exp Exp Exp
   | Channel Span Type
-  | Select Span Identifier Exp
+  | Select Span Identifier
 
 pattern Tuple :: Span -> [Exp] -> Exp
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
@@ -95,6 +101,9 @@ pattern Nil s t <- App s (DCons _ ((== mkNilId s) -> True)) [TypeLevel t]
 pattern Cons :: Span -> Exp -> Exp -> Exp 
 pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, ExpLevel e2]
   where Cons s e1 e2 =  App s (DCons s (mkConsId s)) (map ExpLevel [e1,e2])
+
+listExp :: Span -> Type -> [Exp] -> Exp
+listExp s t = foldr (Cons s) (Nil s t)
 
 instance Located Pat where
   getSpan = \case
@@ -137,7 +146,7 @@ instance Located Exp where
     Case s _ _   -> s
     If s _ _ _   -> s
     Channel s _  -> s
-    Select s _ _ -> s
+    Select s _ -> s
 
   setSpan s = \case
     Int _ i       -> Int s i
@@ -151,7 +160,7 @@ instance Located Exp where
     Case _ e cs   -> Case s e cs
     If _ e1 e2 e3 -> If s e1 e2 e3
     Channel _ t   -> Channel s t
-    Select _ i e  -> Select s i e
+    Select _ i -> Select s i
 
 instance Located RHS where
   getSpan = \case
@@ -219,4 +228,4 @@ instance Show Exp where
                       where showCase (p, e) = show p ++ " -> " ++ show e
     If _ e1 e2 e3  -> "(if "++show e1++" then "++show e2++" else "++show e3++")"
     Channel _ t    -> "(channel @"++show t++")"
-    Select _ i e   -> "select "++show i++" "++show e
+    Select _ i     -> "(select "++show i++")"

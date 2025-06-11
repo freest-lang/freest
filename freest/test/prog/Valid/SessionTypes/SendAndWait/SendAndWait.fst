@@ -1,7 +1,6 @@
 module SendAndWait where
 
 main : ()
-main =
-  forkWith @(!Int ; Wait) @Int (receiveAndClose @Int)
-  |>
-  sendAndWait @Int 5
+main =  
+  forkWith @(!Int ; Wait) @Int (receiveAndClose @Int) 
+    |> sendAndWait @Int 5

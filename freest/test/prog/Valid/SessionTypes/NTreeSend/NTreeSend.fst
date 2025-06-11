@@ -1,10 +1,14 @@
 module NTreeSend where
 
+type Tree, TreeList : *T
+
 -- Represents a n-Tree structure where each node has 0..n children.
 data Tree = Empty | Node Int TreeList
 
 -- List of Trees
 data TreeList = Nil | Cons Tree TreeList
+
+type TreeChannel, TreeListChannel : 1S
 
 type TreeChannel = +{
   Node : !Int; TreeListChannel,
@@ -18,27 +22,27 @@ type TreeListChannel = +{
 -- ===== SENDING =====
 
 mutual
-  sendTree : Tree -> TreeChannel;a -> a
-  sendTree tree c =
+  sendTree : forall (a : 1S). Tree -> TreeChannel;a -> a
+  sendTree @a tree c =
     case tree of
       Empty ->
         select Empty c
       Node i children ->
-        sendTreeList @a children $ send i $ select Node c
+        c |> select Node |> send i |> sendTreeList @a children
 
-  sendTreeList : TreeList -> TreeListChannel;a -> a
-  sendTreeList list c =
+  sendTreeList : forall (a : 1S). TreeList -> TreeListChannel;a -> a
+  sendTreeList @a list c =
     case list of
       Nil ->
         select Nil c
       Cons tree rest ->
-        sendTreeList @a rest $ sendTree @(TreeListChannel ; a) tree $ select Cons c
+        c |> select Cons |> sendTree @(TreeListChannel ; a) tree |> sendTreeList @a rest
 
 -- ===== RECEIVING =====
 
 mutual 
-  receiveTree : Dual TreeChannel;a -> (Tree, a)
-  receiveTree c =
+  receiveTree : forall (a : 1S). Dual TreeChannel;a -> (Tree, a)
+  receiveTree @a c =
     case c of
       &Empty c ->
         (Empty, c)
@@ -47,8 +51,8 @@ mutual
         let (children, c) = receiveTreeList @a c in
         (Node i children, c)
 
-  receiveTreeList : Dual TreeListChannel;a -> (TreeList, a)
-  receiveTreeList c =
+  receiveTreeList : forall (a : 1S). Dual TreeListChannel;a -> (TreeList, a)
+  receiveTreeList @a c =
     case c of
       &Nil c ->
         (Nil, c)
@@ -79,14 +83,12 @@ aTree = Node 0 $ Cons (Node 1 $ Cons (Node 7 $ Cons (Node 13 Nil)
                  Nil
 
 clientSendTree : TreeChannel;Close -> ()
-clientSendTree c =
-  sendTree @Close aTree c
-  |> close
+clientSendTree c = c |> sendTree @Close aTree c |> close
 
 main : Tree
 main =
   let (client, server) = channel @(TreeChannel;Close) in
-  fork @() (\_:()1-> clientSendTree client);
+  fork (\(_ : ()) 1-> clientSendTree client);
   let (t, server) = receiveTree @Wait server in
   wait server;
   t

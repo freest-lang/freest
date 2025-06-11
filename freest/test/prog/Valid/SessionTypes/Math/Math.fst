@@ -1,5 +1,6 @@
 module Math where
 
+type MathServer : 1C
 type MathServer = &{Negate: ?Int;!Int, Add: ?Int;?Int;!Int} ; Wait
 
 mathServer : MathServer-> ()
@@ -16,5 +17,5 @@ mathServer c =
 main : Int
 main =
   let (r,w) = channel @MathServer in
-  let _ = fork (\_:()1-> mathServer r) in
+  fork (\(_ : ()) 1-> mathServer r);
   w |> select Negate |> send 5 |> receiveAndClose @Int

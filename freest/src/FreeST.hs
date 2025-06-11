@@ -28,7 +28,6 @@ import qualified LeaST.PrettyPrint as LPP
 import Control.Monad.State ( runState )
 import Data.Function ( (&) )
 import Data.Map qualified as Map
-import Debug.Trace ( traceM )
 import Options.Applicative
 import System.Exit ( exitFailure, exitSuccess )
 
@@ -60,21 +59,16 @@ freest RunOpts{file=programPath, least=l} = do
     -- include the former in the latter, resulting in a single module.
     mappend <$> runParseModule preludePath preludeSrc
             <*> runParseModule programPath programSrc
-        >>= runScopeModule & \case 
-          Left es -> do
-            putStrLn "[Scoping failed]"
-            mapM_ print es
-            exitFailure
-          Right m -> do 
-            putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-            -- Validate the module.
-            runValidate m & \case 
-              Left es -> do
-                putStrLn "[Validation failed]" 
-                mapM_ print es
-                exitFailure     
-              Right m -> do
-                putStrLn "[Validation passed]" 
+      -- Scope the module.
+      >>= runScopeModule & \case 
+        Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
+        Right m -> do 
+          -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+          -- Validate the module.
+          runValidate m & \case 
+            Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+            Right m -> do
+              {- putStrLn "[Validation passed]" >> -}
                 let leastAST = fstToLst [removeBuiltins m]
                 print leastAST
                 LPP.prettyPrint leastAST

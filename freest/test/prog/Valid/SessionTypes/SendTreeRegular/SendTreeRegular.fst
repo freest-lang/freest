@@ -8,19 +8,21 @@ Maintainer  : vmavsconcelos@ciencias.ulisboa.pt
 
 module SendTreeRegular where
 
+type Tree : *T
 data Tree = Leaf | Node Tree Int Tree
 
 aTree : Tree
 aTree = Node (Node Leaf 5 Leaf) 7 (Node (Node Leaf 11 Leaf) 9 (Node Leaf 15 Leaf))
 
+type TreeC : 1C
 type TreeC = &{
   LeafC: Wait,
   NodeC: ?TreeC ; ?Int ; ?TreeC ; Wait
  }
 
 read : TreeC -> Tree
-read (LeafC c) = wait c ; Leaf
-read (NodeC c) =
+read (&LeafC c) = wait c; Leaf
+read (&NodeC c) =
   let (l, c) = receive c in
   let (x, c) = receive c in
   let  r     = receiveAndWait @TreeC c in 
@@ -37,5 +39,5 @@ write (Node l x r) c =
 
 main : Tree
 main =
-  forkWith @TreeC @() (write aTree) |>
-  read
+  forkWith @TreeC @() (write aTree) 
+    |> read

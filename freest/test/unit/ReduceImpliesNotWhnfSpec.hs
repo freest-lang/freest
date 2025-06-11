@@ -9,7 +9,6 @@ import UnitSpecUtils
 import Data.Map.Strict qualified as Map
 import Test.Hspec
 import Control.Exception ( catch, ErrorCall )
-import Debug.Trace
 
 -- This test should be called with well-formed types only
 

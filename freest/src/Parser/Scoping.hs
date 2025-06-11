@@ -41,7 +41,6 @@ import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
-import Debug.Trace ( traceM )
 
 -- = Scoping context
 -- The scoping context keeps track of variable and indentifier names.
@@ -244,7 +243,7 @@ scopeDataDecls ctx dds = do
         as' <- mapM freshInternal as 
         ks' <- mapM scopeKind ks
         (ctx''',cds') <- scopeConsDecls (fromTVarList as' `union` ctx') cds
-        return (ctx''', (ti, (zip as' ks', cds')) : dds')
+        return (foldr deleteTVar ctx''' as', (ti, (zip as' ks', cds')) : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
       where
         scopeConsDecl (ctx',cds') (ci,ts)
@@ -410,8 +409,6 @@ scopeExp ctx = \case
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
   E.Channel s t ->
     E.Channel s <$> scopeType ctx t
-  E.Select s i e ->
-    E.Select s i <$> scopeExp ctx e
   e -> pure e
 
 -- | Scope a pattern. This function takes two contexts: the first being the main
@@ -506,7 +503,7 @@ scopeType ctx = \case
   T.DName s i -> return (T.DName s i)
   t -> pure t
 
--- | Scope a type, universally quantifying any free variables it might have.
+-- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.
 scopeAndQuantifyType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeAndQuantifyType ctx t = do
@@ -517,8 +514,7 @@ scopeAndQuantifyType ctx t = do
     else do
       aks <- mapM (\a -> (a,) <$> freshKVar a) 
         $ List.sortBy (compare `on` getSpan) fvt'
-      T.AppForall (getSpan t) aks <$> 
-        scopeType (fromTVarList fvt' `union` ctx) t'
+      scopeType ctx $ T.AppForall (getSpan t) aks t
 
 -- | Scope a kind.
 scopeKind :: K.Kind -> Scoping K.Kind

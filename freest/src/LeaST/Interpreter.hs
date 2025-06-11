@@ -51,7 +51,9 @@ eval ctx = \case
   L.Var x -> case B.external x of
     "fork"      -> return VFork
     "undefined" -> error ("undefined, called at "++show (B.getSpan x))
+    -- TODO: substitute all error__ for error
     "error__"   -> error "Error"
+    "error" -> error "Error"
     "fatbar__"  -> return $ VFatbar []
     "if__" -> return $ VIf []
     _ -> return $ getVar ctx (B.external x)
@@ -100,6 +102,7 @@ eval ctx = \case
     case v1 of
       VClosure cctx _ cExp -> eval cctx cExp
       VBuiltin b -> return $ b v2 
+      con@(VCon _ _) -> return con
       _ -> undefined
   L.Type _ -> return $ VCon "()" []
 
@@ -225,7 +228,7 @@ builtins = [
 
   -- ("(^^)", VBuiltin (\(VString str1) -> VBuiltin (\(VString str2) -> VString (str1++str2)))),
 
-  -- ("show", VBuiltin (VString . show)),
+  ("show", VBuiltin (hsToLstStr . show)),
   -- ("readBool", VBuiltin (\(VString str) -> hsToFstBool (read str))),
   -- ("readInt", VBuiltin (\(VString x) -> VInt (read x))),
   -- ("readInt", VBuiltin (\(VString c) -> VChar (read c))),
@@ -249,6 +252,8 @@ builtins = [
 
   ("id", VBuiltin id),
   ("undefined", VBuiltin undefined),
+  -- TODO: improve
+  ("error", VBuiltin undefined),
   ("fork", VFork),
   ("if_", VIf [])
   ]
@@ -262,6 +267,9 @@ hsToLstBool False = VCon "False" []
 lstToHsBool :: Value -> Bool
 lstToHsBool (VCon "True" []) = True
 lstToHsBool (VCon "False" []) = False
+
+hsToLstStr :: String -> Value
+hsToLstStr = foldr (\char acc -> VCon "::" [VChar char, acc]) (VCon "[]" [])
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do

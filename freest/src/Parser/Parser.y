@@ -66,7 +66,6 @@ import Data.List.NonEmpty qualified as NE
   'else'   { TkElse _ }
   'forall' { TkForall _ }
   'exists' { TkExists _ }
-  'rec'    { TkRec _ }
   -- Punctuation
   '.'     { TkDot _ }
   '='     { TkEqual _ }
@@ -127,7 +126,7 @@ import Data.List.NonEmpty qualified as NE
   INT_LIT { TkIntLit _ _ }
   FLOAT_LIT { TkFloatLit _ _ }
   CHAR_LIT { TkCharLit _ _ }
-  -- STRING_LIT {TkStringLit _ _ }
+  STRING_LIT {TkStringLit _ _ }
 
   -- Identifiers
   UPPER_ID { TkUpperId _ _ }  
@@ -224,6 +223,10 @@ ExpVar :: { Variable }
 TypeVar :: { Variable }
   : LOWER_ID { mkVarTk $1 }
 
+TypeVarNEListWS :: { [Variable] }
+  : TypeVar { [$1] }
+  | TypeVar TypeVarNEListWS { $1 : $2 }
+
 RHS(sep) :: { E.RHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
   | GuardedExps(sep) Where { E.GuardedRHS $1 $2   }
@@ -308,7 +311,7 @@ TypePrimary :: { T.Type }
 Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVar KindedVarListWS '.' Type   { T.AppQuant (spanFromTo (fst $1) $5) (snd $1) ($2 : $3) $5 }
+  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }
@@ -344,23 +347,25 @@ LabelListComma :: { [Identifier] }
   : UPPER_ID ',' LabelListComma { mkIdTk $1 : $3 }
   | UPPER_ID                    { [mkIdTk $1] }
 
-VarListWS :: { [Variable] }
-  : {- empty -} { [] }
-  | ExpVar VarListWS { $1 : $2 }
-
 KindedVarListWS :: { [(Variable, K.Kind)] }
   : {- empty -} { [] }
   | KindedVar KindedVarListWS { $1 : $2 }
 
+KindedVars :: { [(Variable, K.Kind)] }
+  : TypeVar KindedVars { ($1, dummyKindVar $1) : $2 }
+  | '(' TypeVarNEListWS ':' Kind ')' KindedVars { map (, $4) $2 ++ $6 }
+  | TypeVar { [($1, dummyKindVar $1)] }
+  | '(' TypeVarNEListWS ':' Kind ')' { map (, $4) $2 }
+
 KindedVar :: { (Variable, K.Kind) }
   : TypeVar { ($1, dummyKindVar $1) }
-  | TypeVar ':' Kind { ($1, $3) }
+  | '(' TypeVar ':' Kind ')' { ($2, $4) }
 
 ExpPrimary :: { E.Exp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
-  -- | STRING_LIT  { E.String (getSpan $1) (read $ getText $1) }
+  | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1)) (map (E.Char (getSpan $1)) (getText $1)) }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
@@ -379,7 +384,7 @@ ExpPrimary :: { E.Exp }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
   | '(' Exp '-.' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusDotVar $3)) $2) }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
-  | '[' ExpListComma ']' '@' TypePrimary { listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
+  | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
 Exp :: { E.Exp }
@@ -396,9 +401,12 @@ Exp :: { E.Exp }
   --   * à la Haskell (declared by programmer) 
   --   * à la F# (depends on leading chars)
   | Exp '.'  Exp { binOp $1 (E.Var (getSpan $2) $ mkDotVar $2) $3 }
-  | Exp ';'  Exp { binOp $1 (E.Var (getSpan $2) $ mkSemiVar $2) $3 }
-  | Exp '$'  Exp { binOp $1 (E.Var (getSpan $2) $ mkDollarVar $2) $3 }
-  | Exp '|>' Exp { binOp $1 (E.Var (getSpan $2) $ mkRTriangleVar $2) $3 }
+  | Exp ';'  Exp { E.Let (spanFromTo $1 $3) 
+                         [E.ValDef (E.WildPat (getSpan $1) (mkDefaultVar "_" $1)) 
+                                   (E.UnguardedRHS $1 Nothing)] 
+                         $3 } -- { binOp $1 (E.Var (getSpan $2) $ mkSemiVar $2) $3 }
+  | Exp '$'  Exp { addArgExp (ExpLevel $3) $1 } -- { binOp $1 (E.Var (getSpan $2) $ mkDollarVar $2) $3 }
+  | Exp '|>' Exp { addArgExp (ExpLevel $1) $3 } -- { binOp $1 (E.Var (getSpan $2) $ mkRTriangleVar $2) $3 }
   | Exp '||' Exp { binOp $1 (E.Var (getSpan $2) $ mkOrVar $2) $3 }
   | Exp '&&' Exp { binOp $1 (E.Var (getSpan $2) $ mkAndVar $2) $3 }
   | Exp CMP  Exp { binOp $1 (E.Var (getSpan $2) $ mkCmpVar (getText $2) $2) $3 }
@@ -425,7 +433,7 @@ Exp :: { E.Exp }
 
 ExpApp :: { E.Exp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
-  | 'select' UPPER_ID ExpPrimary { E.Select (spanFromTo $1 $2) (mkIdTk $2) $3 }
+  | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
@@ -473,10 +481,14 @@ Arrow :: { (Span, K.Multiplicity) }
   : UnArrow  { $1 }
   | LinArrow { $1 }
 
+TypedPat :: { (E.Pat, T.Type) }
+  : '(' Pat ':' Type ')' { ($2, $4) }
+  -- | PatPrimary { ($1, ?) } -- TODO: type inference var?
+
 PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.Type) (Variable, K.Kind)], K.Multiplicity) } 
-  : PatPrimary ':' TypePrimary PatTypeOrKindedVarListArrow { first (ExpLevel ($1, $3) :) $4 }
+  : TypedPat PatTypeOrKindedVarListArrow { first (ExpLevel $1 :) $2 }
   | '@' KindedVar PatTypeOrKindedVarListArrow { first (TypeLevel $2 :) $3 }
-  | PatPrimary ':' TypePrimary Arrow { ([ExpLevel  ($1, $3)], snd $4) }
+  | TypedPat Arrow { ([ExpLevel $1], snd $2) }
   | '@' KindedVar UnArrow { ([TypeLevel $2], snd $3) }
 
 CaseBlock :: { [(E.Pat, E.RHS)] }
@@ -493,11 +505,11 @@ PatPrimary :: { E.Pat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
-  -- | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
+  | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
-  | '[' ']'          { E.NilPat (spanFromTo $1 $2) }
-  | '(' Pat ',' PatListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
+  | '[' PatListComma ']' { E.listPat (spanFromTo $1 $3) $2 }
+  | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
@@ -525,8 +537,12 @@ PatPrimaryOrAtVarListWS :: { [Level E.Pat Variable] }
   | '@' TypeVar  { [TypeLevel $2] }
 
 PatListComma :: { [E.Pat] }
+  : {- empty -} { [] }
+  | PatNEListComma { $1 }
+
+PatNEListComma :: { [E.Pat] }
   : Pat { [$1] }
-  | Pat ',' PatListComma { $1 : $3 }
+  | Pat ',' PatNEListComma { $1 : $3 }
 
 LetDeclBlock :: { [E.LetDecl] }
   : OPEN LetDeclListPIPE Close { $2 }
@@ -626,13 +642,17 @@ LAlt :: { L.Alt }
   | FLOAT_LIT { L.ALit (L.LFloat (read $ getText $1)) }
   | CHAR_LIT { L.ALit (L.LChar (read $ getText $1)) }
   | WILDCARD { L.AWildCard }
-  | UPPER_ID VarListWS { (L.ACon (mkIdTk $1) $2)} 
+  | UPPER_ID LVarList { (L.ACon (mkIdTk $1) $2)} 
 -- implement (x, y) syntax for tuples in pattern
-  | '(' Commas ')' VarListWS{ L.ACon (mkTupleId $2 (spanFromTo $1 $3)) $4 }
+  | '(' Commas ')' LVarList{ L.ACon (mkTupleId $2 (spanFromTo $1 $3)) $4 }
 
 LExpListComma :: { [L.Exp] }
   : LExp ',' LExpListComma { $1 : $3 }
   | LExp                  { [$1] }
+
+LVarList :: { [Variable] }
+  : {- empty -} { [] }
+  | ExpVar LVarList { $1 : $2 }
 
 {
 

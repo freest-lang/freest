@@ -1,6 +1,7 @@
 module RegularTreeStreamAlt where
 
 -- Represents a classical binary tree (Node LeftTree RightTree)
+type Tree : *T
 data Tree = Leaf | Node Int Tree Tree
 
 -- Example of the following Tree:
@@ -13,6 +14,7 @@ aTree = Node 1 (Node 2 (Node 8 Leaf Leaf) (Node 3 (Node 5 Leaf Leaf) (Node 4 Lea
 
 
 -- Represents a Stack of Tree
+type TreeStack : *T
 data TreeStack = Empty | Value Tree TreeStack
 
 -- Push a Tree to the stack
@@ -44,6 +46,7 @@ stackSize ts =
 -- Channel to send/receive a Tree. It is important that both sender and receiver
 --  agree on an order to traverse the Tree.
 --  (In our particular case we will use PREORDER - node, left, right)
+type TreeC : 1S
 type TreeC = +{
   ValueC: !Int; TreeC,
   LeafC:  TreeC,
@@ -141,7 +144,7 @@ badClientSendOnlyValue c =
 main : Tree
 main =
   let (w, r) = channel @TreeC in
-  fork @() (\_:() 1-> treeClient w);
+  fork @() (\(_ : ()) 1-> treeClient w);
   --fork @() $ badClientPrematureEnd w;
   --fork @() $ badClientSendExtraValue w;
   --fork @() $ badClientSendExtraLeaf w;

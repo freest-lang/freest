@@ -15,34 +15,35 @@ and NEStack. They both feature a Push-labelled field.
 
 module StackRecClient where
 
-type  EStack = &{Push: ?Int; NEStack; EStack,  Stop: Skip}
-type NEStack = &{Push: ?Int; NEStack; NEStack, Pop: !Int}
+type EStack, NEStack : 1S
+type EStack  = &{Push: ?Int; NEStack; EStack , Stop: Skip}
+type NEStack = &{Push: ?Int; NEStack; NEStack, Pop : !Int}
 
 -- Stack server. The non-empty stack case
-neStack : Int -> NEStack;a -> a
-neStack x c =
+neStack : forall (a : 1S). Int -> NEStack;a -> a
+neStack @a x c =
   case c of
     &Push c -> let (y, c) = receive c in neStack @a x (neStack @(NEStack ; a) y c)
     &Pop  c -> send x c
 
 -- Stack server. The empty stack case
-eStack : EStack;a -> a
-eStack c =
+eStack : forall (a : 1S). EStack;a -> a
+eStack @a c =
   case c of
     &Push c -> let (x, c) = receive c in eStack @a (neStack @(EStack ; a) x c)
     &Stop  c -> c
 
 -- Stack operations. Push on an empty stack
-pushE : Int -> Dual EStack ; a -> Dual NEStack ; Dual EStack ; a
-pushE n c = select Push c |> send n
+pushE : forall (a : 1S). Int -> Dual EStack ; a -> Dual NEStack ; Dual EStack ; a
+pushE @a n c = select Push c |> send n
 
 -- Stack operations. Push on a nonempty stack
-pushNE : Int -> Dual NEStack ; a -> Dual NEStack ; Dual NEStack ; a
-pushNE n c = select Push c |> send n
+pushNE : forall (a : 1S). Int -> Dual NEStack ; a -> Dual NEStack ; Dual NEStack ; a
+pushNE @a n c = select Push c |> send n
 
 -- Stack operations. Pop from a nonempty stack (and print the result)
-pop : Dual NEStack;a -> a
-pop c = 
+pop : forall (a : 1S). Dual NEStack;a -> a
+pop @a c = 
   let c = select Pop c in let (x, c) = receive c in
   putStr (show @Int x) ; putStr " " ; c
 
@@ -58,8 +59,8 @@ reverseThree c =
   |> select Stop
 
 -- A recursive client working on a nonempty stack
-reverseNE : Int -> Dual NEStack ; a -> Dual NEStack ; a
-reverseNE n c =
+reverseNE : forall (a : 1S). Int -> Dual NEStack ; a -> Dual NEStack ; a
+reverseNE @a n c =
   if n == 0
   then c
   else
@@ -79,7 +80,7 @@ reverseE n c =
 main : ()
 main =
   let (r, w) = channel @(EStack;Wait) in
-  fork  @() (\_:()1-> eStack @Wait r |> wait);
+  fork  @() (\(_ : ()) 1-> eStack @Wait r |> wait);
   reverseE 10 w
   -- reverseThree w
 

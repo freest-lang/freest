@@ -12,6 +12,7 @@ module Validation.Kinding
   , checkSubkindOf
   , checkProper
   , checkSession
+  , checkChannel
   , KindingCtx
   , kindModule
   , runKindModule
@@ -124,6 +125,15 @@ checkSession ctx t = do
   (m,pk) <- checkProper ctx t
   unless (pk <: Session) $
     throwE (SessionTypeMismatch (getSpan t) t (Proper (getSpan t) m pk))
+  return (m,pk)
+
+-- | Check if a type is a session type. If so, return its minimal multiplicity
+-- and prekind. Otherwise, throw an error.
+checkChannel :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
+checkChannel ctx t = do
+  (m,pk) <- checkProper ctx t
+  unless (pk <: Channel) $
+    throwE (ChannelTypeMismatch (getSpan t) t (Proper (getSpan t) m pk))
   return (m,pk)
 
 -- | Check if the kind of a type is a subkind of another. If not, throw an 

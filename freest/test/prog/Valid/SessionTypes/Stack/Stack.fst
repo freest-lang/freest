@@ -16,17 +16,17 @@ type  EStack = &{Push: ?Int; NEStack; EStack,  Stop: Skip}
 
 type NEStack = &{Push: ?Int; NEStack; NEStack, Pop: !Int}
 
-neStack : Int -> NEStack;a -> a
-neStack x c =
+neStack : forall (a : 1S). Int -> NEStack;a -> a
+neStack @a x c =
   case c of
-    &Push c -> let (y, c) = receive c in neStack @a x (neStack @(NEStack ; a) y c)
+    &Push c -> let (y, c) = receive c in neStack @a x (neStack @(NEStack; a) y c)
     &Pop  c -> send x c
 
-eStack : EStack;a -> a
-eStack c =
+eStack : forall (a : 1S). EStack;a -> a
+eStack @a c =
   case c of 
-    &Push c -> let (x, c) = receive c in eStack @a (neStack @(EStack ; a) x c)
-    &Stop  c -> c
+    &Push c -> let (x, c) = receive c in eStack @a (neStack @(EStack; a) x c)
+    &Stop c -> c
 
 aStackClient : Dual EStack;Close -> Int
 aStackClient c =
@@ -42,12 +42,12 @@ aStackClient c =
   let c = select Pop  c in let (x, c) = receive c in
   -- let c = select Pop  c in let (_, c) = receive c in
   -- Error: Branch Pop not present in internal choice type Dual EStack
-  select Stop  c |> close;
-  x 
+  c |> select Stop |> close;
+  x
 
 main : Int
 main =
   let (r, w) = channel @(EStack;Wait) in
-  fork @() (\_:()1-> eStack @Wait r |> wait);
+  fork (\(_ : ()) 1-> r |> eStack @Wait |> wait);
   aStackClient w
     

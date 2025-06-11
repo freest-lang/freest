@@ -12,7 +12,7 @@ import Data.Maybe ( maybe )
 import Debug.Trace
 
 fstToLst :: [M.Module] -> L.Exp
-fstToLst modules = translateTopLevelLetDecls (concatMap M.definitions modules) 
+fstToLst modules = traceShow modules $ translateTopLevelLetDecls (concatMap M.definitions modules) 
 
 translateTopLevelLetDecls :: [E.LetDecl] -> L.Exp
 translateTopLevelLetDecls letDecls = fst $ translateLetDecls 0 letDecls [] generateUnit
@@ -115,9 +115,8 @@ translateExp counter (E.Case _ exp patRhss) =
       (compiledEquationsExp, counter4) = compileEquations counter3 [var] rhss generateError in
   (L.App (L.Abs var (T.Int B.nullSpan) compiledEquationsExp) caseExp, counter4)
 translateExp counter (E.Channel _ _) = (L.App (L.Var $ generatePrimitiveVar "chan") generateUnit, counter)
-translateExp counter (E.Select _ (B.Identifier _ iden) exp) =
-  let (translateExpRes, counter1) = translateExp counter exp in
-  (L.TApp (L.TApp (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "send") generateUnit) generateUnit) (lstString iden)) translateExpRes, counter1)
+translateExp counter (E.Select _ (B.Identifier _ iden)) =
+  ((L.TApp (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "send") generateUnit) generateUnit) (lstString iden)) , counter)
 
 mapWithCounter :: Int -> (Int -> a -> (b, Int)) -> [a] -> ([b], Int)
 mapWithCounter n _ [] = ([], n)
@@ -140,10 +139,10 @@ generateUnit :: L.Exp
 generateUnit = L.Con (B.Identifier B.nullSpan "()")
 
 lstString :: String -> L.Exp
-lstString = foldl (\acc char ->
-  L.App (L.App (L.Var $ generatePrimitiveVar "(::)") (L.Lit $ L.LChar char)) acc)
-  (L.TApp (L.Con $ B.Identifier B.nullSpan "[]") (L.Type $ T.Char B.nullSpan))
+lstString = foldr (\char acc ->
+  L.App (L.App (L.Con $ B.Identifier B.nullSpan "::") (L.Lit $ L.LChar char)) acc) (L.TApp (L.Con $ B.Identifier B.nullSpan "[]") (L.Type $ T.Char B.nullSpan))
 
+-- TODO: am i using this?
 -- Transforms a pattern in the "equivalent" least expression
 -- used for compiling Choice patterns and as-patterns
 patToLExp :: E.Pat -> L.Exp

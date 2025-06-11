@@ -11,6 +11,7 @@ type Stream = +{
 
 module ArithExprServerRegular where
 
+type StreamClient, StreamServer : 1S
 type StreamClient = +{ Add  : StreamClient
                      , Mult : StreamClient
                      , Const: !Int; StreamClient
@@ -45,12 +46,12 @@ size s n =
     &Add s   -> size s (n + 1)
     &Mult s  -> size s (n + 1)
     &Const s -> let (_, s) = receive s in size s (n + 1)
-    &EOS s   -> send n s |> close
+    &EOS s   -> s |> send n |> close
 
 -- A sample interaction: counting the number of nodes in a stream;
 -- expect 7 on the console.
 main : Int
 main =
   let (c, s) = channel @StreamClient in
-  fork @() (\_:()1-> size s 0);
+  fork (\(_:()) 1-> size s 0);
   client c

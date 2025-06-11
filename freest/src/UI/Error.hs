@@ -37,26 +37,30 @@ data Error
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | GivenTooManyArgs Span E.Exp T.Type Int Int
-  | ExpectsTooManyArgs Span E.Exp 
+  | ExpectsTooManyArgs Span E.Exp T.Type Int Int
   | LinVarsConsumedInUnFun Span [Variable] E.Exp
   | LinVarsCreatedInUnFun Span [Variable] E.Exp
-  | ExposeError Span String (Either E.Exp E.Pat) T.Type
-  | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
+  | ExposeError Span String T.Type
+  | UnexpectedArg Span (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type) Int E.Exp
   | UnexpectedParam Span (Level T.Type K.Kind) (Level E.Pat Variable) Int E.Exp
   | NonLinPat Span E.Pat T.Type
   | KindMismatch Span K.Kind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
   | SessionTypeMismatch Span T.Type K.Kind
+  | ChannelTypeMismatch Span T.Type K.Kind
+  | ArrowMultiplicityMismatch Span E.Exp Int K.Multiplicity T.Type K.Multiplicity
   | GivenTooManyArgsK Span T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | InvalidType Span T.Type
   | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
+  | TypeMismatchSelect Span T.Type Identifier E.Exp
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
   | TypeCtxMismatch Span E.Exp [(Either Variable Identifier, T.Type)] 
                                [(Either Variable Identifier, T.Type)]
   | ConstructorArgumentMismatch Span Identifier Int Int
   | IllegalChoice Span Identifier T.Type
+  | PartiallyAppliedSelect Span Identifier
   | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
   | UnsupportedError Span String
   | SigLacksDef Span Variable
@@ -81,26 +85,30 @@ instance Located Error where
     LacksKindSig s _ -> s
     LacksTypeSig s _ -> s
     GivenTooManyArgs s _ _ _ _ -> s
-    ExpectsTooManyArgs s _ -> s
+    ExpectsTooManyArgs s _ _ _ _ -> s
     LinVarsConsumedInUnFun s _ _ -> s
     LinVarsCreatedInUnFun s _ _ -> s
-    ExposeError s _ _ _ -> s
+    ExposeError s _ _ -> s
     UnexpectedArg s _ _ _ _ -> s
     UnexpectedParam s _ _ _ _ -> s
     NonLinPat s _ _ -> s
     KindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     SessionTypeMismatch s _ _ -> s
+    ChannelTypeMismatch s _ _ -> s
+    ArrowMultiplicityMismatch s _ _ _ _ _ -> s
     GivenTooManyArgsK s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     InvalidType s _ -> s
     TypeMismatch s _ _ _ -> s
+    TypeMismatchSelect s _ _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchTuple s _ _ _ -> s
     TypeCtxMismatch s _ _ _ -> s
     ConstructorArgumentMismatch s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
     IllegalChoice s _ _ -> s
+    PartiallyAppliedSelect s _ -> s
     UnsupportedError s _ -> s
     SigLacksDef s _ -> s
   -- | There should be no need to relocate an error. (At least for now...)
@@ -156,21 +164,21 @@ instance Show Error where
           "\n Signature for variable `"++show x++"` lacks an accompanying definition."
         GivenTooManyArgs _ f t expected actual ->
           "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
-        ExpectsTooManyArgs _ f ->
-          "\n  Function `"++show f++"` expects too many arguments."
+        ExpectsTooManyArgs _ f t n m->
+          "\n  Function `"++show f++"` expects "++show m++" argument"++(if m == 1 then "" else "s")++", but its type `"++show t++"` takes at most "++show n++"."
         LinVarsConsumedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
         LinVarsCreatedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
-        ExposeError _ s e t -> 
-          "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
+        ExposeError _ s t -> 
+          "\n  Expecting "++s++", but got type `"++show t++"`"
         UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
-          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
+          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"`"++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
-          "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
+          "\n  Expecting a value argument "++maybe "" (\t -> "of type `"++show t++"`") t++", but got type argument `"++show u++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
           "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
@@ -181,11 +189,16 @@ instance Show Error where
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
-          "\n  Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
+          "\n  Expected kind `"++show k1++"` for type `"++show t++"`, but got kind `"++show k2++"`."
         ProperKindMismatch s t k -> 
-          "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`"
+          "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`."
         SessionTypeMismatch s t k -> 
           "\n Expected a session type, but found type `"++show t++"` of kind `"++show k++"`."
+        ChannelTypeMismatch s t k -> 
+          "\n Expected a channel type, but found type `"++show t++"` of kind `"++show k++"`."
+        ArrowMultiplicityMismatch s e n m t m' ->
+          "\n Expected a"++showMult m++" function of type `"++show t++"`, but got "++showMult m'++" function after the "++ordinal n++" parameter of `"++ show e++"`."
+          where showMult = \case K.Lin -> " linear"; K.Un -> "n unrestricted"; K.VarM x -> " multiplicity `"++show x++"`"
         GivenTooManyArgsK s t n m ->
           "\n  Type `"++show t++"` expects "++show n++" arguments, but it was given "++show m++"."
         ExpectsTooManyArgsK s i k ->
@@ -194,6 +207,8 @@ instance Show Error where
           "\n  Invalid type: `"++show t++"`"
         TypeMismatch s t u ep ->
           "\n  Couldn't match expected type `"++show t++"` with actual type `"++show u++"` in the "++showExpPat ep++"."
+        TypeMismatchSelect s t i e ->
+          "\n  Couldn't match expected type `"++show t++"` with selection of choice `"++show i++"` in the expression "++show e++"."
         TypeMismatchList _ t ep ->
           "\n  Couldn't match expected type `"++show t++"` with a list type in the "++showExpPat ep++"."
         TypeMismatchTuple _ n t ep ->
@@ -218,6 +233,8 @@ instance Show Error where
                                     Right i -> "Constructor `"++show i++"`"
         IllegalChoice s i t ->
           "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
+        PartiallyAppliedSelect s i -> 
+          "\n  Cannot synthesize type of partially applied `select` expression."
         UnsupportedError _ m ->
           "\n  " ++ m
 

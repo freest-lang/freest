@@ -1,17 +1,19 @@
 
 module PolyInstantiatedWithUnnormed where
 
-f : !Char;a -> a
-f c = let c = send 'a' c in c
+f : forall (a : 1S). !Char;a -> a
+f @a c = send 'a' c
 
-g : ?Char;a -> a
-g c = let (_,c) = receive c in c
+g : forall (a : 1S). ?Char;a -> a
+g @a c = let (_, c) = receive c in c
 
+type T : 1S
+type T = !Int; T; ?Int
 
 writer : Int -> T -> ()
 writer i c =
-  let _ = writer (i + 1) (send i c)
-  in ()
+  c |> send i |> writer (i + 1);
+  ()
 
 reader : Dual T -> ()
 reader c =
@@ -19,12 +21,9 @@ reader c =
   print @Int i;
   reader c
 
-type T : 1S
-type T = !Int;T;?Int
-
 main : ()
 main =
   let (w,r) = channel @(!Char;T) in
-  fork (\_:() 1-> f @T w |> writer 0) ;
-  g @(Dual T) r |> reader
+  fork (\(_ : ()) 1-> writer 0 (f @T w));
+  reader (g @(Dual T) r)
 

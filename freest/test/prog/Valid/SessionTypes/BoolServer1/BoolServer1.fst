@@ -1,5 +1,7 @@
 module BoolServer1 where
 
+type BoolClient, BoolServer : 1S
+
 type BoolServer = &{ And: ?Bool; ?Bool; !Bool; Skip
                    , Or : ?Bool; ?Bool; !Bool; Skip
                    , Not: ?Bool; !Bool; Skip
@@ -20,7 +22,7 @@ boolServer c =
       c3 |> send (n1 || n2) |> wait
     &Not c1 ->
       let (n1, c2) = receive c1 in
-      c2 |> send (not n1) |> wait
+      c2 |> send (not n1)   |> wait
 
 client1 : BoolClient -> Bool
 client1 w = w |> select Or
@@ -28,12 +30,9 @@ client1 w = w |> select Or
               |> send False
               |> receiveAndClose @Bool 
 
-
 main : Bool
 main =
   let (w,r) = channel @BoolClient in
-  let x = fork @() (\_:()1-> boolServer r) in
+  fork (\(_:()) 1-> boolServer r);
   client1 w
 
--- remove skips from the end
--- Type check : environment checks only the linear part (filter)

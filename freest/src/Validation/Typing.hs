@@ -11,6 +11,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
+import Syntax.Names 
 import Syntax.Type qualified as T
 import UI.Error
 import Utils
@@ -32,7 +33,6 @@ import Data.Functor
 import Data.List qualified as List
 import Data.List.Extra qualified as List
 import Data.Map.Strict qualified as Map
-import Debug.Trace ( traceM )
 
 
 -- The type context. It keeps track of the variables and constructors in scope
@@ -110,9 +110,38 @@ synth kctx tctx = \case
     (t,) <$> check kctx tctx' e2 t
   E.DCons s i     -> lookupType kctx tctx (Right i)
   E.Var s x       -> lookupType kctx tctx (Left  x)
+  -- send e1 e2
+  E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do  -- TODO: remove magic constants (and refactor Syntax.Names).
+    (t, tctx') <- synth kctx tctx e2                                            -- (or not, since these cases are temporary...)
+    (t1, t2) <- Expose.output e2 t `Expose.onExpression` e2
+    (t2,) <$> check kctx tctx' e1 t1
+  -- receive e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
+    (t, tctx') <- synth kctx tctx e
+    (t1, t2) <- Expose.input e t `Expose.onExpression` e
+    return (T.Tuple s [t1,t2], tctx')
+  -- fork e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
+    (t, tctx') <- synth kctx tctx e
+    (m, t1, t2) <- Expose.function e t `Expose.onExpression` e
+    Kinding.check kctx t2 (K.ut (getSpan e))
+    checkEquivTypes (Left e) 
+      (T.AppArrow (getSpan e) m t1 t2) 
+      (T.AppArrow (getSpan e) K.Lin (T.DName s (mkUnitId s)) t2)
+    return (T.DName s (mkUnitId s), tctx')
+  -- select l e1 ... en
+  E.App s f@(E.Select _ i) as ->
+    case as of
+      [] -> throwE (PartiallyAppliedSelect s i)
+      (TypeLevel t : _  ) -> 
+        throwE (UnexpectedArg (getSpan t) (ExpLevel Nothing) (TypeLevel t) 1 f)
+      (ExpLevel  e : as') -> do
+        (u, tctx') <- synth kctx tctx e
+        ui <- Expose.internalChoice e u i
+        checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
-    t' <- Expose.typeArrow f t
+    t' <- Expose.functionOrPolyExp f t `Expose.onExpression` f
     checkArgs f kctx tctx' t' (as, t')
   E.Abs s ps m e'  -> do
     -- TODO: detect incomplete patterns
@@ -154,17 +183,16 @@ synth kctx tctx = \case
       checkEquivTypeCtxs e tctxi tctx1
     return (t1, tctx1)
   E.If s e1 e2 e3 -> do
-    tctx' <- check kctx tctx e1 (T.bool (getSpan e1))
-    (t1, tctx1) <- synth kctx tctx' e1
-    tctx2 <- check kctx tctx' e2 t1
-    checkEquivTypeCtxs e2 tctx1 tctx2
-    return (t1, tctx1)
+    tctx1 <- check kctx tctx e1 (T.bool (getSpan e1))
+    (t2, tctx2) <- synth kctx tctx1 e2
+    tctx3 <- check kctx tctx1 e2 t2
+    checkEquivTypeCtxs e2 tctx2 tctx3
+    return (t2, tctx2)
   E.Channel s t -> do
-    Kinding.checkSession kctx t
+    Kinding.checkChannel kctx t
     pure (T.Tuple s [t, T.AppDual s t], tctx)
-  E.Select s i e -> do
-    (t,tctx') <- synth kctx tctx e
-    Expose.internalChoice e t i <&> (,tctx')
+  E.Select s i -> do
+    throwE (PartiallyAppliedSelect s i)
 
 -- | Synthesis for right-hand sides of case expressions and value/function
 -- definitions. Given kind and type contexts, it synthesizes the type of a
@@ -215,8 +243,8 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   E.Cons s e1 e2 ->
     case normalise tds t of
       T.List _ t' -> do
-        check kctx tctx e1 t'
-        check kctx tctx e2 t
+        tctx' <- check kctx tctx e1 t'
+        check kctx tctx' e2 t
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
@@ -228,13 +256,40 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     (u, tctx') <- lookupType kctx tctx (Left x)
     checkEquivTypes (Left e) t u
     return tctx'
+  -- send e1 e2
+  E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do -- TODO: remove magic constants (and refactor Syntax.Names).
+    (u, tctx') <- synth kctx tctx e                                            -- (or not, since these cases are temporary...)
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- receive e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
+    (u, tctx') <- synth kctx tctx e
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- fork e
+  E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
+    (u, tctx') <- synth kctx tctx e
+    checkEquivTypes (Left e) t u
+    return tctx'
+  -- select l e1 ... en
+  E.App s f@(E.Select _ i) as -> do
+    case as of
+      [] -> throwE (PartiallyAppliedSelect s i)
+      (TypeLevel t : _  ) -> 
+        throwE (UnexpectedArg (getSpan t) (ExpLevel Nothing) (TypeLevel t) 1 f)
+      (ExpLevel  e : as') -> do
+        (u, tctx') <- synth kctx tctx e
+        ui <- Expose.internalChoice e u i
+        (ui', tctx'') <- checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
+        checkEquivTypes (Left e) t ui'
+        return tctx''
   E.App s f as -> do
     (u, tctx') <- synth kctx tctx f
     (v, tctx'') <- checkArgs f kctx tctx' u (as, u)
     checkEquivTypes (Left e) t v
     return tctx''
   E.Abs s ps m e'  -> do
-    (u, kctxps, tctxps) <- checkParams e t kctx tctx (prepareParams ps) t
+    (u, kctxps, tctxps) <- checkParams e (Just m) t kctx tctx (prepareParams ps) t
     let kctx' = kctxps `Map.union` kctx
     tctxe' <- check kctx' (tctxps `Map.union` tctx) e' u
     tctx' <- typeCtxDifference kctx' tctxe' tctxps
@@ -264,7 +319,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     checkEquivTypeCtxs e tctx2 tctx3
     return tctx2
   E.Channel s u -> do
-    Kinding.checkSession kctx u
+    Kinding.checkChannel kctx u
     case normalise tds t of
       T.Tuple _ [t1,t2] -> do
         checkEquivTypes (Left e) u t1
@@ -273,11 +328,20 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
       _ -> do
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
-  E.Select s i e' -> do
-    (u,tctx') <- synth kctx tctx e'
-    ui <- Expose.internalChoice e u i
-    checkEquivTypes (Left e) t ui
-    return tctx'
+  E.Select s i -> do
+    case normalise tds t of
+      T.AppArrow s m u v -> do
+        case normalise tds u of
+          T.AppLinChoice s T.Out us ->
+            case lookup i us of
+              Just ui -> do 
+                checkEquivTypes (Left e) (T.AppArrow s m u ui) 
+                                         (T.AppArrow s m u v ) 
+                return tctx
+              Nothing -> throwE (IllegalChoice s i u)
+          _ -> throwE (TypeMismatchSelect s t i e)
+      _ -> throwE (TypeMismatchSelect s t i e)
+
 
 -- | Checking for declarations. Given kind and type contexts, it validates a
 -- list of declarations in sequence. Variables introduced by a declaration
@@ -304,12 +368,12 @@ checkDecls kctx tctx = foldM (checkDecl kctx) (Map.empty, tctx)
       E.FnDef x ((ps1,rhs1):psrhss) -> do
         let e = E.Var (getSpan x) x
         t <- lookupFunType tctx' x
-        (t1, kctxps1, tctxps1) <- checkParams e t kctx tctx' (prepareParams ps1) t
+        (t1, kctxps1, tctxps1) <- checkParams e Nothing t kctx tctx' (prepareParams ps1) t
         let kctx1 = kctxps1 `Map.union` kctx
         tctxrhs1 <- checkRHS kctx1 (tctxps1 `Map.union` tctx') rhs1 t1
         tctx1 <- typeCtxDifference kctx1 tctxrhs1 tctxps1
         forM_ psrhss \(psi,rhsi) -> do
-            (ti, kctxpsi, tctxpsi) <- checkParams e t kctx tctx' (prepareParams psi) t
+            (ti, kctxpsi, tctxpsi) <- checkParams e Nothing t kctx tctx' (prepareParams psi) t
             let kctxi = kctxpsi `Map.union` kctx
             tctxrhsi <- checkRHS kctxi (tctxpsi `Map.union` tctx') rhsi ti
             tctxi <- typeCtxDifference kctxi tctxrhsi tctxpsi
@@ -346,7 +410,7 @@ checkArgs = checkArgs' 1
         checkArgs' (n+1) f kctx tctx' t0 (as,v)
       -- expected expression, given type
       (TypeLevel t:as, normalise tds -> T.AppArrow s' m u v) -> do
-        throwE (UnexpectedArg (getSpan t) (ExpLevel u) (TypeLevel t) n f)
+        throwE (UnexpectedArg (getSpan t) (ExpLevel (Just u)) (TypeLevel t) n f)
       -- expected type, given expression (to be inferred...)
       (ExpLevel  e:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
         throwE (UnexpectedArg (getSpan e) (TypeLevel k) (ExpLevel e) n f)
@@ -361,15 +425,18 @@ checkArgs = checkArgs' 1
 -- collecting the variables introduced by each parameter and performing the
 -- appropriate checks. It returns the type the body of the function should 
 -- conform to, along with the kind and type contexts containing exclusively the
--- variables introduced by the parameters.
+-- variables introduced by the parameters. If a multiplicity is provided (e.g., 
+-- that of a lambda expression), then it is checked against each of the function
+-- types inspected.
 checkParams :: E.Exp
+            -> Maybe K.Multiplicity
             -> T.Type
             -> KindCtx
             -> TypeCtx
             -> [Level (E.Pat, Maybe T.Type) (Variable, Maybe K.Kind)]
             -> T.Type
             -> Validation (T.Type, KindCtx, TypeCtx)
-checkParams e t kctx tctx = checkParams' 1 kctx tctx
+checkParams e mm t kctx tctx = checkParams' 1 kctx tctx
   where
     checkParams' n kctx' tctx' ps t' = gets typeDecls >>= \tds -> case (ps, t') of
     -- regular cases first
@@ -379,11 +446,15 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
           Nothing -> return () -- catchE (...) putError_
         checkParams' (n+1) (Map.insert a' k kctx') tctx' as 
           ((if null aks then id else T.AppForall s' aks) $ subs a (T.Var (getSpan a') a') u)
-      (ExpLevel  (p,mu'):as, normalise tds -> T.AppArrow s' m u v) -> do
+      (ExpLevel  (p,mu'):as, normalise tds -> t'@(T.AppArrow s' m u v)) -> do
         case mu' of
           Just u' -> do
             Kinding.checkProper kctx' u'
             checkEquivTypes (Right p) u' u
+          Nothing -> return ()
+        case mm of -- TODO: check if this is the right approach, tune error message, revisit multiplicity subtyping or polymorphism
+          Just m' -> unless (m' == m) $ 
+            throwE (ArrowMultiplicityMismatch (getSpan e) e n m t' m')
           Nothing -> return ()
         ptctx <- checkPat kctx' p u
         checkParams' (n+1) kctx' (ptctx `Map.union` tctx') as v
@@ -397,7 +468,7 @@ checkParams e t kctx tctx = checkParams' 1 kctx tctx
       ([], t') -> return (t', kctx' Map.\\ kctx, tctx' Map.\\ tctx)
       -- too many arguments
       (as, t') -> do
-        throwE (GivenTooManyArgs (getSpan e) e t n (n+length as))
+        throwE (ExpectsTooManyArgs (getSpan e) e t n (n + length as))
 
 -- | Check-against for patterns. Given a kind context, it checks whether a 
 -- pattern can match a given type, throwing an error if it cannot. It returns a 
@@ -463,7 +534,7 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
       (T.AppSemi _ t'@(T.SharedChoice _ T.In ls) u) 
         | i `elem` ls -> checkPat kctx p' t'
         | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-      _ -> throwE (ExposeError (getSpan p) "an internal choice" (Right p) t)
+      _ -> throwE (ExposeError (getSpan p) ("an internal choice type for pattern `" ++ show p ++"`") t)
   -- x@p
   E.AsPat s x p'     -> do
     k <- Kinding.synth kctx t
