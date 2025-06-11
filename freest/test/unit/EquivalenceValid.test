@@ -10,6 +10,48 @@ case Int == Int : *T
 
 case () == () : *T
 
+-- Polymorphism
+
+case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
+  == Sum Int Bool
+   : *T
+where
+  type Bool : *T
+  data Bool = True | False
+  type Sum : *T -> *T -> *T
+  type Sum a b = forall (c : *T). (a -> c) -> (b -> c) -> c
+
+case (forall (b : *T). (b -> b) -> b -> b) 
+  == Nat 
+   : *T
+where
+  type Nat : *T
+  type Nat = forall (a : *T). (a -> a) -> a -> a
+
+case forall (b : *T). b -> b -> b
+  == Bool
+   : *T
+where
+  type Bool : *T
+  type Bool = forall (b : *T). b -> b -> b
+
+case forall (a : *T). (forall (c : *T). (List a -> List a -> c) -> c)
+  == forall (a : *T). ((Pair (List a)) (List a))
+   : *T
+where
+  type Pair : *T -> *T -> *T
+  type Pair a b = forall (c : *T). (a -> b -> c) -> c
+  type List : *T -> *T
+  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
+
+case (forall (c : *T). (List Int -> List Int -> c) -> c)
+  == ((Pair (List Int)) (List Int))
+   : *T
+where
+  type Pair : *T -> *T -> *T
+  type Pair a b = forall (c : *T). (a -> b -> c) -> c
+  type List : *T -> *T
+  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
 
 -- Session types
 
