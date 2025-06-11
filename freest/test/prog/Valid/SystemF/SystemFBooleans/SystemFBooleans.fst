@@ -11,28 +11,28 @@ module SystemFBooleans where
 type Bool' : *T
 type Bool' = forall (b : *T). b -> b -> b
 
-trueC, falseC : Bool'
+true, false : Bool'
 
-trueC  = \@(a : *T) -> \(t : a) -> \(f : a) -> t
+true  = \@(a : *T) -> \(t : a) -> \(f : a) -> t
 
-falseC = \@(a : *T) -> \(t : a) -> \(f : a) -> f
+false = \@(a : *T) -> \(t : a) -> \(f : a) -> f
 
-notC : Bool' -> Bool'
-notC = \(b : Bool') -> \@(a : *T) -> \(t : a) -> \(f : a) -> b @a f t
+not' : Bool' -> Bool'
+not' = \(b : Bool') -> \@(a : *T) -> \(t : a) -> \(f : a) -> b @a f t
 
 -- Abbreviated versions of the above
 
 type Bool'' : *T -> *T
 type Bool'' b = b -> b -> b
 
-trueC', falseC': forall (b : *T). Bool'' b
+true', false': forall (b : *T). Bool'' b
 
-trueC'  @b t _ = t
+true'  @b t _ = t
 
-falseC' @b _ f = f
+false' @b _ f = f
 
-notC' : forall (b : *T). Bool'' b -> Bool'' b
-notC' @b b = \(t : b) (f : b) -> b f t
+not'' : forall (b : *T). Bool'' b -> Bool'' b
+not'' @b b = \(t : b) (f : b) -> b f t
 
 -- Destructor
 
@@ -41,13 +41,13 @@ cond @a b e1 e2 = b @a e1 e2
 
 -- Boolean ops based on the conditional
 
-notC'' : Bool' -> Bool'
-notC'' b = cond  @Bool' b falseC trueC
+not''' : Bool' -> Bool'
+not''' b = cond  @Bool' b false true
 
-orC, andC : Bool' -> Bool' -> Bool'
-orC b1 b2 = cond  @Bool' b1 trueC b2
+or', and' : Bool' -> Bool' -> Bool'
+or' b1 b2 = cond  @Bool' b1 true b2
 
-andC b1 b2 = cond  @Bool' b1 b2 falseC
+and' b1 b2 = cond  @Bool' b1 b2 false
 
 -- Testing
 
@@ -61,7 +61,7 @@ ifInt : Bool' -> Int -> Int -> Int
 ifInt = cond  @Int
 
 -- main : Int
--- main = ifInt (notC trueC) 1 2
+-- main = ifInt (not' true) 1 2
 
 main : Bool
-main = toBool $ andC (orC falseC trueC) (notC falseC)
+main = toBool $ and' (or' false true) (not' false)
