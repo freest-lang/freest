@@ -137,7 +137,7 @@ synth kctx tctx = \case
         throwE (UnexpectedArg (getSpan t) (ExpLevel Nothing) (TypeLevel t) 1 f)
       (ExpLevel  e : as') -> do
         (u, tctx') <- synth kctx tctx e
-        ui <- Expose.internalChoice e u i
+        ui <- Expose.internalChoice e u i `Expose.onExpression` e
         checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
@@ -276,7 +276,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
         throwE (UnexpectedArg (getSpan t) (ExpLevel Nothing) (TypeLevel t) 1 f)
       (ExpLevel  e : as') -> do
         (u, tctx') <- synth kctx tctx e
-        ui <- Expose.internalChoice e u i
+        ui <- Expose.internalChoice e u i `Expose.onExpression` e
         (ui', tctx'') <- checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
         checkEquivTypes (Left e) t ui'
         return tctx''

@@ -244,7 +244,6 @@ case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
 
 case (?Char ; *&{A, B} ; !Int) 1-> Char == (?Char ; *&{A, B}) 1-> Char : 1T
 
-
 -- When there is (unreachable) life past noncontractive (rec) types
 
 case T == U : 1S

@@ -1,4 +1,4 @@
-module Validation.Expose 
+module Validation.Expose
   ( kindArrow
   , functionOrPolyExp
   , function
@@ -55,10 +55,13 @@ internalChoice :: Located e => e -> T.Type -> Identifier -> Validation T.Type
 internalChoice e t i = do
   ds <- gets typeDecls
   case normalise ds t of
-    T.AppLinChoice s T.Out ts -> 
-        case lookup i ts of
-            Just t' -> return t'
-            Nothing -> throwE (IllegalChoice s i t)
+    T.AppLinChoice s T.Out its -> 
+      case lookup i its of
+        Just t' -> return t'
+        Nothing -> throwE (IllegalChoice s i t)
+    t'@(T.SharedChoice s T.Out its)
+      | i `elem` its -> return t'
+      | otherwise    -> throwE (IllegalChoice s i t)
     _ -> throwE (ExposeError (getSpan e) "an internal choice" t)
 
 output :: Located e => e -> T.Type -> Validation (T.Type, T.Type)
@@ -71,12 +74,14 @@ message :: Located e => T.Polarity -> e -> T.Type -> Validation (T.Type, T.Type)
 message p e t = do
   ds <- gets typeDecls
   case normalise ds t of
-    T.AppMessage s _ p' u                 | p == p' -> return (u, T.Skip s)
-    T.AppSemi _ (T.AppMessage _ _ p' u) v | p == p' -> return (u, v)
+    T.AppMessage s K.Lin p' u                    | p == p' -> return (u, T.Skip s)
+    t'@(T.AppMessage s K.Un  p' u)               | p == p' -> return (u, t')
+    T.AppSemi _    (T.AppMessage _ K.Lin p' u) v | p == p' -> return (u, v)
+    T.AppSemi _ t'@(T.AppMessage _ K.Un  p' u) v | p == p' -> return (u, t')
     _ -> throwE (ExposeError (getSpan e) "an output type" t)
 
 onExpression :: Validation a -> E.Exp -> Validation a
-onExpression v e = catchE v $ \case 
-  (ExposeError s msg t) -> 
+onExpression v e = catchE v $ \case
+  (ExposeError s msg t) ->
     throwE (ExposeError (getSpan e) (msg ++ " for expression `"++ show e++"`") t)
   e -> throwE e
