@@ -1,7 +1,8 @@
 module LeaST.LeaST where
 
 import qualified Syntax.Base as B
-qs: addEqimport qualified Syntax.Type as T  --import qualified Syntax.Type as T
+--qs: addEqimport qualified Syntax.Type as T  
+import qualified Syntax.Type as T
 import qualified Syntax.Kind as K
 import qualified Syntax.Module as M
 
@@ -14,9 +15,9 @@ data Exp
   | App Exp Exp
   | Con B.Identifier
   | Case Exp [(Alt, Exp)]
-  -- | Type T.Type  
+  | Type T.Type  --tirar
   | TAbs B.Variable K.Kind Exp
-  | TApp Exp T.Type
+  | TApp Exp T.Type --mudar TApp Exp T.Type
   -- | Source B.Span Exp
   deriving Show
 

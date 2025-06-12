@@ -12,37 +12,30 @@ import Data.Maybe ( maybe )
 import Debug.Trace
 
 fstToLst :: [M.Module] -> L.Exp
-fstToLst modules = translateTopLevelLetDecls (concat (map (\M.Module {M.name=_, M.imports=_, M.dataDecls=_, M.typeDecls=_, M.kindSigs=_, M.definitions=letDecls} -> letDecls) modules)) 
+fstToLst modules = traceShow modules $ translateTopLevelLetDecls (concatMap M.definitions modules) 
 
 translateTopLevelLetDecls :: [E.LetDecl] -> L.Exp
-translateTopLevelLetDecls letDecls = fst $ translateLetDecls 0 letDecls [] (L.Var $ generatePrimitiveVar "main")
+translateTopLevelLetDecls letDecls = fst $ translateLetDecls 0 letDecls [] generateUnit
 
 translateLetDecls :: Int -> [E.LetDecl] -> [(B.Variable, T.Type)] -> L.Exp -> (L.Exp, Int)
 translateLetDecls counter [] _ cont = (cont, counter)
 translateLetDecls counter ((E.ValDef pat@(E.VarPat _ var) rhs):letDecls) typeSigs cont =
   let (rhsExp, counter1) = translateRHS counter rhs
       (translateLetDeclsRes, counter2) = translateLetDecls counter1 letDecls typeSigs cont in
-  (L.App (translatePat (pat, getTypeFromTypeSigs typeSigs var) translateLetDeclsRes) rhsExp, counter2)
--- TODO: merge this and next equation
-translateLetDecls counter ((E.ValDef (E.AsPat _ asPatVar asPatPat) rhs):letDecls) typeSigs cont =
-  let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
-      (counter2, var) = nextFreshVar counter1
-      (compileEquationsRes, counter3) = compileEquations counter2 [var] [([asPatPat], translateLetDeclsRes)] generateError
-      (translateRhsRes, counter4) = translateRHS counter3 rhs in
-  (L.App (L.Abs var (T.Int B.nullSpan) (L.App (L.Abs asPatVar (T.Int B.nullSpan) compileEquationsRes) (L.Var var))) translateRhsRes, counter3)
+  (L.App (translatePat (pat, getTypeFromTypeSigs typeSigs var) translateLetDeclsRes) (L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") rhsExp) generateError), counter2)
 translateLetDecls counter ((E.ValDef pat rhs):letDecls) typeSigs cont =
   let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
       (counter2, var) = nextFreshVar counter1
-      (compileEquationsRes, counter3) = compileEquations counter2 [var] [([pat], translateLetDeclsRes)] generateError
+      (compileEquationsRes, counter3) = compileEquations counter2 [var] [([removeAsPat pat], foldr (\(var, exp) acc -> L.App (L.Abs var (T.Int B.nullSpan) acc) exp) translateLetDeclsRes (getAsPatBindings pat))] generateError
       (translateRhsRes, counter4) = translateRHS counter3 rhs in
-  (L.App (L.Abs var (T.Int B.nullSpan) compileEquationsRes) translateRhsRes, counter3)
+  (L.App (L.Abs var (T.Int B.nullSpan) (L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") compileEquationsRes) generateError)) translateRhsRes, counter3)
 translateLetDecls counter ((E.FnDef var patRhss):letDecls) typeSigs cont =
   let (translateLetDeclsRes, counter1) = translateLetDecls counter letDecls typeSigs cont
       (eqs, counter2) = bar counter1 patRhss
       argsNum = length $ (fst . head) eqs
       (counter3, vars) = nextFreshVars counter2 argsNum
-      (compileEquationsRes, _) = compileEquations counter3 vars (cleanPats eqs vars) generateError
-      (generateArgsRes, counter5) = generateArgs counter2 argsNum compileEquationsRes in
+      (compileEquationsRes, _) = compileEquations counter3 vars (handleAsPatInEqs eqs) generateError
+      (generateArgsRes, counter5) = generateArgs counter2 argsNum (L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") compileEquationsRes) generateError) in
   (L.App (L.Abs var (T.Int B.nullSpan) translateLetDeclsRes) (L.App generateFixPoint (L.Abs var (T.Int B.nullSpan) generateArgsRes)), counter5)
 -- TODO: remover ctx das assinaturas
 translateLetDecls counter ((E.Mutual mutualLetDecls):letDecls) typeSigs cont = undefined
@@ -57,21 +50,39 @@ generateArgs n size cont =
   (L.Abs var (T.Int B.nullSpan) generateArgsRes, counter1)
 
 -- Removes AsPats transforming the expression in the equation
-cleanPats :: [Equation] -> [B.Variable] -> [Equation]
-cleanPats [] _ = []
-cleanPats (eq:eqs) vars = cleanPats' eq vars : cleanPats eqs vars
+handleAsPatInEqs :: [Equation] -> [Equation]
+handleAsPatInEqs = map (\(pats, exp) ->
+  let newPats = map removeAsPat pats
+      patsBindings = concatMap getAsPatBindings pats in
+  (newPats, foldr (\(var, bindingExp) acc -> L.App (L.Abs var (T.Int B.nullSpan) acc) bindingExp) exp patsBindings))
 
-cleanPats' :: Equation -> [B.Variable] -> Equation
-cleanPats' ([], exp) vars = ([], exp)
-cleanPats' ((E.AsPat _ asPatVar asPatPat):pats, exp) (var:vars) = let (patsRes, expRes) = cleanPats' (pats, exp) vars in (asPatPat:patsRes, L.App (L.Abs asPatVar (T.Int B.nullSpan) expRes) (L.Var var))
-cleanPats' (pat:pats, exp) vars = let (patsRes, expRes) = cleanPats' (pats, exp) (tail vars) in (pat:patsRes, expRes)
+removeAsPat :: E.Pat -> E.Pat
+removeAsPat (E.DConsPat span iden pats) = E.DConsPat span iden (map removeAsPat pats) 
+removeAsPat (E.ChoicePat span iden pat) = (E.ChoicePat span iden (removeAsPat pat))
+removeAsPat (E.AsPat _ _ pat) = removeAsPat pat
+removeAsPat pat = pat
+
+getAsPatBindings :: E.Pat -> [(B.Variable, L.Exp)]
+getAsPatBindings (E.DConsPat _ __ pats) = concat $ map getAsPatBindings pats
+getAsPatBindings (E.ChoicePat _ _ pat) = getAsPatBindings pat
+getAsPatBindings (E.AsPat _ var pat) = (var, patToLExp pat) : (getAsPatBindings pat)
+getAsPatBindings _ = []
 
 translateRHS :: Int -> E.RHS -> (L.Exp, Int)
 translateRHS counter (E.UnguardedRHS exp (Just letDecls)) =
-  let (cont, counter) = translateExp counter exp in translateLetDecls counter letDecls [] cont
+  let (cont, counter1) = translateExp counter exp in translateLetDecls counter letDecls [] cont
 translateRHS counter (E.UnguardedRHS exp Nothing) = translateExp counter exp
-translateRHS counter (E.GuardedRHS guards (Just letDecls)) = undefined
-translateRHS counter (E.GuardedRHS guards Nothing) = undefined
+translateRHS counter (E.GuardedRHS guards (Just letDecls)) =
+  let (cont, counter1) =
+        foldr (\(cond, exp) (accExp, accCounter) ->
+        let (cond1, counter1) = translateExp accCounter cond
+            (exp1, counter2) = translateExp counter1 exp
+        in (generateLeastIf cond1 exp1 accExp, counter2)) (generateFail, counter) guards
+  in translateLetDecls counter1 letDecls [] cont
+translateRHS counter (E.GuardedRHS guards Nothing) = foldr (\(cond, exp) (accExp, accCounter) ->
+  let (cond1, counter1) = translateExp accCounter cond
+      (exp1, counter2) = translateExp counter1 exp
+  in (generateLeastIf cond1 exp1 accExp, counter2)) (generateFail, counter) guards
 
 translateExp :: Int -> E.Exp -> (L.Exp, Int)
 translateExp counter (E.Int _ int) = (L.Lit (L.LInt int), counter)
@@ -84,14 +95,9 @@ translateExp counter (E.App _ exp args) =
     B.ExpLevel exp -> let (exp3, counter) = translateExp accCounter exp in (L.App accExp exp3, counter)
     B.TypeLevel ty -> (L.TApp accExp (L.Type ty), accCounter)) (translateExp counter exp) args
 translateExp counter (E.Abs _ levels _ exp) = foldr (\abs (accExp, accCounter) -> case abs of
-  -- TODO: merge this case with the next one
-  B.ExpLevel (E.AsPat _ asPatVar asPatPat, ty) ->
-    let (counter1, var) = nextFreshVar accCounter
-        (compileEquationsRes, counter2) = compileEquations counter1 [var] [([asPatPat], accExp)] generateError in
-    ((L.Abs var (T.Int B.nullSpan) (L.App (L.Abs asPatVar (T.Int B.nullSpan) compileEquationsRes) (L.Var var))), counter2)
   B.ExpLevel (pat, ty) ->
     let (counter1, var) = nextFreshVar accCounter
-        (compileEquationsRes, counter2) = compileEquations counter1 [var] [([pat], accExp)] generateError in
+        (compileEquationsRes, counter2) = compileEquations counter1 [var] [([removeAsPat pat], foldr (\(var, exp) acc -> L.App (L.Abs var (T.Int B.nullSpan) acc) exp) accExp (getAsPatBindings pat))] generateError in
     ((L.Abs var (T.Int B.nullSpan) compileEquationsRes), counter2)
 -- TODO: give the correct type
   B.TypeLevel (var, kind) -> (translatePat (E.VarPat B.nullSpan var, T.Int B.nullSpan) accExp,  accCounter)) (translateExp counter exp) levels
@@ -105,16 +111,12 @@ translateExp counter (E.If _ cond t f) =
 translateExp counter (E.Case _ exp patRhss) =
   let (caseExp, counter1) = translateExp counter exp
       (counter2, var) = nextFreshVar counter1
-      (rhss, counter3) = mapWithCounter counter2 (\counter (pat, rhs) -> let (rhsExp, counter1) = translateRHS counter rhs in
-        case pat of
-          E.AsPat _ asPatVar asPatPat -> (([asPatPat], L.App (L.Abs asPatVar (T.Int B.nullSpan) rhsExp) (L.Var var)), counter1)
-          _ -> (([pat], rhsExp), counter1)) patRhss
+      (rhss, counter3) = mapWithCounter counter2 (\counter (pat, rhs) -> let (rhsExp, counter1) = translateRHS counter rhs in (([removeAsPat pat], foldr (\(var, exp) acc -> L.App (L.Abs var (T.Int B.nullSpan) acc) exp) rhsExp (getAsPatBindings pat)), counter1)) patRhss
       (compiledEquationsExp, counter4) = compileEquations counter3 [var] rhss generateError in
   (L.App (L.Abs var (T.Int B.nullSpan) compiledEquationsExp) caseExp, counter4)
 translateExp counter (E.Channel _ _) = (L.App (L.Var $ generatePrimitiveVar "chan") generateUnit, counter)
-translateExp counter (E.Select _ (B.Identifier _ iden) exp) =
-  let (translateExpRes, counter1) = translateExp counter exp in
-  (L.TApp (L.TApp (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "send") generateUnit) generateUnit) (lstString iden)) translateExpRes, counter1)
+translateExp counter (E.Select _ (B.Identifier _ iden)) =
+  ((L.TApp (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "send") generateUnit) generateUnit) (lstString iden)) , counter)
 
 mapWithCounter :: Int -> (Int -> a -> (b, Int)) -> [a] -> ([b], Int)
 mapWithCounter n _ [] = ([], n)
@@ -124,18 +126,35 @@ mapWithCounter n f (x:xs) =
   (x':xs', counter2)
 
 generateLeastIf :: L.Exp -> L.Exp -> L.Exp -> L.Exp
-generateLeastIf cond t f = L.Case cond [(L.ACon (B.Identifier B.nullSpan "True") [], t), (L.ACon (B.Identifier B.nullSpan "False") [], f)]
+-- generateLeastIf cond t f = L.Case cond [(L.ACon (B.Identifier B.nullSpan "True") [], t), (L.ACon (B.Identifier B.nullSpan "False") [], f)]
+generateLeastIf cond t f = L.App (L.App (L.App (L.Var $ generatePrimitiveVar "if__") cond) t) f
 
 generatePrimitiveVar :: String -> B.Variable
 generatePrimitiveVar name = B.Variable {B.internal=(-1), B.external=name, B.varSpan=B.Span{B.filepath="", B.startPos=(0,0), B.endPos=(0,0)}}
+
+generateFail :: L.Exp
+generateFail = L.Con (B.Identifier B.nullSpan "Fail__")
 
 generateUnit :: L.Exp
 generateUnit = L.Con (B.Identifier B.nullSpan "()")
 
 lstString :: String -> L.Exp
-lstString = foldl (\acc char ->
-  L.App (L.App (L.Var $ generatePrimitiveVar "(::)") (L.Lit $ L.LChar char)) acc)
-  (L.TApp (L.Con $ B.Identifier B.nullSpan "[]") (L.Type $ T.Char B.nullSpan))
+lstString = foldr (\char acc ->
+  L.App (L.App (L.Con $ B.Identifier B.nullSpan "::") (L.Lit $ L.LChar char)) acc) (L.TApp (L.Con $ B.Identifier B.nullSpan "[]") (L.Type $ T.Char B.nullSpan))
+
+-- TODO: am i using this?
+-- Transforms a pattern in the "equivalent" least expression
+-- used for compiling Choice patterns and as-patterns
+patToLExp :: E.Pat -> L.Exp
+patToLExp (E.IntPat _ n) = L.Lit $ L.LInt n
+patToLExp (E.FloatPat _ n) = L.Lit $ L.LFloat n
+patToLExp (E.CharPat _ c) = L.Lit $ L.LChar c
+patToLExp (E.WildPat _ _) = L.Var $ generatePrimitiveVar "wild__"
+patToLExp (E.VarPat _ var) = L.Var var
+patToLExp (E.DConsPat _ iden pats) = foldl (\acc pat -> L.App acc (patToLExp pat)) (L.Con iden) pats
+patToLExp (E.ChoicePat _ iden (E.VarPat _ var)) = L.Var var
+-- TODO: can treat asPat as varPat??
+patToLExp (E.AsPat _ _ pat) = patToLExp pat
 
 -- TODO: necessario um variavel fresca para o wildpat??
 translatePat :: (E.Pat, T.Type) -> L.Exp -> L.Exp
@@ -179,10 +198,17 @@ compileEquations :: Int -> [B.Variable] -> [Equation] -> L.Exp -> (L.Exp, Int)
 -- TODO: empty rule is not correct, maybe?
 -- compileEquations _ [] eqs def = let (hd:tl) = [e |(_,e) <- eqs] in 
 --   L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") (foldl (\acc exp -> L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") acc) exp) hd tl)) def
-compileEquations counter [] ((_,exp):_) _ = (exp, counter)
-compileEquations counter vars eqs def | allVars eqs = compileEquations counter (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
-                              | allCons eqs = let (fooRes, counter1) = foo counter (tail vars) (groupEqs eqs) def in (L.Case (L.Var (head vars)) fooRes, counter1)
-                              | otherwise = foldr (\groupedEqs (accExp, accCounter) -> compileEquations accCounter vars groupedEqs accExp) (def, counter) (reverse $ mixtureGroup eqs)
+compileEquations counter [] [] def = (def, counter)
+compileEquations counter [] [(_, exp)] _ = (exp, counter)
+compileEquations counter [] eqs _ = (foldr (\(_, exp) acc-> L.App (L.App (L.Var $ generatePrimitiveVar "fatbar__") exp) acc) (snd . last $ eqs) (init eqs), counter)
+compileEquations counter vars eqs def | allVars eqs =
+                                        compileEquations counter (tail vars) (updateHeadPattern (replaceVar (head vars) eqs)) def
+                                      | allCons eqs && firstEqIsChoicePat eqs =
+                                        let (counter1, freshVars) = nextFreshVars counter 2
+                                            (fooRes, counter2) = foo counter1 (tail freshVars ++ tail vars ) (groupEqs eqs) def
+                                        in (L.Case (generateReceive generateUnit generateUnit (L.Var $ head vars)) [(L.ACon (B.Identifier B.nullSpan "(,)") freshVars, (L.Case (L.Var (head freshVars)) fooRes))], counter2)
+                                      | allCons eqs = let (fooRes, counter1) = foo counter (tail vars) (groupEqs eqs) def in (L.Case (L.Var (head vars)) fooRes, counter1)
+                                      | otherwise = foldr (\groupedEqs (accExp, accCounter) -> compileEquations accCounter vars groupedEqs accExp) (def, counter) (reverse $ mixtureGroup eqs)
 
 allVars :: [Equation] -> Bool
 allVars [] = True 
@@ -198,7 +224,15 @@ allCons (eq:eqs) = case (head . fst) eq of
   E.IntPat _ _ -> allCons eqs
   E.FloatPat _ _ -> allCons eqs
   E.CharPat _ _ -> allCons eqs
+  E.ChoicePat _ _ _ -> allCons eqs
   _ -> False
+
+firstEqIsChoicePat :: [Equation] -> Bool
+firstEqIsChoicePat ((((E.ChoicePat _ _ _):_), _):_) = True
+firstEqIsChoicePat _ = False
+
+generateReceive :: L.Exp -> L.Exp -> L.Exp -> L.Exp
+generateReceive arg1 arg2 arg3 = L.App (L.TApp (L.TApp (L.Var $ generatePrimitiveVar "receive") arg1) arg2) arg3
 
 replaceVar :: B.Variable -> [Equation] -> [Equation]
 replaceVar var eqs = map (\(pats, exp) -> case pats of
@@ -291,6 +325,15 @@ foo counter vars (eqs:eqss) def =
       let (compileEquationsRes, counter1) = compileEquations counter vars (updateHeadPattern eqs) def
           (fooRes, counter2) = foo counter1 vars eqss def in
       ((L.ALit $ L.LChar n, compileEquationsRes):fooRes, counter2)
+    E.ChoicePat _ label (E.VarPat _ var) ->
+      let (compileEquationsRes, counter1) = compileEquations counter vars (updateHeadPattern eqs) def 
+          (fooRes, counter2) = foo counter1 vars eqss def in
+      ((L.ACon label [], compileEquationsRes):fooRes, counter2)
+    E.ChoicePat _ label (E.WildPat _ var) ->
+      let (compileEquationsRes, counter1) = compileEquations counter vars (updateHeadPattern eqs) def 
+          (fooRes, counter2) = foo counter1 vars eqss def in
+      ((L.ACon label [], compileEquationsRes):fooRes, counter2)
+    E.ChoicePat _ _ _ -> undefined
 
 -- TODO: remove this function
 newKVars :: Int -> Int -> [B.Variable]
@@ -302,6 +345,9 @@ updateHeadPattern eqs = map (\(pats, exp) -> (updateHeadPattern' pats, exp)) eqs
 updateHeadPattern' :: [E.Pat] -> [E.Pat]
 updateHeadPattern' ((E.DConsPat _ _ []):pats) = pats 
 updateHeadPattern' ((E.DConsPat _ _ innerPats):pats) = innerPats++pats 
+updateHeadPattern' ((E.ChoicePat _ _ varPat@(E.VarPat _ _)):pats) = varPat:pats 
+updateHeadPattern' ((E.ChoicePat _ _ varPat@(E.WildPat _ _)):pats) = varPat:pats 
+updateHeadPattern' ((E.ChoicePat _ _ pat):pats) = undefined 
 updateHeadPattern' (pat:pats) = pats
 
 -- TODO: rename this for function for something better
@@ -328,3 +374,4 @@ removeBuiltins m = m{M.definitions = filter notBuiltin (M.definitions m)}
               Nothing -> True
               Just _  -> False
           _ -> True
+  

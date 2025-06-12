@@ -642,13 +642,17 @@ LAlt :: { L.Alt }
   | FLOAT_LIT { L.ALit (L.LFloat (read $ getText $1)) }
   | CHAR_LIT { L.ALit (L.LChar (read $ getText $1)) }
   | WILDCARD { L.AWildCard }
-  | UPPER_ID VarListWS { (L.ACon (mkIdTk $1) $2)} 
+  | UPPER_ID LVarList { (L.ACon (mkIdTk $1) $2)} 
 -- implement (x, y) syntax for tuples in pattern
-  | '(' Commas ')' VarListWS{ L.ACon (mkTupleId $2 (spanFromTo $1 $3)) $4 }
+  | '(' Commas ')' LVarList{ L.ACon (mkTupleId $2 (spanFromTo $1 $3)) $4 }
 
 LExpListComma :: { [L.Exp] }
   : LExp ',' LExpListComma { $1 : $3 }
   | LExp                  { [$1] }
+
+LVarList :: { [Variable] }
+  : {- empty -} { [] }
+  | ExpVar LVarList { $1 : $2 }
 
 {
 

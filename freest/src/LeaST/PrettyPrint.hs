@@ -18,7 +18,7 @@ prettyStr (L.Con iden) _ = getStringFromIdentifier iden
 prettyStr (L.Case exp alts) indent = "case " ++ prettyStr exp indent ++ " of\n" ++ alternativesStr alts (indent+2)
 prettyStr (L.Type ty) _ = show ty
 prettyStr (L.TAbs var _ exp) indent = "(\\@" ++ (getStringFromVariable var) ++ " -> " ++ "\n" ++ replicate (indent+2) ' ' ++ (prettyStr exp (indent+2)) ++ "\n" ++ replicate (indent) ' ' ++ ")"
-prettyStr (L.TApp lExp rExp) indent = prettyStr lExp indent ++ " " ++ prettyStr rExp indent
+--prettyStr (L.TApp lExp rExp) indent = prettyStr lExp indent ++ " " ++ prettyStr rExp indent
 
 literalStr :: L.Literal -> String
 literalStr (L.LInt int) = show int
