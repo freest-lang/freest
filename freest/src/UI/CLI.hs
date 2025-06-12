@@ -10,6 +10,7 @@ module UI.CLI where
 
 import Options.Applicative
 
+-- | The command line options accepted by the FreeST compiler.
 data RunOpts = RunOpts{file :: FilePath, least :: Bool}
 
 -- | The parser for the command line options.

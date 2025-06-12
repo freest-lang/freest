@@ -91,3 +91,7 @@ lexAll = do
     TkEOF _ -> pure ()
     x -> do
       lexAll
+      
+-- | The path to the source code of the Prelude.
+preludePath :: FilePath
+preludePath = "StandardLib/Prelude.fst"
