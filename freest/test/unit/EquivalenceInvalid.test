@@ -1,11 +1,13 @@
--- NC is non-contractive, hence has no transtions. Wait has a transition (by Wait)
+-- Void is non-contractive, hence has no transtions. Wait has a transition (by Wait)
 
-case NC ; Wait == Wait : 1S
+case Void ; Wait == Wait : 1S
 where
-  type NC : *S
-  type NC = NC
+  type Void : *S
+  type Void = Void
 
-case forall (a : 1S). NC ; Wait ; a == forall (b : 1S). Wait : 1S
+case forall (a : 1S). Void ; Wait ; a == forall (b : 1S). Wait : 1S
 where
-  type NC : *S
-  type NC = NC
+  type Void : *S
+  type Void = Void
+
+case &{Done: Skip} ; Wait == &{Done: Skip} ; Close : 1C

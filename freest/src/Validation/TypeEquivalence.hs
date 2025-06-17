@@ -36,7 +36,7 @@ equivalent td t u =
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
-  -- trace ("\nTypes:   " ++ show ts ++
+  -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\nRenamed: " ++ show (map (rename td) ts) ++ 
   --        "\n"++show (Grammar w (productions s))) $
   Grammar w (productions s)
@@ -103,8 +103,7 @@ wordWhnf = \case
       (label ++ "_2", [])]
   T.App _ t us -> do  -- ι T1···Tm with ι = -> , #{}, (|lᵢ|) and other datatypes (variants)
     let terminals = map (\n -> show t ++ "_" ++ show n) [0..]
-    ws <- mapM word us
-    let words = map (++ [bottom]) ws
+    words <- mapM word us
     getLHS $ M.fromList (zip terminals words)
   t -> internalError $ "wordWhnf " ++ show t
 
