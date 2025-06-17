@@ -54,6 +54,11 @@ where
   type List : *T -> *T
   type List a = forall (r : *T) . (a -> r -> r) -> r -> r
 
+case Two Int == forall (b: *T) . (Int, b) : 1T
+where
+  type Two : *T -> *T
+  type Two a = forall (b: *T) . (a, b)
+
 -- Session types
 
 case !Int == !Int : 1S
