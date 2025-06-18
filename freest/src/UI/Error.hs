@@ -206,24 +206,24 @@ instance Show Error where
         InvalidType s t ->
           "\n  Invalid type: `"++show t++"`"
         TypeMismatch s t u ep ->
-          "\n  Couldn't match expected type `"++show t++"` with actual type `"++show u++"` in the "++showExpPat ep++"."
+          "\n  Couldn't match expected type `"++show t++"` with actual type `"++show u++"` in "++showExpPat ep++"."
         TypeMismatchSelect s t i e ->
-          "\n  Couldn't match expected type `"++show t++"` with selection of choice `"++show i++"` in the expression "++show e++"."
+          "\n  Couldn't match expected type `"++show t++"` with selection of choice `"++show i++"` in expression "++show e++"."
         TypeMismatchList _ t ep ->
-          "\n  Couldn't match expected type `"++show t++"` with a list type in the "++showExpPat ep++"."
+          "\n  Couldn't match expected type `"++show t++"` with a list type in "++showExpPat ep++"."
         TypeMismatchTuple _ n t ep ->
           "\n  Couldn't match expected type `"++show t++"` with "++
             (case n of 0 -> "actual type ()"
                        2 -> "a pair type"
                        n -> "a "++show n++"-tuple type.")
-          ++" in the "++showExpPat ep++"."
+          ++" in "++showExpPat ep++"."
         TypeCtxMismatch s e tctx1 tctx2 -> -- TODO: better error message, ideally better than freest 3
           "\n  Couldn't match "++ (case e of E.Case{} -> "the final contexts in two distinct branches in a `case` expression"
                                              E.Abs {} -> "the initial and final contexts in an unrestricted function"
                                              _        -> "contexts in an expression") ++"."++
           "\n  \tWhere the former contains " ++ showCtx (tctx1 Map.\\ tctx2) ++
           "\n  \t      The latter contains " ++ showCtx (tctx2 Map.\\ tctx1) ++
-          "\n  \tIn the expression `" ++ show e ++"`"++
+          "\n  \tIn expression `" ++ show e ++"`"++
           "\n  \t(was a variable consumed in one branch and not in the other?)" ++
           "\n  \t(is there a variable with different types in the two contexts?)"
           where showCtx tctx = case Map.foldrWithKey (\cases (Left  x) t ss -> ("`"++show x++" : "++show t++"`") : ss
