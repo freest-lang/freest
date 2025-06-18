@@ -12,16 +12,6 @@ case () == () : *T
 
 -- Polymorphism
 
-case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
-  -- == (forall (a b : *T). forall (c : *T). (a -> c) -> (b -> c) -> c) Int Bool
-  == Sum Int Bool
-   : *T
-where
-  type Bool : *T
-  data Bool = True | False
-  type Sum : *T -> *T -> *T
-  type Sum a b = forall (c : *T). (a -> c) -> (b -> c) -> c
-
 case (forall (b : *T). (b -> b) -> b -> b) 
   == Nat 
    : *T
@@ -35,29 +25,6 @@ case forall (b : *T). b -> b -> b
 where
   type Bool : *T
   type Bool = forall (b : *T). b -> b -> b
-
-case forall (a : *T). (forall (c : *T). (List a -> List a -> c) -> c)
-  == forall (a : *T). ((Pair (List a)) (List a))
-   : *T
-where
-  type Pair : *T -> *T -> *T
-  type Pair a b = forall (c : *T). (a -> b -> c) -> c
-  type List : *T -> *T
-  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
-
-case (forall (c : *T). (List Int -> List Int -> c) -> c)
-  == ((Pair (List Int)) (List Int))
-   : *T
-where
-  type Pair : *T -> *T -> *T
-  type Pair a b = forall (c : *T). (a -> b -> c) -> c
-  type List : *T -> *T
-  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
-
-case Two Int == forall (b: *T) . (Int, b) : 1T
-where
-  type Two : *T -> *T
-  type Two a = forall (b: *T) . (a, b)
 
 -- Session types
 
@@ -539,3 +506,48 @@ case forall (a : 1S). V ; V ; a == forall (a : 1S). V ; a : 1S
 where
   type V : 1S
   type V = forall (b: 1S). !b
+
+-- Problems with forall and parameerrised types
+
+case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
+  -- == (forall (a b : *T). forall (c : *T). (a -> c) -> (b -> c) -> c) Int Bool
+  == Sum Int Bool
+   : *T
+where
+  type Bool : *T
+  data Bool = True | False
+  type Sum : *T -> *T -> *T
+  type Sum a b = forall (c : *T). (a -> c) -> (b -> c) -> c
+
+case forall (a : *T). (forall (c : *T). (List a -> List a -> c) -> c)
+  == forall (a : *T). ((Pair (List a)) (List a))
+   : *T
+where
+  type Pair : *T -> *T -> *T
+  type Pair a b = forall (c : *T). (a -> b -> c) -> c
+  type List : *T -> *T
+  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
+
+
+case (forall (c : *T). (List Int -> List Int -> c) -> c)
+  == ((Pair (List Int)) (List Int))
+   : *T
+where
+  type Pair : *T -> *T -> *T
+  type Pair a b = forall (c : *T). (a -> b -> c) -> c
+  type List : *T -> *T
+  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
+
+case Two Int == forall (b: *T) . (Int, b) : *T
+where
+  type Two : *T -> *T
+  type Two a = forall (b: *T) . (a, b)
+
+-- Duplicated -- debugging in process
+case forall (b : *T). b -> b -> b
+  == Bool
+   : *T
+where
+  type Bool : *T
+  type Bool = forall (b : *T). b -> b -> b
+

@@ -50,7 +50,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             y <- nextNonTerminal
             addVisited t y
             td <- gets typeDecls
-            let u = normalise td t
+            let u = rename td (normalise td t)
             case u of
               T.Skip{} -> pure []
               T.Bottom{} -> pure [bottom]
@@ -83,7 +83,7 @@ wordWhnf = \case
     getLHS $ M.fromList (zip terminals words)
   T.Abs _ (aks, t) -> do -- λα1:κ1...αn:κn.T
     w <- word t
-    foldM (\w' (a, k) -> getLHS $ M.singleton (varTerminal a ++ ":" ++ show k) w') 
+    foldM (\w' (a, k) -> getLHS $ M.singleton ("λ" ++ varTerminal a ++ ":" ++ show k) w') 
           (w ++ [bottom]) aks
   T.AppMessage _ m p u -> do -- #T
     w <- word u
@@ -92,9 +92,9 @@ wordWhnf = \case
       (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
-  T.App _ t@T.Semi{} [u] -> do -- We may have partially applied Semi in the future
+  T.App _ T.Semi{} [u] -> do -- We may have partially applied Semi in the future
     w <- word u
-    getLHS $ M.singleton (show t ++ "_1") []
+    getLHS $ M.singleton (";_1") w
   T.AppDual s u -> do -- Dual u. type u is α, for types in whnf
     w <- word u
     let label = show $ T.Dual s
