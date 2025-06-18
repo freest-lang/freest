@@ -90,8 +90,8 @@ initOrderedServer c =
 -- Function to send a list and receive it ordered
 --  direction : Bool - is used to determine if Asc(True) or
 --                     Desc(False) is selected
-order : OrderingChannel; a -> IntList 1-> Bool 1-> (a, IntList)
-order c sList direction =
+order : forall (a : 1S). OrderingChannel; a -> IntList 1-> Bool 1-> (a, IntList)
+order @a c sList direction =
   case sList of
     Nil -> if direction
            then (select Asc c , Nil)

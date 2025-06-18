@@ -84,6 +84,6 @@ sortingServer @a xs c =
 -- Putting it all together
 main : ()
 main =
-  let (w, r) = new @(OrderingChannel; Wait) () in
+  let (w, r) = channel @(OrderingChannel; Wait) in
   fork (\(_ : ()) 1-> sortingServer @Close Nil r |> snd @IntList @Close |> close);
   client w

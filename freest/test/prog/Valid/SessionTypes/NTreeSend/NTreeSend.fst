@@ -83,7 +83,7 @@ aTree = Node 0 $ Cons (Node 1 $ Cons (Node 7 $ Cons (Node 13 Nil)
                  Nil
 
 clientSendTree : TreeChannel;Close -> ()
-clientSendTree c = c |> sendTree @Close aTree c |> close
+clientSendTree c = c |> sendTree @Close aTree |> close
 
 main : Tree
 main =
