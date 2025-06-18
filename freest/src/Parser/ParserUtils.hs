@@ -49,5 +49,9 @@ addArgExp a (E.App s e as) = E.App s e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 
 addArgType :: T.Type -> T.Type -> T.Type
-addArgType t (T.App s u us)   = T.App s u (us ++ [t])
-addArgType t u                = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppLinChoice{} = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppSemi{}      = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppDual{}      = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppQuant{}     = T.App (spanFromTo u t) u [t]
+addArgType t (T.App s u us)     = T.App s u (us ++ [t])
+addArgType t u                  = T.App (spanFromTo u t) u [t]
