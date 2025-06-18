@@ -543,6 +543,11 @@ where
   type Two : *T -> *T
   type Two a = forall (b: *T) . (a, b)
 
+case Void == Void ; Skip : 1C
+where
+  type Void : 1C
+  type Void = Void
+
 -- Duplicated -- debugging in process
 case forall (b : *T). b -> b -> b
   == Bool

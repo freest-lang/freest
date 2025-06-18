@@ -16,12 +16,12 @@ where
 import Syntax.Base
 import Syntax.Kind
 import Syntax.Type qualified as T
-import Language.Simple.Grammar
 import Validation.Base ( TypeDeclMap )
-import Validation.Normalisation
+import Validation.Normalisation ( normalise, isWhnf)
 import Validation.Rename ( rename )
 import Utils ( internalError )
 
+import Language.Simple.Grammar
 import Language.Simple.Bisimulation ( bisimilar )
 
 import Control.Monad.State
@@ -50,7 +50,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             y <- nextNonTerminal
             addVisited t y
             td <- gets typeDecls
-            let u = rename td (normalise td t)
+            let u = normalise td t
             case u of
               T.Skip{} -> pure []
               T.Bottom{} -> pure [bottom]
