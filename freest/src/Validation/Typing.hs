@@ -570,7 +570,7 @@ typeModule m = do
   tctx <- buildDConsCtx
   (tctxds,tctx') <- checkDecls Map.empty tctx (M.definitions m)
   tctx'' <- typeCtxDifference Map.empty tctxds tctx'
-  return (m, tctx'')
+  return (m, tctxds)
   where
     buildDConsCtx :: Validation TypeCtx
     buildDConsCtx = do

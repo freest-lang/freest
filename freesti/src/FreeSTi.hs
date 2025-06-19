@@ -22,6 +22,8 @@ import Control.Monad.State ( runState )
 import Paths_freest (getDataFileName)
 import FreeST (preludePath)
 import Control.Monad.Except (runExceptT)
+import System.Exit (die)
+import Control.Monad.Trans (lift)
 
 main :: IO ()
 main = execParser opts >>= freesti
@@ -61,7 +63,7 @@ repl :: REPLState -> InputT IO ()
 repl s = do
   minput <- getInputLine "freesti> "
   case minput of
-    Nothing -> repl s
+    Nothing -> lift $ die "Leaving FreeSTi."
     Just (dropWhile isSpace -> ':' : (break isSpace -> (cmd, val))) ->
       if null cmd 
         then outputStrLn "Incomplete command `:`" >> repl s
@@ -105,7 +107,7 @@ commands = Map.fromList
               repl s{scopingState, scopingCtx, typeCtx}
 
     handleQuit :: REPLState -> String -> InputT IO ()
-    handleQuit _ _ = outputStrLn "Leaving FreeSTi."
+    handleQuit _ _ = lift $ die "Leaving FreeSTi."
 
 
 handleCommand :: REPLState -> String -> String -> InputT IO ()
