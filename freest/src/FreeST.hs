@@ -53,7 +53,7 @@ freest RunOpts{file=programPath} = do
         -- Validate the module.
         runValidate m & \case 
           Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-          Right m -> {- putStrLn "[Validation passed]" >> -} exitSuccess
+          Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath

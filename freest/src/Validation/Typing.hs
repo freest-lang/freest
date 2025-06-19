@@ -565,12 +565,12 @@ checkEquivTypeCtxs e tctx1 tctx2 =
   unless (Map.keysSet tctx1 == Map.keysSet tctx2) $
     throwE (TypeCtxMismatch (getSpan e) e tctx1 tctx2)
 
-typeModule :: M.Module -> Validation M.Module
+typeModule :: M.Module -> Validation (M.Module, TypeCtx)
 typeModule m = do
   tctx <- buildDConsCtx
   (tctxds,tctx') <- checkDecls Map.empty tctx (M.definitions m)
-  typeCtxDifference Map.empty tctxds tctx'
-  return m
+  tctx'' <- typeCtxDifference Map.empty tctxds tctx'
+  return (m, tctx'')
   where
     buildDConsCtx :: Validation TypeCtx
     buildDConsCtx = do
@@ -595,6 +595,6 @@ typeModule m = do
               foldrM (\t u -> return $ T.AppArrow (spanFromTo t u) K.Lin t u)
                      (T.DName (getSpan it) it)
 
-runValidate :: M.Module -> Either [Error] M.Module
+runValidate :: M.Module -> Either [Error] (M.Module, TypeCtx)
 runValidate m =
   runValidation (buildValidationState m) (Kinding.kindModule m >> typeModule m)

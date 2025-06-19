@@ -10,10 +10,17 @@ category:   Session types
 
 default-extensions:
   - FlexibleInstances
-  - ImportQualifiedPost
-  - ViewPatterns
   - LambdaCase
+  - TupleSections
+  - ViewPatterns
+  - MultiWayIf
+  - PatternSynonyms
+  - BlockArguments
+  - FlexibleContexts
   - NamedFieldPuns
+  - BangPatterns
+  - ScopedTypeVariables
+  - ImportQualifiedPost
 
 extra-source-files:
   - README.md
