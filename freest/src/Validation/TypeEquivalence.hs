@@ -17,7 +17,7 @@ import Syntax.Base
 import Syntax.Kind
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
-import Validation.Normalisation ( normalise, isWhnf)
+import Validation.Normalisation ( normalise, isWhnf )
 import Validation.Rename ( rename )
 import Utils ( internalError )
 

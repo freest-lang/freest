@@ -1,4 +1,20 @@
--- Dual
+-- Type applications
+
+case Int Int
+
+case T Int Char
+where
+  type T : *T -> *T
+  type T a = a
+
+case T Int
+where
+  type T : 1S -> 1S
+  type T a = a
+
+-- Dual related types
+
+case Dual Dual
 
 case Dual Int
 
@@ -27,3 +43,4 @@ case NestedTree : 1T -> 1S
 where
   type NestedTree : 1T -> 1S
   type NestedTree a = +{Leaf: !a, Node: NestedTree [a]}
+
