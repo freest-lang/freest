@@ -247,7 +247,7 @@ instance Show Type where
       showView  = \case In -> "&"     ; Out -> "+"
       showQuant = \case In -> "forall"; Out -> "exists"
       showLambda aks sep t =
-        unwords (map (\(a,k) -> show a ++ ":" ++ show k) aks) ++ sep ++ show t
+        unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t
 
 class Congruence t where
   congruent :: M.Map Variable Variable -> t -> t -> Bool

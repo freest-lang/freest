@@ -17,6 +17,7 @@ import UI.Error
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
+import Validation.Kinding ( KindCtx )
 import Validation.Kinding qualified as Kinding
 import Validation.Normalisation ( normalise )
 import Validation.Substitution ( subs, subsAll )
@@ -39,9 +40,8 @@ import Data.Map.Strict qualified as Map
 -- and their types.
 type TypeCtx = Map.Map (Either Variable Identifier) T.Type
 
--- The kind context. It keeps track of the type variables in scope and their 
--- kinds.
-type KindCtx = Map.Map Variable K.Kind
+emptyTypeCtx :: TypeCtx
+emptyTypeCtx = Map.empty
 
 -- | Looks up the type of a variable or identifier in a type context,
 -- returning its type and the updated type context. If the type is strictly

@@ -11,11 +11,15 @@ duplicate variable declarations, etc.).
 -}
 module Parser.Scoping
   (Scoping
+  ,ScopingState(..)
+  ,emptyScopingState
   ,ScopingCtx
+  ,emptyScopingCtx
   ,runScoping
   ,runScopeModule
   ,scopeModule
   ,scopeModule'
+  ,scopeExp
   ,scopeType
   ,scopeKind
   )
@@ -75,8 +79,8 @@ type ScopingCtx = (IdCtx, VarCtx)
 -- The internals are hidden for easy replacement.
 
 -- | The empty context.
-empty :: ScopingCtx
-empty = (Map.empty, Map.empty)
+emptyScopingCtx:: ScopingCtx
+emptyScopingCtx= (Map.empty, Map.empty)
 
 -- | The left-biased union of two contexts.
 union :: ScopingCtx -> ScopingCtx -> ScopingCtx
@@ -159,6 +163,9 @@ insertKSig i@(Identifier _ s) = first $ Map.insert (KSig s) i
 --     * a list of errors thrown during the scoping process.
 data ScopingState = ScopingState{counter :: Int, errors :: [Error]}
 
+emptyScopingState :: ScopingState
+emptyScopingState = ScopingState firstInternal []
+
 -- | The Scoping monad, a State monad carrying a ScopingState.
 type Scoping = State ScopingState
 
@@ -168,7 +175,7 @@ type Scoping = State ScopingState
 --     * the result of the scoping procedure, otherwise.
 runScoping :: (ScopingCtx -> a -> Scoping b) -> a -> Either [Error] b
 runScoping f x =
-  let (x',s) = runState (f empty x) (ScopingState firstInternal [])
+  let (x', s) = runState (f emptyScopingCtx x) emptyScopingState
   in if null (errors s) then Right x' else Left (errors s)
 
 -- | Insert an error in the scoping state.
@@ -281,7 +288,7 @@ scopeTypeDecls ctx tds = do
 -- equations and detects signatures without accompanying definitions.
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
 scopeDefs ctx ds = do
-  (ictx, ctx, ds) <- scopeDefs' False ctx empty (groupEquations ds)
+  (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx(groupEquations ds)
   forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
   return (ctx, ds)
   where
@@ -315,7 +322,7 @@ scopeDefs ctx ds = do
         second (E.FnDef x' psrhss' :) <$> scopeDefs' isMutual ctx' ictx' ds
         where
           scopeParam (ctx',pars') (ExpLevel  p) = do
-            (_, p') <- scopePat ctx' empty p
+            (_, p') <- scopePat ctx' emptyScopingCtx p
             let ctx'' = fromEVarList (Set.toList (patVars p')) `union` ctx'
             return (ctx'', pars'++[ExpLevel p'])
           scopeParam (ctx',pars') (TypeLevel a) = do
@@ -343,7 +350,7 @@ scopeDefs ctx ds = do
         -- (this will add them to the context in the case for E.TypeSig)
         let (sigs, fndefs) = 
               List.partition (\case E.TypeSig{} -> True ; _ -> False) ds'
-        (ictx', ctx', ds'') <- scopeDefs' True ctx empty (sigs ++ fndefs)
+        (ictx', ctx', ds'') <- scopeDefs' True ctx emptyScopingCtx(sigs ++ fndefs)
         forM_ (toEVarList ictx') (\x -> insertError (SigLacksDef (getSpan x) x))
         second (E.Mutual ds'' :) <$> scopeDefs' True ctx' ictx ds
 
@@ -382,7 +389,7 @@ scopeExp ctx = \case
     E.Abs s pars' m <$> scopeExp ctx' e
     where
       scopeTypedParam (ctx',pars') (ExpLevel  (p,t)) = do
-        (_, p') <- scopePat ctx' empty p
+        (_, p') <- scopePat ctx' emptyScopingCtx p
         t' <- scopeType ctx' t
         let ctx'' = fromEVarList (Set.toList (patVars p')) `union` ctx'
         return (ctx'', pars'++[ExpLevel (p',t')])
@@ -401,7 +408,7 @@ scopeExp ctx = \case
       scopePatRHS :: (E.Pat, E.RHS) -> Scoping (E.Pat, E.RHS)
       scopePatRHS (p,rhs) = do
         checkConflictingDefs [ExpLevel p]
-        (_,p') <- scopePat ctx empty p
+        (_,p') <- scopePat ctx emptyScopingCtx p
         let pvs = Set.toList $ patVars p'
         let ctx' = fromEVarList pvs `union` ctx
         (p',) <$> scopeRHS ctx' rhs
@@ -428,7 +435,7 @@ scopePat ctx ictx = \case
     (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
         (ictx''', p') <- scopePat ctx ictx'' p
         return (ictx''', ps''++[p']))
-      (empty, []) ps
+      (emptyScopingCtx, []) ps
     return (ictx', E.DConsPat s c ps')
   E.ChoicePat s c p -> do
     second (E.ChoicePat s c) <$> scopePat ctx ictx p

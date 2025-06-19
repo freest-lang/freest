@@ -1,0 +1,43 @@
+name:       freesti
+version:    5.0
+license:    BSD3
+author:     The FreeST Team
+copyright:  © 2025 FreeST Team.
+synopsis:   The FreeST REPL
+maintainer: The FreeST Team
+homepage:   https://freest-lang.github.io/
+category:   Session types
+
+default-extensions:
+  - FlexibleInstances
+  - ImportQualifiedPost
+  - ViewPatterns
+  - LambdaCase
+  - NamedFieldPuns
+
+extra-source-files:
+  - README.md
+
+dependencies:
+  - freest
+  - base >= 4.7 && < 5
+  - containers >= 0.5.9
+  - mtl >= 2.2.1
+  - optparse-applicative >= 0.16.1.0
+  - haskeline
+  
+library:
+  source-dirs: src
+  exposed-modules:
+    - FreeSTi
+
+executables:
+  freesti:
+    main:        FreeSTi
+    source-dirs: src
+    ghc-options: 
+      - -main-is FreeSTi
+      - -threaded 
+      - -rtsopts 
+      - -with-rtsopts=-N
+

@@ -13,7 +13,8 @@ module Validation.Kinding
   , checkProper
   , checkSession
   , checkChannel
-  , KindingCtx
+  , KindCtx
+  , emptyKindCtx
   , kindModule
   , runKindModule
   , runSynth
@@ -43,10 +44,13 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 
 -- | The kinding context. Keeps track of type variables and their kinds.
-type KindingCtx = Map.Map Variable Kind
+type KindCtx = Map.Map Variable Kind
+
+emptyKindCtx :: KindCtx
+emptyKindCtx = Map.empty
 
 -- | Synthesize the (minimal?) kind of a type.
-synth :: KindingCtx -> T.Type -> Validation Kind
+synth :: KindCtx -> T.Type -> Validation Kind
 synth ctx = \case
   -- Functional types
   T.Int s    -> pure (ut s)
@@ -99,20 +103,20 @@ synth ctx = \case
       check ctx t' k' >> checkArgs s t nargs npars ts' ks' kn
 
 -- | Check a type against a given kind.
-check :: KindingCtx -> T.Type -> Kind -> Validation ()
+check :: KindCtx -> T.Type -> Kind -> Validation ()
 check ctx t k = void (synthCheck ctx t k)
 
 -- | Calculate the join of the multiplicities of a list of types, starting
 -- from a given multiplicity. Throws an error if a non-proper type is
 -- encountered.
-foldCheckProperJoin :: KindingCtx -> Multiplicity -> [T.Type] -> Validation Multiplicity
+foldCheckProperJoin :: KindCtx -> Multiplicity -> [T.Type] -> Validation Multiplicity
 foldCheckProperJoin ctx = foldM (checkProperJoin ctx)
   where checkProperJoin ctx m' t =
           checkProper ctx t >>= \(m'',_) -> pure (join m' m'')
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and prekind. Otherwise, throw an error.
-checkProper :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
+checkProper :: KindCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkProper ctx t =
   synth ctx t >>= \case
     Proper _ m pk -> pure (m,pk)
@@ -120,7 +124,7 @@ checkProper ctx t =
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
-checkSession :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
+checkSession :: KindCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkSession ctx t = do
   (m,pk) <- checkProper ctx t
   unless (pk <: Session) $
@@ -129,7 +133,7 @@ checkSession ctx t = do
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
-checkChannel :: KindingCtx -> T.Type -> Validation (Multiplicity, Prekind)
+checkChannel :: KindCtx -> T.Type -> Validation (Multiplicity, Prekind)
 checkChannel ctx t = do
   (m,pk) <- checkProper ctx t
   unless (pk <: Channel) $
@@ -145,7 +149,7 @@ checkSubkindOf t k' k =
 
 -- | Synthesize the kind of a type and check if it is a subkind of another
 -- kind.
-synthCheck :: KindingCtx -> T.Type -> Kind -> Validation Kind
+synthCheck :: KindCtx -> T.Type -> Kind -> Validation Kind
 synthCheck ctx t k = do
   k' <- synth ctx t
   checkSubkindOf t k' k

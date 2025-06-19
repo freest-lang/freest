@@ -21,10 +21,13 @@ freestOpts = RunOpts
     <> metavar "FILEPATH"
     )
 
+version :: String
+version = "5.0"
+
 -- | The man page of the FreeST compiler.
 opts :: ParserInfo RunOpts
-opts = info (freestOpts <**> helper)
+opts = info (freestOpts <**> helper <**> simpleVersioner ("The FreeST Compiler, version" ++ version))
      ( fullDesc
-     <> progDesc "FreeST 5.0"
-     <> header "nothing here yet!"
+     <> progDesc ("The FreeST Compiler, version " ++ version)
+     <> header "Nothing here yet!"
      )
