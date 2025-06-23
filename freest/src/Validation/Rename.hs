@@ -10,7 +10,6 @@ Absorbing - non-normed types == types w/ infinite norm
 
 module Validation.Rename
   ( rename
-  , renameLambda
   , isAbsorbing -- for testing purposes
   )
 where
@@ -32,16 +31,15 @@ rename td = \case
   t@T.Var{} -> t
   t@T.TName{} -> t
   T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  T.Abs s l -> T.Abs s (renameLambda td l)
-
--- | Rename a type abstraction.
-renameLambda :: TypeDeclMap -> T.Lambda T.Type -> T.Lambda T.Type
-renameLambda td (unzip -> (as, ks), t) = 
-  (zip bs ks, rename td (subsAll as (map T.fromVariable bs) t))
-  where reach = reachable td t
-        bs = foldr (\a bs' -> if a `elem` reach 
-                              then firstVar a (S.fromList bs' `S.union` reach) : bs'
-                              else nullVar a : bs') [] as
+  T.Abs s (unzip -> (as, ks)) t -> 
+    T.Abs s (zip bs ks) (rename td (subsAll as (map T.fromVariable bs) t))
+    where 
+      reach = reachable td t
+      bs = foldr (\a bs' -> if a `elem` reach then 
+                              firstVar a (S.fromList bs' `S.union` reach) : bs'
+                            else 
+                              nullVar a : bs') 
+                 [] as
 
 -- | The set of free variables reachable in a type.
 reachable :: TypeDeclMap -> T.Type -> S.Set Variable
@@ -49,7 +47,7 @@ reachable td = \case
   t | T.isConstant t -> S.empty
   T.TName{} -> S.empty
   T.Var _ a -> S.singleton a
-  T.Abs _ (map fst -> as, t) -> reachable td t S.\\ S.fromList as
+  T.Abs _ (map fst -> as) t -> reachable td t S.\\ S.fromList as
   T.AppSemi _ t u | isAbsorbing td t -> reachable td t
                   | otherwise -> reachable td t `S.union` reachable td u
   T.App _ t us -> S.unions (map (reachable td) (t:us))
@@ -68,7 +66,8 @@ isAbsorbing td = absorb S.empty
       T.App _ T.Choice{} ts -> all (absorb v) ts
       T.AppDual _ t -> absorb v t
       T.AppTName _ id ts -> id `S.member` v || case td M.!? id of
-        Just (_, u) -> absorb (S.insert id v) u
+        Just (T.Abs _ _ u) -> absorb (S.insert id v) u
+        Just u  -> absorb (S.insert id v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
       T.AppQuant _ _ _ t -> absorb v t
       _ -> False

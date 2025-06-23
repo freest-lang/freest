@@ -14,8 +14,6 @@ where
 
 -- Dual related types
 
-case Dual Dual
-
 case Dual Int
 
 case Dual (Int -> (Char, String) -> [Float])

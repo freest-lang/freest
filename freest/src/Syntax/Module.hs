@@ -44,14 +44,14 @@ type ConsDeclList = [(Identifier, [T.Type])]
 --   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
 -- represented as
 --   [(Tree, ([a], <see above>))]
-type DataDeclList = [(Identifier, T.Lambda ConsDeclList)]
+type DataDeclList = [(Identifier, [(Variable, K.Kind)], ConsDeclList)]
 -- Type (type) constructor declaration list, e.g.
 --   type Stream a = !a ; Stream a
 -- In Fµω:
 --   type Stream = λa. µs. !a ; s a
 -- represented as
 --   [(Stream, ([a], (!a ; Stream a))
-type TypeDeclList = [(Identifier, T.Lambda T.Type)]
+type TypeDeclList = [(Identifier, T.Type)]
 -- Kind signature list, e.g.
 --   type Tree : *T -> *T
 --   type Stream : 1T -> 1S
@@ -81,10 +81,11 @@ insertImport :: [String] -> Module -> Module
 insertImport i m = m{imports = i : imports m}
 
 insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> ConsDeclList -> Module -> Module
-insertDataDecl i aks b m = m{dataDecls = (i, (aks, b)) : dataDecls m}
+insertDataDecl i aks b m = m{dataDecls = (i, aks, b) : dataDecls m}
 
 insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type -> Module -> Module
-insertTypeDecl i aks t m = m{typeDecls = (i, (aks, t)) : typeDecls m}
+insertTypeDecl i aks t m = m{typeDecls = (i, t') : typeDecls m}
+  where t' = if null aks then t else T.Abs (getSpan t) aks t 
 
 insertKindSig :: [Identifier] -> K.Kind -> Module -> Module
 insertKindSig is k m = m{kindSigs = (is, k) : kindSigs m}
@@ -126,7 +127,8 @@ instance Show Module where
       ]
     where showImport ss = "import "++intercalate "." ss
           showKindSig (is, k) = "type "++intercalate "," (map show is)++" : "++show k
-          showDataDecl (i, (as,cds)) =
-            "data "++show i++" "++unwords (map show as)++" = "++intercalate " | " (map showConsDecl cds)
+          showDataDecl (i, aks, cds) =
+            "data "++show i++" "++unwords (map show aks)++" = "++intercalate " | " (map showConsDecl cds)
             where showConsDecl (cn,ts) = show cn ++" "++ unwords (map show ts)
-          showTypeDecl (i, (as, t)) = "type "++show i++" "++unwords (map show as)++" = "++show t
+          showTypeDecl (i, T.Abs _ aks t) = "type "++show i++" "++unwords (map show aks)++" = "++show t
+          showTypeDecl (i, t) = "type "++show i++" = "++show t

@@ -28,18 +28,18 @@ import Data.Set qualified as Set
 -- | The set of free variables ocurring in a type.
 freeVars :: T.Type -> Set.Set Variable
 freeVars = \case
-    T.Abs _ (aks, t) -> freeVars t Set.\\ Set.fromList (map fst aks)
-    T.Var _ a        -> Set.singleton a
-    T.App _ t ts     -> Set.unions (freeVars t : map freeVars ts)
-    _                -> Set.empty
+    T.Abs _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
+    T.Var _ a     -> Set.singleton a
+    T.App _ t ts  -> Set.unions (freeVars t : map freeVars ts)
+    _             -> Set.empty
 
 -- | The set of all variables ocurring in a type.
 allVars :: T.Type -> Set.Set Variable
 allVars = \case 
-    T.Abs _ (aks, t)   -> allVars t
-    T.Var _ a          -> Set.singleton a
-    T.App _ t ts       -> Set.unions (allVars t : map allVars ts)
-    _                  -> Set.empty
+    T.Abs _ aks t -> allVars t
+    T.Var _ a     -> Set.singleton a
+    T.App _ t ts  -> Set.unions (allVars t : map allVars ts)
+    _             -> Set.empty
 
 -- | Type substitution. Substitutes ocurrences of a variable in a type for 
 -- another type (usually written @[a -> u] t@).
@@ -50,16 +50,16 @@ subs a u = \case
     | b == a    -> u
     | otherwise -> t
   -- Abstractions (can we do this more elegantly?)
-  (T.Abs s ([], t')) -> T.Abs s ([], subs a u t')
-  t@(T.Abs s ((b,k):bks, t'))
+  (T.Abs s [] t') -> T.Abs s [] (subs a u t')
+  t@(T.Abs s ((b,k):bks) t')
       | b == a -> t
       | b `Set.member` fvu ->
         let b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
-            T.Abs _ (bks', t'') = subs a u (subs b (T.Var (getSpan b') b') (T.Abs s (bks, t')))
-        in T.Abs s ((b',k):bks', t'')
+            T.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') b') (T.Abs s bks t'))
+        in T.Abs s ((b',k):bks') t''
       | otherwise ->
-        let T.Abs _ (bks', t'') = subs a u (T.Abs s (bks, t'))
-        in T.Abs s ((b,k):bks', t'')
+        let T.Abs _ bks' t'' = subs a u (T.Abs s bks t')
+        in T.Abs s ((b,k):bks') t''
     where  fvu = freeVars u
   -- Applications
   T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)

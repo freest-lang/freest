@@ -81,7 +81,7 @@ wordWhnf = \case
     let words = [] : map (++ [bottom]) ws
     let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
     getLHS $ M.fromList (zip terminals words)
-  T.Abs _ (aks, t) -> do -- λα1:κ1...αn:κn.T
+  T.Abs _ aks t -> do -- λα1:κ1...αn:κn.T
     w <- word t
     foldM (\w' (a, k) -> getLHS $ M.singleton ("λ" ++ varTerminal a ++ ":" ++ show k) w') 
           (w ++ [bottom]) aks

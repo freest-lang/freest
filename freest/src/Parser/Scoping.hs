@@ -29,7 +29,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Validation.Rename ( renameLambda )
+import Validation.Rename ( rename )
 import Validation.Substitution ( freeVars )
 import Syntax.Type qualified as T
 import UI.Error ( Error(..) )
@@ -237,23 +237,23 @@ scopeDataDecls :: ScopingCtx
                -> M.DataDeclList 
                -> Scoping (ScopingCtx, M.DataDeclList)
 scopeDataDecls ctx dds = do
-  ctx' <- foldM (\ctx'' (ti, _) -> do
-      when (memberTId ti ctx'' || memberDId ti ctx'') 
-        do insertError (MultipleTypeDecls (getSpan ti) ti)
-      return $ insertDId ti ctx'')
-    ctx dds
+  ctx' <- foldM (\ctx'' (ti, _, _) -> do
+                  when (memberTId ti ctx'' || memberDId ti ctx'') do 
+                    insertError (MultipleTypeDecls (getSpan ti) ti)
+                  return $ insertDId ti ctx'')
+                ctx dds
   foldM scopeDataDecl (ctx', []) dds
   where
-    scopeDataDecl (ctx',dds') dd@(ti, (unzip -> (as, ks), cds)) = do
+    scopeDataDecl (ctx', dds') dd@(ti, unzip -> (as, ks), cds) = do
         unless (ti `memberKSig` ctx) do
           insertError (LacksKindSig (getSpan ti) ti)
         as' <- mapM freshInternal as 
         ks' <- mapM scopeKind ks
         (ctx''',cds') <- scopeConsDecls (fromTVarList as' `union` ctx') cds
-        return (foldr deleteTVar ctx''' as', (ti, (zip as' ks', cds')) : dds')
+        return (foldr deleteTVar ctx''' as', (ti, zip as' ks', cds') : dds')
     scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
       where
-        scopeConsDecl (ctx',cds') (ci,ts)
+        scopeConsDecl (ctx', cds') (ci, ts)
           | memberCId ci ctx' = do
             insertError (MultipleConsDecls (getSpan ci) ci)
             return (ctx', (ci, ts) : cds')
@@ -275,12 +275,10 @@ scopeTypeDecls ctx tds = do
     ctx tds
   foldM scopeTypeDecl (ctx', []) tds
   where
-    scopeTypeDecl (ctx', tds') td@(ti, (unzip -> (as, ks), t)) = do
+    scopeTypeDecl (ctx', tds') td@(ti, t) = do
       unless (memberKSig ti ctx') (insertError (LacksKindSig (getSpan ti) ti))
-      as' <- mapM freshInternal as
-      ks' <- mapM scopeKind ks
-      t'  <- scopeType (fromTVarList as' `union` ctx') t
-      return (ctx', (ti, renameLambda tdm (zip as' ks', t')) : tds')
+      t'  <- scopeType ctx' t
+      return (ctx', (ti, rename tdm t') : tds')
     tdm = Map.fromList tds
 
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
@@ -490,13 +488,12 @@ scopeType ctx = \case
       foldM (\ls' l -> do 
         when (l `elem` ls') (insertError (MultipleFieldDecls (getSpan l) l))
         return $ ls' ++ [l]) [] ls
-  -- Polymorphism
-  T.Abs s (unzip -> (as, ks), t) -> do
+  -- Higher-order
+  T.Abs s (unzip -> (as, ks)) t -> do
     as' <- mapM freshInternal as
     ks' <- mapM scopeKind ks
     let ctx' = fromTVarList as' `union` ctx
-    T.Abs s . (zip as' ks',) <$> scopeType ctx' t
-  -- Higher-order
+    T.Abs s (zip as' ks') <$> scopeType ctx' t
   t@(T.Var s a) ->
     case lookupTVar a ctx of
       Just a' -> return $ T.Var s a{internal = internal a'}

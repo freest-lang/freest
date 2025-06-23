@@ -18,10 +18,10 @@ import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
 
 -- | Maps @type@ names to their declarations.
-type TypeDeclMap = Map.Map Identifier (T.Lambda T.Type)
+type TypeDeclMap = Map.Map Identifier T.Type
 
 -- | Maps @data@ names to their declarations.
-type DataDeclMap = Map.Map Identifier (T.Lambda ConsDeclMap)
+type DataDeclMap = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclMap)
 
 -- | Maps @data@ constructor names to their declarations.
 type ConsDeclMap = Map.Map Identifier [T.Type]
@@ -52,10 +52,10 @@ emptyValidationState = ValidationState
 buildValidationState :: M.Module -> ValidationState
 buildValidationState m = ValidationState -- TODO: traverse module once.
   { errors    = []
-  , kindSigs  = Map.fromList (concatMap (\(is,k) -> map (,k) is) $ M.kindSigs m)
+  , kindSigs  = Map.fromList (concatMap (\(is, k) -> map (, k) is) $ M.kindSigs m)
   , typeDecls = Map.fromList (M.typeDecls m)
-  , dataDecls = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
-  , consDecls = Map.fromList (concatMap (\(i,(aks,cds)) -> map (second (i,aks,)) cds) $ M.dataDecls m)
+  , dataDecls = Map.fromList (map (\(i, aks, cds) -> (i, (aks, Map.fromList cds))) $ M.dataDecls m)
+  , consDecls = Map.fromList (concatMap (\(i, aks, cds) -> map (second (i, aks, )) cds) $ M.dataDecls m)
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 

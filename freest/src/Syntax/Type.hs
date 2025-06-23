@@ -8,7 +8,6 @@ polymorphic context-free session types.
 -}
 module Syntax.Type
   ( Polarity(..)
-  , Lambda
   , Type( ..
         , AppQuant
         , AppForall
@@ -62,8 +61,6 @@ instance Dual Polarity where
   dual Out = In
   dual In = Out
 
-type Lambda t = ([(Variable, K.Kind)], t)
-
 data Type
   -- Constants
   --   Functional types
@@ -86,7 +83,7 @@ data Type
   | Bottom Span
   -- Non-constants
   | Var Span Variable
-  | Abs Span (Lambda Type)
+  | Abs Span [(Variable, K.Kind)] Type
   | App Span Type [Type]
   deriving Ord
 
@@ -94,9 +91,9 @@ data Type
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
 pattern AppQuant :: Span -> Polarity ->  [(Variable, K.Kind)] -> Type -> Type
-pattern AppQuant s p aks t <- App s (Quant _ p) [Abs _ (aks, t)]
+pattern AppQuant s p aks t <- App s (Quant _ p) [Abs _ aks t]
   where AppQuant s p []  t = t
-        AppQuant s p aks t = App s (Quant s p) [Abs s (aks, t)]
+        AppQuant s p aks t = App s (Quant s p) [Abs s aks t]
 
 pattern AppForall :: Span -> [(Variable, K.Kind)] -> Type -> Type
 pattern AppForall s aks t <- AppQuant s In aks t
@@ -232,11 +229,11 @@ instance Show Type where
       ++ "}"
       where showField (l, t) = show l ++ ": " ++ show t
     -- Polymorphism
-    AppQuant _ p aks t -> "(" ++ showQuant p ++ " " ++ showLambda aks ". " t ++ ")"
+    AppQuant _ p aks t -> "(" ++ showQuant p ++ " " ++ showAbs aks ". " t ++ ")"
     -- Higher-order
     Var _ a    -> show a
     AppSemi _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
-    Abs _ (aks,t) -> "(\\" ++ showLambda aks " -> " t ++ ")"
+    Abs _ aks t -> "(\\" ++ showAbs aks " -> " t ++ ")"
     App _ t ts -> foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts
     -- Equations
     TName _ i -> show i ++ "#type"
@@ -246,7 +243,7 @@ instance Show Type where
     where 
       showView  = \case In -> "&"     ; Out -> "+"
       showQuant = \case In -> "forall"; Out -> "exists"
-      showLambda aks sep t =
+      showAbs aks sep t =
         unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t
 
 class Congruence t where
@@ -274,7 +271,7 @@ instance Congruence Type where
     (Var _ v1) (Var _ v2) ->
       v1 == v2 ||              -- free variables
       Just v2 == M.lookup v1 m -- bound variables
-    (Abs _ (unzip -> (as1,ks1), t)) (Abs _ (unzip -> (as2, ks2), u)) ->
+    (Abs _ (unzip -> (as1,ks1)) t) (Abs _ (unzip -> (as2, ks2)) u) ->
       ks1 == ks2 && congruent (M.fromList (zip as1 as2) `M.union` m) t u
     (App _ t ts) (App _ u us) -> congruent m t u && congruent m ts us
   -- Equations
@@ -313,7 +310,7 @@ instance Located Type where
     Quant s _       -> s
     -- Higher-order
     Var s _         -> s
-    Abs s _         -> s
+    Abs s _ _       -> s
     App s _ _       -> s
     -- Equations
     TName s _       -> s
@@ -337,7 +334,7 @@ instance Located Type where
     Dual _           -> Dual s
     -- Higher-order
     Var _ a          -> Var s a
-    Abs _ l          -> Abs s l
+    Abs _ aks t      -> Abs s aks t
     App _ t1 t2      -> App s t1 t2
     -- Equations
     TName _ n        -> TName s n

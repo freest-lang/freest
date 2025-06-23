@@ -28,13 +28,13 @@ instance NoDefaultVariables Variable where
 
 instance NoDefaultVariables T.Type where
   noDefault = \case
-    T.Abs _ (aks, t) -> all (noDefault . fst) aks && noDefault t
+    T.Abs _ aks t -> all (noDefault . fst) aks && noDefault t
     T.Var _ a -> noDefault a
     T.App _ t us -> all noDefault (t:us)
     _ -> True
 
 instance NoDefaultVariables TypeDeclMap where
-  noDefault = Map.foldr (\(aks, t) b -> b && all (noDefault . fst) aks && noDefault t) True
+  noDefault = Map.foldr (\t b -> b && noDefault t) True
 
 instance NoDefaultVariables DataDeclMap where
   noDefault m = True -- TODO: complete me!
@@ -43,4 +43,4 @@ instance NoDefaultVariables DataDeclMap where
 buildTypeDecls :: M.Module -> TypeDeclMap
 buildTypeDecls = Map.fromList . M.typeDecls
 buildDataDecls :: M.Module -> DataDeclMap
-buildDataDecls m = Map.fromList (map (\(i,(aks,cds)) -> (i,(aks,Map.fromList cds))) $ M.dataDecls m)
+buildDataDecls m = Map.fromList (map (\(i, aks, cds) -> (i, (aks, Map.fromList cds))) $ M.dataDecls m)

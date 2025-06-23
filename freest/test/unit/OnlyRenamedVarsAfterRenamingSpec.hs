@@ -31,13 +31,13 @@ instance OnlyRenamedVars Variable where
 
 instance OnlyRenamedVars T.Type where
   onlyRenamed = \case
-    T.Abs _ (aks, t) -> all (onlyRenamed . fst) aks && onlyRenamed t
+    T.Abs _ aks t -> all (onlyRenamed . fst) aks && onlyRenamed t
     T.Var _ a -> onlyRenamed a
     T.App _ t us -> all onlyRenamed (t:us)
     _ -> True
 
 instance OnlyRenamedVars TypeDeclMap where
-  onlyRenamed = Map.foldr (\(aks, t) b -> b && all (onlyRenamed . fst) aks && onlyRenamed t) True
+  onlyRenamed = Map.foldr (\t b -> b && onlyRenamed t) True
 
 -- Warning: code also in from Validation.Base
 buildTypeDecls :: M.Module -> TypeDeclMap

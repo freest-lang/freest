@@ -92,6 +92,9 @@ synth ctx = \case
     k <- synth ctx t
     let (ks,kn) = Expose.kindArrow k
     checkArgs s t (length ts) (length ks) ts ks kn
+  T.Abs s aks t -> do
+    flip (foldr (\(_, ki) k -> Arrow (spanFromTo ki k) ki k)) aks 
+      <$> synth (Map.fromList aks `Map.union` ctx) t
   where
     checkArgs :: Span -> T.Type -> Int -> Int -- error info
               -> [T.Type] -> [Kind] -> Kind -> Validation Kind
@@ -161,20 +164,23 @@ kindModule m = do
   forM_ (M.typeDecls m) kindTypeDecl
   forM_ (M.dataDecls m) kindDataDecl
   where 
-    kindTypeDecl :: (Identifier, T.Lambda T.Type) -> Validation ()
-    kindTypeDecl (i, (map fst -> as, t)) = do
+    kindTypeDecl :: (Identifier, T.Type) -> Validation ()
+    kindTypeDecl (i, t) = do
       k <- lookupKind i
-      checkTypeDecl k Map.empty as k
-      where
-        checkTypeDecl k ctx [] k' =
-          check ctx t k'
-        checkTypeDecl k ctx as Proper{} =
-          throwE (ExpectsTooManyArgsK (getSpan i) i k)
-        checkTypeDecl k ctx (a : as) (Arrow s k1 k2) =
-          checkTypeDecl k (Map.insert a k1 ctx) as k2
+      case t of
+        T.Abs _ (map fst -> as) t' ->
+          checkTypeDecl k Map.empty as k
+          where
+            checkTypeDecl k ctx [] k' =
+              check ctx t' k'
+            checkTypeDecl k ctx as Proper{} =
+              throwE (ExpectsTooManyArgsK (getSpan i) i k)
+            checkTypeDecl k ctx (a : as) (Arrow s k1 k2) =
+              checkTypeDecl k (Map.insert a k1 ctx) as k2
+        t -> check Map.empty t k
 
-    kindDataDecl :: (Identifier, T.Lambda M.ConsDeclList) -> Validation ()
-    kindDataDecl (i, (map fst -> as, t)) = do
+    kindDataDecl :: (Identifier, [(Variable, Kind)], M.ConsDeclList) -> Validation ()
+    kindDataDecl (i, map fst -> as, t) = do
       k <- lookupKind i
       checkDataDecl k id Map.empty as k
       where
