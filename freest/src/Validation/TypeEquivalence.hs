@@ -16,18 +16,20 @@ where
 import Syntax.Base
 import Syntax.Kind
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
-import Validation.Normalisation ( normalise, isWhnf )
-import Validation.Rename ( rename )
+import Validation.Base ( TypeDeclMap, ValidationState )
+import Validation.Normalisation ( normalise, reduce )
+import Validation.Rename ( reachable )
+import Validation.Kinding ( runSynth' )
 import Utils ( internalError )
 
 import Language.Simple.Grammar
 import Language.Simple.Bisimulation ( bisimilar )
 
 import Control.Monad.State
-import Data.Map.Strict qualified as M
-import Debug.Trace ( trace )
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Prelude hiding ( Word, words )
+import Debug.Trace ( trace )
 
 equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
 equivalent td t u =
@@ -36,12 +38,82 @@ equivalent td t u =
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
-  trace ("\n\nTypes:   " ++ show ts ++
-         "\nRenamed: " ++ show (map (rename td) ts) ++ 
-         "\n"++show (Grammar w (productions s))) $
+  -- trace ("\n\nTypes:   " ++ show ts ++
+  --        "\n"++show (Grammar w (productions s))) $
   Grammar w (productions s)
-  where (w, s) = runState (mapM (word . rename td) ts) (initial td)
+  where (w, s) = runState (mapM (word Set.empty) ts) (initial td)
 
+word :: Set.Set Variable -> T.Type -> TransState Word
+word set t = wasVisited t >>= \case
+  Just y -> pure [y]
+  Nothing -> do
+    y <- nextNonTerminal
+    addVisited t y
+    word' set t
+
+word' :: Set.Set Variable -> T.Type -> TransState Word
+word' set = \case
+  -- Skip
+  T.Skip{} -> pure []
+  -- End
+  t@T.End{} -> getLHS $ Map.singleton (show t) [bottom]
+  -- Void
+  t@T.Void{} -> getLHS $ Map.singleton (show t) [bottom]
+  -- #T
+  T.AppMessage _ m p u -> do
+    w <- word set u
+    getLHS $ Map.fromList [
+      (show m ++ show p ++ "_1", w ++ [bottom]),
+      (show m ++ show p ++ "_2", [bottom | m /= Lin])]
+  -- T ; U
+  T.AppSemi _ t u -> do
+    td <- gets typeDecls
+    let set' = set `Set.union` reachable td u
+    liftM2 (++) (word set' t) (word set u)
+  -- Dual (αT1···Tm)
+  T.AppDual s t@(T.App _ (T.Var{}) _) -> do
+    w <- word set t
+    let label = show $ T.Dual s
+    getLHS $ Map.fromList [
+      (label ++ "_1", w),
+      (label ++ "_2", [])]
+  -- *+{} and *&{}
+  t@(T.Choice _ Un _ _) -> getLHS $ Map.singleton (show t) [bottom]
+  -- ιT1···Tm with iota = ->, ∀, ∃, variants and choices
+  T.App s iota ts | True -> do -- TODO: fix the guard
+    words <- mapM (word set) ts
+    let terminals = map (\n -> show iota ++ "_" ++ show n) [1..]
+    getLHS $ Map.fromList (zip terminals words)
+  -- α T1···Tm with ∆ ⊢ α: κ1 => ··· => κm => ∗
+  T.AppVar _ a ts | True -> do -- TODO: fix the guard
+    ws <- mapM (word set) ts
+    let words = [] : ws
+    let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
+    getLHS $ Map.fromList (zip terminals words)
+  -- F : k => k'
+
+  -- μ F
+  t@T.AppTName{} -> do
+    td <- gets typeDecls
+    let u = normalise td t
+    case u of
+      -- μ F normalises to Skip
+      T.Skip{} -> pure []
+      -- μ F normalises to something different from Skip
+      _ -> do 
+        ~(z:δ) <- word set u
+        y <- nextNonTerminal
+        γ <- getTransitions z
+        addProductions y (Map.map (++ δ) γ)
+        pure [y]
+  -- t reduces
+  t -> do
+    td <- gets typeDecls
+    word set (reduce td t)
+  -- Should not happen - Redundant
+  -- t -> internalError $ "word' " ++ show t
+
+{- OLD 
 word :: T.Type -> TransState Word
 word t | isWhnf t || T.isAppSemi t = wordWhnf t
        | otherwise = wasVisited t >>= \case
@@ -57,7 +129,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
               _ -> do
                 ~(z:δ) <- wordWhnf u
                 γ <- getTransitions z
-                addProductions y (M.map (++ δ) γ)
+                addProductions y (Map.map (++ δ) γ)
                 pure [y]
 -- word t =
 --   -- case fatTerminal t of
@@ -69,50 +141,51 @@ wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
   T.Skip{} -> -- Skip
     pure []
-  t@T.Void{} -> -- Void
-    pure [bottom] 
   t@T.End{} -> -- End
-    getLHS $ M.singleton (show t) [bottom]
-  t@(T.Choice _ Un _ _) -> getLHS $ M.singleton (show t) [bottom] -- *+{} and *&{}
+    getLHS $ Map.singleton (show t) [bottom]
+  t@T.Void{} -> -- Void
+    getLHS $ Map.singleton (show t) [bottom]
+  t@(T.Choice _ Un _ _) -> getLHS $ Map.singleton (show t) [bottom] -- *+{} and *&{}
   t | T.isConstant t ->  -- ι ≠ Skip, Bot, End, *#{}
-    getLHS $ M.singleton (show t) []
+    getLHS $ Map.singleton (show t) []
   T.AppVar _ a ts -> do -- α T1...Tm
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
     let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
-    getLHS $ M.fromList (zip terminals words)
+    getLHS $ Map.fromList (zip terminals words)
   T.Abs _ aks t -> do -- λα1:κ1...αn:κn.T
     w <- word t
-    foldM (\w' (a, k) -> getLHS $ M.singleton ("λ" ++ varTerminal a ++ ":" ++ show k) w') 
+    foldM (\w' (a, k) -> getLHS $ Map.singleton ("λ" ++ varTerminal a ++ ":" ++ show k) w') 
           (w ++ [bottom]) aks
   T.AppMessage _ m p u -> do -- #T
     w <- word u
-    getLHS $ M.fromList [
+    getLHS $ Map.fromList [
       (show m ++ show p ++ "_1", w ++ [bottom]),
       (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
   T.App _ T.Semi{} [u] -> do -- We may have partially applied Semi in the future
     w <- word u
-    getLHS $ M.singleton (";_1") w
+    getLHS $ Map.singleton (";_1") w
   T.AppDual s u -> do -- Dual u. type u is α, for types in whnf
     w <- word u
     let label = show $ T.Dual s
-    getLHS $ M.fromList [
+    getLHS $ Map.fromList [
       (label ++ "_1", w),
       (label ++ "_2", [])]
   T.App _ t us -> do  -- ι T1···Tm with ι = -> , #{}, (|lᵢ|) and other datatypes (variants)
     let terminals = map (\n -> show t ++ "_" ++ show n) [0..]
     words <- mapM word us
-    getLHS $ M.fromList (zip terminals words)
+    getLHS $ Map.fromList (zip terminals words)
   t -> internalError $ "wordWhnf " ++ show t
+-}
 
 varTerminal :: Variable -> Terminal
 varTerminal α = "α" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 
-type Visited = M.Map T.Type NonTerminal
+type Visited = Map.Map T.Type NonTerminal
 
 data TState = TState
   { productions :: Productions
@@ -125,9 +198,9 @@ type TransState = State TState
 
 initial :: TypeDeclMap -> TState
 initial td = TState
-  { productions = M.empty
+  { productions = Map.empty
   , nextIndex = 1 -- 0 is for bottom
-  , visited = M.empty
+  , visited = Map.empty
   , typeDecls = td
   }
 
@@ -140,11 +213,11 @@ nextNonTerminal = do
 wasVisited :: T.Type -> TransState (Maybe NonTerminal)
 wasVisited t = do
   v <- gets visited
-  pure $ v M.!? t
+  pure $ v Map.!? t
 
 addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
 addVisited t y = do
-    modify $ \s -> s { visited = M.insert t y (visited s) }
+    modify $ \s -> s { visited = Map.insert t y (visited s) }
     pure y
 
 -- TODO: Add only if needed
@@ -154,12 +227,12 @@ addProduction x a w =
 
 addProductions :: NonTerminal -> Transitions -> TransState ()
 addProductions x m =
-  modify $ \s -> s { productions = M.insert x m (productions s) }
+  modify $ \s -> s { productions = Map.insert x m (productions s) }
 
 getTransitions :: NonTerminal -> TransState Transitions
 getTransitions x = do
   p <- gets productions
-  pure $ p M.! x
+  pure $ p Map.! x
 
 -- | Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS.
@@ -174,9 +247,9 @@ getLHS ts = do
     Just x -> pure [x]
 
 -- | Lookup a key for a value in the map. Probably O(n).
-reverseLookup :: Eq a => Ord k => a -> M.Map k a -> Maybe k
+reverseLookup :: Eq a => Ord k => a -> Map.Map k a -> Maybe k
 reverseLookup a =
-    M.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
+    Map.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
 
 -- | Fat terminal types can be compared for syntactic equality.
 fatTerminal :: T.Type -> Maybe T.Type

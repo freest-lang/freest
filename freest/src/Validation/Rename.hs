@@ -9,7 +9,8 @@ Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
-  ( rename
+  ( reachable
+  , rename
   , isAbsorbing -- for testing purposes
   )
 where
