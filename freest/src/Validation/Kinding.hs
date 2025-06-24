@@ -215,7 +215,8 @@ runKindModule m =
 --     * a list of errors, if any was encountered;
 --     * a kind synthesized from the type, otherwise.
 runSynth :: M.Module -> T.Type -> Either [Error] Kind
-runSynth m t = runValidation (buildValidationState m) (synth Map.empty t)
+runSynth m = runSynth' (buildValidationState m)
+-- runSynth m t = runValidation (buildValidationState m) (synth Map.empty t)
 
 runSynth' :: ValidationState -> T.Type -> Either [Error] Kind
 runSynth' m t = runValidation m (synth Map.empty t)

@@ -16,9 +16,9 @@ where
 import Syntax.Base
 import Syntax.Kind
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState )
+import Validation.Base ( TypeDeclMap, ValidationState, typeDecls )
 import Validation.Normalisation ( normalise, reduce )
-import Validation.Rename ( reachable )
+import Validation.Rename ( first, reachable )
 import Validation.Kinding ( runSynth' )
 import Utils ( internalError )
 
@@ -31,17 +31,17 @@ import Data.Set qualified as Set
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
-equivalent :: TypeDeclMap -> T.Type -> T.Type -> Bool
-equivalent td t u =
+equivalent :: ValidationState -> T.Type -> T.Type -> Bool
+equivalent vs t u =
   t == u ||
-  bisimilar (fromType td [t, u])
+  bisimilar (fromType vs [t, u])
 
-fromType :: TypeDeclMap -> [T.Type] -> Grammar
-fromType td ts =
+fromType :: ValidationState -> [T.Type] -> Grammar
+fromType vs ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++show (Grammar w (productions s))) $
   Grammar w (productions s)
-  where (w, s) = runState (mapM (word Set.empty) ts) (initial td)
+  where (w, s) = runState (mapM (word Set.empty) ts) (initial vs)
 
 word :: Set.Set Variable -> T.Type -> TransState Word
 word set t = wasVisited t >>= \case
@@ -67,7 +67,7 @@ word' set = \case
       (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   -- T ; U
   T.AppSemi _ t u -> do
-    td <- gets typeDecls
+    td <- getTypeDecls
     let set' = set `Set.union` reachable td u
     liftM2 (++) (word set' t) (word set u)
   -- Dual (αT1···Tm)
@@ -90,11 +90,9 @@ word' set = \case
     let words = [] : ws
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
     getLHS $ Map.fromList (zip terminals words)
-  -- F : k => k'
-
   -- μ F
   t@T.AppTName{} -> do
-    td <- gets typeDecls
+    td <- getTypeDecls
     let u = normalise td t
     case u of
       -- μ F normalises to Skip
@@ -106,12 +104,26 @@ word' set = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- t reduces
+  -- F : k => k' // t reduces
   t -> do
-    td <- gets typeDecls
-    word set (reduce td t)
+    state <- gets validationState
+    case runSynth' state t of
+      Left errors -> internalError $ "kinding failed. " ++ show t ++ "\n" ++ show errors
+      Right (Arrow _ k _) -> do
+        td <- getTypeDecls
+        let a = first set td t
+        let s = getSpan t
+        w <- word set (T.App s t [T.Var s a])
+        let label = ("λ" ++ show k ++ "_" ++ show a)
+        getLHS $ Map.singleton label w
+      Right _ -> do
+        td <- getTypeDecls
+        word set (reduce td t)
   -- Should not happen - Redundant
   -- t -> internalError $ "word' " ++ show t
+
+-- fullyApplied :: ValidationState -> Type -> Bool
+-- fullyApplied 
 
 {- OLD 
 word :: T.Type -> TransState Word
@@ -121,7 +133,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
           Nothing -> do
             y <- nextNonTerminal
             addVisited t y
-            td <- gets typeDecls
+            td <- getTypeDecls
             let u = normalise td t
             case u of
               T.Skip{} -> pure []
@@ -191,17 +203,17 @@ data TState = TState
   { productions :: Productions
   , nextIndex :: Int
   , visited :: Visited
-  , typeDecls :: TypeDeclMap
+  , validationState :: ValidationState
   }
 
 type TransState = State TState
 
-initial :: TypeDeclMap -> TState
-initial td = TState
+initial :: ValidationState -> TState
+initial vs = TState
   { productions = Map.empty
   , nextIndex = 1 -- 0 is for bottom
   , visited = Map.empty
-  , typeDecls = td
+  , validationState = vs
   }
 
 nextNonTerminal :: TransState NonTerminal
@@ -219,6 +231,11 @@ addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
 addVisited t y = do
     modify $ \s -> s { visited = Map.insert t y (visited s) }
     pure y
+
+getTypeDecls :: TransState TypeDeclMap
+getTypeDecls = do
+  vs <- gets validationState
+  pure (typeDecls vs)
 
 -- TODO: Add only if needed
 addProduction :: NonTerminal -> Terminal -> Word -> TransState ()

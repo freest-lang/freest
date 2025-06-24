@@ -553,8 +553,8 @@ checkRHS kctx tctx rhs t = case rhs of
 -- if they are not. An expression or pattern is provided to locate the error.
 checkEquivTypes :: Either E.Exp E.Pat -> T.Type -> T.Type -> Validation ()
 checkEquivTypes eop t1 t2 = do
-  tds <- gets typeDecls
-  unless (equivalent tds t1 t2) $
+  state <- get
+  unless (equivalent state t1 t2) $
     throwE (TypeMismatch (getSpan eop) t1 t2 eop)
 
 -- | Type context equivalence. Checks if two type contexts contain the same

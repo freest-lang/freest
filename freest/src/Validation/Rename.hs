@@ -10,8 +10,9 @@ Absorbing - non-normed types == types w/ infinite norm
 
 module Validation.Rename
   ( reachable
-  , rename
+  , first
   , isAbsorbing -- for testing purposes
+  , rename
   )
 where
 
@@ -22,8 +23,8 @@ import Validation.Base ( TypeDeclMap )
 import Validation.Substitution ( subs, subsAll )
 import Utils ( internalError )
 
-import Data.Map.Strict qualified as M
-import Data.Set qualified as S
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 
 -- | Rename a type.
 rename :: TypeDeclMap -> T.Type -> T.Type
@@ -37,27 +38,32 @@ rename td = \case
     where 
       reach = reachable td t
       bs = foldr (\a bs' -> if a `elem` reach then 
-                              firstVar a (S.fromList bs' `S.union` reach) : bs'
+                              firstVar a (Set.fromList bs' `Set.union` reach) : bs'
                             else 
                               nullVar a : bs') 
                  [] as
 
+-- | (first s t) is be the smallest variable in set B \ (s union reach t)
+first :: Set.Set Variable -> TypeDeclMap -> T.Type -> Variable
+first s td t = firstVar var (s `Set.union` reachable td t)
+  where var = Variable (Span "<word>" (0,0) (0,0)) "α" defaultInternal
+
 -- | The set of free variables reachable in a type.
-reachable :: TypeDeclMap -> T.Type -> S.Set Variable
+reachable :: TypeDeclMap -> T.Type -> Set.Set Variable
 reachable td = \case
-  t | T.isConstant t -> S.empty
-  T.TName{} -> S.empty
-  T.Var _ a -> S.singleton a
-  T.Abs _ (map fst -> as) t -> reachable td t S.\\ S.fromList as
+  t | T.isConstant t -> Set.empty
+  T.TName{} -> Set.empty
+  T.Var _ a -> Set.singleton a
+  T.Abs _ (map fst -> as) t -> reachable td t Set.\\ Set.fromList as
   T.AppSemi _ t u | isAbsorbing td t -> reachable td t
-                  | otherwise -> reachable td t `S.union` reachable td u
-  T.App _ t us -> S.unions (map (reachable td) (t:us))
+                  | otherwise -> reachable td t `Set.union` reachable td u
+  T.App _ t us -> Set.unions (map (reachable td) (t:us))
 
 -- | Is a type absorbing?
 isAbsorbing :: TypeDeclMap -> T.Type -> Bool
-isAbsorbing td = absorb S.empty
+isAbsorbing td = absorb Set.empty
   where
-    absorb :: S.Set Identifier -> T.Type -> Bool
+    absorb :: Set.Set Identifier -> T.Type -> Bool
     absorb v = \case
       T.End{} -> True
       T.Void{} -> True
@@ -66,9 +72,9 @@ isAbsorbing td = absorb S.empty
       T.AppSemi _ t u -> absorb v t || absorb v u
       T.App _ T.Choice{} ts -> all (absorb v) ts
       T.AppDual _ t -> absorb v t
-      T.AppTName _ id ts -> id `S.member` v || case td M.!? id of
-        Just (T.Abs _ _ u) -> absorb (S.insert id v) u
-        Just u  -> absorb (S.insert id v) u
+      T.AppTName _ id ts -> id `Set.member` v || case td Map.!? id of
+        Just (T.Abs _ _ u) -> absorb (Set.insert id v) u
+        Just u  -> absorb (Set.insert id v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
       T.AppQuant _ _ _ t -> absorb v t
       _ -> False
