@@ -122,6 +122,7 @@ $upper = [ A-Z ]
 <0> "Skip"  { token TkSkipType }
 <0> "Close" { token TkCloseType }
 <0> "Wait"  { token TkWaitType }
+<0> "Void"  { token TkVoidType }
 <0> \!      { token TkBang }
 <0> \?      { token TkQuestion }
 <0> \&      { token TkAmp }

@@ -109,6 +109,7 @@ import Data.List.NonEmpty qualified as NE
   'Close' { TkCloseType _ }
   'Wait'  { TkWaitType _ }
   'Dual'  { TkDualType _ }
+  'Void'  { TkVoidType _ }
   '?'     { TkQuestion _ }
   '!'     { TkBang _ }
   '&'     { TkAmp _ }
@@ -257,10 +258,13 @@ TypePrimaryListWS :: { [T.Type] }
   : TypePrimary TypePrimaryListWS { $1 : $2 }
   | {- empty -}                   { []      }
 
+KindPrimary :: { K.Kind }
+  : ProperKind   { $1 }
+  | '(' Kind ')' { $2 }
+
 Kind :: { K.Kind }
   : Kind '->' Kind %prec ARROW { K.Arrow (spanFromTo $1 $3) $1 $3 }
-  | '(' Kind ')'                { $2 }
-  | ProperKind                  { $1 }
+  | KindPrimary                { $1 }
 
 ProperKind :: { K.Kind }
   : '1T' { K.lt (getSpan $1) }
@@ -278,6 +282,7 @@ TypePrimary :: { T.Type }
   | 'Skip'   { T.Skip  (getSpan $1)       }
   | 'Close'  { T.End   (getSpan $1) T.Out }
   | 'Wait'   { T.End   (getSpan $1) T.In  }
+  | 'Void' '@' Kind { T.Void (spanFromTo $1 $3) $3 }
   -- Unit, Tuples, Operators
   | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnitId (spanFromTo $1 $2)) }
   | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }

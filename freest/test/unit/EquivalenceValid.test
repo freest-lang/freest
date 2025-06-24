@@ -492,15 +492,19 @@ where
 
 -- Troublesome with reachable/unreachable vars
 
-case forall (a b : 1S). Void ; a ; b == forall (b a : 1S). Void : 1S
-where
-  type Void : 1S
-  type Void = Void
+case forall (a b : 1S). (Void @1S) ; a ; b == forall (b a : 1S). (Void @1S) : 1S
 
-case forall (a b : 1S). Void ; a ; b == forall (b a : 1S). Void : 1S
+case forall (a b : 1S). Void' ; a ; b == forall (b a : 1S). Void' : 1S
 where
-  type Void : 1S
-  type Void = Void
+  type Void' : 1S
+  type Void' = Void'
+
+case forall (a b : 1S). (Void @1S) ; a ; b == forall (b a : 1S). (Void @1S) : 1S
+
+case forall (a b : 1S). Void' ; a ; b == forall (b a : 1S). Void' : 1S
+where
+  type Void' : 1S
+  type Void' = Void'
 
 case forall (a : 1S). V ; V ; a == forall (a : 1S). V ; a : 1S
 where
@@ -543,10 +547,12 @@ where
   type Two : *T -> *T
   type Two a = forall (b: *T) . (a, b)
 
-case Void == Void ; Skip : 1C
+case Void @1C == Void @1C ; Skip : 1C
+
+case Void' == Void' ; Skip : 1C
 where
-  type Void : 1C
-  type Void = Void
+  type Void' : 1C
+  type Void' = Void'
 
 -- Duplicated -- debugging in process
 case forall (b : *T). b -> b -> b

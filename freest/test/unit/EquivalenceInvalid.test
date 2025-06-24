@@ -1,13 +1,17 @@
 -- Void is non-contractive, hence has no transtions. Wait has a transition (by Wait)
 
-case Void ; Wait == Wait : 1S
-where
-  type Void : *S
-  type Void = Void
+case (Void @*S) ; Wait == Wait : 1S
 
-case forall (a : 1S). Void ; Wait ; a == forall (b : 1S). Wait : 1S
+case Void' ; Wait == Wait : 1S
 where
-  type Void : *S
-  type Void = Void
+  type Void' : *S
+  type Void' = Void'
+
+case forall (a : 1S). (Void @*S) ; Wait ; a == forall (b : 1S). Wait : 1S
+
+case forall (a : 1S). Void' ; Wait ; a == forall (b : 1S). Wait : 1S
+where
+  type Void' : *S
+  type Void' = Void'
 
 case &{Done: Skip} ; Wait == &{Done: Skip} ; Close : 1C

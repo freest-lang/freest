@@ -56,6 +56,7 @@ data Token
   | TkIntType Span | TkFloatType Span | TkCharType Span
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
+  | TkVoidType Span
   -- Kinds 
   | TkLinTopKind Span | TkUnTopKind Span
   | TkLinSessionKind Span | TkUnSessionKind Span
@@ -79,7 +80,7 @@ getText = \case
   TkStringLit _ t -> t
   TkCmp _ t -> t
   -- Keywords
-  _ -> error "Parser.Token.getText: no text"
+  t -> error $ "Parser.Token.getText: no text for token `" ++ show t ++ "`"
 
 instance Located Token where
   getSpan :: Token -> Span
@@ -167,6 +168,7 @@ instance Located Token where
     TkCloseType s -> s
     TkWaitType s -> s
     TkDualType s -> s
+    TkVoidType s -> s
     -- Kinds
     TkLinTopKind s -> s
     TkUnTopKind s -> s
@@ -259,6 +261,7 @@ instance Located Token where
     TkDualType _ -> TkDualType s
     TkCloseType _ -> TkCloseType s
     TkWaitType _ -> TkWaitType s
+    TkVoidType _ -> TkVoidType s
     -- Kinds
     TkLinTopKind _ -> TkLinTopKind s
     TkUnTopKind _ -> TkUnTopKind s
