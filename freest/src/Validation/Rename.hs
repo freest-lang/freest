@@ -59,7 +59,7 @@ isAbsorbing td = absorb S.empty
     absorb :: S.Set Identifier -> T.Type -> Bool
     absorb v = \case
       T.End{} -> True
-      T.Bottom{} -> True
+      T.Void{} -> True
       T.SharedChoice{} -> True -- Unrestricted choice
       T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
       T.AppSemi _ t u -> absorb v t || absorb v u

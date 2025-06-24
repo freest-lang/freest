@@ -80,7 +80,7 @@ data Type
   | TName Span Identifier
   | DName Span Identifier
   --   The type equivalent to non-contractive types
-  | Bottom Span
+  | Void Span K.Kind
   -- Non-constants
   | Var Span Variable
   | Abs Span [(Variable, K.Kind)] Type
@@ -203,7 +203,7 @@ instance Dual Type where
   dual (Message s m p) = Message s m (dual p)
   dual (Choice s m p ids) = Choice s m (dual p) ids
   dual t@Skip{} = t
-  dual t@Bottom{} = t
+  dual t@Void{} = t
 
 instance Show Type where
   show = \case
@@ -239,7 +239,7 @@ instance Show Type where
     TName _ i -> show i ++ "#type"
     DName _ i -> show i ++ "#data"
     -- The type of non-contractive types
-    Bottom{} -> "Bottom"
+    Void _ k -> "(Void @" ++ show k ++ ")"
     where 
       showView  = \case In -> "&"     ; Out -> "+"
       showQuant = \case In -> "forall"; Out -> "exists"
@@ -278,7 +278,7 @@ instance Congruence Type where
     (TName _ i1) (TName _ i2) -> i1 == i2
     (DName _ i1) (DName _ i2) -> i1 == i2
   --   The type of non-contractive types
-    (Bottom _) (Bottom _) -> True
+    (Void _ k1) (Void _ k2) -> k1 == k2
     _ _ -> False
 
 instance Congruence [Type] where
@@ -316,7 +316,7 @@ instance Located Type where
     TName s _       -> s
     DName s _       -> s
     --   The type of non-contractive types
-    Bottom s        -> s
+    Void s _        -> s
 
   setSpan s = \case
     -- Functional types
@@ -340,4 +340,4 @@ instance Located Type where
     TName _ n        -> TName s n
     DName _ n        -> DName s n
     --   The type of non-contractive types
-    Bottom _         -> Bottom s
+    Void _ k         -> Void s k

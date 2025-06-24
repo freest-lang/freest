@@ -17,8 +17,8 @@ module Validation.Normalisation
 where
 
 import Syntax.Base
-import Syntax.Kind ( Kind )
-import Syntax.Type as T
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
 import Validation.Substitution ( subsAll )
 import Utils ( internalError )
@@ -37,7 +37,7 @@ normalise td = norm S.empty
     norm :: Visited -> T.Type -> T.Type
     norm visited t
       | isWhnf t = t
-      | reappears = T.Bottom (getSpan t)
+      | reappears = T.Void (getSpan t) (K.lt $ getSpan t)
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
@@ -90,8 +90,8 @@ reduce td = \case
   T.AppDual _ t@T.Skip{} -> t
   -- R-DEnd
   T.AppDual _ t@T.End{} -> T.dual t
-  -- R-DBottom
-  T.AppDual _ t@T.Bottom{} -> t
+  -- R-DVoid
+  T.AppDual _ t@T.Void{} -> t
   -- R-DMsg
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
   -- R-DChoice

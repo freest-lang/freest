@@ -53,7 +53,7 @@ word t | isWhnf t || T.isAppSemi t = wordWhnf t
             let u = normalise td t
             case u of
               T.Skip{} -> pure []
-              T.Bottom{} -> pure [bottom]
+              T.Void{} -> pure [bottom]
               _ -> do
                 ~(z:δ) <- wordWhnf u
                 γ <- getTransitions z
@@ -69,7 +69,7 @@ wordWhnf :: T.Type -> TransState Word
 wordWhnf = \case
   T.Skip{} -> -- Skip
     pure []
-  t@T.Bottom{} -> -- Bottom
+  t@T.Void{} -> -- Void
     pure [bottom] 
   t@T.End{} -> -- End
     getLHS $ M.singleton (show t) [bottom]
