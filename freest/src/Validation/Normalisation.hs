@@ -72,7 +72,6 @@ reduce td = \case
   -- R-TAppVoid
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
   -- R-TAppL + R-μ followed by a series of R-β
-  -- Types are expected to be well formed at this point, hence as and ts are of the same length
   T.AppTName _ name ts -> case td M.!? name of
     Just u@T.Abs{} -> betaReduce u ts
     Just u -> u
@@ -82,6 +81,7 @@ reduce td = \case
   T.App s t ts -> T.App s (reduce td t) ts
   t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t
 
+betaReduce :: T.Type -> [T.Type] -> T.Type
 betaReduce (T.Abs s aks u) ts
   | length aks == arity = v
   | otherwise = T.Abs s (drop arity aks) v
