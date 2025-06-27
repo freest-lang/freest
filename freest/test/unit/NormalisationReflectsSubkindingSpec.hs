@@ -1,4 +1,4 @@
-module NormalisationReflectsKindingSpec (spec) where
+module NormalisationReflectsSubkindingSpec (spec) where
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T

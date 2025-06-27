@@ -115,8 +115,11 @@ normalise td = norm S.empty
   where
     norm :: S.Set T.Type -> T.Type -> T.Type
     norm visited t
+      -- N-Whnf
       | isWhnf t = t
-      | reappears = T.Void (getSpan t) (K.lt $ getSpan t)
+      -- N-Visited
+      | reappears = T.Void (getSpan t) (K.lt $ getSpan t) -- Bug: the kind of void is that of mu
+      -- N-NotVisited + N-NoMuRedex
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
