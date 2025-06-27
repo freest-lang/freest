@@ -23,11 +23,11 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test"] 
-  "If ∆ ⊢ T : κ and T -> U, then ∆ ⊢ U : κ" 
-  \(t, _, m) -> reductionPreservesKinding m t `shouldBe` True
+  "If ∆ ⊢ T : κ and T -> U, then ∆ ⊢ U : κ' and k' <: k" 
+  \(t, _, m) -> reductionReflectsKinding m t `shouldBe` True
 
-reductionPreservesKinding :: M.Module -> T.Type -> Bool
-reductionPreservesKinding m t =
+reductionReflectsKinding :: M.Module -> T.Type -> Bool
+reductionReflectsKinding m t =
   isWhnf t ||
   (trace
     ("\n" ++ show (runSynth m t) ++ " :>? " ++ show (runSynth m (reduce (buildDataDecls m) t))) $
