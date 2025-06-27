@@ -23,6 +23,7 @@ import Validation.Base ( TypeDeclMap )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
+import Control.Exception ( catch, ErrorCall )
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Debug.Trace
@@ -71,14 +72,21 @@ reduce td = \case
   -- R-TAppVoid
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
   -- R-TAppL + R-μ followed by a series of R-β
-  -- Types are expected to be well formed at this foint, hence as and ts are of the same length
-  T.AppTName s name ts -> case td M.!? name of
-    Just (T.Abs _ (map fst -> as) u) -> subsAll as ts u
+  -- Types are expected to be well formed at this point, hence as and ts are of the same length
+  T.AppTName _ name ts -> case td M.!? name of
+    Just u@T.Abs{} -> betaReduce u ts
     Just u -> u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
+    where arity = length ts
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t
+
+betaReduce (T.Abs s aks u) ts
+  | length aks == arity = v
+  | otherwise = T.Abs s (drop arity aks) v
+  where arity = length ts
+        v = subsAll (map fst aks) ts u
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.Type -> Bool
@@ -86,16 +94,16 @@ isWhnf = \case
   -- W-Const0
   t | T.isConstant t -> True
   -- W-Const1
-  T.App _ t _
-    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
-  -- W-Seq1 _ does not apply, presently; semicolon must be fully applied
-  T.App _ T.Semi{} [_] -> True
-  -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
+  T.App _ t us
+    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && length us >= 1 -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs
   T.Abs{} -> True
+  -- W-Seq1 _ does not apply, presently: semicolon must be fully applied
+  T.App _ T.Semi{} [_] -> True
+  -- W-Seq2
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Dual
   T.AppDual _ T.Var{} -> True
   _ -> False
@@ -124,3 +132,12 @@ tNameRedex = \case
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
+-- betaReduce :: T.Type -> T.Type
+-- betaReduce
+
+
+-- betaReduces :: T.Type -> MaybeType
+-- betaReduces t = catch
+--   -- Force the deep evaluation of reduce
+--   (length (show (betaReduce t)) `seq` Nothing)
+--   (\(x::ErrorCall) -> Just (betaReduce t))

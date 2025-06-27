@@ -19,7 +19,7 @@ spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T reduces to U, then rename T reduces to rename U" 
-  \(t,_,m) -> renamePreservesReduction (buildDataDecls m) t `shouldBe` True
+  \(t, _, m) -> renamePreservesReduction (buildDataDecls m) t `shouldBe` True
 
 renamePreservesReduction :: TypeDeclMap -> T.Type -> Bool
 renamePreservesReduction td t = isWhnf t || u == u'

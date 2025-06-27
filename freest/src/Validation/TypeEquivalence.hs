@@ -38,8 +38,8 @@ equivalent vs t u =
 
 fromType :: ValidationState -> [T.Type] -> Grammar
 fromType vs ts =
-  -- trace ("\n\nTypes:   " ++ show ts ++
-  --        "\n"++show (Grammar w (productions s))) $
+  trace ("\n\nTypes:   " ++ show ts ++
+         "\n"++show (Grammar w (productions s))) $
   Grammar w (productions s)
   where (w, s) = runState (mapM (word Set.empty) ts) (initial vs)
 
@@ -104,12 +104,12 @@ word' set = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- F : k => k' // t reduces
   t -> do
     state <- gets validationState
     case runSynth' state t of
-      Left errors -> internalError $ "kinding failed. " ++ show t ++ "\n" ++ show errors
+      Left errors -> internalError $ "kinding failed for type " ++ show t ++ "\n" ++ show errors
       Right (Arrow _ k _) -> do
+        -- F : k => k'
         td <- getTypeDecls
         let a = first set td t
         let s = getSpan t
@@ -117,6 +117,7 @@ word' set = \case
         let label = ("λ" ++ show k ++ "_" ++ show a)
         getLHS $ Map.singleton label w
       Right _ -> do
+        -- t reduces
         td <- getTypeDecls
         word set (reduce td t)
   -- Should not happen - Redundant

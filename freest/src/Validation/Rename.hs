@@ -11,7 +11,7 @@ Absorbing - non-normed types == types w/ infinite norm
 module Validation.Rename
   ( reachable
   , first
-  , isAbsorbing -- for testing purposes
+  , absorbing -- for testing purposes
   , rename
   )
 where
@@ -55,26 +55,24 @@ reachable td = \case
   T.TName{} -> Set.empty
   T.Var _ a -> Set.singleton a
   T.Abs _ (map fst -> as) t -> reachable td t Set.\\ Set.fromList as
-  T.AppSemi _ t u | isAbsorbing td t -> reachable td t
+  T.AppSemi _ t u | absorbing td t -> reachable td t
                   | otherwise -> reachable td t `Set.union` reachable td u
   T.App _ t us -> Set.unions (map (reachable td) (t:us))
 
 -- | Is a type absorbing?
-isAbsorbing :: TypeDeclMap -> T.Type -> Bool
-isAbsorbing td = absorb Set.empty
-  where
-    absorb :: Set.Set Identifier -> T.Type -> Bool
-    absorb v = \case
-      T.End{} -> True
-      T.Void{} -> True
-      T.SharedChoice{} -> True -- Unrestricted choice
-      T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
-      T.AppSemi _ t u -> absorb v t || absorb v u
-      T.App _ T.Choice{} ts -> all (absorb v) ts
-      T.AppDual _ t -> absorb v t
-      T.AppTName _ id ts -> id `Set.member` v || case td Map.!? id of
-        Just (T.Abs _ _ u) -> absorb (Set.insert id v) u
-        Just u  -> absorb (Set.insert id v) u
-        Nothing -> internalError $ "isAbsorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
-      T.AppQuant _ _ _ t -> absorb v t
-      _ -> False
+absorbing :: TypeDeclMap -> T.Type -> Bool
+absorbing td = \case
+  T.End{} -> True
+  T.Void{} -> True
+  T.SharedChoice{} -> True -- Unrestricted choice
+  T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
+  T.AppSemi _ t u -> absorbing td t || absorbing td u
+  T.App _ T.Choice{} ts -> all (absorbing td) ts
+  T.AppDual _ t -> absorbing td t
+  -- forall F _ Using isnatead forall lambda a.T
+  T.AppQuant _ _ _ t -> absorbing td t
+  T.AppTName _ id ts -> case td Map.!? id of
+    Just u  -> absorbing td u
+    Nothing -> internalError $ "absorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
+  
+  _ -> False

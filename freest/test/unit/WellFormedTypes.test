@@ -941,6 +941,11 @@ where
   type Id : 1S -> 1S
   type Id a = a
 
+case ABStream Int : *T -> 1S
+where
+  type ABStream : *T -> *T -> 1S
+  type ABStream a b = !a ; !b ; ABStream a b
+
 case Convert Id Wait : 1S
 where
   type Convert : (1S -> 1S) -> 1S -> 1S

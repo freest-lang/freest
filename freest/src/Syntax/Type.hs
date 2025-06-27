@@ -29,6 +29,7 @@ module Syntax.Type
   , Dual(..)
   , isConstant
   , isSkip
+  , isVoid
   , isSemi
   , isAppSemi
   , isAppLinChoice
@@ -36,6 +37,7 @@ module Syntax.Type
   , isTName
   , isDName
   , isMsg
+  , isAppQuant
   , fromVariable
   )
 where
@@ -175,21 +177,22 @@ isConstant = \case
   Abs{}   -> False
   App{}   -> False
   -- Given a declaration 'type A a1 ... an = U', type A stands for
-  -- λa1...λan.μλA.U. Hence, type A is then a non value.
-  TName{} -> False
+  -- λa1...λan.μλA.U. Hence, type A is an abstraction, hence a value.
   -- On the other hand, given a declaration 'data A a1 ... an = U', type A is
   -- understood as a constant.
   _       -> True
 
-isSkip, isSemi, isAppSemi, isAppLinChoice, isDual, isTName, isDName, isMsg :: Type -> Bool
-isSkip         = \case Skip{}         -> True; _ -> False
-isSemi         = \case Semi{}         -> True; _ -> False
-isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuant, isAppLinChoice :: Type -> Bool
+isSkip     = \case Skip{}     -> True; _ -> False
+isVoid     = \case Void{}     -> True; _ -> False
+isSemi     = \case Semi{}     -> True; _ -> False
+isAppSemi  = \case AppSemi{}  -> True; _ -> False
+isDual     = \case Dual{}     -> True; _ -> False
+isTName    = \case TName{}    -> True; _ -> False
+isDName    = \case DName{}    -> True; _ -> False
+isMsg      = \case Message{}  -> True; _ -> False
+isAppQuant = \case AppQuant{} -> True; _ -> False
 isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
-isDual         = \case Dual{}         -> True; _ -> False
-isTName        = \case TName{}        -> True; _ -> False
-isDName        = \case DName{}        -> True; _ -> False
-isMsg          = \case Message{}      -> True; _ -> False
 
 fromVariable :: Variable -> Type
 fromVariable a = Var (varSpan a) a

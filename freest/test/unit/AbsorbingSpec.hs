@@ -21,7 +21,7 @@ spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test" ]
   "Channel types (kind C) are absorbing types"
   \case
-    (t, Just k, m) -> not (K.isStrictlyAbsorbing k) || R.isAbsorbing (buildDataDecls m) t `shouldBe` True
+    (t, Just k, m) -> not (K.isStrictlyAbsorbing k) || R.absorbing (buildDataDecls m) t `shouldBe` True
     _ -> expectationFailure "Ill formed test case: missing kind annotation"
 
 -- Warning: code also in from Validation.Base
