@@ -12,7 +12,8 @@ Weak reduction strategies do not reduce under lambda abstractions.
 module Validation.Normalisation
   ( reduce
   , isWhnf
-  , normalise 
+  , normalise
+  , betaReduces
   )
 where
 
@@ -23,7 +24,6 @@ import Validation.Base ( TypeDeclMap )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
-import Control.Exception ( catch, ErrorCall )
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Debug.Trace
@@ -73,16 +73,16 @@ reduce td = \case
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
   -- R-TAppL + R-μ followed by a series of R-β
   T.AppTName _ name ts -> case td M.!? name of
-    Just u@T.Abs{} -> betaReduce u ts
+    Just u@T.Abs{} -> apply u ts
     Just u -> u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
-    where arity = length ts
   -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
   t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t
 
-betaReduce :: T.Type -> [T.Type] -> T.Type
-betaReduce (T.Abs s aks u) ts
+-- | Type application, the beta rule
+apply :: T.Type -> [T.Type] -> T.Type
+apply (T.Abs s aks u) ts
   | length aks == arity = v
   | otherwise = T.Abs s (drop arity aks) v
   where arity = length ts
@@ -118,7 +118,7 @@ normalise td = norm S.empty
       -- N-Whnf
       | isWhnf t = t
       -- N-Visited
-      | reappears = T.Void (getSpan t) (K.lt $ getSpan t) -- Bug: the kind of void is that of mu
+      | reappears = T.Void (getSpan t) (K.uc $ getSpan t) -- Bug: the kind of void is that of mu
       -- N-NotVisited + N-NoMuRedex
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
@@ -135,12 +135,19 @@ tNameRedex = \case
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
--- betaReduce :: T.Type -> T.Type
--- betaReduce
+betaReduce :: TypeDeclMap -> T.Type -> T.Type
+betaReduce td = \case
+  -- R-TAppVoid
+  T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
+  -- R-TAppL
+  T.App s t ts -> T.App s (reduce td t) ts
+  -- R-TAppL + R-μ followed by a series of R-β
+  T.AppTName _ name ts -> case td M.!? name of
+    Just u@T.Abs{} -> apply u ts
+    Just u -> u
+    Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
 
-
--- betaReduces :: T.Type -> MaybeType
--- betaReduces t = catch
---   -- Force the deep evaluation of reduce
---   (length (show (betaReduce t)) `seq` Nothing)
---   (\(x::ErrorCall) -> Just (betaReduce t))
+betaReduces :: TypeDeclMap -> T.Type -> Maybe T.Type
+betaReduces td t
+  | isWhnf t = Nothing -- TODO: Fix me!
+  | otherwise = Just $ betaReduce td t

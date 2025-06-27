@@ -1,6 +1,7 @@
 module AbsorbingSpec (spec) where
 
-import Syntax.Kind qualified as K
+import Syntax.Base ( getSpan )
+import Syntax.Kind
 import Validation.Rename qualified as R
 import Validation.Base ( TypeDeclMap )
 import Syntax.Module qualified as M
@@ -19,9 +20,10 @@ that are not channel types. Non-contractive types are one (the?) example.
 spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test" ]
-  "Channel types (kind C) are absorbing types"
+  "Absorbing types have kind <: 1S"
   \case
-    (t, Just k, m) -> not (K.isStrictlyAbsorbing k) || R.absorbing (buildDataDecls m) t `shouldBe` True
+    (t, Just k, m) -> not (R.absorbing (buildDataDecls m) t) || k <: ls (getSpan k) `shouldBe` True
+    -- (t, Just k, m) -> not (K.isStrictlyAbsorbing k) || R.absorbing (buildDataDecls m) t `shouldBe` True
     _ -> expectationFailure "Ill formed test case: missing kind annotation"
 
 -- Warning: code also in from Validation.Base
