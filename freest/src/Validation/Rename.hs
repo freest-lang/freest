@@ -36,10 +36,10 @@ first s td t = firstVar var (s `Set.union` reachable td t)
 absorbing :: TypeDeclMap -> T.Type -> Bool
 absorbing td = \case
   T.End{} -> True
-  T.Void{} -> True
+  T.Void _ (K.Proper _ _ pk) | pk K.<: K.Session -> True
+  T.AppSemi _ t u -> absorbing td t || absorbing td u
   T.SharedChoice{} -> True -- Unrestricted choice
   T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
-  T.AppSemi _ t u -> absorbing td t || absorbing td u
   T.App _ T.Choice{} ts -> all (absorbing td) ts
   T.AppDual _ t -> absorbing td t
   -- forall F _ Using instead forall lambda a.T
@@ -48,9 +48,9 @@ absorbing td = \case
   T.TName s name -> case td Map.!? name of
     Just u  -> absorbing td (replace name (T.Void s (K.uc s)) u)
     Nothing -> internalError $ "absorbing: name " ++ show name ++ " not in type declaration map"
-  t -> case betaReduces td t of
-    Nothing -> False
+  t -> case betaReduces t of
     Just u -> absorbing td u
+    Nothing -> False
 
 -- | Replace a given name by a type in a type (usually written @[a -> u] t@,
 -- only that a is an identifier and not a variable)

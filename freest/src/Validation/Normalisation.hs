@@ -140,14 +140,18 @@ betaReduce td = \case
   -- R-TAppVoid
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
   -- R-TAppL
-  T.App s t ts -> T.App s (reduce td t) ts
+  T.App s t ts -> T.App s (betaReduce td t) ts
   -- R-TAppL + R-μ followed by a series of R-β
   T.AppTName _ name ts -> case td M.!? name of
     Just u@T.Abs{} -> apply u ts
     Just u -> u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
 
-betaReduces :: TypeDeclMap -> T.Type -> Maybe T.Type
-betaReduces td t
-  | isWhnf t = Nothing -- TODO: Fix me!
-  | otherwise = Just $ betaReduce td t
+betaReduces :: T.Type -> Maybe T.Type
+betaReduces = \case
+  T.App s (T.Abs _ [(a,_)] t) [u] -> Just $ subs a t u
+  T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k
+  T.App s t vs -> do
+    u <- betaReduces t
+    pure $ T.App s u vs
+  _ -> Nothing
