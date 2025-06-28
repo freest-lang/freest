@@ -12,6 +12,7 @@ module Validation.Substitution
   ( subs
   , subsAll
   , freeVars
+  , unfold
   )
 where
 
@@ -69,3 +70,12 @@ subs a u = \case
 -- between @as@ and @us@.
 subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
 subsAll as us t = foldr (uncurry subs) t (zip as us)
+
+-- | Replace a given name by a type in a type. Usually written @[a -> u] t@. A
+-- substitution, only that @a@ is an identifier rather than a variable.
+unfold :: Identifier -> T.Type -> T.Type -> T.Type
+unfold name t (T.Abs s aks u) = T.Abs s aks (unfold name t u)
+unfold name t (T.App s u vs) = T.App s (unfold name t u) (map (unfold name t) vs)
+unfold name t (T.TName _ name') | name == name' = t
+unfold _ _ u = u
+

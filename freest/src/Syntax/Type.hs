@@ -176,6 +176,7 @@ isConstant = \case
   Var{}   -> False
   Abs{}   -> False
   App{}   -> False
+  TName{} -> False
   -- Given a declaration 'type A a1 ... an = U', type A stands for
   -- λa1...λan.μλA.U. Hence, type A is an abstraction, hence a value.
   -- On the other hand, given a declaration 'data A a1 ... an = U', type A is

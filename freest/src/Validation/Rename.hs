@@ -20,7 +20,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
-import Validation.Substitution ( subs, subsAll )
+import Validation.Substitution ( subs, subsAll, unfold )
 import Validation.Normalisation ( betaReduces )
 import Utils ( internalError )
 
@@ -38,7 +38,7 @@ absorbing td = \case
   T.End{} -> True
   T.Void _ (K.Proper _ _ pk) | pk K.<: K.Session -> True
   T.AppSemi _ t u -> absorbing td t || absorbing td u
-  T.SharedChoice{} -> True -- Unrestricted choice
+  T.SharedChoice{}        -> True -- Unrestricted choice
   T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
   T.App _ T.Choice{} ts -> all (absorbing td) ts
   T.AppDual _ t -> absorbing td t
@@ -46,19 +46,12 @@ absorbing td = \case
   T.AppQuant _ _ _ t -> absorbing td t
   -- µ_κ F absorbing if F Void_κ absorbing
   T.TName s name -> case td Map.!? name of
-    Just u  -> absorbing td (replace name (T.Void s (K.uc s)) u)
+    -- TODO: The kind of T.Void should be that of the 'name', a proper kind
+    Just u  -> absorbing td (unfold name (T.Void s (K.uc s)) u)
     Nothing -> internalError $ "absorbing: name " ++ show name ++ " not in type declaration map"
   t -> case betaReduces t of
     Just u -> absorbing td u
     Nothing -> False
-
--- | Replace a given name by a type in a type (usually written @[a -> u] t@,
--- only that a is an identifier and not a variable)
-replace :: Identifier -> T.Type -> T.Type -> T.Type
-replace name t (T.Abs s aks u) = T.Abs s aks (replace name t u)
-replace name t (T.App s u vs) = T.App s (replace name t u) (map (replace name t) vs)
-replace name t (T.TName _ name') | name == name' = t
-replace _ _ u = u
 
 -- | The set of free variables reachable in a type.
 reachable :: TypeDeclMap -> T.Type -> Set.Set Variable
@@ -72,7 +65,7 @@ reachable td = \case
   T.App _ t us -> Set.unions (map (reachable td) (t:us))
 
 
--- Depracated
+-- Deprecated
 
 -- | Rename a type.
 rename :: TypeDeclMap -> T.Type -> T.Type

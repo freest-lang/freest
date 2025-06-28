@@ -18,14 +18,22 @@ main = hspec spec
 spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test" ]
-  "Normalisation preserves and reflect absorbing"
+  "Normalisation preserves and reflects absorbing"
   \case
     (t, Just k, m) ->
-      let td = buildTypeDecls m in
-        trace (show t ++ " vs. " ++ show (normalise td t)) $
-        absorbing td t == absorbing td (normalise td t) `shouldBe` True
-    _ -> expectationFailure "Ill formed test case: missing kind annotation"
+      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ " and " ++ show u  ++ showAbs uAbsorbing)
+      tAbsorbing == uAbsorbing `shouldBe` True
+      where
+        td = buildTypeDecls m
+        tAbsorbing = absorbing td t
+        u = normalise td t
+        uAbsorbing = absorbing td u
+    _ -> expectationFailure "Ill formed test case: kind annotation absent"
 
 -- Warning: code also in from Validation.Base
 buildTypeDecls :: M.Module -> TypeDeclMap
 buildTypeDecls = Map.fromList . M.typeDecls
+
+showAbs :: Bool -> String
+showAbs True = " is absorbing"
+showAbs False = " is non absorbing"
