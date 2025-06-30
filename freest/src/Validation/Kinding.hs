@@ -35,7 +35,7 @@ import Validation.Substitution ( subs )
 
 import Control.Monad.Identity ( Identity(..) )
 import Control.Monad.Extra ( unlessM, (&&^) )
-import Control.Monad.State ( MonadState, foldM, unless, void, forM_, when, runState, StateT (runStateT), evalState, gets )
+import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, gets, modify )
 import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
 import Data.Bifunctor ( first )
 import Data.Foldable.Extra ( allM )
@@ -150,6 +150,13 @@ checkSubkindOf t k' k =
   unless (k' <: k) $
     throwE (KindMismatch (getSpan t) k t k')
 
+-- | Check if the kind of a type is a subkind of another in a contravariant 
+-- position. If not, throw an error located at the type.
+checkSubkindOf' :: T.Type -> Kind -> Kind -> Validation ()
+checkSubkindOf' t k' k =
+  unless (k' <: k) $
+    throwE (KindMismatch (getSpan t) k' t k)
+
 -- | Synthesize the kind of a type and check if it is a subkind of another
 -- kind.
 synthCheck :: KindCtx -> T.Type -> Kind -> Validation Kind
@@ -159,36 +166,46 @@ synthCheck ctx t k = do
   return k'
 
 -- | Check a module for type formation.
-kindModule :: M.Module -> Validation ()
+kindModule :: M.Module -> Validation M.Module
 kindModule m = do
-  forM_ (M.typeDecls m) kindTypeDecl
+  tds <- forM (M.typeDecls m) kindTypeDecl
   forM_ (M.dataDecls m) kindDataDecl
+  modify (\s -> s{typeDecls = Map.fromList tds})
+  return m{M.typeDecls = tds}
   where 
-    kindTypeDecl :: (Identifier, T.Type) -> Validation ()
+    kindTypeDecl :: (Identifier, T.Type) -> Validation (Identifier, T.Type)
     kindTypeDecl (i, t) = do
       k <- lookupKind i
-      case t of
-        T.Abs _ (map fst -> as) t' ->
-          checkTypeDecl k Map.empty as k
+      t' <- case t of
+        T.Abs s aks u -> do
+          aks' <- kindParams aks k
+          return $ T.Abs s aks' u
           where
-            checkTypeDecl k ctx [] k' =
-              check ctx t' k'
-            checkTypeDecl k ctx as Proper{} =
+            kindParams []  Proper{} = pure []
+            kindParams aks Proper{} = 
               throwE (ExpectsTooManyArgsK (getSpan i) i k)
-            checkTypeDecl k ctx (a : as) (Arrow s k1 k2) =
-              checkTypeDecl k (Map.insert a k1 ctx) as k2
-        t -> check Map.empty t k
+            kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
+              ((a, k1) :) <$> kindParams aks' k2
+            kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
+              checkSubkindOf' (T.Var (getSpan a) a) k1 k
+              ((a, k) :) <$> kindParams aks' k2
+        t' -> return t'
+      check Map.empty t' k
+      return (i, t)
 
     kindDataDecl :: (Identifier, [(Variable, Kind)], M.ConsDeclList) -> Validation ()
-    kindDataDecl (i, map fst -> as, t) = do
+    kindDataDecl (i, aks, t) = do
       k <- lookupKind i
-      checkDataDecl k id Map.empty as k
+      checkDataDecl k id Map.empty aks k
       where
         checkDataDecl k f ctx [] _ =
           checkConsDecls k f ctx t
-        checkDataDecl k f ctx (a : as) (Arrow s k1 k2) =
-          checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) as k2
-        checkDataDecl k f ctx as Proper{} =
+        checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
+          checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) aks' k2
+        checkDataDecl k f ctx ((a, k') : aks') (Arrow s k1 k2) = do
+          checkSubkindOf' (T.Var (getSpan a) a) k1 k'
+          checkDataDecl k (f . Arrow s k') (Map.insert a k' ctx) aks' k2
+        checkDataDecl k f ctx aks Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
 
         checkConsDecls k f ctx cds = do
@@ -206,7 +223,7 @@ kindModule m = do
 --     * the given module, otherwise.
 runKindModule :: M.Module -> Either [Error] M.Module
 runKindModule m = 
-  runValidation (buildValidationState m) (kindModule m) >> pure m
+  runValidation (buildValidationState m) (kindModule m)
 
 -- | Run synthesis on type, building the initial validation state from a given
 -- module. This returns either:

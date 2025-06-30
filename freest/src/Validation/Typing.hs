@@ -597,4 +597,4 @@ typeModule m = do
 
 runValidate :: M.Module -> Either [Error] (M.Module, TypeCtx)
 runValidate m =
-  runValidation (buildValidationState m) (Kinding.kindModule m >> typeModule m)
+  runValidation (buildValidationState m) (Kinding.kindModule m >>= typeModule)
