@@ -21,7 +21,7 @@ import Data.List.NonEmpty qualified as NE
 
 dummyKindVar :: Located a => a -> K.Kind
 dummyKindVar (getSpan -> s) =
-  K.Proper s (K.VarM  (Variable s "φ" (-1))) (K.VarPK (Variable s "ψ" (-1)))
+  K.Var s (Variable s "τ" defaultInternal)
 
 split :: Eq a => a -> [a] -> [[a]]
 split d str =

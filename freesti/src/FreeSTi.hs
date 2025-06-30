@@ -144,7 +144,7 @@ runValidateModule :: Typing.TypeCtx
                   -> M.Module
                   -> Either [Error] (M.Module, Typing.TypeCtx, ValidationState)
 runValidateModule tctx m = 
-  let (em', s') = runState (runExceptT (Kinding.kindModule m >> Typing.typeModule m)) (buildValidationState m)
+  let (em', s') = runState (runExceptT (Kinding.kindModule m >>= Typing.typeModule)) (buildValidationState m)
   in case em' of
     Left e -> Left (errors s' ++ [e])
     Right (m', tctx) | null (errors s') -> Right (m', tctx, s') 

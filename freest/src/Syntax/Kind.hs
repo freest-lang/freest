@@ -84,25 +84,30 @@ instance Meet Prekind where
   meet _       Session = Session
   meet _       _       = Top
 
-instance Meet Kind where
-  meet (Proper s m1 b1) (Proper _ m2 b2) = Proper s (meet m1 m2) (meet b1 b2)
-
-data Kind = Proper Span Multiplicity Prekind | Arrow Span Kind Kind            
+data Kind 
+  = Proper Span Multiplicity Prekind 
+  | Arrow Span Kind Kind 
+  | Var Span Variable       
   deriving (Ord)
 
 instance Eq Kind where
   (Proper _ m1 pk1) == (Proper _ m2 pk2) = m1 == m2 && pk1 == pk2
   (Arrow _ k11 k12) == (Arrow _ k21 k22) = k11 == k21 && k12 == k22
 
-instance Subsort Kind where
-  Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
-  Arrow _ k11 k12 <: Arrow _ k21 k22 = k21 <: k11 && k12 <: k22
-  _               <: _               = False
+instance Meet Kind where
+  meet (Proper s m1 b1) (Proper _ m2 b2) = 
+    Proper s (meet m1 m2) (meet b1 b2)
+  meet _ _ = internalError "meet of non-proper kinds."
 
 instance Join Kind where
   join (Proper s m1 pk1) (Proper _ m2 pk2) = 
     Proper s (join m1 m2) (join pk1 pk2)
   join _ _ = internalError "join of non-proper kinds."
+
+instance Subsort Kind where
+  Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
+  Arrow _ k11 k12 <: Arrow _ k21 k22 = k21 <: k11 && k12 <: k22
+  _               <: _               = False
 
 -- | Abbreviations for the six proper kinds
 lt, ut, ls, us, lc, uc :: Span -> Kind

@@ -470,10 +470,9 @@ patVars = \case
 
 -- | Generate a fresh kind inference variable.
 freshKVar :: Located a => a -> Scoping K.Kind
-freshKVar l = do
-  φ <- incCounter >>= \i -> return (Variable (getSpan l) ("φ"++show i) i)
-  ψ <- incCounter >>= \i -> return (Variable (getSpan l) ("ψ"++show i) i)
-  return $ K.Proper (getSpan l) (K.VarM φ) (K.VarPK ψ)
+freshKVar (getSpan -> s) = do
+  i <- incCounter
+  return $ K.Var s (Variable s  ("τ"++show i) i)
 
 -- | Scope a type.
 scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
@@ -524,17 +523,21 @@ scopeKind :: K.Kind -> Scoping K.Kind
 scopeKind = \case
     K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind k1 <*> scopeKind k2
     K.Proper s m pk -> K.Proper s <$> scopeMultiplicity m  <*> scopePrekind pk
-  where 
-    scopePrekind (K.VarPK psi) = do
-      psi' <- freshInternal psi
-      return $ K.VarPK psi'{external="φ"++show (internal psi')}
+    K.Var s τ       -> K.Var s    <$> scopeKVar τ
+  where
+    scopePrekind (K.VarPK ψ) = do
+      ψ' <- freshInternal ψ
+      return $ K.VarPK ψ'{external = external ψ' ++ show (internal ψ')}
     scopePrekind pk = pure pk
+    scopeKVar τ = do
+      τ' <- freshInternal τ
+      return $ τ'{external = external τ' ++ show (internal τ')}
 
 -- | Scope a multiplicity.
 scopeMultiplicity :: K.Multiplicity -> Scoping K.Multiplicity
 scopeMultiplicity = \case
   K.VarM φ -> do
     φ' <- freshInternal φ
-    return $ K.VarM φ'{external="φ"++show (internal φ')}
+    return $ K.VarM φ'{external= external φ' ++show (internal φ')}
   m -> pure m
 
