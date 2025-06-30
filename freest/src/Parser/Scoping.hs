@@ -526,9 +526,9 @@ scopeKind = \case
     K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind k1 <*> scopeKind k2
     K.Proper s m pk -> K.Proper s <$> scopeMultiplicity m  <*> scopePrekind pk
   where 
-    scopePrekind (K.VarPK psi) = do
-      psi' <- freshInternal psi
-      return $ K.VarPK psi'{external="φ"++show (internal psi')}
+    scopePrekind (K.VarPK ψ) = do
+      ψ' <- freshInternal ψ
+      return $ K.VarPK ψ'{external= external ψ' ++ show (internal ψ')}
     scopePrekind pk = pure pk
 
 -- | Scope a multiplicity.
