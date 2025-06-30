@@ -171,16 +171,22 @@ smartApp s t            us = App s t us
 bool :: Span -> Type
 bool s = DName (getSpan s) (mkBoolId s)
 
+-- | Is this type a type constant? An iota an in Cai et alia.
 isConstant :: Type -> Bool
 isConstant = \case
+  -- Given a declaration 'type A a1 ... an = T' with n>0, type 'A T1 ... Tm',
+  -- with m<=n, stands for λa1...λan.μλA.T. Type 'A T1 ... Tm' is an
+  -- application. Not a constant.
+  
+  -- Given a declaration 'type B = U', type B stands for μλA.U. Hence, type B is
+  -- of the form μF, an application that reduces to F(μF). Not a constant.
+  
+  -- Given a declaration 'data A a1 ... an = U' with n>0, type 'A' is understood
+  -- as a type constant.
+  TName{} -> False
   Var{}   -> False
   Abs{}   -> False
   App{}   -> False
-  TName{} -> False
-  -- Given a declaration 'type A a1 ... an = U', type A stands for
-  -- λa1...λan.μλA.U. Hence, type A is an abstraction, hence a value.
-  -- On the other hand, given a declaration 'data A a1 ... an = U', type A is
-  -- understood as a constant.
   _       -> True
 
 isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuant, isAppLinChoice :: Type -> Bool

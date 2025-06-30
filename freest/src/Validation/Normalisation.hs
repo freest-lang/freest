@@ -28,6 +28,26 @@ import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Debug.Trace ( trace )
 
+-- | Is a given type a weak head normal form?
+isWhnf :: T.Type -> Bool
+isWhnf = \case
+  -- W-Const0
+  t | T.isConstant t -> True
+  -- W-Const1
+  T.App _ t us
+    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && length us >= 1 -> True
+  -- W-Var
+  T.AppVar{} -> True
+  -- W-Abs
+  T.Abs{} -> True
+  -- W-Seq1 _ semi-applied semicolon
+  T.App _ T.Semi{} [_] -> True
+  -- W-Seq2
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
+  -- W-Dual
+  T.AppDual _ T.Var{} -> True
+  _ -> False
+
 -- | One step type reduction
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
@@ -93,26 +113,6 @@ beta (T.Abs s aks u) ts
   | otherwise = T.Abs s (drop arity aks) v
   where arity = length ts
         v = subsAll (map fst aks) ts u
-
--- | Is a given type a weak head normal form?
-isWhnf :: T.Type -> Bool
-isWhnf = \case
-  -- W-Const0
-  t | T.isConstant t -> True
-  -- W-Const1
-  T.App _ t us
-    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && length us >= 1 -> True
-  -- W-Var
-  T.AppVar{} -> True
-  -- W-Abs
-  T.Abs{} -> True
-  -- W-Seq1 _ semi-applied semicolon
-  T.App _ T.Semi{} [_] -> True
-  -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
-  -- W-Dual
-  T.AppDual _ T.Var{} -> True
-  _ -> False
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
