@@ -35,8 +35,10 @@ instance Show K.Kind where
   show = snd . unparse 
 
 instance Unparse K.Kind where
-  unparse (K.Proper _ m pk) = (maxRator, show m ++ show pk)
-  unparse (K.Arrow _ lkind rkind) = (arrowRator, l ++ " -> " ++ r)
-    where
-      l = bracket (unparse lkind) LeftAssoc arrowRator
-      r = bracket (unparse rkind) RightAssoc arrowRator
+  unparse = \case
+    K.Proper _ m pk -> (maxRator, show m ++ show pk)
+    K.Arrow _ k1 k2 -> (arrowRator, l ++ " -> " ++ r)
+      where
+        l = bracket (unparse k1) LeftAssoc arrowRator
+        r = bracket (unparse k2) RightAssoc arrowRator
+    K.Var _ τ       -> (maxRator, show τ)

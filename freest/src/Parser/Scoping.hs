@@ -528,17 +528,17 @@ scopeKind = \case
   where
     scopePrekind (K.VarPK ψ) = do
       ψ' <- freshInternal ψ
-      return $ K.VarPK ψ'{external = external ψ' ++ show (internal ψ')}
+      return $ K.VarPK ψ'{external = "ψ" ++ show (internal ψ')}
     scopePrekind pk = pure pk
     scopeKVar τ = do
       τ' <- freshInternal τ
-      return $ τ'{external = external τ' ++ show (internal τ')}
+      return $ τ'{external = "τ" ++ show (internal τ')}
 
 -- | Scope a multiplicity.
 scopeMultiplicity :: K.Multiplicity -> Scoping K.Multiplicity
 scopeMultiplicity = \case
   K.VarM φ -> do
     φ' <- freshInternal φ
-    return $ K.VarM φ'{external= external φ' ++show (internal φ')}
+    return $ K.VarM φ'{external = "φ" ++ show (internal φ')}
   m -> pure m
 

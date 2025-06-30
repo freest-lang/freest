@@ -37,9 +37,8 @@ data Multiplicity = Lin | Un | VarM Variable
   deriving (Eq, Ord)
 
 instance Subsort Multiplicity where
-  Un <: Lin           = True
-  m1 <: m2 | m1 == m2 = True
-  _   <: _            = False
+  Un <: Lin = True
+  m1 <: m2  = m1 == m2
 
 instance Join Multiplicity where
   join φ@VarM{} _  = internalError ("join of multiplicity variable "++show φ)
@@ -61,9 +60,7 @@ instance Subsort Prekind where
   Session <: Top     = True
   Channel <: Top     = True
   Channel <: Session = True
-  pk1     <: pk2     
-    | pk1 == pk2     = True
-  _       <: _       = False
+  pk1     <: pk2     = pk1 == pk2
 
 instance Join Prekind where  
   join ψ@VarPK{} _  = internalError ("join of prekind variable "++show ψ)
@@ -91,8 +88,9 @@ data Kind
   deriving (Ord)
 
 instance Eq Kind where
-  (Proper _ m1 pk1) == (Proper _ m2 pk2) = m1 == m2 && pk1 == pk2
-  (Arrow _ k11 k12) == (Arrow _ k21 k22) = k11 == k21 && k12 == k22
+  Proper _ m1 pk1 == Proper _ m2 pk2 = m1 == m2 && pk1 == pk2
+  Arrow _ k11 k12 == Arrow _ k21 k22 = k11 == k21 && k12 == k22
+  Var _ τ1        == Var _ τ2        = τ1 == τ2 
 
 instance Meet Kind where
   meet (Proper s m1 b1) (Proper _ m2 b2) = 
@@ -107,6 +105,7 @@ instance Join Kind where
 instance Subsort Kind where
   Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
   Arrow _ k11 k12 <: Arrow _ k21 k22 = k21 <: k11 && k12 <: k22
+  Var _ τ1        <: Var _ τ2        = τ1 == τ2
   _               <: _               = False
 
 -- | Abbreviations for the six proper kinds
