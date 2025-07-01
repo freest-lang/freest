@@ -79,7 +79,7 @@ where
 case Tree : 1S
 where
   type Tree : 1S
-  type Tree = &{Leaf: Skip, Node: ?Int;Tree;Tree}
+  type Tree = &{Leaf: Skip, Node: Tree ; ?Int ; Tree}
 
 case TreeChannel : 1S
 where

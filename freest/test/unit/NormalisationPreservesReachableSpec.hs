@@ -1,4 +1,4 @@
-module NormalisationPreservesReflectsAbsorbingSpec (spec) where
+module NormalisationPreservesReachableSpec (spec) where
 
 import Syntax.Base ( getSpan )
 import Syntax.Kind
@@ -17,27 +17,23 @@ main = hspec spec
 
 -- This test should be called with well-formed types only
 
--- If T normalises to U, then T absorbing iff U absorbing
+-- If T normalises to U, then reach(T) = reach(U).
 
 spec :: Spec
 spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test" ]
-  "Normalisation preserves and reflects absorbing"
+  "Normalisation preserves free reachable variables"
   \case
     (t, Just k, m) ->
-      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ " and " ++ show u  ++ showAbs uAbsorbing)
-      tAbsorbing == uAbsorbing `shouldBe` True
+      trace ("\n" ++ show t ++ show tReachable ++ " and " ++ show u  ++ show uReachable)
+      tReachable == uReachable `shouldBe` True
       where
         td = buildTypeDecls m
-        tAbsorbing = absorbing td t
+        tReachable = reachable td t
         u = normalise td t
-        uAbsorbing = absorbing td u
+        uReachable = reachable td u
     _ -> expectationFailure "Ill formed test case: kind annotation absent"
 
 -- Warning: code also in from Validation.Base
 buildTypeDecls :: M.Module -> TypeDeclMap
 buildTypeDecls = Map.fromList . M.typeDecls
-
-showAbs :: Bool -> String
-showAbs True = " is absorbing"
-showAbs False = " is non absorbing"

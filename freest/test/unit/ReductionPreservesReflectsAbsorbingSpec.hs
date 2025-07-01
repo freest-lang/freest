@@ -15,6 +15,8 @@ import Debug.Trace ( trace )
 main :: IO ()
 main = hspec spec
 
+-- This test should be called with well-formed types only
+
 -- If T --> U, then T absorbing iff U absorbing.
 
 spec :: Spec
