@@ -9,6 +9,9 @@ import Data.Map.Strict qualified as Map
 import Test.Hspec
 import UnitSpecUtils
 
+-- See also WhnfImpliesNotReducesSpec.hs and ReduceImpliesNotWhnfSpec.hs. It
+-- seems to me that these two tests are equivalent to WhnfOrReducesSpec.
+
 -- This test should be called with well-formed types only
 
 -- A given type T is either a WHNF or reduces
