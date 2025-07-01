@@ -1,4 +1,4 @@
-module AbsorbingSpec (spec) where
+module AbsorbingTypesAreSessionTypesSpec (spec) where
 
 import Syntax.Base ( getSpan )
 import Syntax.Kind
@@ -9,6 +9,7 @@ import UnitSpecUtils
 
 import Data.Map.Strict qualified as Map
 import Test.Hspec
+import Debug.Trace ( trace )
 
 main :: IO ()
 main = hspec spec
@@ -22,10 +23,17 @@ spec = mkKindingSpec
   ["test/unit/WellFormedTypes.test" ]
   "Absorbing types have kind <: 1S"
   \case
-    (t, Just k, m) -> not (R.absorbing (buildDataDecls m) t) || k <: ls (getSpan k) `shouldBe` True
-    -- (t, Just k, m) -> not (K.isStrictlyAbsorbing k) || R.absorbing (buildDataDecls m) t `shouldBe` True
+    (t, Just k, m) -> 
+      trace ("\n" ++ show t ++ " : " ++ show k ++ showAbs absorbing) $
+      not absorbing || k <: ls (getSpan k) `shouldBe` True
+      where
+      absorbing = R.absorbing (buildDataDecls m) t
     _ -> expectationFailure "Ill formed test case: missing kind annotation"
 
 -- Warning: code also in from Validation.Base
 buildDataDecls :: M.Module -> TypeDeclMap
 buildDataDecls = Map.fromList . M.typeDecls
+
+showAbs :: Bool -> String
+showAbs True = " is absorbing"
+showAbs False = " is not absorbing"

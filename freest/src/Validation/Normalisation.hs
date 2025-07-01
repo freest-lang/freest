@@ -21,7 +21,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
-import Validation.Substitution ( freeVars, subs, subsAll, unfold )
+import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
 import Data.Map.Strict qualified as M
@@ -97,7 +97,7 @@ reduce td = \case
   T.App s t ts -> T.App s (reduce td t) ts
     -- R-μ
   t@(T.TName _ name) -> case td M.!? name of
-    Just u -> unfold name t u
+    Just u -> {- unfold name t -} u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map"
   -- R-TAppL + R-μ followed by a series of R-β
   -- T.AppTName _ name ts -> case td M.!? name of

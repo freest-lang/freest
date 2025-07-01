@@ -183,7 +183,7 @@ isConstant = \case
   
   -- Given a declaration 'data A a1 ... an = U' with n>0, type 'A' is understood
   -- as a type constant.
-  TName{} -> False -- μF reduces
+  TName{} -> False -- TName is indeed a μF, which reduces (unfolds)
   Var{}   -> False
   Abs{}   -> False
   App{}   -> False

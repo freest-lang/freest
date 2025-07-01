@@ -20,7 +20,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
-import Validation.Substitution ( subs, subsAll, unfold )
+import Validation.Substitution ( subs, subsAll )
 import Validation.Normalisation ( betaReduces )
 import Utils ( internalError )
 
@@ -34,24 +34,26 @@ first s td t = firstVar var (s `Set.union` reachable td t)
 
 -- | Is a given type absorbing?
 absorbing :: TypeDeclMap -> T.Type -> Bool
-absorbing td = \case
-  T.End{} -> True
-  T.Void _ (K.Proper _ _ pk) | pk K.<: K.Session -> True
-  T.AppSemi _ t u -> absorbing td t || absorbing td u
-  T.SharedChoice{}        -> True -- Unrestricted choice
-  T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
-  T.App _ T.Choice{} ts -> all (absorbing td) ts
-  T.AppDual _ t -> absorbing td t
-  -- forall F _ Using instead forall lambda a.T
-  T.AppQuant _ _ _ t -> absorbing td t
-  -- µ_κ F absorbing if F Void_κ absorbing
-  T.TName s name -> case td Map.!? name of
-    -- TODO: The kind of T.Void should be that of the 'name', a proper kind
-    Just u  -> absorbing td (unfold name (T.Void s (K.uc s)) u)
-    Nothing -> internalError $ "absorbing: name " ++ show name ++ " not in type declaration map"
-  t -> case betaReduces t of
-    Just u -> absorbing td u
-    Nothing -> False
+absorbing td = absorb Set.empty
+  where
+    absorb :: Set.Set T.Type -> T.Type-> Bool
+    absorb v t | t `Set.member` v = True
+    absorb v T.End{} = True
+    absorb v (T.Void _ (K.Proper _ _ pk)) | pk K.<: K.Session = True
+    absorb v (T.AppSemi _ t u) = absorb v t || absorb v u
+    absorb v T.SharedChoice{}         = True -- Unrestricted choice
+    absorb v (T.AppMessage _ K.Un _ _) = True -- Unrestricted message
+    absorb v (T.App _ T.Choice{} ts) = all (absorb v) ts
+    absorb v (T.AppDual _ t) = absorb v t
+      -- forall F _ Using instead forall lambda a.T
+    absorb v (T.AppQuant _ _ _ t) = absorb v t
+      -- µ_κ F absorbing if F Void_κ absorbing
+    absorb v t@(T.TName s name) = case td Map.!? name of
+      Just u  -> absorb (Set.insert t v) u -- BUG: insert only if name is a session type
+      Nothing -> internalError $ "absorbing: name " ++ show name ++ " not in type declaration map"
+    absorb v t = case betaReduces t of
+      Just u -> absorb v u
+      Nothing -> False
 
 -- | The set of free variables reachable in a type.
 reachable :: TypeDeclMap -> T.Type -> Set.Set Variable
