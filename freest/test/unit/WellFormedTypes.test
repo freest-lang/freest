@@ -759,31 +759,31 @@ where
   type Z : 1S -> 1S
   type Z b = Z ?Char
 
-case Z : 1S -- Absorbing? Yes! non-contractive
+case Z : 1S -- Absorbing? Yes! non-contractive of kind S/C
 where
   type Z : 1S
   type Z = Z
 
-case Z !Char : 1S -- Absorbing? Yes! non-contractive
+case Z !Char : 1S -- Absorbing? Yes! non-contractive of kind S/C
 where
   type Z : 1S -> 1S
   type Z b = Z b
 
-case A : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type
+case A : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type of kind S/C
 where
   type A : 1S
   type A = &{B: Z !Char}
   type Z : 1S -> 1C
   type Z b = Z b ; Skip ; b
 
-case W : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type
+case W : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type of kind S/C
 where
   type W : 1S
   type W = Z ?Char
   type Z : 1S -> 1S
   type Z b = W ; b
 
-case Z : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type
+case Z : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type of kind S/C
 where
   type Z, Z', A, Z'', Z''' : 1S
   type Z = Z'

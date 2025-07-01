@@ -14,6 +14,7 @@ module Validation.Normalisation
   , isWhnf
   , normalise
   , betaReduces
+  , tNameRedex
   )
 where
 
@@ -134,18 +135,22 @@ normalise td = norm S.empty
 
 -- | Extract the applied @type@ name at the head of a type, if any.
 tNameRedex :: T.Type -> Maybe T.Type
-tNameRedex = \case 
+tNameRedex = \case
+  -- TODO: Replace all T.AppTName -> T.TName ? (right now hangs in NormalisationIsIdempotentSpec)
   t@T.AppTName{}                               -> Just t -- µ∗U
   (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
   (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
-betaReduces :: T.Type -> Maybe T.Type
-betaReduces = \case
-  T.App s (T.Abs _ [(a,_)] t) [u] -> Just $ subs a t u
-  T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k
-  T.App s t vs -> do
-    u <- betaReduces t
+betaReduces :: TypeDeclMap -> T.Type -> Maybe T.Type
+betaReduces td = \case
+  T.AppTName s name ts -> case td M.!? name of
+    Just u -> betaReduces td (T.App s u ts)
+    Nothing -> internalError $ "betaReduces: " ++ show name ++ " type name not in type declaration map"
+  T.App s (T.Abs _ [(a,_)] t) [u] -> Just $ subs a t u -- R-β
+  T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k -- R-VoidApp
+  T.App s t vs -> do -- R-TAppL
+    u <- betaReduces td t
     Just $ T.App s u vs
   _ -> Nothing

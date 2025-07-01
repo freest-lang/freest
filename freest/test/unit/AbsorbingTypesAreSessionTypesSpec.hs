@@ -25,7 +25,7 @@ spec = mkKindingSpec
   \case
     (t, Just k, m) -> 
       trace ("\n" ++ show t ++ " : " ++ show k ++ showAbs absorbing) $
-      not absorbing || k <: ls (getSpan k) `shouldBe` True
+      not absorbing || isSession k `shouldBe` True
       where
       absorbing = R.absorbing (buildDataDecls m) t
     _ -> expectationFailure "Ill formed test case: missing kind annotation"

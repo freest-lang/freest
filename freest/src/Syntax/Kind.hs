@@ -18,6 +18,7 @@ module Syntax.Kind
   , isStrictlyLin
   , isStrictlySession
   , isStrictlyAbsorbing
+  , isSession
   )
 where 
 
@@ -121,7 +122,7 @@ uc s = Proper s Un  Channel
 bot :: Span -> Kind
 bot = us -- (ua later)
 
-isStrictlyLin, isStrictlyAbsorbing, isStrictlySession :: Kind -> Bool
+isStrictlyLin, isStrictlyAbsorbing, isStrictlySession, isSession :: Kind -> Bool
 
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
@@ -131,6 +132,9 @@ isStrictlyAbsorbing _ = False
 
 isStrictlySession (Proper _ _ Session) = True
 isStrictlySession _ = False
+
+isSession (Proper _ _ pk) = pk <: Session
+isSession _ = False
 
 instance Show Multiplicity where
   show = \case 

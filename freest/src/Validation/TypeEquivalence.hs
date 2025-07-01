@@ -107,7 +107,7 @@ word' set = \case
   t -> do
     state <- gets validationState
     case runSynth' state t of
-      Left errors -> internalError $ "kinding failed for type " ++ show t ++ "\n" ++ show errors
+      Left errors -> internalError $ "word': kinding failed for type " ++ show t ++ "\n" ++ show errors
       Right (Arrow _ k _) -> do
         -- F : k => k'
         td <- getTypeDecls

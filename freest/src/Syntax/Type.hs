@@ -190,15 +190,15 @@ isConstant = \case
   _       -> True
 
 isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuant, isAppLinChoice :: Type -> Bool
-isSkip     = \case Skip{}     -> True; _ -> False
-isVoid     = \case Void{}     -> True; _ -> False
-isSemi     = \case Semi{}     -> True; _ -> False
-isAppSemi  = \case AppSemi{}  -> True; _ -> False
-isDual     = \case Dual{}     -> True; _ -> False
-isTName    = \case TName{}    -> True; _ -> False
-isDName    = \case DName{}    -> True; _ -> False
-isMsg      = \case Message{}  -> True; _ -> False
-isAppQuant = \case AppQuant{} -> True; _ -> False
+isSkip         = \case Skip{}         -> True; _ -> False
+isVoid         = \case Void{}         -> True; _ -> False
+isSemi         = \case Semi{}         -> True; _ -> False
+isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isDual         = \case Dual{}         -> True; _ -> False
+isTName        = \case TName{}        -> True; _ -> False
+isDName        = \case DName{}        -> True; _ -> False
+isMsg          = \case Message{}      -> True; _ -> False
+isAppQuant     = \case AppQuant{}     -> True; _ -> False
 isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 
 fromVariable :: Variable -> Type
