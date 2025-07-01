@@ -20,8 +20,9 @@ import Parser.Scoping ( runScopeModule )
 import Validation.Base
 import Validation.Kinding
 import Validation.Typing
+import LeaST.Typing qualified as LT
 
-import FstToLst.FstToLst ( fstToLst, removeBuiltins )
+--import FstToLst.FstToLst ( fstToLst, removeBuiltins )
 import LeaST.Interpreter ( interpret, Value(VIO) )
 import qualified LeaST.PrettyPrint as LPP
 
@@ -44,7 +45,12 @@ freest RunOpts{file=programPath, least=l} = do
   if l then case runLexer parseLeaST programPath source of
     Right (_,_,_,leastAST) -> do
       LPP.prettyPrint leastAST
-      --call synth leastAST
+      case runValidation emptyValidationState (LT.synth Map.empty Map.empty leastAST) of
+        Left es -> do
+          putStrLn "[Validation failed]" 
+          mapM_ print es
+          exitFailure     
+        Right t -> putStrLn $ "[Validation passed]: " ++ show t 
       res <- interpret leastAST
       case res of
         VIO io -> do io2 <- io
@@ -75,14 +81,14 @@ freest RunOpts{file=programPath, least=l} = do
                 exitFailure     
               Right m -> do
                 putStrLn "[Validation passed]" 
-                let leastAST = fstToLst [removeBuiltins m]
-                print leastAST
-                LPP.prettyPrint leastAST
-                res <- interpret leastAST
-                case res of
-                  VIO io -> do io2 <- io
-                               print io2
-                  _ -> print res
+                -- let leastAST = fstToLst [removeBuiltins m]
+                -- print leastAST
+                -- LPP.prettyPrint leastAST
+                -- res <- interpret leastAST
+                -- case res of
+                --   VIO io -> do io2 <- io
+                --                print io2
+                --   _ -> print res
 
 lexAll :: Lexer ()
 lexAll = do

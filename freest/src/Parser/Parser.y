@@ -630,7 +630,7 @@ LExpPrimary :: { L.Exp }
 
 LExpApp :: { L.Exp }
   : LExpApp LExpPrimary { L.App $1 $2 }
-  | LExpApp '@' TypePrimary { L.TApp $1 (L.Type $3) }
+  | LExpApp '@' TypePrimary { L.TApp $1 $3 }
   | LExpPrimary { $1 }
 
 LAlternatives :: { [(L.Alt, L.Exp)] }
