@@ -1,4 +1,4 @@
-module WhnfOrReducesSpec (spec) where
+module NotWhnfImpliesReducesSpec (spec) where
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
@@ -9,12 +9,10 @@ import Data.Map.Strict qualified as Map
 import Test.Hspec
 import UnitSpecUtils
 
--- See also WhnfImpliesNotReducesSpec.hs and ReduceImpliesNotWhnfSpec.hs. It
--- seems to me that these two tests are equivalent to WhnfOrReducesSpec.
-
 -- This test should be called with well-formed types only
 
--- A given type T is either a WHNF or reduces
+-- If is not a whnf then T reduces.
+
 
 main :: IO ()
 main = hspec spec
