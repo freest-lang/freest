@@ -28,8 +28,11 @@ spec = mkKindingSpec
 
 normalisationReflectsKinding :: M.Module -> T.Type -> Bool
 normalisationReflectsKinding m t =
-  trace ("\n" ++ show (runSynth m t) ++ " :>? " ++ show (runSynth m (normalise (buildDataDecls m) t))) $
-  runSynth m (normalise (buildDataDecls m) t) <: runSynth m t
+  trace ("\n" ++ show t ++ " : " ++ show k1 ++ " :>? " ++ show u ++ " : " ++ show k2) $
+  k2 <: k1
+  where k1 = runSynth m t
+        u  = normalise (buildDataDecls m) t
+        k2 = runSynth m u
   
 instance Subsort (Either [Error] Kind) where
   Left _ <: Left _ = True
