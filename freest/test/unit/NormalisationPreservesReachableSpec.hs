@@ -20,9 +20,10 @@ main = hspec spec
 -- If T normalises to U, then reach(T) = reach(U).
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test" ]
   "Normalisation preserves free reachable variables"
+  errorsAreFailures
   \case
     (t, Just k, m) ->
       trace ("\n" ++ show t ++ show tReachable ++ " and " ++ show u  ++ show uReachable)

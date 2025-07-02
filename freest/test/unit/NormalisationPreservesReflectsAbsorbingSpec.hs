@@ -20,9 +20,10 @@ main = hspec spec
 -- If T normalises to U, then T absorbing iff U absorbing
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test" ]
   "Normalisation preserves and reflects absorbing"
+  errorsAreFailures
   \case
     (t, Just k, m) ->
       trace ("\n" ++ show t ++ showAbs tAbsorbing ++ " and " ++ show u  ++ showAbs uAbsorbing)

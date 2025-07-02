@@ -19,9 +19,10 @@ The inverse of this test is not (no longer) valid. There are absorbing types
 that are not channel types. Non-contractive types are one (the?) example.
 -}
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test" ]
   "Absorbing types have kind <: 1S"
+  errorsAreFailures
   \case
     (t, Just k, m) -> 
       trace ("\n" ++ show t ++ " : " ++ show k ++ showAbs absorbing) $

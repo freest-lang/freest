@@ -16,9 +16,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "normalise t == normalise (normalise t)" 
+  errorsAreFailures
   \(t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
 
 normalisationIsIdempotent :: TypeDeclMap -> T.Type -> Bool

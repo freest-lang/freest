@@ -43,6 +43,7 @@ import Data.Foldable.Extra ( allM )
 import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
+import Debug.Trace (traceM)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map Variable Kind
@@ -192,7 +193,7 @@ kindModule m = do
               ((a, k) :) <$> kindParams aks' k2
         t' -> return t'
       check Map.empty t' k
-      return (i, t)
+      return (i, t')
 
     kindDataDecl :: (Identifier, [(Variable, Kind)], M.ConsDeclList) -> Validation ()
     kindDataDecl (i, aks, t) = do

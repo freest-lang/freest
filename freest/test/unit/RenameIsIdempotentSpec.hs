@@ -15,10 +15,11 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "rename(t) == rename(rename(t))" 
-  \(t,_,m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
+  errorsAreFailures
+  \(t, _, m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
 
 renameIsIdempotent :: TypeDeclMap -> T.Type -> Bool
 renameIsIdempotent td t = rename td t == rename td (rename td t)

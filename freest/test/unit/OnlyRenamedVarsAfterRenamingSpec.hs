@@ -16,9 +16,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
-  "Only renamed internal numbers for variables in renamed types" 
+  "Only renamed internal numbers for variables in renamed types"
+  errorsAreFailures
   \(t, _, m) ->
     let td = buildTypeDecls m
     in onlyRenamed (rename td t) && onlyRenamed td `shouldBe` True

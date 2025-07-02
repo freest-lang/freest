@@ -21,9 +21,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
-  "If ∆ ⊢ T : κ and T -> U, then ∆ ⊢ U : κ' and k' <: k" 
+  "If ∆ ⊢ T : κ and T -> U, then ∆ ⊢ U : κ' and k' <: k"
+  errorsAreFailures
   \(t, _, m) -> reductionReflectsKinding m t `shouldBe` True
 
 reductionReflectsKinding :: M.Module -> T.Type -> Bool

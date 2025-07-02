@@ -18,9 +18,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Free reachable variables are free" 
+  errorsAreFailures
   \(t, _, m) -> freeVars t `Set.isSubsetOf` reachable (buildTypeDecls m) t `shouldBe` True
 
 -- Warning: code also in from Validation.Base

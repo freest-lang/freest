@@ -5,15 +5,16 @@ import Validation.Kinding ( runSynth, runCheck, runKindModule )
 import Data.Either ( isRight )
 import Data.Map qualified as Map
 import Test.Hspec
-import UnitSpecUtils ( mkKindingSpec )
+import UnitSpecUtils ( mkTypeSpec, errorsAreSuccesses )
 
 main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/IllFormedTypes.test"]
   "Invalid kinding tests" 
+  errorsAreSuccesses
   \case
     (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of
       Left _ -> return ()

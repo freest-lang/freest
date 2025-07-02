@@ -20,9 +20,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
-  "Type translation to grammar converges" 
+  "Type translation to grammar converges"
+  errorsAreFailures
   \(t,_,m) -> translateToGrammar (buildValidationState m) t `shouldBe` True
 
 translateToGrammar :: ValidationState -> T.Type -> Bool

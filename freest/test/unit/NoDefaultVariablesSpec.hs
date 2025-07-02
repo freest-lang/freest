@@ -15,9 +15,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Only proper internal numbers for variables" 
+  errorsAreFailures
   \(t, _, m) -> noDefault t && noDefault (buildTypeDecls m) && noDefault (buildDataDecls m) `shouldBe` True
 
 class NoDefaultVariables a where

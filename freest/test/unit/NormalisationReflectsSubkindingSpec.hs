@@ -21,9 +21,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If ∆ ⊢ T : κ and T normalises to U, then ∆ ⊢ U : κ' and k' <: k"
+  errorsAreFailures
   \(t, _, m) -> normalisationReflectsKinding m t `shouldBe` True
 
 normalisationReflectsKinding :: M.Module -> T.Type -> Bool

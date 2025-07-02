@@ -20,9 +20,10 @@ main = hspec spec
 -- If T --> U, then T absorbing iff U absorbing.
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test" ]
   "Reduction preserves and reflects absorbing"
+  errorsAreFailures
   \case
     (t, Just k, m) ->
       isWhnf t || 

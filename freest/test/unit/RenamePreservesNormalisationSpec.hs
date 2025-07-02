@@ -16,10 +16,11 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then rename T normalises to rename U" 
-  \(t,_,m) -> renamePreservesNormalisation (buildDataDecls m) t `shouldBe` True
+  errorsAreFailures
+  \(t, _, m) -> renamePreservesNormalisation (buildDataDecls m) t `shouldBe` True
 
 renamePreservesNormalisation :: TypeDeclMap -> T.Type -> Bool
 renamePreservesNormalisation td t = isWhnf t || u == u'
