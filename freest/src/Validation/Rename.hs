@@ -19,9 +19,9 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
-import Validation.Substitution ( subs, subsAll, unfold )
-import Validation.Normalisation ( reduce, betaReduces, isWhnf, tNameRedex )
+import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, kindSigs, getType, getKind )
+import Validation.Substitution ( subs, subsAll )
+import Validation.Normalisation ( reduce, beta, isWhnf, tNameRedex )
 import Validation.Kinding ( runSynth' )
 import Utils ( internalError )
 
@@ -34,45 +34,56 @@ first :: Set.Set Variable -> TypeDeclMap -> T.Type -> Variable
 first s td t = firstVar var (s `Set.union` reachable td t)
   where var = Variable (Span "<word>" (0,0) (0,0)) "α" defaultInternal
 
--- | Is a given type absorbing?
-absorbing :: TypeDeclMap -> T.Type -> Bool
-absorbing td = absorb Set.empty
-  where
-    absorb :: Set.Set T.Type -> T.Type-> Bool
-    absorb v t | t `Set.member` v = True
-    absorb v T.End{} = True
-    absorb v (T.Void _ k) | K.isSession k = True
-    absorb v (T.AppSemi _ t u) = absorb v t || absorb v u
-    absorb v T.SharedChoice{}         = True -- Unrestricted choice
-    absorb v (T.AppMessage _ K.Un _ _) = True -- Unrestricted message
-    absorb v (T.App _ T.Choice{} ts) = all (absorb v) ts
-    absorb v (T.AppDual _ t) = absorb v t
-      -- forall F _ Using instead forall lambda a.T
-    absorb v (T.AppQuant _ _ _ t) = absorb v t
-      -- µ_κ F absorbing if F Void_κ absorbing
-    absorb v t@(T.TName s name) = case td Map.!? name of
-      Just u  -> absorb (Set.insert t v) u -- BUG: insert only if name is a session type
-      Nothing -> internalError $ "absorbing: name " ++ show name ++ " not in type declaration map"
-    absorb v t = case betaReduces td t of
-      Just u -> absorb v u
-      Nothing -> False
+  -- | Is a given type absorbing?
+absorbing :: ValidationState -> T.Type -> Bool
+absorbing vs = \case
+  -- t | t `Set.member` v -> True
+  T.End{} -> True
+  T.Void _ k | K.isSession k -> True
+  T.AppSemi _ t u -> absorbing vs t || absorbing vs u
+  T.SharedChoice{}        -> True -- Unrestricted choice
+  T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
+  T.App _ T.Choice{} ts -> all (absorbing vs) ts
+  T.AppDual _ t -> absorbing vs t
+  -- forall F _ Using instead forall lambda a.T
+  T.AppQuant _ _ _ t -> absorbing vs t
+  -- µ_κ F absorbing if F Void_κ absorbing
+  t@(T.AppTName s name ts) -> absorbing (vs {typeDecls = Map.insert name (T.Void s k) (typeDecls vs)}) $ T.App s u ts
+    where
+      k = getKind vs name
+      u = getType vs name
+  t -> case betaReduces t of
+    Just u -> absorbing vs u
+    Nothing -> False
+
+betaReduces :: T.Type -> Maybe T.Type
+betaReduces = \case
+  -- R-β
+  T.App _ t@T.Abs{} us -> Just $ beta t us
+  -- R-VoidApp
+  T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k
+  -- R-TAppL
+  T.App s t us -> do
+    t' <- betaReduces t
+    Just $ T.App s t' us
+  _ -> Nothing
 
 -- | The set of free variables reachable in a type.
 reachable :: TypeDeclMap -> T.Type -> Set.Set Variable
-reachable td = \case
-  t | T.isConstant t -> Set.empty
-  T.Var _ a -> Set.singleton a
-  T.Abs _ (map fst -> as) t -> reachable td t Set.\\ Set.fromList as
-  T.AppSemi _ t u | absorbing td t -> reachable td t
-                  | otherwise -> reachable td t `Set.union` reachable td u
-  T.AppDual _ t -> reachable td t
-  t@(T.App _ u vs) | not (T.isSemi u) && isWhnf t -> Set.unions (map (reachable td) (u:vs)) -- TODO: t /= ;t'
-                   | isNothing (tNameRedex t) -> reachable td (reduce td t)
-  t@(T.TName s name) -> case td Map.!? name of
-    Just u | absorbing td t -> reachable td (unfold name (T.Void s (K.ls s)) u)
-           | otherwise -> reachable td u
-    Nothing -> internalError $ "reachable: " ++ show name ++ " type name not in type declaration map"
-  t -> internalError $ "reachable: non-exhaustive pattern: " ++ show t
+reachable td t = Set.empty-- \case
+  -- t | T.isConstant t -> Set.empty
+  -- T.Var _ a -> Set.singleton a
+  -- T.Abs _ (map fst -> as) t -> reachable td t Set.\\ Set.fromList as
+  -- T.AppSemi _ t u | absorbing td t -> reachable td t
+  --                 | otherwise -> reachable td t `Set.union` reachable td u
+  -- T.AppDual _ t -> reachable td t
+  -- t@(T.App _ u vs) | not (T.isSemi u) && isWhnf t -> Set.unions (map (reachable td) (u:vs)) -- TODO: t /= ;t'
+  --                  | isNothing (tNameRedex t) -> reachable td (reduce td t)
+  -- -- t@(T.TName s name) -> case td Map.!? name of
+  -- --   Just u | absorbing td t -> reachable td (unfold name (T.Void s (K.ls s)) u)
+  -- --          | otherwise -> reachable td u
+  -- --   Nothing -> internalError $ "reachable: " ++ show name ++ " type name not in type declaration map"
+  -- t -> internalError $ "reachable: non-exhaustive pattern: " ++ show t
 
 -- Deprecated
 

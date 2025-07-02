@@ -648,6 +648,11 @@ where
 
 -- Noncontractive types are the big new valid types
 
+case A : 1T
+where
+  type A : 1S
+  type A = A
+
 case Seq Bot : *S
 where
   type Seq : *S -> *S
@@ -656,6 +661,13 @@ where
   type Bot = Bot
 
 case Seq Bot : *T
+where
+  type Seq : *S -> *S
+  type Seq a = a ; Seq a
+  type Bot : *S
+  type Bot = Bot
+
+case Seq Bot : 1T
 where
   type Seq : *S -> *S
   type Seq a = a ; Seq a

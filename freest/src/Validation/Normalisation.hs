@@ -13,7 +13,7 @@ module Validation.Normalisation
   ( reduce
   , isWhnf
   , normalise
-  , betaReduces
+  , beta
   , tNameRedex
   )
 where
@@ -25,8 +25,8 @@ import Validation.Base ( TypeDeclMap )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
-import Data.Map.Strict qualified as M
-import Data.Set qualified as S
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Debug.Trace ( trace )
 
 -- | Is a given type a weak head normal form?
@@ -62,7 +62,7 @@ reduce td = \case
     -- R-QuantDist - Requires the kind of the quantifier.
     -- Implementing the particular case where the quantifier is followed by a lambda
   T.AppSemi s1 (T.AppQuant s2 p [(a,k)] t) u -> T.AppQuant s1 p [(b,k)] (T.AppSemi s2 (subs a bt t) u)
-    where b = freshVar a (freeVars t `S.union` freeVars u)
+    where b = freshVar a (freeVars t `Set.union` freeVars u)
           bt = T.Var (getSpan b) b
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
@@ -97,17 +97,18 @@ reduce td = \case
     -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
     -- R-μ
-  t@(T.TName _ name) -> case td M.!? name of
+  t@(T.TName _ name) -> case td Map.!? name of
     Just u -> {- unfold name t -} u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map"
   -- R-TAppL + R-μ followed by a series of R-β
-  -- T.AppTName _ name ts -> case td M.!? name of
+  -- T.AppTName _ name ts -> case td Map.!? name of
   --   Just u@T.Abs{} -> beta u ts
   --   Just u -> u
   --   Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
   t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t
 
--- | Type application, the beta rule
+-- | Type application, the beta rule.
+-- (λα1...λαn T) U1 ... Un ... Un+m --> (T[U1/α1]...[Un/αn]) Un+1 ... Un+m
 beta :: T.Type -> [T.Type] -> T.Type
 beta (T.Abs s aks u) ts
   | length aks == arity = v
@@ -118,9 +119,9 @@ beta (T.Abs s aks u) ts
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
 normalise :: TypeDeclMap -> T.Type -> T.Type
-normalise td = norm S.empty
+normalise td = norm Set.empty
   where
-    norm :: S.Set T.Type -> T.Type -> T.Type
+    norm :: Set.Set T.Type -> T.Type -> T.Type
     norm visited t
       -- N-Whnf
       | isWhnf t = t
@@ -130,8 +131,8 @@ normalise td = norm S.empty
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
-        reappears = maybe False   (`S.member` visited) u
-        insert    = maybe visited (`S.insert` visited) u
+        reappears = maybe False   (`Set.member` visited) u
+        insert    = maybe visited (`Set.insert` visited) u
 
 -- | Extract the applied @type@ name at the head of a type, if any.
 tNameRedex :: T.Type -> Maybe T.Type
@@ -142,15 +143,3 @@ tNameRedex = \case
   (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
-
-betaReduces :: TypeDeclMap -> T.Type -> Maybe T.Type
-betaReduces td = \case
-  T.AppTName s name ts -> case td M.!? name of
-    Just u -> betaReduces td (T.App s u ts)
-    Nothing -> internalError $ "betaReduces: " ++ show name ++ " type name not in type declaration map"
-  T.App s (T.Abs _ [(a,_)] t) [u] -> Just $ subs a t u -- R-β
-  T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k -- R-VoidApp
-  T.App s t vs -> do -- R-TAppL
-    u <- betaReduces td t
-    Just $ T.App s u vs
-  _ -> Nothing

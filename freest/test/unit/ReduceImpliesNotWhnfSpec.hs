@@ -42,4 +42,4 @@ buildDataDecls = Map.fromList . M.typeDecls
 
 showWhnf :: Bool -> String
 showWhnf True  = " (a whnf) "
-showWhnf False = " (not a whnf) "
+showWhnf False = " (a non whnf) "

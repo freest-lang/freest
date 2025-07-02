@@ -29,12 +29,8 @@ spec = mkTypeSpec
       trace ("\n" ++ show t ++ show tReachable ++ " and " ++ show u  ++ show uReachable)
       tReachable == uReachable `shouldBe` True
       where
-        td = buildTypeDecls m
-        tReachable = reachable td t
+        td = Map.fromList (M.typeDecls m)
+        tReachable = reachable (Map.fromList (M.typeDecls m)) t
         u = normalise td t
-        uReachable = reachable td u
+        uReachable = reachable (Map.fromList (M.typeDecls m)) u
     _ -> expectationFailure "Ill formed test case: kind annotation absent"
-
--- Warning: code also in from Validation.Base
-buildTypeDecls :: M.Module -> TypeDeclMap
-buildTypeDecls = Map.fromList . M.typeDecls

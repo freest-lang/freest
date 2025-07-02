@@ -15,7 +15,7 @@ import Debug.Trace ( trace )
 
 -- This test should be called with well-formed types only
 
--- If ⊢ T : κ and T -> U, then ⊢ U : κ.
+-- If ⊢ T : κ and T -> U, then ⊢ U :  κ' and k' <: k
 
 main :: IO ()
 main = hspec spec
@@ -31,8 +31,8 @@ reductionReflectsKinding :: M.Module -> T.Type -> Bool
 reductionReflectsKinding m t =
   isWhnf t ||
   (trace
-    ("\n" ++ show (runSynth m t) ++ " :>? " ++ show (runSynth m (reduce (buildDataDecls m) t))) $
-    runSynth m (reduce (buildDataDecls m) t)) <: runSynth m t
+    ("\n" ++ show (runSynth m t) ++ " :>? " ++ show (runSynth m (reduce (buildTypeDecls m) t))) $
+    runSynth m (reduce (buildTypeDecls m) t)) <: runSynth m t
   
 instance Subsort (Either [Error] Kind) where
   Left _ <: Left _ = True
@@ -40,5 +40,5 @@ instance Subsort (Either [Error] Kind) where
   _ <: _ = False
 
 -- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+buildTypeDecls :: M.Module -> TypeDeclMap
+buildTypeDecls = Map.fromList . M.typeDecls
