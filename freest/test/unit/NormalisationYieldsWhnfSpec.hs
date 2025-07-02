@@ -19,9 +19,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then U is a whnf" 
+  errorsAreFailures
   \(t, _, m) -> normYieldsWhnf (buildDataDecls m) t `shouldBe` True
 
 normYieldsWhnf :: TypeDeclMap -> T.Type -> Bool

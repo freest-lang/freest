@@ -17,9 +17,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
-  "A given type T is either a whnf or reduces" 
+  "A given type T is either a whnf or reduces"
+  errorsAreFailures
   \(t, _, m) -> whnfOrReduces m t `shouldBe` True
 
 whnfOrReduces :: M.Module -> T.Type -> Bool

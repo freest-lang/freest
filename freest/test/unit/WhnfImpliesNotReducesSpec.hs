@@ -18,9 +18,10 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
+spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
-  "If T is a whnf then T does not reduce" 
+  "If T is a whnf then T does not reduce"
+  errorsAreFailures
   \(t, _, m) -> whnfImpliesNotReduces (buildDataDecls m) t >>= (`shouldBe` True)
 
 whnfImpliesNotReduces :: TypeDeclMap -> T.Type -> IO Bool
