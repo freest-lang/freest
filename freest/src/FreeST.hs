@@ -36,24 +36,25 @@ main = do
 
 -- | The FreeST compiler pipeline.
 freest :: RunOpts -> IO ()
-freest RunOpts{file=programPath} = do
-  -- Read the source code of the Prelude.
+freest RunOpts{file=programPath, noImplicitPrelude} = do
+  -- Read the source code of the Prelude and the program.
   preludeSrc <- getDataFileName preludePath >>= readFile
-  -- Read the source code of the program.
   programSrc <- readFile programPath
-  -- Parse the source code of both the Prelude and the program, and
-  -- include the former in the latter, resulting in a single module.
-  mappend <$> runParseModule preludePath preludeSrc
-          <*> runParseModule programPath programSrc
-    -- Scope the module.
-    >>= runScopeModule & \case 
-      Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
-      Right m -> do 
-        -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-        -- Validate the module.
-        runValidate m & \case 
-          Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
-          Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
+  case  -- Parse the source code of both the Prelude and the program
+        -- and join them in a single module (unless noImplicitPrelude).
+    do  programModule  <- runParseModule programPath programSrc
+        preludeModule  <- runParseModule preludePath preludeSrc
+        let finalModule = if noImplicitPrelude then programModule 
+                         else mappend preludeModule programModule
+        -- Scope the final module.
+        runScopeModule finalModule
+    of Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
+       Right m -> do 
+          -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+          -- Validate the module.
+          runValidate m & \case 
+            Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+            Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath
