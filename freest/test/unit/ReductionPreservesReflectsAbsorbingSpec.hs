@@ -27,7 +27,7 @@ spec = mkTypeSpec
   \case
     (t, Just k, m) ->
       isWhnf t || 
-      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ " and " ++ show u  ++ showAbs uAbsorbing)
+      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ " and reduces to " ++ show u  ++ " which " ++ showAbs uAbsorbing)
         tAbsorbing == uAbsorbing `shouldBe` True
       where
         vs = buildValidationState m

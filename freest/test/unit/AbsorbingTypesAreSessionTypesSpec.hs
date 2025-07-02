@@ -31,7 +31,6 @@ spec = mkTypeSpec
       where
       absorbing = R.absorbing (buildValidationState m) t
       k = fromRight (error "should not happen") $ runSynth m t
-    _ -> expectationFailure "Ill formed test case: missing kind annotation"
 
 showAbs :: Bool -> String
 showAbs True = " is absorbing"

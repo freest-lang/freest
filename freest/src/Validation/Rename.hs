@@ -37,7 +37,6 @@ first s td t = firstVar var (s `Set.union` reachable td t)
   -- | Is a given type absorbing?
 absorbing :: ValidationState -> T.Type -> Bool
 absorbing vs = \case
-  -- t | t `Set.member` v -> True
   T.End{} -> True
   T.Void _ k | K.isSession k -> True
   T.AppSemi _ t u -> absorbing vs t || absorbing vs u
@@ -48,7 +47,7 @@ absorbing vs = \case
   -- forall F _ Using instead forall lambda a.T
   T.AppQuant _ _ _ t -> absorbing vs t
   -- µ_κ F absorbing if F Void_κ absorbing
-  t@(T.AppTName s name ts) -> absorbing (vs {typeDecls = Map.insert name (T.Void s k) (typeDecls vs)}) $ T.App s u ts
+  t@(T.AppTName s name ts) -> absorbing (vs {typeDecls = Map.insert name (T.Void s k) (typeDecls vs)}) (if null ts then u else T.App s u ts)
     where
       k = getKind vs name
       u = getType vs name

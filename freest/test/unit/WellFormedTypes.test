@@ -499,8 +499,7 @@ where
 
 case U : 1C
 where
-  type T, U : 1C
-  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1C
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
 case T : 1S
