@@ -5,9 +5,6 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 The module specifies how to conduct invalid program tests.
 -}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NamedFieldPuns #-}
 module InvalidSpec where
 
 import FreeST
@@ -45,7 +42,7 @@ testDir baseDir invalidTest = do
 testInvalid :: String -> FilePath -> Spec
 testInvalid test file = do
   b <- runIO $ hSilence [stdout, stderr] $ catches
-    (  freest RunOpts{file=test}
+    (  freest defaultRunOpts{file = test}
     >> return (Just errorExpected)
     )
     [ Handler (\(e :: ExitCode) -> return $ exitProgram e)
