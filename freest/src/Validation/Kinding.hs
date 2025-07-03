@@ -182,14 +182,14 @@ kindModule m = do
           aks' <- kindParams aks k
           return $ T.Abs s aks' u
           where
-            kindParams []  Proper{} = pure []
-            kindParams aks Proper{} = 
-              throwE (ExpectsTooManyArgsK (getSpan i) i k)
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
               ((a, k1) :) <$> kindParams aks' k2
             kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
               checkSubkindOf' (T.Var (getSpan a) a) k1 k
               ((a, k) :) <$> kindParams aks' k2
+            kindParams []  _ = pure []
+            kindParams aks _ = 
+              throwE (ExpectsTooManyArgsK (getSpan i) i k)
         t' -> return t'
       check Map.empty t' k
       return (i, t')
