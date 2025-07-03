@@ -554,11 +554,13 @@ where
   type Void' : 1C
   type Void' = Void'
 
--- Duplicated -- debugging in process
-case forall (b : *T). b -> b -> b
-  == Bool
-   : *T
-where
-  type Bool : *T
-  type Bool = forall (b : *T). b -> b -> b
+-- Infra and Supra type applications
 
+case Infra Int = Supra Int Char : 1S -> 1S
+where
+  type Infra : *T -> 1S -> 1S
+  type Infra a b = !b
+  type Supra : 1T -> 1T -> 1S -> 1S
+  type Supra a = A
+  type A : 1T -> 1S
+  type A b = !b
