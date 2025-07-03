@@ -13,7 +13,7 @@ module Validation.Normalisation
   ( reduce
   , isWhnf
   , normalise
-  , beta
+  , betaRule
   , tNameRedex
   )
 where
@@ -91,7 +91,7 @@ reduce td = \case
   
   -- 3. β, Void, AppL, and μ
     -- R-β
-  T.App _ t@T.Abs{} us -> beta t us
+  T.App _ t@T.Abs{} us -> betaRule t us
     -- R-VoidApp
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
     -- R-TAppL
@@ -102,19 +102,24 @@ reduce td = \case
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map"
   -- R-TAppL + R-μ followed by a series of R-β
   -- T.AppTName _ name ts -> case td Map.!? name of
-  --   Just u@T.Abs{} -> beta u ts
+  --   Just u@T.Abs{} -> betaRule u ts
   --   Just u -> u
   --   Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
   t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t
 
 -- | Type application, the beta rule.
--- (λα1...λαn T) U1 ... Un ... Un+m --> (T[U1/α1]...[Un/αn]) Un+1 ... Un+m
-beta :: T.Type -> [T.Type] -> T.Type
-beta (T.Abs s aks u) ts
-  | length aks == arity = v
-  | otherwise = T.Abs s (drop arity aks) v
-  where arity = length ts
-        v = subsAll (map fst aks) ts u
+-- (λα1...αn. T) U1 ... Um -->β
+--     T[U1/α1]...[Un/αn]                  if n = m
+--     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
+--     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
+betaRule :: T.Type -> [T.Type] -> T.Type
+betaRule (T.Abs s aks t) us
+  | n == m    = v
+  | m > n     = T.App s v (drop n us)
+  | otherwise = T.Abs s (drop m aks) v
+  where n = length aks
+        m = length us
+        v = subsAll (map fst aks) us t
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.

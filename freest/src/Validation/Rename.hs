@@ -21,7 +21,7 @@ import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, kindSigs, getType, getKind )
 import Validation.Substitution ( subs, subsAll )
-import Validation.Normalisation ( reduce, beta, isWhnf, tNameRedex )
+import Validation.Normalisation ( reduce, betaRule, isWhnf, tNameRedex )
 import Validation.Kinding ( runSynth' )
 import Utils ( internalError )
 
@@ -58,7 +58,7 @@ absorbing vs = \case
 betaReduces :: T.Type -> Maybe T.Type
 betaReduces = \case
   -- R-β
-  T.App _ t@T.Abs{} us -> Just $ beta t us
+  T.App _ t@T.Abs{} us -> Just $ betaRule t us
   -- R-VoidApp
   T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k
   -- R-TAppL
