@@ -14,14 +14,13 @@ module Validation.Normalisation
   , isWhnf
   , normalise
   , betaRule
-  , tNameRedex
   )
 where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Base ( TypeDeclMap, ValidationState, getType, getType', typeDecls )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
@@ -97,15 +96,8 @@ reduce td = \case
     -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
     -- R-μ
-  t@(T.TName _ name) -> case td Map.!? name of
-    Just u -> {- unfold name t -} u
-    Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map"
-  -- R-TAppL + R-μ followed by a series of R-β
-  -- T.AppTName _ name ts -> case td Map.!? name of
-  --   Just u@T.Abs{} -> betaRule u ts
-  --   Just u -> u
-  --   Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
-  t -> internalError $ "reduce: non-exhaustive pattern: " ++ show t
+  t@(T.TName _ name) -> getType' td name
+  t -> internalError $ "Validation.Normalisation.reduce: non-exhaustive pattern: " ++ show t
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β
@@ -131,7 +123,7 @@ normalise td = norm Set.empty
       -- N-Whnf
       | isWhnf t = t
       -- N-Visited
-      | reappears = T.Void (getSpan t) (K.uc $ getSpan t) -- Bug: the kind of void is that of mu
+      | reappears = T.Void (getSpan t) (K.uc $ getSpan t) -- BUG: the kind of Void is that of the mu, and not an arbitrary *C
       -- N-NotVisited + N-NoMuRedex
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
@@ -139,12 +131,28 @@ normalise td = norm Set.empty
         reappears = maybe False   (`Set.member` visited) u
         insert    = maybe visited (`Set.insert` visited) u
 
--- | Extract the applied @type@ name at the head of a type, if any.
+-- | This is not exactly redexµ(T) = µκF. We need to look at applied TNames, for
+-- these are the types that reappear.
 tNameRedex :: T.Type -> Maybe T.Type
 tNameRedex = \case
-  -- TODO: Replace all T.AppTName -> T.TName ? (right now hangs in NormalisationIsIdempotentSpec)
   t@T.AppTName{}                               -> Just t -- µ∗U
   (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
   (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
+
+normalise' :: ValidationState -> T.Type -> T.Type
+normalise' vs = norm Set.empty
+  where
+    norm :: Set.Set T.Type -> T.Type -> T.Type
+    norm visited t
+      -- N-Whnf
+      | isWhnf t = t
+      -- N-Visited
+      | reappears = T.Void (getSpan t) (K.uc $ getSpan t) -- Bug: the kind of void is that of mu
+      -- N-NotVisited + N-NoMuRedex
+      | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce (typeDecls vs) t)
+      where
+        u = tNameRedex t -- u is Maybe (µ∗U)
+        reappears = maybe False   (`Set.member` visited) u
+        insert    = maybe visited (`Set.insert` visited) u

@@ -1128,5 +1128,5 @@ case Suupra Int Char : 1S -> 1S
 where
   type Suupra : 1T -> 1T -> 1S -> 1S
   type Suupra a = A
-  type A : 1T -> 1S
-  type A b = !b
+  type A : 1T -> 1S -> 1S
+  type A b c = !b

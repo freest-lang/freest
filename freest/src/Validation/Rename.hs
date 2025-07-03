@@ -21,7 +21,7 @@ import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, kindSigs, getType, getKind )
 import Validation.Substitution ( subs, subsAll )
-import Validation.Normalisation ( reduce, betaRule, isWhnf, tNameRedex )
+import Validation.Normalisation ( reduce, betaRule, isWhnf )
 import Validation.Kinding ( runSynth' )
 import Utils ( internalError )
 

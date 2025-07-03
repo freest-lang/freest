@@ -87,8 +87,11 @@ lookupKind i = do
     Nothing -> throwE (TypeOutOfScope (getSpan i) i)
 
 getType :: ValidationState -> Identifier -> T.Type
-getType vs name =
-  case typeDecls vs Map.!? name of
+getType vs = getType' $ typeDecls vs
+
+getType' :: TypeDeclMap -> Identifier -> T.Type
+getType' td name =
+  case td Map.!? name of
     Just u  -> u
     Nothing -> internalError $ "Validation.Base..getType: name " ++ show name ++ " not in type declaration map"
 
