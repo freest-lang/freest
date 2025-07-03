@@ -1109,3 +1109,17 @@ case PTree : 1T -> 1T
 where
   type PTree: 1T -> 1T
   data PTree a = Leaf a | Node (PTree (a, a))
+
+-- Infra and Supra type application
+
+case A Int : 1S -> 1S
+where
+  type A : *T -> 1S -> 1S
+  type A a b = !b
+
+case B Int Char
+where
+  type B : 1T -> 1T -> 1S
+  type B a = C
+  type C : 1T -> 1S
+  type C b = !b

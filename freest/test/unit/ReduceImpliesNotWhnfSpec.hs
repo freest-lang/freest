@@ -13,7 +13,7 @@ import Debug.Trace ( trace )
 
 -- This test should be called with well-formed types only
 
--- If T reduces then T is not a whnf.
+-- If T reduces then T is not a whnf
 
 main :: IO ()
 main = hspec spec
@@ -23,7 +23,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T reduces then T is not a whnf"
   errorsAreFailures
-  \(t, _, m) -> reducesImpliesNotWhnf (buildDataDecls m) t >>= (`shouldBe` True)
+  \(t, _, m) -> reducesImpliesNotWhnf (buildTypeDecls m) t >>= (`shouldBe` True)
 
 reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool
 reducesImpliesNotWhnf m t =
@@ -37,8 +37,8 @@ reducesImpliesNotWhnf m t =
     whnf = isWhnf t
 
 -- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+buildTypeDecls :: M.Module -> TypeDeclMap
+buildTypeDecls = Map.fromList . M.typeDecls
 
 showWhnf :: Bool -> String
 showWhnf True  = " (a whnf) "
