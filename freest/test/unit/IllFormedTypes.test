@@ -42,3 +42,9 @@ where
   type NestedTree : 1T -> 1S
   type NestedTree a = +{Leaf: !a, Node: NestedTree [a]}
 
+-- (Non) Channel types
+
+case T : 1C -> 1C
+where
+  type T : 1C -> 1C
+  type T a = +{Done: Skip, More: !Int ; T a}

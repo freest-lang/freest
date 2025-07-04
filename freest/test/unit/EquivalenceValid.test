@@ -556,7 +556,7 @@ where
 
 -- Infra and Supra type applications
 
-case Infra Int = Supra Int Char : 1S -> 1S
+case Infra Int == Supra Int Char : 1S -> 1S
 where
   type Infra : *T -> 1S -> 1S
   type Infra a b = !b

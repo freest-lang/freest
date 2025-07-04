@@ -26,12 +26,12 @@ spec = mkTypeSpec
   errorsAreFailures
   \case
     (t, Just k, m) ->
-      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ " and " ++ show u  ++ showAbs uAbsorbing)
+      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ ", normalises to " ++ show u  ++ " which" ++ showAbs uAbsorbing)
       tAbsorbing == uAbsorbing `shouldBe` True
       where
         vs = buildValidationState m
         tAbsorbing = absorbing vs t
-        u = normalise (typeDecls vs) t
+        u = normalise vs t
         uAbsorbing = absorbing vs u
     _ -> expectationFailure "Ill formed test case: kind annotation absent"
 

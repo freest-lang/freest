@@ -81,7 +81,7 @@ data Type
   --   Equations
   | TName Span Identifier
   | DName Span Identifier
-  --   The type equivalent to non-contractive types
+  --   The type equivalent to non-contractive types; only proper kinds are of interest
   | Void Span K.Kind
   -- Non-constants
   | Var Span Variable

@@ -92,8 +92,8 @@ word' set = \case
     getLHS $ Map.fromList (zip terminals words)
   -- μ F
   t@T.AppTName{} -> do
-    td <- getTypeDecls
-    let u = normalise td t
+    vs <- gets validationState
+    let u = normalise vs t
     case u of
       -- μ F normalises to Skip
       T.Skip{} -> pure []

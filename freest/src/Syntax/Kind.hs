@@ -11,15 +11,15 @@ module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
-  , lt, ut, ls, us, lc, uc, bot
+  , lt, ut, ls, us, lc, uc
   , Subsort(..)
   , Join(..)
   , Meet(..)
   , isStrictlyLin
   , isStrictlySession
-  , isStrictlyAbsorbing
   , isSession
   , isChannel
+  , image
   )
 where 
 
@@ -119,26 +119,24 @@ us s = Proper s Un  Session
 lc s = Proper s Lin Channel
 uc s = Proper s Un  Channel
 
--- | Abbreviation for the bottom proper kind
-bot :: Span -> Kind
-bot = us -- (ua later)
-
-isStrictlyLin, isStrictlyAbsorbing, isStrictlySession, isSession, isChannel :: Kind -> Bool
+isStrictlyLin, isStrictlySession, isChannel, isSession :: Kind -> Bool
 
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
 
-isStrictlyAbsorbing (Proper _ _ Channel) = True
-isStrictlyAbsorbing _ = False
-
 isStrictlySession (Proper _ _ Session) = True
 isStrictlySession _ = False
+
+isChannel (Proper _ _ Channel) = True
+isChannel _ = False
 
 isSession (Proper _ _ pk) = pk <: Session
 isSession _ = False
 
-isChannel (Proper _ _ Channel) = True
-isChannel _ = False
+image :: Kind -> Kind
+image = \case
+  k@Proper{} -> k
+  Arrow _ _ k -> image k
 
 instance Show Multiplicity where
   show = \case 

@@ -20,7 +20,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, getType, getType', typeDecls )
+import Validation.Base ( TypeDeclMap, ValidationState, getType, getType', typeDecls, getKind )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
@@ -115,23 +115,26 @@ betaRule (T.Abs s aks t) us
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: TypeDeclMap -> T.Type -> T.Type
-normalise td = norm Set.empty
+normalise :: ValidationState -> T.Type -> T.Type
+normalise vs = norm Set.empty
   where
     norm :: Set.Set T.Type -> T.Type -> T.Type
     norm visited t
       -- N-Whnf
       | isWhnf t = t
       -- N-Visited
-      | reappears = T.Void (getSpan t) (K.uc $ getSpan t) -- BUG: the kind of Void is that of the mu, and not an arbitrary *C
+      | reappears = T.Void (getSpan t) (K.image k)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
+      | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce (typeDecls vs) t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u
         insert    = maybe visited (`Set.insert` visited) u
+        k = case u of
+          Just (T.AppTName _ name _) -> getKind vs name
+          _ -> internalError $ "Validation.Normalisation.normalise: " ++ show u
 
--- | This is not exactly redexµ(T) = µκF. We need to look at applied TNames, for
+-- | This is not exactly redexµ(T) = µκF. We must look at applied TNames, for
 -- these are the types that reappear.
 tNameRedex :: T.Type -> Maybe T.Type
 tNameRedex = \case
@@ -140,19 +143,3 @@ tNameRedex = \case
   (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
   (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
-
-normalise' :: ValidationState -> T.Type -> T.Type
-normalise' vs = norm Set.empty
-  where
-    norm :: Set.Set T.Type -> T.Type -> T.Type
-    norm visited t
-      -- N-Whnf
-      | isWhnf t = t
-      -- N-Visited
-      | reappears = T.Void (getSpan t) (K.uc $ getSpan t) -- Bug: the kind of void is that of mu
-      -- N-NotVisited + N-NoMuRedex
-      | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce (typeDecls vs) t)
-      where
-        u = tNameRedex t -- u is Maybe (µ∗U)
-        reappears = maybe False   (`Set.member` visited) u
-        insert    = maybe visited (`Set.insert` visited) u

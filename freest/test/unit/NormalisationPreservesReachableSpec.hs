@@ -3,7 +3,7 @@ module NormalisationPreservesReachableSpec (spec) where
 import Syntax.Base ( getSpan )
 import Syntax.Kind
 import Syntax.Module qualified as M
-import Validation.Base ( TypeDeclMap )
+import Validation.Base ( ValidationState, buildValidationState )
 import Validation.Rename
 import Validation.Normalisation
 import UnitSpecUtils
@@ -29,8 +29,8 @@ spec = mkTypeSpec
       trace ("\n" ++ show t ++ show tReachable ++ " and " ++ show u  ++ show uReachable)
       tReachable == uReachable `shouldBe` True
       where
-        td = Map.fromList (M.typeDecls m)
+        vs = buildValidationState m
         tReachable = reachable (Map.fromList (M.typeDecls m)) t
-        u = normalise td t
+        u = normalise vs t
         uReachable = reachable (Map.fromList (M.typeDecls m)) u
     _ -> expectationFailure "Ill formed test case: kind annotation absent"

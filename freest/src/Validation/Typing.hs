@@ -216,13 +216,13 @@ synthRHS kctx tctx = \case
 -- Returns the updated type context without the linear variables consumed in 
 -- the expression.
 check :: KindCtx -> TypeCtx -> E.Exp -> T.Type -> Validation TypeCtx
-check kctx tctx e t = gets typeDecls >>= \tds -> case e of
+check kctx tctx e t = get >>= \vs -> case e of
   E.Int s _   -> checkEquivTypes (Left e) t (T.Int s)   >> pure tctx
   E.Float s _ -> checkEquivTypes (Left e) t (T.Float s) >> pure tctx
   E.Char s _  -> checkEquivTypes (Left e) t (T.Char s)  >> pure tctx
   -- Tuples, (e1 ... , en)
   E.Tuple s es ->
-    case normalise tds t of
+    case normalise vs t of
       T.Tuple _ ts | length es == length ts ->
         foldM (\tctx' (ei,ti) -> check kctx tctx' ei ti) tctx (zip es ts)
       _ -> do
@@ -231,14 +231,14 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
   -- Nil, [] @a
   E.Nil s u -> do
     Kinding.checkProper kctx u
-    case (normalise tds t, normalise tds u) of
+    case (normalise vs t, normalise vs u) of
       (T.List _ t', u') -> do
         checkEquivTypes (Left e) t' u'
         return tctx
       _ -> throwE (TypeMismatch s t (T.List (getSpan u) u) (Left e))
     -- Cons, (::) @a e1 e2
   E.Cons s e1 e2 ->
-    case normalise tds t of
+    case normalise vs t of
       T.List _ t' -> do
         tctx' <- check kctx tctx e1 t'
         check kctx tctx' e2 t
@@ -312,7 +312,7 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
     return tctx2
   E.Channel s u -> do
     Kinding.checkChannel kctx u
-    case normalise tds t of
+    case normalise vs t of
       T.Tuple _ [t1,t2] -> do
         checkEquivTypes (Left e) u t1
         checkEquivTypes (Left e) (T.AppDual (getSpan u) u) t2
@@ -321,9 +321,9 @@ check kctx tctx e t = gets typeDecls >>= \tds -> case e of
         (u, _) <- synth kctx tctx e
         throwE (TypeMismatch s t u (Left e))
   E.Select s i -> do
-    case normalise tds t of
+    case normalise vs t of
       T.AppArrow s m u v -> do
-        case normalise tds u of
+        case normalise vs u of
           T.AppLinChoice s T.Out us ->
             case lookup i us of
               Just ui -> do
@@ -386,19 +386,19 @@ checkArgs :: E.Exp
           -> Validation (T.Type, TypeCtx)
 checkArgs = checkArgs' 1
   where
-    checkArgs' n f kctx tctx t0 (as, t) = gets typeDecls >>= \tds -> case (as, t) of
+    checkArgs' n f kctx tctx t0 (as, t) = get >>= \vs -> case (as, t) of
       -- regular cases first
-      (TypeLevel t:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
+      (TypeLevel t:as, normalise vs -> T.AppForall s' ((a, k) : aks) u) -> do
         Kinding.check kctx t k
         checkArgs' (n+1) f kctx tctx t0 (as, T.AppForall s' aks (subs a t u))
-      (ExpLevel  e:as, normalise tds -> T.AppArrow s' m u v) -> do
+      (ExpLevel  e:as, normalise vs -> T.AppArrow s' m u v) -> do
         tctx' <- check kctx tctx e u
         checkArgs' (n+1) f kctx tctx' t0 (as,v)
       -- expected expression, given type
-      (TypeLevel t:as, normalise tds -> T.AppArrow s' m u v) -> do
+      (TypeLevel t:as, normalise vs -> T.AppArrow s' m u v) -> do
         throwE (UnexpectedArg (getSpan t) (ExpLevel (Just u)) (TypeLevel t) n f)
       -- expected type, given expression (to be inferred...)
-      (ExpLevel  e:as, normalise tds -> T.AppForall s' ((a, k) : aks) u) -> do
+      (ExpLevel  e:as, normalise vs -> T.AppForall s' ((a, k) : aks) u) -> do
         throwE (UnexpectedArg (getSpan e) (TypeLevel k) (ExpLevel e) n f)
       -- no more arguments, return type
       ([], t) -> return (t, tctx)
@@ -422,8 +422,8 @@ checkFun :: KindCtx
          -> Validation TypeCtx
 checkFun kctx tctx e ps mm rhs t = checkFun' 1 kctx tctx ps t
   where
-    checkFun' i kctxi tctxi ps' t' = gets typeDecls >>= \tds -> 
-      case (ps', normalise tds t') of
+    checkFun' i kctxi tctxi ps' t' = get >>= \vs -> 
+      case (ps', normalise vs t') of
         -- no more parameters, check RHS
         ([], t') -> do
           checkRHS kctxi tctxi rhs t'
@@ -462,7 +462,7 @@ checkFun kctx tctx e ps mm rhs t = checkFun' 1 kctx tctx ps t
 -- pattern can match a given type, throwing an error if it cannot. It returns a 
 -- type context containing exclusively the variables introduced in the pattern.
 checkPat :: KindCtx -> E.Pat -> T.Type -> Validation TypeCtx
-checkPat kctx p t = gets typeDecls >>= \tds -> case p of
+checkPat kctx p t = get >>= \vs -> case p of
   -- 0
   E.IntPat    s _   -> do
     checkEquivTypes (Right p) t (T.Int s)
@@ -483,12 +483,12 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
     return Map.empty
   -- []
   E.NilPat s        ->
-    case normalise tds t of
+    case normalise vs t of
       T.List _ _ -> return Map.empty
       t' -> throwE (TypeMismatchList (getSpan p) t (Right p))
   -- (p1 :: p2)
   E.ConsPat s p1 p2 ->
-    case normalise tds t of
+    case normalise vs t of
       t'@(T.List s t'') -> do
         tctx <- checkPat kctx p1 t''
         tctx' <- checkPat kctx p2 t'
@@ -496,14 +496,14 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
       t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
   -- (p1 ... , pn)
   E.TuplePat s ps   ->
-    case normalise tds t of
+    case normalise vs t of
       t'@(T.Tuple s ts) -> do
         foldM (\tctx (p', u) -> Map.union tctx <$> checkPat kctx p' u) Map.empty (zip ps ts)
       t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
   -- (C p1 ... pn)
   E.DConsPat s i ps -> do
     (i', map fst -> as, ts) <- lookupDConsDecl i
-    case normalise tds t of
+    case normalise vs t of
       T.AppDName _ i'' us | i' == i'' -> do
         let ts' = map (subsAll as us) ts
         let (lts', lps) = (length ts', length ps)
@@ -512,7 +512,7 @@ checkPat kctx p t = gets typeDecls >>= \tds -> case p of
       t' -> throwE (TypeMismatch (getSpan p) t (T.AppDName (getSpan i) i' (map (T.Var (getSpan i)) as)) (Right p))
   -- (&C p)
   E.ChoicePat s i p' -> do
-    case normalise tds t of
+    case normalise vs t of
       T.AppLinChoice _ T.In lts -> case lookup i lts of
         Just ti -> checkPat kctx p' ti
         Nothing -> throwE (IllegalChoice (getSpan i) i t)
