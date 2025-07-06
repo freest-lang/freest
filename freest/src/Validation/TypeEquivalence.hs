@@ -37,11 +37,11 @@ equivalent vs t u =
   bisimilar (fromType vs [t, u])
 
 fromType :: ValidationState -> [T.Type] -> Grammar
-fromType vs ts =
-  trace ("\n\nTypes:   " ++ show ts ++
-         "\n"++show (Grammar w (productions s))) $
-  Grammar w (productions s)
-  where (w, s) = runState (mapM (word Set.empty) ts) (initial vs)
+fromType vs ts = Grammar [[],[]] Map.empty
+  -- trace ("\n\nTypes:   " ++ show ts ++
+  --        "\n"++show (Grammar w (productions s))) $
+  -- Grammar w (productions s)
+  -- where (w, s) = runState (mapM (word Set.empty) ts) (initial vs)
 
 word :: Set.Set Variable -> T.Type -> TransState Word
 word set t = wasVisited t >>= \case

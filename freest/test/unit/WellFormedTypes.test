@@ -1147,3 +1147,28 @@ where
   type Suupra a = A
   type A : 1T -> 1S -> 1S
   type A b c = !b
+
+-- Type constants
+
+case (!) : *T -> 1S
+
+case (!) Wait : 1S
+
+case (!) Wait ; Close : 1S
+
+case (?) : *T -> 1S
+
+case (->) : *T -> *T -> *T
+
+case (->) : *T -> *T -> *T
+
+case (1->) Int : 1T -> 1T
+
+case (->) Wait : *T -> *T
+
+case (->) Int !Int : *T
+
+case A ((->) Int) : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = A ((->) Char)

@@ -133,6 +133,7 @@ isChannel _ = False
 isSession (Proper _ _ pk) = pk <: Session
 isSession _ = False
 
+-- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
 image :: Kind -> Kind
 image = \case
   k@Proper{} -> k

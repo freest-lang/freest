@@ -564,4 +564,10 @@ where
   type Supra a = A
   type A : 1T -> 1S -> 1S
   type A b c = !b
-  type A b = !b
+
+-- Type constants
+
+case A ((->) Int) : Int -> Char : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = A ((->) Char)

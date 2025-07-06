@@ -10,9 +10,10 @@ Weak reduction strategies do not reduce under lambda abstractions.
 -}
 
 module Validation.Normalisation
-  ( reduce
-  , isWhnf
+  ( isWhnf
+  , reduce
   , normalise
+  , tNameRedex
   , betaRule
   )
 where
