@@ -82,12 +82,12 @@ word' set ctx = \case
   -- ι
   t | T.isConstant t -> getLHS $ Map.singleton (show t) []
   -- ιT1···Tm with iota = ->, ∀, ∃, variants and choices
-  t@(T.App s u vs) | T.isConstant u && isFullyApplied ctx t -> do -- TODO: fix the guard
+  t@(T.App s u vs) | T.isConstant u && isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
     let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
     getLHS $ Map.fromList (zip terminals words)
   -- α T1···Tm with ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.AppVar _ a us) | isFullyApplied ctx t -> do -- TODO: fix the guard
+  t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
     ws <- mapM (word set ctx) us
     let words = [] : ws
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
