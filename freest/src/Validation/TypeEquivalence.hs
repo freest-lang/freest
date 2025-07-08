@@ -14,12 +14,12 @@ module Validation.TypeEquivalence
 where
 
 import Syntax.Base
-import Syntax.Kind
+import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap, ValidationState, typeDecls )
 import Validation.Normalisation ( normalise, reduce )
 import Validation.Rename ( first, reachable )
-import Validation.Kinding ( runSynth' )
+import Validation.Kinding ( runSynth', KindCtx )
 import Utils ( internalError )
 
 import Language.Simple.Grammar
@@ -37,22 +37,22 @@ equivalent vs t u =
   bisimilar (fromType vs [t, u])
 
 fromType :: ValidationState -> [T.Type] -> Grammar
-fromType vs ts = Grammar [[],[]] Map.empty
+fromType vs ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++show (Grammar w (productions s))) $
-  -- Grammar w (productions s)
-  -- where (w, s) = runState (mapM (word Set.empty) ts) (initial vs)
+  Grammar w (productions s)
+  where (w, s) = runState (mapM (word Set.empty Map.empty) ts) (initial vs)
 
-word :: Set.Set Variable -> T.Type -> TransState Word
-word set t = wasVisited t >>= \case
+word :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
+word set ctx t = wasVisited t >>= \case
   Just y -> pure [y]
   Nothing -> do
     y <- nextNonTerminal
     addVisited t y
-    word' set t
+    word' set ctx t
 
-word' :: Set.Set Variable -> T.Type -> TransState Word
-word' set = \case
+word' :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
+word' set ctx = \case
   -- Skip
   T.Skip{} -> pure []
   -- End
@@ -61,70 +61,83 @@ word' set = \case
   t@T.Void{} -> getLHS $ Map.singleton (show t) [bottom]
   -- #T
   T.AppMessage _ m p u -> do
-    w <- word set u
+    w <- word set ctx u
     getLHS $ Map.fromList [
       (show m ++ show p ++ "_1", w ++ [bottom]),
-      (show m ++ show p ++ "_2", [bottom | m /= Lin])]
+      (show m ++ show p ++ "_2", [bottom | m /= K.Lin])]
   -- T ; U
-  -- T.AppSemi _ t u -> do
-  --   td <- getTypeDecls
-  --   let set' = set `Set.union` reachable td u
-  --   liftM2 (++) (word set' t) (word set u)
+  T.AppSemi _ t u -> do
+    vs <- gets validationState
+    let set' = set `Set.union` reachable vs u
+    liftM2 (++) (word set' ctx t) (word set ctx u)
   -- Dual (αT1···Tm)
   T.AppDual s t@(T.App _ (T.Var{}) _) -> do
-    w <- word set t
+    w <- word set ctx t
     let label = show $ T.Dual s
     getLHS $ Map.fromList [
       (label ++ "_1", w),
       (label ++ "_2", [])]
   -- *+{} and *&{}
-  t@(T.Choice _ Un _ _) -> getLHS $ Map.singleton (show t) [bottom]
+  t@(T.Choice _ K.Un _ _) -> getLHS $ Map.singleton (show t) [bottom]
+  -- ι
+  t | T.isConstant t -> getLHS $ Map.singleton (show t) []
   -- ιT1···Tm with iota = ->, ∀, ∃, variants and choices
-  T.App s iota ts | True -> do -- TODO: fix the guard
-    words <- mapM (word set) ts
-    let terminals = map (\n -> show iota ++ "_" ++ show n) [1..]
+  t@(T.App s u vs) | T.isConstant u && isFullyApplied ctx t -> do -- TODO: fix the guard
+    words <- mapM (word set ctx) vs
+    let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
     getLHS $ Map.fromList (zip terminals words)
   -- α T1···Tm with ∆ ⊢ α: κ1 => ··· => κm => ∗
-  T.AppVar _ a ts | True -> do -- TODO: fix the guard
-    ws <- mapM (word set) ts
+  t@(T.AppVar _ a us) | isFullyApplied ctx t -> do -- TODO: fix the guard
+    ws <- mapM (word set ctx) us
     let words = [] : ws
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
     getLHS $ Map.fromList (zip terminals words)
   -- μ F
-  t@T.AppTName{} -> do
+  t@T.TName{} -> do
     vs <- gets validationState
     let u = normalise vs t
     case u of
       -- μ F normalises to Skip
       T.Skip{} -> pure []
-      -- μ F normalises to something different from Skip
+      -- μ F normalises to a type different from Skip
       _ -> do 
-        ~(z:δ) <- word set u
+        ~(z:δ) <- word set ctx u
         y <- nextNonTerminal
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- t -> do
-  --   state <- gets validationState
-  --   case runSynth' state t of
-  --     Left errors -> internalError $ "word': kinding failed for type " ++ show t ++ "\n" ++ show errors
-  --     Right (Arrow _ k _) -> do
-  --       -- F : k => k'
-  --       td <- getTypeDecls
-  --       let a = first set td t
-  --       let s = getSpan t
-  --       w <- word set (T.App s t [T.Var s a])
-  --       let label = ("λ" ++ show k ++ "_" ++ show a)
-  --       getLHS $ Map.singleton label w
-  --     Right _ -> do
-  --       -- t reduces
-  --       td <- getTypeDecls
-  --       word set (reduce td t)
+  t -> do
+    vs <- gets validationState
+    case runSynth' vs ctx t of -- TODO: add ctx to state
+      Right (K.Arrow _ k _) -> do
+        -- F : k => k'
+        let a = first set vs t
+        let s = getSpan t
+        let ctx' = Map.insert a k ctx
+        w <- word set ctx' (T.App s t [T.Var s a])
+        let label = ("λ" ++ show a ++ ":" ++ show k)
+        getLHS $ Map.singleton label w
+      Right _ -> do
+        -- t reduces
+        td <- getTypeDecls
+        word set ctx (reduce td t)
+      Left errors -> internalError $ "word': kinding failed for type " ++ show t ++ "\n" ++ show errors
   -- Should not happen - Redundant
   -- t -> internalError $ "word' " ++ show t
 
--- fullyApplied :: ValidationState -> Type -> Bool
--- fullyApplied 
+isFullyApplied :: KindCtx -> T.Type -> Bool
+isFullyApplied ctx = \case
+  T.Int{} -> True
+  T.Float{} -> True
+  T.AppArrow{} -> True
+  T.AppQuant{} -> True
+  T.AppLinChoice{} -> True
+  T.SharedChoice{} -> True
+  T.AppDName{} -> True
+  T.AppVar _ a ts -> case ctx Map.!? a of
+    Just k -> K.depth k == length ts
+    Nothing -> internalError $ "word': variable " ++ show a ++ " not in context " ++ show ctx
+  _ -> False
 
 {- OLD 
 word :: T.Type -> TransState Word
@@ -250,7 +263,9 @@ addProductions x m =
 getTransitions :: NonTerminal -> TransState Transitions
 getTransitions x = do
   p <- gets productions
-  pure $ p Map.! x
+  case p Map.!? x of
+    Just transitions -> pure $ transitions
+    Nothing -> internalError $ "TypeEquivalence.getTransitions: nonterminal " ++ show x ++ " not in map " ++ show p
 
 -- | Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS.

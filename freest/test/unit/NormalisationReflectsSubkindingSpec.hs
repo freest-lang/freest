@@ -31,9 +31,9 @@ normalisationReflectsKinding :: ValidationState -> T.Type -> Bool
 normalisationReflectsKinding vs t =
   trace ("\n" ++ show t ++ " : " ++ show k1 ++ " :>? " ++ show u ++ " : " ++ show k2) $
   k2 <: k1
-  where k1 = runSynth' vs t
+  where k1 = runSynth' vs Map.empty t
         u  = normalise vs t
-        k2 = runSynth' vs u
+        k2 = runSynth' vs Map.empty u
   
 instance Subsort (Either [Error] Kind) where
   Left _ <: Left _ = True

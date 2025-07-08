@@ -20,6 +20,7 @@ module Syntax.Kind
   , isSession
   , isChannel
   , image
+  , depth
   )
 where 
 
@@ -138,6 +139,13 @@ image :: Kind -> Kind
 image = \case
   k@Proper{} -> k
   Arrow _ _ k -> image k
+
+depth :: Kind -> Int
+depth = \case
+  k@Proper{} -> 0
+  Arrow _ _ k -> 1 + depth k
+
+
 
 instance Show Multiplicity where
   show = \case 
