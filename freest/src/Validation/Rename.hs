@@ -9,8 +9,8 @@ Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
-  ( reachable
-  , first
+  ( first
+  , reachable
   , absorbing
   -- , rename
   )
@@ -30,9 +30,9 @@ import Data.Set qualified as Set
 import Data.Maybe ( isNothing )
 
 -- | (first s t) is be the smallest variable in set B \ (s union reach t)
-first :: Set.Set Variable -> ValidationState -> T.Type -> Variable
-first s vs t = firstVar var (s `Set.union` reachable vs t)
-  where var = Variable (Span "<word>" (0,0) (0,0)) "α" defaultInternal
+first :: ValidationState -> Set.Set Variable -> T.Type -> Variable
+first vs s t = firstVar var (s `Set.union` reachable vs t)
+  where var = Variable (getSpan t) "α" defaultInternal
 
 -- | The set of free variables reachable in a type.
 reachable :: ValidationState -> T.Type -> Set.Set Variable

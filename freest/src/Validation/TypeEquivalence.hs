@@ -56,13 +56,13 @@ word' set ctx = \case
   -- Skip
   T.Skip{} -> pure []
   -- End
-  t@T.End{} -> getLHS $ Map.singleton (show t) [bottom]
+  t@T.End{} -> getNonTerminal $ Map.singleton (show t) [bottom]
   -- Void
-  t@T.Void{} -> getLHS $ Map.singleton (show t) [bottom]
+  t@T.Void{} -> getNonTerminal $ Map.singleton (show t) [bottom]
   -- #T
   T.AppMessage _ m p u -> do
     w <- word set ctx u
-    getLHS $ Map.fromList [
+    getNonTerminal $ Map.fromList [
       (show m ++ show p ++ "_1", w ++ [bottom]),
       (show m ++ show p ++ "_2", [bottom | m /= K.Lin])]
   -- T ; U
@@ -74,24 +74,24 @@ word' set ctx = \case
   T.AppDual s t@(T.App _ (T.Var{}) _) -> do
     w <- word set ctx t
     let label = show $ T.Dual s
-    getLHS $ Map.fromList [
+    getNonTerminal $ Map.fromList [
       (label ++ "_1", w),
       (label ++ "_2", [])]
   -- *+{} and *&{}
-  t@(T.Choice _ K.Un _ _) -> getLHS $ Map.singleton (show t) [bottom]
+  t@(T.Choice _ K.Un _ _) -> getNonTerminal $ Map.singleton (show t) [bottom]
   -- ι
-  t | T.isConstant t -> getLHS $ Map.singleton (show t) []
+  t | T.isConstant t -> getNonTerminal $ Map.singleton (show t) []
   -- ιT1···Tm with iota = ->, ∀, ∃, variants and choices
   t@(T.App s u vs) | T.isConstant u && isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
     let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
-    getLHS $ Map.fromList (zip terminals words)
+    getNonTerminal $ Map.fromList (zip terminals words)
   -- α T1···Tm with ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
     ws <- mapM (word set ctx) us
     let words = [] : ws
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
-    getLHS $ Map.fromList (zip terminals words)
+    getNonTerminal $ Map.fromList (zip terminals words)
   -- μ F
   t@T.TName{} -> do
     vs <- gets validationState
@@ -108,20 +108,20 @@ word' set ctx = \case
         pure [y]
   t -> do
     vs <- gets validationState
-    case runSynth' vs ctx t of -- TODO: add ctx to state
+    case runSynth' vs ctx t of
       Right (K.Arrow _ k _) -> do
         -- F : k => k'
-        let a = first set vs t
-        let s = getSpan t
+        let a = first vs set t
         let ctx' = Map.insert a k ctx
+        let s = getSpan t
         w <- word set ctx' (T.App s t [T.Var s a])
         let label = ("λ" ++ show a ++ ":" ++ show k)
-        getLHS $ Map.singleton label w
+        getNonTerminal $ Map.singleton label w
       Right _ -> do
         -- t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "word': kinding failed for type " ++ show t ++ "\n" ++ show errors
+      Left errors -> internalError $ "TypeEquivalence.word': kinding failed for type " ++ show t ++ "\n" ++ show errors
   -- Should not happen - Redundant
   -- t -> internalError $ "word' " ++ show t
 
@@ -168,41 +168,41 @@ wordWhnf = \case
   T.Skip{} -> -- Skip
     pure []
   t@T.End{} -> -- End
-    getLHS $ Map.singleton (show t) [bottom]
+    getNonTerminal $ Map.singleton (show t) [bottom]
   t@T.Void{} -> -- Void
-    getLHS $ Map.singleton (show t) [bottom]
-  t@(T.Choice _ Un _ _) -> getLHS $ Map.singleton (show t) [bottom] -- *+{} and *&{}
+    getNonTerminal $ Map.singleton (show t) [bottom]
+  t@(T.Choice _ Un _ _) -> getNonTerminal $ Map.singleton (show t) [bottom] -- *+{} and *&{}
   t | T.isConstant t ->  -- ι ≠ Skip, Bot, End, *#{}
-    getLHS $ Map.singleton (show t) []
+    getNonTerminal $ Map.singleton (show t) []
   T.AppVar _ a ts -> do -- α T1...Tm
     ws <- mapM word ts
     let words = [] : map (++ [bottom]) ws
     let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
-    getLHS $ Map.fromList (zip terminals words)
+    getNonTerminal $ Map.fromList (zip terminals words)
   T.Abs _ aks t -> do -- λα1:κ1...αn:κn.T
     w <- word t
-    foldM (\w' (a, k) -> getLHS $ Map.singleton ("λ" ++ varTerminal a ++ ":" ++ show k) w') 
+    foldM (\w' (a, k) -> getNonTerminal $ Map.singleton ("λ" ++ varTerminal a ++ ":" ++ show k) w') 
           (w ++ [bottom]) aks
   T.AppMessage _ m p u -> do -- #T
     w <- word u
-    getLHS $ Map.fromList [
+    getNonTerminal $ Map.fromList [
       (show m ++ show p ++ "_1", w ++ [bottom]),
       (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   T.AppSemi _ t u -> -- T ; U
     liftM2 (++) (word t) (word u)
   T.App _ T.Semi{} [u] -> do -- We may have partially applied Semi in the future
     w <- word u
-    getLHS $ Map.singleton (";_1") w
+    getNonTerminal $ Map.singleton (";_1") w
   T.AppDual s u -> do -- Dual u. type u is α, for types in whnf
     w <- word u
     let label = show $ T.Dual s
-    getLHS $ Map.fromList [
+    getNonTerminal $ Map.fromList [
       (label ++ "_1", w),
       (label ++ "_2", [])]
   T.App _ t us -> do  -- ι T1···Tm with ι = -> , #{}, (|lᵢ|) and other datatypes (variants)
     let terminals = map (\n -> show t ++ "_" ++ show n) [0..]
     words <- mapM word us
-    getLHS $ Map.fromList (zip terminals words)
+    getNonTerminal $ Map.fromList (zip terminals words)
   t -> internalError $ "wordWhnf " ++ show t
 -}
 
@@ -269,8 +269,8 @@ getTransitions x = do
 
 -- | Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS.
-getLHS :: Transitions -> TransState Word
-getLHS ts = do
+getNonTerminal :: Transitions -> TransState Word
+getNonTerminal ts = do
   ps <- gets productions
   case reverseLookup ts ps of
     Nothing -> do
@@ -325,7 +325,7 @@ typeToGrammar t = collect [] t >> toGrammar t
 
 toGrammar :: T.Type -> TransState Word
 toGrammar t = case fatTerminal t of
-  Just t' ->  getLHS $ Map.singleton (show t') []
+  Just t' ->  getNonTerminal $ Map.singleton (show t') []
   Nothing -> toGrammar' t
 
 -- Only non fat terminals
@@ -334,28 +334,28 @@ toGrammar' :: T.Type -> TransState Word
 toGrammar' (T.Arrow _ m t u) = do
   xs <- toGrammar t
   ys <- toGrammar u
-  getLHS $ Map.fromList [(showArrow m ++ "d", xs), (showArrow m ++ "r", ys)] -- domain, range
+  getNonTerminal $ Map.fromList [(showArrow m ++ "d", xs), (showArrow m ++ "r", ys)] -- domain, range
 toGrammar' (T.Labelled _ s m) = do
   ms <- tMapM toGrammar m
-  getLHS $ Map.mapKeys (\k -> show s ++ show k) ms
+  getNonTerminal $ Map.mapKeys (\k -> show s ++ show k) ms
 -- toGrammar' (T.Labelled _ t m) | t == T.Variant || t == T.Record = do
 --   ms <- tMapM toGrammar m
---   getLHS $ Map.insert (show t ++ "✓") [] $ Map.mapKeys (\k -> show t ++ show k) ms
+--   getNonTerminal $ Map.insert (show t ++ "✓") [] $ Map.mapKeys (\k -> show t ++ show k) ms
 toGrammar' (T.Skip _) = pure []
-toGrammar' t@T.End{} = getLHS $ Map.singleton (show t) [bottom]
+toGrammar' t@T.End{} = getNonTerminal $ Map.singleton (show t) [bottom]
 toGrammar' (T.Semi _ t u) = liftM2 (++) (toGrammar t) (toGrammar u)
 toGrammar' (T.Message _ p t) = do
   xs <- toGrammar t
-  getLHS $ Map.fromList [(show p ++ "p", xs ++ [bottom]), (show p ++ "c", [])] -- payload, continuation
+  getNonTerminal $ Map.fromList [(show p ++ "p", xs ++ [bottom]), (show p ++ "c", [])] -- payload, continuation
 -- Polymorphism and recursive types
 -- Use intern to build the terminal for polymorphic variables (do not use show which gets the program-level variable
 toGrammar' (T.Forall _ (Bind _ a k t)) = do
   xs <- toGrammar t
-  getLHS $  Map.singleton ('∀' : intern a ++ ":" ++ show k) xs
-toGrammar' (T.Var _ a) = getLHS $ Map.singleton (intern a) []
+  getNonTerminal $  Map.singleton ('∀' : intern a ++ ":" ++ show k) xs
+toGrammar' (T.Var _ a) = getNonTerminal $ Map.singleton (intern a) []
 toGrammar' (T.Rec _ (Bind _ a _ _)) = pure [a]
 -- Type operators
-toGrammar' t@(T.Dualof _ T.Var{}) = getLHS $ Map.singleton (show t) []
+toGrammar' t@(T.Dualof _ T.Var{}) = getNonTerminal $ Map.singleton (show t) []
 toGrammar' t = internalError "Equivalence.TypeToGrammar.toGrammar" t
 
 -- Fat terminal types can be compared for syntactic equality
@@ -464,8 +464,8 @@ putSubstitution x y =
 
 -- Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS
-getLHS :: Transitions -> TransState Word
-getLHS ts = do
+getNonTerminal :: Transitions -> TransState Word
+getNonTerminal ts = do
   ps <- getProductions
   case reverseLookup ts ps of
     Nothing -> do
