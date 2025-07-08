@@ -1,11 +1,11 @@
 -- identity
-(\x:Int -> x) 2
+-- (\x:Int -> x) 2
 
 -- abstraction
 -- (\x:Int -> + x x)
 
 -- aplication
---(\x:Int -> + x x) 2
+(\x:Int -> + x x) 2
 
 -- higher-order function
 -- (\f:(Int -> Int) -> (\x:Int -> f x)) (\x:Int -> + x x) 2
