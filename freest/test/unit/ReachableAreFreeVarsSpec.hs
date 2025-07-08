@@ -1,12 +1,11 @@
 module ReachableAreFreeVarsSpec (spec) where
 
 import Syntax.Module qualified as M
-import Validation.Base ( TypeDeclMap )
+import Validation.Base ( ValidationState, buildValidationState )
 import Validation.Substitution ( freeVars )
 import Validation.Rename ( reachable )
 
 import Data.Set qualified as Set
-import Data.Map.Strict qualified as Map
 import Test.Hspec
 import UnitSpecUtils
 
@@ -22,8 +21,4 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Free reachable variables are free" 
   errorsAreFailures
-  \(t, _, m) -> freeVars t `Set.isSubsetOf` reachable (buildTypeDecls m) t `shouldBe` True
-
--- Warning: code also in from Validation.Base
-buildTypeDecls :: M.Module -> TypeDeclMap
-buildTypeDecls = Map.fromList . M.typeDecls
+  \(t, _, m) -> freeVars t `Set.isSubsetOf` reachable (buildValidationState m) t `shouldBe` True

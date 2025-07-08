@@ -126,7 +126,7 @@ where
   type B : 1S -> 1S
   type B a = a
 
-case forall (b : 1S) . A b : 1T
+case forall (b : 1S) . A b : 1T -- An absorbing type which is not of kind C
 where
   type A : 1S -> 1S
   type A b = b ; A b

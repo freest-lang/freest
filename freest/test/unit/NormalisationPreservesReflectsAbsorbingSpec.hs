@@ -1,9 +1,9 @@
-module NormalisationPreservesReachableSpec (spec) where
+module NormalisationPreservesReflectsAbsorbingSpec (spec) where
 
 import Syntax.Base ( getSpan )
 import Syntax.Kind
 import Syntax.Module qualified as M
-import Validation.Base ( ValidationState, buildValidationState )
+import Validation.Base  ( buildValidationState, typeDecls )
 import Validation.Rename
 import Validation.Normalisation
 import UnitSpecUtils
@@ -17,20 +17,24 @@ main = hspec spec
 
 -- This test should be called with well-formed types only
 
--- If T normalises to U, then reach(T) = reach(U).
+-- If T normalises to U, then T absorbing iff U absorbing
 
 spec :: Spec
 spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test" ]
-  "Normalisation preserves free reachable variables"
+  "Normalisation preserves and reflects absorbing"
   errorsAreFailures
   \case
     (t, Just k, m) ->
-      trace ("\n" ++ show t ++ show tReachable ++ " and " ++ show u  ++ show uReachable)
-      tReachable == uReachable `shouldBe` True
+      trace ("\n" ++ show t ++ showAbs tAbsorbing ++ ", normalises to " ++ show u  ++ " which" ++ showAbs uAbsorbing)
+      tAbsorbing == uAbsorbing `shouldBe` True
       where
         vs = buildValidationState m
-        tReachable = reachable vs t
+        tAbsorbing = absorbing vs t
         u = normalise vs t
-        uReachable = reachable vs u
+        uAbsorbing = absorbing vs u
     _ -> expectationFailure "Ill formed test case: kind annotation absent"
+
+showAbs :: Bool -> String
+showAbs True = " is absorbing"
+showAbs False = " is non absorbing"

@@ -66,10 +66,10 @@ word' set = \case
       (show m ++ show p ++ "_1", w ++ [bottom]),
       (show m ++ show p ++ "_2", [bottom | m /= Lin])]
   -- T ; U
-  T.AppSemi _ t u -> do
-    td <- getTypeDecls
-    let set' = set `Set.union` reachable td u
-    liftM2 (++) (word set' t) (word set u)
+  -- T.AppSemi _ t u -> do
+  --   td <- getTypeDecls
+  --   let set' = set `Set.union` reachable td u
+  --   liftM2 (++) (word set' t) (word set u)
   -- Dual (αT1···Tm)
   T.AppDual s t@(T.App _ (T.Var{}) _) -> do
     w <- word set t
@@ -104,22 +104,22 @@ word' set = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  t -> do
-    state <- gets validationState
-    case runSynth' state t of
-      Left errors -> internalError $ "word': kinding failed for type " ++ show t ++ "\n" ++ show errors
-      Right (Arrow _ k _) -> do
-        -- F : k => k'
-        td <- getTypeDecls
-        let a = first set td t
-        let s = getSpan t
-        w <- word set (T.App s t [T.Var s a])
-        let label = ("λ" ++ show k ++ "_" ++ show a)
-        getLHS $ Map.singleton label w
-      Right _ -> do
-        -- t reduces
-        td <- getTypeDecls
-        word set (reduce td t)
+  -- t -> do
+  --   state <- gets validationState
+  --   case runSynth' state t of
+  --     Left errors -> internalError $ "word': kinding failed for type " ++ show t ++ "\n" ++ show errors
+  --     Right (Arrow _ k _) -> do
+  --       -- F : k => k'
+  --       td <- getTypeDecls
+  --       let a = first set td t
+  --       let s = getSpan t
+  --       w <- word set (T.App s t [T.Var s a])
+  --       let label = ("λ" ++ show k ++ "_" ++ show a)
+  --       getLHS $ Map.singleton label w
+  --     Right _ -> do
+  --       -- t reduces
+  --       td <- getTypeDecls
+  --       word set (reduce td t)
   -- Should not happen - Redundant
   -- t -> internalError $ "word' " ++ show t
 

@@ -126,11 +126,11 @@ normalise vs = norm Set.empty
       -- N-Visited
       | reappears = T.Void (getSpan t) (K.image k)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce (typeDecls vs) t)
+      | otherwise = norm visited' (reduce (typeDecls vs) t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u
-        insert    = maybe visited (`Set.insert` visited) u
+        visited'  = maybe visited (`Set.insert` visited) u
         k = case u of
           Just (T.AppTName _ name _) -> getKind vs name
           _ -> internalError $ "Validation.Normalisation.normalise: " ++ show u
