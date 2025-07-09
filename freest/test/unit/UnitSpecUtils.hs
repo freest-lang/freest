@@ -52,10 +52,9 @@ mkEquivalenceSpec testPaths testDesc testFun = do
     Right ts -> describe testDesc $ 
       forM_ ts \((t, u, k), m) -> it (show (spanFromTo t u))
         case do (t', u', k', m') <- runScoping scopeEquivalenceTest (t, u, k, m)
-                runKindModule m'
-                return (t', u',k', m') of
+                (t', u', k',) <$> runKindModule m' of
           Left es      -> expectationFailure (unlines $ map show es)
-          Right (t', u', k', m') -> testFun (t', u', k', m')
+          Right (t', u', k', m'') -> testFun (t', u', k', m'')
   where
     scopeEquivalenceTest ctx (t, u, k, m) = do
       (ctx',m') <- scopeModule' ctx m
