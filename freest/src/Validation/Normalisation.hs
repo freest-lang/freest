@@ -49,7 +49,7 @@ isWhnf = \case
   T.AppDual _ T.Var{} -> True
   _ -> False
 
--- | One step type reduction
+-- | One step type reduction. Requires 'not (isWnhf t)'.
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
   -- 1. Semicolon
@@ -98,7 +98,7 @@ reduce td = \case
   T.App s t ts -> T.App s (reduce td t) ts
     -- R-μ
   t@(T.TName _ name) -> unfold td name
-  t -> internalError $ "Validation.Normalisation.reduce: non-exhaustive pattern: " ++ show t
+  t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ (if isWhnf t then " (a whnf)" else "")
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β

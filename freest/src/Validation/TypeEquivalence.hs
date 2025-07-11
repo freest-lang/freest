@@ -46,10 +46,7 @@ fromType vs ts =
 word :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
 word set ctx t = wasVisited t >>= \case
   Just y -> pure [y]
-  Nothing -> do
-    y <- nextNonTerminal
-    addVisited t y
-    word' set ctx t
+  Nothing -> word' set ctx t
 
 word' :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
 word' set ctx = \case
@@ -92,8 +89,10 @@ word' set ctx = \case
     let words = [] : ws
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
     getNonTerminal $ Map.fromList (zip terminals words)
-  -- μ F
+  -- μ F (non-visited)
   t@T.TName{} -> do
+    y <- nextNonTerminal
+    addVisited t y
     vs <- gets validationState
     let u = normalise vs t
     case u of
@@ -102,7 +101,6 @@ word' set ctx = \case
       -- μ F normalises to a type different from Skip
       _ -> do 
         ~(z:δ) <- word set ctx u
-        y <- nextNonTerminal
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
@@ -240,12 +238,14 @@ nextNonTerminal = do
 wasVisited :: T.Type -> TransState (Maybe NonTerminal)
 wasVisited t = do
   v <- gets visited
+  trace ("Looking for " ++ show t ++ " in " ++ show v ++ ", resulting in " ++ show (v Map.!? t)) $ return ()
   pure $ v Map.!? t
 
-addVisited :: T.Type -> NonTerminal -> TransState NonTerminal
+addVisited :: T.Type -> NonTerminal -> TransState ()
 addVisited t y = do
-    modify $ \s -> s { visited = Map.insert t y (visited s) }
-    pure y
+  v <- gets visited
+  trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
+  modify $ \s -> s { visited = Map.insert t y (visited s) }
 
 getTypeDecls :: TransState TypeDeclMap
 getTypeDecls = do

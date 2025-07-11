@@ -88,7 +88,7 @@ instance Ord Identifier where
   Identifier _ i1 <= Identifier _ i2 = i1 <= i2
 
 instance Show Identifier where
-  show (Identifier _ s) = s
+  show (Identifier _ i) = i
 
 -- | Construct an identifier with the span of the second argument.
 mkId :: Located a => String -> a -> Identifier

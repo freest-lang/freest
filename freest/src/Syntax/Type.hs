@@ -244,6 +244,7 @@ instance Show Type where
     Var _ a    -> show a
     AppSemi _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
     Abs _ aks t -> "(\\" ++ showAbs aks " -> " t ++ ")"
+    App _ t [] -> "(" ++ show t ++ "[])"
     App _ t ts -> foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts
     -- Equations
     TName _ i -> show i ++ "#type"
@@ -287,7 +288,7 @@ instance Congruence Type where
   -- Equations
     (TName _ i1) (TName _ i2) -> i1 == i2
     (DName _ i1) (DName _ i2) -> i1 == i2
-  --   The type of non-contractive types
+  -- The type of non-contractive types
     (Void _ k1) (Void _ k2) -> k1 == k2
     _ _ -> False
 
@@ -296,11 +297,11 @@ instance Congruence [Type] where
     length ts == length us &&
     all (uncurry (congruent m)) (zip ts us)
 
-instance Congruence [(Identifier, Type)] where
-  congruent m m1 m2 =
-    length m1 == length m2 &&
-    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2)
-        (zip (sort m1) (sort m2))
+-- instance Congruence [(Identifier, Type)] where
+--   congruent m m1 m2 =
+--     length m1 == length m2 &&
+--     all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2)
+--         (zip (sort m1) (sort m2))
 
 instance Located Type where
   getSpan = \case
