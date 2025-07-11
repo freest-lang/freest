@@ -81,7 +81,7 @@ word' set ctx = \case
   t@(T.Choice _ K.Un _ _) -> getNonTerminal $ Map.singleton (show t) [bottom]
   -- ι
   t | T.isConstant t -> getNonTerminal $ Map.singleton (show t) []
-  -- ιT1···Tm with iota = ->, ∀, ∃, variants and choices
+  -- ι T1···Tm with ι being ->, ∀, ∃, variants and choices
   t@(T.App s u vs) | T.isConstant u && isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
     let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
@@ -106,6 +106,7 @@ word' set ctx = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
+  -- If we get here, then t is of higher order kind or a type application, hopefully
   t -> do
     vs <- gets validationState
     case runSynth' vs ctx t of
@@ -121,7 +122,7 @@ word' set ctx = \case
         -- t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "TypeEquivalence.word': kinding failed for type " ++ show t ++ "\n" ++ show errors
+      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding failed for type " ++ show t ++ "\n" ++ show errors
   -- Should not happen - Redundant
   -- t -> internalError $ "word' " ++ show t
 

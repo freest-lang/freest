@@ -87,13 +87,13 @@ lookupKind i = do
     Nothing -> throwE (TypeOutOfScope (getSpan i) i)
 
 getType :: ValidationState -> Identifier -> T.Type
-getType vs = getType' $ typeDecls vs
+getType vs = unfold $ typeDecls vs
 
-getType' :: TypeDeclMap -> Identifier -> T.Type
-getType' td name =
+unfold :: TypeDeclMap -> Identifier -> T.Type
+unfold td name =
   case td Map.!? name of
     Just u  -> u
-    Nothing -> internalError $ "Validation.Base..getType: name " ++ show name ++ " not in type declaration map"
+    Nothing -> internalError $ "Validation.Base.unfold: name " ++ show name ++ " not in type declaration map"
 
 getKind :: ValidationState -> Identifier -> K.Kind
 getKind vs name =

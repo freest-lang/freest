@@ -21,7 +21,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, getType, getType', typeDecls, getKind )
+import Validation.Base ( TypeDeclMap, ValidationState, getType, unfold, typeDecls, getKind )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
@@ -97,7 +97,7 @@ reduce td = \case
     -- R-TAppL
   T.App s t ts -> T.App s (reduce td t) ts
     -- R-μ
-  t@(T.TName _ name) -> getType' td name
+  t@(T.TName _ name) -> unfold td name
   t -> internalError $ "Validation.Normalisation.reduce: non-exhaustive pattern: " ++ show t
 
 -- | Type application, the beta rule.

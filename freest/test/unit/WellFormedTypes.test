@@ -64,8 +64,6 @@ case Char -> Skip : *T
 
 case Char 1-> Skip : 1T
 
--- Recursive types
-
 case A : 1S
 where 
   type A : 1S
@@ -75,6 +73,13 @@ case A : 1S
 where
   type A : 1S
   type A = (!Int; Skip; ?Int)
+
+-- Recursive types
+
+case IntStream : 1S
+where
+  type IntStream : 1S
+  type IntStream = !Int ; IntStream
 
 case Tree : 1S
 where
@@ -341,6 +346,10 @@ case A : *T
 where
   type A : *S
   type A = Dual Skip
+
+case Dual (exists (a : 1S). a) : 1S
+
+case forall (b : 1S). (Dual b) : 1S
 
 case Y : 1C
 where
