@@ -8,9 +8,8 @@ import Validation.Base ( ValidationState, buildValidationState )
 import Validation.TypeEquivalence ( fromType )
 import Language.Simple.Grammar
 
-import Data.Map.Strict qualified as Map
-import Debug.Trace
 import Test.Hspec
+import Debug.Trace ( trace )
 
 -- Requires: This test should be called with well-formed types only
 
@@ -24,8 +23,10 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges"
   errorsAreFailures
-  \(t,_,m) -> translateToGrammar (buildValidationState m) t `shouldBe` True
+  \(t, _, m) -> translateToGrammar (buildValidationState m) t `shouldBe` True
 
 translateToGrammar :: ValidationState -> T.Type -> Bool
-translateToGrammar vs t = trace ("\n" ++ show (fromType vs [t])) True
-
+translateToGrammar vs t =
+  trace (" " ++ show (length productions) ++ " productions") True
+  -- trace ("\n" ++ show (fromType vs [t])) True
+  where  Grammar _ productions = fromType vs [t]

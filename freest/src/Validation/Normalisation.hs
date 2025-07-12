@@ -98,7 +98,7 @@ reduce td = \case
   T.App s t ts -> T.App s (reduce td t) ts
     -- R-μ
   t@(T.TName _ name) -> unfold td name
-  t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ (if isWhnf t then " (a whnf)" else "")
+  t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ (if isWhnf t then ", a whnf" else "")
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β

@@ -16,7 +16,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, typeDecls )
+import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
 import Validation.Normalisation ( normalise, reduce )
 import Validation.Rename ( first, reachable )
 import Validation.Kinding ( runSynth', KindCtx )
@@ -90,7 +90,7 @@ word' set ctx = \case
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
     getNonTerminal $ Map.fromList (zip terminals words)
   -- μ F (non-visited)
-  t@T.TName{} -> do
+  t@T.AppTName{} -> do
     y <- nextNonTerminal
     addVisited t y
     vs <- gets validationState
@@ -238,13 +238,13 @@ nextNonTerminal = do
 wasVisited :: T.Type -> TransState (Maybe NonTerminal)
 wasVisited t = do
   v <- gets visited
-  trace ("Looking for " ++ show t ++ " in " ++ show v ++ ", resulting in " ++ show (v Map.!? t)) $ return ()
+  -- trace ("Looking for " ++ show t ++ " in " ++ show v ++ ", resulting in " ++ show (v Map.!? t)) $ return ()
   pure $ v Map.!? t
 
 addVisited :: T.Type -> NonTerminal -> TransState ()
 addVisited t y = do
   v <- gets visited
-  trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
+  -- trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
   modify $ \s -> s { visited = Map.insert t y (visited s) }
 
 getTypeDecls :: TransState TypeDeclMap
