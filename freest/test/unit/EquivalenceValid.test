@@ -571,3 +571,88 @@ case A ((->) Int) == Int -> Char : *T
 where
   type A : (*T -> *T) -> *T
   type A a = A ((->) Char)
+
+-- Sections
+
+case (->) Int == (Int ->) : 1T -> *T
+
+case \(a : 1T) -> (->) a Int == (-> Int) : 1T -> *T
+
+case (Int ->) Char == Int -> Char : *T
+
+case (-> Char) Int == Int -> Char : *T
+
+-- Type-level abstractions
+
+case (\(a : *T) -> a) == (\(b : *T) -> b) : *T -> *T -- α-equivalence
+
+case (\(a : *T) -> a) Int == Int : *T                -- β-equivalence
+
+case Int == (\(a : *T) -> a) Int : *T
+
+case (\(a : 1T) -> a) Int == Int : 1T
+
+case (\(a : 1T) -> (!) a) == (!) : 1T -> 1S          -- η-equivalence
+
+case (!) == (\(a : 1T) -> (!) a) : 1T -> 1S
+
+case (\(a : 1T) (b : *T) -> a)
+  == (\(a : 1T) -> \(b : *T) -> a) 
+   : 1T -> *T -> 1T
+
+case (\(a : 1T) (b : *T) -> a) !Int Int 
+  == !Int 
+   : 1T
+
+case (\(a : 1T) (b : *T) -> b) !Int Int 
+  == Int 
+   : *T
+
+case (\(a : *T) (b : 1S) -> !b) Int 
+  == (\(b : 1S) -> !b) 
+   : 1S -> 1S
+
+case (\(a : *T) (b : 1S) -> !a) Int 
+  == (\(b : 1S) -> !Int) 
+   : 1S -> 1S
+
+case (\(a : 1T) -> (\(b : 1T) -> !b)) Int Char 
+  == !Char 
+   : 1S
+
+case (\(a : 1T) -> \(b : 1T) (c : 1S) -> !b) Int Char 
+  == \(c : 1S) -> !Char 
+   : 1S -> 1S
+
+case (\(a : 1S -> 1S) (b : 1S) -> a b) (\(a : 1S) -> a) (Tree Int)
+  == (\(b : 1S) -> (\(a : 1S) -> a) b) (Tree Int)
+   : 1S
+where
+  type Tree : *T -> 1S
+  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+case (\(a : 1S -> 1S) (b : 1S) -> a b) (\(a : 1S) -> a) (Tree Int)
+  == Tree Int
+   : 1S
+where
+  type Tree : *T -> 1S
+  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+case Succ Zero
+  == \(s : *T -> *T) (z : *T) -> s z
+   : (*T -> *T) -> *T -> *T
+where
+  type Zero : (*T -> *T) -> *T -> *T
+  type Zero = (\(s : *T -> *T) (z : *T) -> z)
+  type Succ : ((*T -> *T) -> *T -> *T) -> ((*T -> *T) -> *T -> *T)
+  type Succ = \(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)
+
+case (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
+      (\(s : *T -> *T) (z : *T) -> z)
+  == \(s : *T -> *T) (z : *T) -> s (((\(s : *T -> *T) (z : *T) -> z)) s z)
+   : (*T -> *T) -> *T -> *T
+
+case (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
+      (\(s : *T -> *T) (z : *T) -> z)
+  == \(s : *T -> *T) (z : *T) -> s z
+   : (*T -> *T) -> *T -> *T

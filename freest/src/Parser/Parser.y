@@ -288,9 +288,10 @@ TypePrimary :: { T.Type }
   | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }
   | '(' Commas ')' {% prefixTupleTypeConsError $1 $3 }
                 -- { T.DName (spanFromTo $1 $3) (mkTupleId $2 (spanFromTo $1 $3)) }
-  | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
-  -- | '(' Type Arrow ')' -- TODO: sections
-  -- | '(' Arrow Type ')' -- TODO: sections
+  | '(' Arrow ')'  { T.Arrow (spanFromTo $1 $3) (snd $2) }
+  | '(' Type Arrow ')' { T.App (spanFromTo $1 $4) (uncurry T.Arrow $3) [$2] }
+  | '(' Arrow Type ')' { let {s = spanFromTo $1 $4; a = mkDefaultVar "_a" s} 
+                         in T.Abs s [(a, K.lt s)] (T.App s (uncurry T.Arrow $2) [T.Var s a, $3]) }
   | '(' Polarity ')'     {T.Message (spanFromTo $1 $3) K.Lin (snd $2)}
   | '(' '*' Polarity ')' {T.Message (spanFromTo $1 $4) K.Un (snd $3)}
   -- | '(' Type ';' ')' -- TODO: sections
@@ -315,6 +316,7 @@ Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
   | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
+  | '\\' KindedVars '->' Type   { T.Abs (spanFromTo $1 $4) $2 $4 }
   | TypeApp                     { $1 }
 
 TypeApp :: { T.Type }

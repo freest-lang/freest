@@ -15,3 +15,13 @@ where
   type Void' = Void'
 
 case &{Done: Skip} ; Wait == &{Done: Skip} ; Close : 1C
+
+-- Sections
+
+case (-> Int) == (Int ->) : 1T -> *T
+
+-- Type-level abstractions
+
+case \(x : *T) (y : *T) -> x == \(x : *T) (y : *T) -> y : *T -> *T -> *T
+
+case (\(x : *T) -> \(x : *T) -> x) == (\(x : *T) -> \(y : *T) -> x) : *T -> *T -> *T
