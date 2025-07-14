@@ -17,7 +17,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
-import Validation.Normalisation ( normalise, reduce )
+import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Rename ( first, reachable )
 import Validation.Kinding ( runSynth', KindCtx )
 import Utils ( internalError )
@@ -25,6 +25,7 @@ import Utils ( internalError )
 import Language.Simple.Grammar
 import Language.Simple.Bisimulation ( bisimilar )
 
+import Data.Maybe
 import Control.Monad.State
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -90,7 +91,7 @@ word' set ctx = \case
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
     getNonTerminal $ Map.fromList (zip terminals words)
   -- μ F (non-visited)
-  t@T.AppTName{} -> do
+  t | isJust (tNameRedex t) -> do
     y <- nextNonTerminal
     addVisited t y
     vs <- gets validationState

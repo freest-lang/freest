@@ -169,6 +169,14 @@ where
   type X2 : 1S -> 1S
   type X2 y = y
 
+-- Mutual recursion
+
+case A : *T
+where
+  type A, B : *T
+  type A = Int -> B
+  type B = Char -> A
+
 -- Terminated Recursive Types
 
 case A : 1S
@@ -357,6 +365,43 @@ where
   type X, Y : 1C
   type X = Y
   type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
+
+-- Dual and recursion
+
+case Dual IntStream : 1C
+where
+  type IntStream : 1S
+  type IntStream = !Int ; IntStream
+
+case (Dual TreeC) ; Wait : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close) ; TreeC
+    }
+
+case Dual (TreeC ; Wait) : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close) ; TreeC
+    }
+
+case Dual TreeChannel : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close) ; TreeC
+    }
 
 -- Forall / Dual
 
