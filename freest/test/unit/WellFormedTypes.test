@@ -370,7 +370,7 @@ where
 
 case Dual IntStream : 1C
 where
-  type IntStream : 1S
+  type IntStream : 1C
   type IntStream = !Int ; IntStream
 
 case (Dual TreeC) ; Wait : 1C
