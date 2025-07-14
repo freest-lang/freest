@@ -81,7 +81,10 @@ reduce td = \case
   T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
     -- R-DQuant - Requires the kind of the quantifier.
     -- Implementing the particular case where the quantifier is followed by a lambda
-  T.AppDual s1 (T.AppQuant s2 p aks t) -> T.AppQuant s1 (T.dual p) aks (T.AppDual s2 t)
+  T.AppDual s1 f@(T.AppQuant s2 p aks@[(a,k)] t) ->
+    T.AppQuant s1 (T.dual p) aks (T.AppDual s2 (T.smartApp s2 f [T.Var s2 a]))
+  
+  -- T.AppDual s1 (T.AppQuant s2 p aks t) -> T.AppQuant s1 (T.dual p) aks (T.AppDual s2 t)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
     -- -- R-DDual

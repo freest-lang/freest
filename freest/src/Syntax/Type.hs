@@ -92,7 +92,7 @@ data Type
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
-pattern AppQuant :: Span -> Polarity ->  [(Variable, K.Kind)] -> Type -> Type
+pattern AppQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
 pattern AppQuant s p aks t <- App s (Quant _ p) [Abs _ aks t]
   where AppQuant s p []  t = t
         AppQuant s p aks t = App s (Quant s p) [Abs s aks t]
