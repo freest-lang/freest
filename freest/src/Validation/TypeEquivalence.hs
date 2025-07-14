@@ -113,7 +113,7 @@ word' set ctx = \case
         let a = first vs set t
         let ctx' = Map.insert a k ctx
         let s = getSpan t
-        w <- word set ctx' (T.App s t [T.Var s a])
+        w <- word set ctx' (T.smartApp s t [T.Var s a])
         let label = "λ" ++ show a ++ ":" ++ show k
         getNonTerminal $ Map.singleton label w
       Right _ -> do
@@ -132,7 +132,7 @@ isFullyApplied ctx = \case
   T.AppQuant{} -> True
   T.AppLinChoice{} -> True
   T.SharedChoice{} -> True
-  T.AppDName{} -> True
+  T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
   T.Var _ a -> case ctx Map.!? a of
     Just k -> K.depth k == 0
     Nothing -> internalError $ "word': variable " ++ show a ++ " not in context " ++ show ctx

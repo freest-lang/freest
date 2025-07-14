@@ -347,10 +347,6 @@ where
   type A : *S
   type A = Dual Skip
 
-case Dual (exists (a : 1S). a) : 1S
-
-case forall (b : 1S). (Dual b) : 1S
-
 case Y : 1C
 where
   type Y : 1C
@@ -361,6 +357,21 @@ where
   type X, Y : 1C
   type X = Y
   type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
+
+-- Forall / Dual
+
+case Dual (exists (a : 1S). a) : 1S
+
+case forall (b : 1S). (Dual b) : 1S
+
+case (exists (a : 1S). a) ; !Int: 1S
+
+case exists (a : 1S). (a ; !Int) : 1S
+
+case (forall (b : 1S). b) ; !Int : 1S
+
+case forall (b : 1S). (b ; !Int) : 1S
+
 
 -- Messages of kind other than ML
 
