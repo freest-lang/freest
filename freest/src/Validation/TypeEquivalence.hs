@@ -114,7 +114,7 @@ word' set ctx = \case
         let ctx' = Map.insert a k ctx
         let s = getSpan t
         w <- word set ctx' (T.App s t [T.Var s a])
-        let label = ("λ" ++ show a ++ ":" ++ show k)
+        let label = "λ" ++ show a ++ ":" ++ show k
         getNonTerminal $ Map.singleton label w
       Right _ -> do
         -- t reduces
@@ -133,6 +133,9 @@ isFullyApplied ctx = \case
   T.AppLinChoice{} -> True
   T.SharedChoice{} -> True
   T.AppDName{} -> True
+  T.Var _ a -> case ctx Map.!? a of
+    Just k -> K.depth k == 0
+    Nothing -> internalError $ "word': variable " ++ show a ++ " not in context " ++ show ctx
   T.AppVar _ a ts -> case ctx Map.!? a of
     Just k -> K.depth k == length ts
     Nothing -> internalError $ "word': variable " ++ show a ++ " not in context " ++ show ctx
