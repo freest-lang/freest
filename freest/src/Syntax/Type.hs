@@ -71,6 +71,7 @@ data Type
   | Char Span
   | Arrow Span K.Multiplicity
   | Quant Span Polarity
+  | Void Span K.Kind  -- Only proper kinds are of interest, it seems...
   --   Session types
   | Skip Span
   | End Span Polarity
@@ -81,8 +82,6 @@ data Type
   --   Equations
   | TName Span Identifier
   | DName Span Identifier
-  --   The type equivalent to non-contractive types; only proper kinds are of interest
-  | Void Span K.Kind
   -- Non-constants
   | Var Span Variable
   | Abs Span [(Variable, K.Kind)] Type

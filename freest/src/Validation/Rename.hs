@@ -3,16 +3,13 @@ Module      :  SimpleGrammar.Rename
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Minimal (or canonical) type renaming.
-
 Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
   ( first
   , reachable
-  , absorbing
-  -- , rename
+  , absorbing -- for testing purposes only
   )
 where
 
@@ -82,13 +79,6 @@ absorbing vs = \case
     Just u -> absorbing vs u
     Nothing -> False
 
--- This streategy does not work. It checks whether a type is of kind Channel *under the empty context*. But we ofteen need to check whether open types are absorbing :(
--- absorbing vs t =
---   case runSynth' vs t of
---     Right k | K.isChannel k -> True
---     Left errors -> internalError $ "Validation.absorbing: kinding failed for type " ++ show t ++ ". Errors are:\n" ++ show errors
---     otherwise -> False
-
 betaReduces :: T.Type -> Maybe T.Type
 betaReduces = \case
   -- R-β
@@ -100,23 +90,3 @@ betaReduces = \case
     t' <- betaReduces t
     Just $ T.App s t' us
   _ -> Nothing
-
--- Deprecated
-
--- | Rename a type.
--- rename :: TypeDeclMap -> T.Type -> T.Type
--- rename td = \case
---   t | T.isConstant t -> t
---   t@T.Var{} -> t
---   t@T.TName{} -> t
---   T.App s t us -> T.App s (rename td t) (map (rename td) us)
---   T.Abs s (unzip -> (as, ks)) t -> 
---     T.Abs s (zip bs ks) (rename td (subsAll as (map T.fromVariable bs) t))
---     where 
---       reach = reachable td t
---       bs = foldr (\a bs' -> if a `elem` reach then 
---                               firstVar a (Set.fromList bs' `Set.union` reach) : bs'
---                             else 
---                               nullVar a : bs') 
---                  [] as
-
