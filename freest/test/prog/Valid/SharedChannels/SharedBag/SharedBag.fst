@@ -23,7 +23,7 @@ handleClient state chan =
     &Put chan -> let _ = send (receiveAndWait @Int chan) writeOnState in ()
     
 -- | A shared bag server with a state
-bagServer : State -> Dual SharedBag -> Diverge
+bagServer : State -> Dual SharedBag -> Void@*T
 bagServer state serverChannel =
   let (clientSide, serverSide) = channel @Bag in
   send clientSide serverChannel;
@@ -31,7 +31,7 @@ bagServer state serverChannel =
   bagServer state serverChannel
 
 -- | An empty shared bag
-emptyBagServer : Dual SharedBag -> Diverge
+emptyBagServer : Dual SharedBag -> Void@*T
 emptyBagServer = bagServer (channel @*?Int)
 
 -- Client side, utilities

@@ -181,7 +181,7 @@ instance Show Error where
           "\n  Expecting a value argument "++maybe "" (\t -> "of type `"++show t++"`") t++", but got type argument `"++show u++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
         UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
-          "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
+          "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++"`"++
           "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f -> 
           "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++"`"++

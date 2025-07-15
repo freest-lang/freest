@@ -6,14 +6,14 @@ type Pong = ?Int ; Ping
 
 
 mutual
-  ping : Int -> Ping -> Diverge
+  ping : Int -> Ping -> Void@*T
   ping n c = c |> send n |> pong
 
-  pong : Pong -> Diverge
+  pong : Pong -> Void@*T
   pong c =
     let (n, c) = receive c in
     print @Int n;
     ping (n + 1) c
 
-main : ()
-main = forkWith @Pong @Diverge (ping 0) |> pong
+main : Void@*T
+main = forkWith @Pong @(Void@*T) (ping 0) |> pong

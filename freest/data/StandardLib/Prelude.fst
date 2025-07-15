@@ -323,7 +323,8 @@ accept @a c =
 --   -- send the string to be printed
 --   c |> send "Hello!" |> wait
 -- ```
-forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
+forkWith : forall (a : 1C) (b : *T). (Dual a -> b) -> a -- TODO: more tests passing
+-- forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
 forkWith @a @b f =
   let (x, y) = channel @a in
   fork (\(_ : ()) 1-> f y);
@@ -353,17 +354,9 @@ forkWith @a @b f =
 -- runCounterServer : dualof SharedCounter -> Diverge
 -- runCounterServer = runServer @Counter @Int counterService 0 
 -- ```
-runServer : forall (a : 1C) (b : *T). (b -> Dual a 1-> b) -> b -> *!a -> Diverge
+runServer : forall (a : 1C) (b : *T). (b -> Dual a 1-> b) -> b -> *!a -> Void @*T
 runServer @a @b handle state c =
   runServer @a @b handle (handle state (accept @a c)) c 
-
--- | A mark for functions that do not terminate
-type Diverge : *T
-type Diverge = ()
-
--- A function that diverges
--- diverge : Diverge
--- diverge = diverge
 
 -- | Discards an unrestricted value
 sink : forall (a : *T). a -> ()

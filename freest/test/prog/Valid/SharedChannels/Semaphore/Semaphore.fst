@@ -40,7 +40,7 @@ type Semaphore = *?Sem
 
 -- | A semaphore server with a given number of resources and a list of waiting
 -- clients
-semaphore : Int -> SemQueue -> Dual Semaphore 1-> Diverge
+semaphore : Int -> SemQueue -> Dual Semaphore 1-> Void@*T
 semaphore n queue sem =
   case accept @Sem sem of
     &SemWait s ->
@@ -58,7 +58,7 @@ semaphore n queue sem =
 -- | Launch a semaphore for a given number of resources. Returns a channel end
 -- to be used by clients. This is the only function exported by this "module".
 launchSemServer : Int -> Semaphore
-launchSemServer n = forkWith @Semaphore @Diverge (semaphore n (Empty ()))
+launchSemServer n = forkWith @Semaphore @(Void@*T) (semaphore n (Empty ()))
 
 -- End of module Semaphore
 
