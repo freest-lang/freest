@@ -142,7 +142,7 @@ normalise vs = norm Set.empty
       -- N-Visited
       | reappears = T.Void (getSpan t) (K.image k)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = trace ("reducing " ++ show t) $ norm visited' (reduce (typeDecls vs) t)
+      | otherwise = norm visited' (reduce (typeDecls vs) t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u
