@@ -560,14 +560,12 @@ where
   type A : 1T -> 1S -> 1S
   type A b c = !b
 
--- Type constants
+-- Sections
 
 case A ((->) Int) == Int -> Char : *T
 where
   type A : (*T -> *T) -> *T
   type A a = a Char
-
--- Sections
 
 case (->) Int == (Int ->) : 1T -> *T
 
@@ -587,7 +585,11 @@ case Int == (\(a : *T) -> a) Int : *T
 
 case (\(a : 1T) -> a) Int == Int : 1T
 
-case (\(a : 1T) -> (!) a) == (!) : 1T -> 1S          -- η-equivalence
+case (\(a : 1T) -> !a) == (!) : 1T -> 1S             -- η-equivalence
+
+case (!) == (\(a : 1T) -> !a) : 1T -> 1S
+
+case (\(a : 1T) -> (!) a) == (!) : 1T -> 1S
 
 case (!) == (\(a : 1T) -> (!) a) : 1T -> 1S
 

@@ -63,7 +63,7 @@ subs a u = \case
         in T.Abs s ((b,k):bks') t''
     where  fvu = freeVars u
   -- Applications
-  T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)
+  T.App s f ts -> T.smartApp s (subs a u f) (fmap (subs a u) ts)
   t -> t
 
 -- Polyadic substituion (written @[as -> us] t@). Considers only the shortest

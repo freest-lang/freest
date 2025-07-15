@@ -1240,6 +1240,11 @@ where
 
 -- Sections
 
+case A ((->) Int) : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = a Char
+
 case (Int ->) : 1T -> *T
 
 case (Int *->) : 1T -> *T

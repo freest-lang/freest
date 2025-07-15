@@ -52,7 +52,7 @@ isWhnf = \case
 -- | One step type reduction. Requires 'not (isWnhf t)'.
 reduce :: TypeDeclMap -> T.Type -> T.Type
 reduce td = \case
-  -- 1. Semicolon
+  -- 1. Sequential composition
     -- R-Neut
   T.AppSemi _ T.Skip{} t -> t
     -- R-Assoc (must come before R.SemiL)
@@ -60,15 +60,17 @@ reduce td = \case
     -- R-ChoiceDist (must come before R.SemiL)
   T.AppSemi _ (T.App s t@T.Choice{} us) v -> T.App s t (map (\u -> T.AppSemi (getSpan u) u v) us)
     -- R-QuantDist - Requires the kind of the quantifier. Implementing the
-    -- particular case where the quantifier is followed by a lambda; reading the
-    -- kind from the lambda.
+    -- particular case where the quantifier is followed by a lambda. This should
+    -- be enforced by the parser and kept as an invariant. Reading the kind from
+    -- the lambda.
   T.AppSemi s1 (T.App s2 (T.Quant s3 p) [f]) u ->
-    T.AppQuant s1 p [(a,k)] (T.AppSemi s2 (T.App s3 f [T.Var s3 a]) u)
-    where a = freshVar (mkDefaultVar "α" s1) (freeVars f)
+    T.AppQuant s1 p [(a,k)] (T.AppSemi s2 (T.App s3 f [T.fromVariable a]) u)
+    where a = freshVariable s1 (freeVars f `Set.union` freeVars u)
           k = kindOfLambda f
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
-  -- 2. Duality
+  
+  -- 2. Dual
     -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
     -- R-DEnd
@@ -77,15 +79,16 @@ reduce td = \case
   T.AppDual _ t@T.Void{} -> t
     -- R-DMsg
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
-    -- R-DChoice
+    -- R-DChoice (un and lin)
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
   T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
     -- R-DQuant - Requires the kind of the quantifier. Implementing the
-    -- particular case where the quantifier is followed by a lambda; reading the
-    -- kind from the lambda.
+    -- particular case where the quantifier is followed by a lambda. This should
+    -- be enforced by the parser and kept as an invariant. Reading the kind from
+    -- the lambda.
   T.AppDual s1 (T.App s2 (T.Quant s3 p) [f]) ->
-    T.AppQuant s1 (T.dual p) [(a,k)] (T.AppDual s2 (T.App s3 f [T.Var s3 a]))
-    where a = freshVar (mkDefaultVar "α" s1) (freeVars f)
+    T.AppQuant s1 (T.dual p) [(a,k)] (T.AppDual s2 (T.App s3 f [T.fromVariable a]))
+    where a = freshVariable s1 (freeVars f)
           k = kindOfLambda f
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
@@ -108,7 +111,10 @@ reduce td = \case
 -- | requires: t is an abstraction with a single binder
 kindOfLambda :: T.Type -> K.Kind
 kindOfLambda (T.Abs _ [(_,k)] _) = k
-kindOfLambda t = internalError $ "Validation.Normalisation.kindOfLambda " ++ show t
+kindOfLambda t = internalError $ "Validation.Normalisation.kindOfLambda: " ++ show t
+
+freshVariable :: Span -> Set.Set Variable -> Variable -- TODO:review
+freshVariable s fvs = freshVar (mkDefaultVar "β" s) fvs
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β
@@ -136,7 +142,7 @@ normalise vs = norm Set.empty
       -- N-Visited
       | reappears = T.Void (getSpan t) (K.image k)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = norm visited' (reduce (typeDecls vs) t)
+      | otherwise = trace ("reducing " ++ show t) $ norm visited' (reduce (typeDecls vs) t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u

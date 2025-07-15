@@ -68,7 +68,11 @@ word' set ctx = \case
     vs <- gets validationState
     let set' = set `Set.union` reachable vs u
     liftM2 (++) (word set' ctx t) (word set ctx u)
-  -- Dual (αT1···Tm)
+  -- Dual α
+  T.AppDual s T.Var{} -> do
+    let label = show $ T.Dual s
+    getNonTerminal $ Map.singleton (label ++ "_2") []
+  -- Dual (α T1···Tm) , m >= 1
   T.AppDual s t@(T.App _ (T.Var{}) _) -> do
     w <- word set ctx t
     let label = show $ T.Dual s
@@ -80,7 +84,7 @@ word' set ctx = \case
   -- ι
   t | T.isConstant t -> getNonTerminal $ Map.singleton (show t) []
   -- ι T1···Tm with ι being ->, ∀, ∃, variants and choices
-  t@(T.App s u vs) | T.isConstant u && isFullyApplied ctx t -> do
+  t@(T.App s u vs) | isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
     let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
     getNonTerminal $ Map.fromList (zip terminals words)
