@@ -57,6 +57,11 @@ word' set ctx = \case
   t@T.End{} -> getNonTerminal $ Map.singleton (show t) [bottom]
   -- Void
   t@T.Void{} -> getNonTerminal $ Map.singleton (show t) [bottom]
+  -- Int, Float, Char, Variant types
+  t@T.Int{} -> getNonTerminal $ Map.singleton (show t) []
+  t@T.Float{} -> getNonTerminal $ Map.singleton (show t) []
+  t@T.Char{} -> getNonTerminal $ Map.singleton (show t) []
+  t@T.DName{} -> getNonTerminal $ Map.singleton (show t) []
   -- #T
   T.AppMessage _ m p u -> do
     w <- word set ctx u
@@ -72,7 +77,7 @@ word' set ctx = \case
   T.AppDual s T.Var{} -> do
     let label = show $ T.Dual s
     getNonTerminal $ Map.singleton (label ++ "_2") []
-  -- Dual (α T1···Tm) , m >= 1
+  -- Dual (α T1 ··· Tm) , m >= 1
   T.AppDual s t@(T.App _ (T.Var{}) _) -> do
     w <- word set ctx t
     let label = show $ T.Dual s
@@ -82,13 +87,13 @@ word' set ctx = \case
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonTerminal $ Map.singleton (show t) [bottom]
   -- ι
-  t | T.isConstant t -> getNonTerminal $ Map.singleton (show t) []
-  -- ι T1···Tm with ι being ->, ∀, ∃, variants and choices
+  -- t | T.isConstant t -> getNonTerminal $ Map.singleton (show t) []
+  -- ι T1···Tm with m >= 1 and ι being ->, ∀, ∃, variants and choices
   t@(T.App s u vs) | isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
     let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
     getNonTerminal $ Map.fromList (zip terminals words)
-  -- α T1···Tm with ∆ ⊢ α: κ1 => ··· => κm => ∗
+  -- α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
     ws <- mapM (word set ctx) us
     let words = [] : ws

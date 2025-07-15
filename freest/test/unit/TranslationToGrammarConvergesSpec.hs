@@ -27,6 +27,7 @@ spec = mkTypeSpec
 
 translateToGrammar :: ValidationState -> T.Type -> Bool
 translateToGrammar vs t =
-  trace (" " ++ show (length productions) ++ " productions") True
-  -- trace ("\n" ++ show (fromType vs [t])) True
-  where  Grammar _ productions = fromType vs [t]
+  -- trace (" " ++ show (length productions) ++ " productions") True
+  trace ("\n" ++ show grammar) True
+  where grammar = fromType vs [t]
+        Grammar _ productions = grammar

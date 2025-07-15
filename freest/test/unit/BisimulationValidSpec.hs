@@ -21,5 +21,7 @@ spec = mkEquivalenceSpec
   \(t, u, k, m) -> case runCheck m t k >> runCheck m u k of
     Left es -> expectationFailure (unlines $ map show es)
     _       ->
-      trace ("\n" ++ show t ++ " vs. " ++ show u)
-      bisimilar (fromType (buildValidationState m) [t, u])  `shouldBe` True
+      trace ("\n" ++ show grammar)
+      -- trace ("\n" ++ show t ++ " vs. " ++ show u)
+      bisimilar grammar  `shouldBe` True
+      where grammar = fromType (buildValidationState m) [t, u]

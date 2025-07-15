@@ -1240,10 +1240,9 @@ where
 
 -- Sections
 
-case A ((->) Int) : *T
-where
-  type A : (*T -> *T) -> *T
-  type A a = a Char
+case (->) : 1T -> 1T -> *T
+
+case (1->) : 1T -> 1T -> 1T
 
 case (Int ->) : 1T -> *T
 
@@ -1270,6 +1269,13 @@ case (-> Int) Int : *T
 case (*-> Int) Int : *T
 
 case (1-> Int) Int : 1T
+
+case A ((->) Int) : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = a Char
+
+case (!) : 1T -> 1S
 
 -- Type-level abstractions
 
