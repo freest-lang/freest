@@ -44,7 +44,7 @@ isWhnf = \case
   -- W-Seq1 _ semi-applied semicolon
   T.App _ T.Semi{} [_] -> True
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppQuant t) -> True
   -- W-Dual
   T.AppDual _ T.Var{} -> True
   _ -> False
@@ -59,14 +59,15 @@ reduce td = \case
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
     -- R-ChoiceDist (must come before R.SemiL)
   T.AppSemi _ (T.App s t@T.Choice{} us) v -> T.App s t (map (\u -> T.AppSemi (getSpan u) u v) us)
-    -- R-QuantDist - Requires the kind of the quantifier.
-    -- Implementing the particular case where the quantifier is followed by a lambda
-  T.AppSemi s1 (T.AppQuant s2 p [(a,k)] t) u -> T.AppQuant s1 p [(b,k)] (T.AppSemi s2 (subs a bt t) u)
-    where b = freshVar a (freeVars t `Set.union` freeVars u)
-          bt = T.Var (getSpan b) b
+    -- R-QuantDist - Requires the kind of the quantifier. Implementing the
+    -- particular case where the quantifier is followed by a lambda; reading the
+    -- kind from the lambda.
+  T.AppSemi s1 (T.App s2 (T.Quant s3 p) [f]) u ->
+    T.AppQuant s1 p [(a,k)] (T.AppSemi s2 (T.App s3 f [T.Var s3 a]) u)
+    where a = freshVar (mkDefaultVar "α" s1) (freeVars f)
+          k = kindOfLambda f
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
-  
   -- 2. Duality
     -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
@@ -79,13 +80,13 @@ reduce td = \case
     -- R-DChoice
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
   T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
-    -- R-DQuant - Requires the kind of the quantifier.
-    -- Implementing the particular case where the quantifier is followed by a lambda
-  T.AppDual s1 f@(T.AppQuant s2 p [(a,k)] t) ->
-    T.AppQuant s1 (T.dual p) [(b,k)] (T.AppDual s2 (T.smartApp s2 f [T.Var s2 b]))
-    where b = freshVar a (freeVars f)
-  
-  -- T.AppDual s1 (T.AppQuant s2 p aks t) -> T.AppQuant s1 (T.dual p) aks (T.AppDual s2 t)
+    -- R-DQuant - Requires the kind of the quantifier. Implementing the
+    -- particular case where the quantifier is followed by a lambda; reading the
+    -- kind from the lambda.
+  T.AppDual s1 (T.App s2 (T.Quant s3 p) [f]) ->
+    T.AppQuant s1 (T.dual p) [(a,k)] (T.AppDual s2 (T.App s3 f [T.Var s3 a]))
+    where a = freshVar (mkDefaultVar "α" s1) (freeVars f)
+          k = kindOfLambda f
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
     -- -- R-DDual
@@ -103,6 +104,11 @@ reduce td = \case
     -- R-μ
   t@(T.TName _ name) -> unfold td name
   t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
+
+-- | requires: t is an abstraction with a single binder
+kindOfLambda :: T.Type -> K.Kind
+kindOfLambda (T.Abs _ [(_,k)] _) = k
+kindOfLambda t = internalError $ "Validation.Normalisation.kindOfLambda " ++ show t
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β

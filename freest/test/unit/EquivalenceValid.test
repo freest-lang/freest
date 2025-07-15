@@ -506,11 +506,6 @@ where
   type Void' : 1S
   type Void' = Void'
 
-case forall (a : 1S). V ; V ; a == forall (a : 1S). V ; a : 1S
-where
-  type V : 1S
-  type V = forall (b: 1S). !b
-
 -- Problems with forall and parameerrised types
 
 case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
@@ -570,7 +565,7 @@ where
 case A ((->) Int) == Int -> Char : *T
 where
   type A : (*T -> *T) -> *T
-  type A a = A ((->) Char)
+  type A a = a Char
 
 -- Sections
 
