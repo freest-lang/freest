@@ -20,7 +20,7 @@ import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Rename ( first, reachable )
 import Validation.Kinding ( runSynth', KindCtx )
-import Validation.Substitution ( freeVars, subsAll )
+import Validation.Substitution ( freeVars, subs )
 import Utils ( internalError )
 
 import Language.Simple.Grammar
@@ -119,12 +119,12 @@ word' set ctx = \case
     case runSynth' vs ctx t of
       Right (K.Arrow _ k _) -> do
         -- F : k => k'
-        let a = first vs set t
-        let ctx' = Map.insert a k ctx
         let s = getSpan t
-        let unreach = Set.toList (freeVars t `Set.difference` reachable vs t)
-        let voids = map (T.Void s . kindOf ctx) unreach
-        let t' = subsAll unreach voids t
+        let a = first vs set t
+        let t' = case ctx Map.!? a of
+              Just k -> subs a (T.Void s k) t
+              Nothing -> t
+        let ctx' = Map.insert a k ctx
         w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
         let label = "λ" ++ show a ++ ":" ++ show k
         getNonTerminal $ Map.singleton label w
