@@ -98,16 +98,16 @@ word' set ctx = \case
     let words = [] : ws
     let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
     getNonTerminal $ Map.fromList (zip terminals words)
-  -- μ F (non-visited)
+  -- μ-redex
   t | isJust (tNameRedex t) -> do
     y <- nextNonTerminal
     addVisited t y
     vs <- gets validationState
     let u = normalise vs t
     case u of
-      -- μ F normalises to Skip
+      -- t normalises to Skip
       T.Skip{} -> pure []
-      -- μ F normalises to a type other than Skip
+      -- t normalises to a type other than Skip
       _ -> do 
         ~(z:δ) <- word set ctx u
         γ <- getTransitions z
