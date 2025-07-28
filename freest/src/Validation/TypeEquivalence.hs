@@ -126,7 +126,7 @@ word' set ctx = \case
               Nothing -> t
         let ctx' = Map.insert a k ctx
         w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
-        let label = "λ" ++ show a ++ ":" ++ show k
+        let label = "λ" ++ show a -- ++ ":" ++ show k
         getNonTerminal $ Map.singleton label w
       Right _ -> do
         -- t reduces
