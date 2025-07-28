@@ -132,7 +132,7 @@ where
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
 
--- Dual
+-- Duality
 
 case Dual (Dual !Int) == !Int : 1S
 
@@ -194,6 +194,11 @@ case Dual (FiniteStream ; !Int ; Wait) == Dual FiniteStream ; ?Int ; Close : 1C
 where
   type FiniteStream : 1S
   type FiniteStream = &{Done: Skip, More: ?Int ; FiniteStream}
+
+-- The below types are not (yet?) syntactically valid
+
+-- case exists (Dual Skip) == Dual (forall (Dual Skip)) : 1S
+
 
 -- Unrestricted sessions
 
@@ -506,7 +511,7 @@ where
   type Void' : 1S
   type Void' = Void'
 
--- Problems with forall and parameerrised types
+-- Forall and parameterised types
 
 case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
   -- == (forall (a b : *T). forall (c : *T). (a -> c) -> (b -> c) -> c) Int Bool
