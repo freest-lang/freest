@@ -7,7 +7,8 @@ Errors. A work in progress.
 -}
 {-# LANGUAGE LambdaCase #-}
 module UI.Error 
-  (Error(..))
+  (Error(..)
+  ,errorToMessage)
 where 
 
 import Parser.Token
@@ -113,6 +114,37 @@ instance Located Error where
     SigLacksDef s _ -> s
   -- | There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
+
+
+-- span = filePaht POS POS
+-- POS = int int
+getFromSpan :: String -> Span -> String
+getFromSpan src (Span _ (sl, sc) (_, ec)) =
+  take (ec - sc) . drop (sc - 1) $ lines src !! (sl - 1)
+
+getLineFromSPan :: String -> Span -> String
+getLineFromSPan src (Span _ (sl, _) (_, _)) =
+  lines src !! (sl - 1)
+
+
+
+
+errorToMessage :: String ->Error -> String
+errorToMessage src = \case
+  VarOutOfScope s x -> "Variable `" ++ getFromSpan src s ++ " Span:" ++ show  s ++"` is not in scope. v2"
+  TypeMismatch s t u ep ->
+          "\n Type mismatch in " ++ getFromSpan src s ++ 
+          "\n Expected type: `"++show t++
+          "`\n Actual type: `"++show u++
+          "` in " ++ getLineFromSPan src s
+  
+
+
+
+
+
+
+
 
 -- | Convert an error to a readable 'String', which should include its location
 -- in the source code in a way that is parseable and by most common IDEs.

@@ -53,7 +53,7 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
           -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
           -- Validate the module.
           runValidate m & \case 
-            Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+            Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> mapM_ (putStrLn . errorToMessage programSrc) es >> exitFailure     
             Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
 
 -- | The path to the source code of the Prelude.
