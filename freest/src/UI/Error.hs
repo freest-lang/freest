@@ -6,10 +6,10 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 Errors. A work in progress.
 -}
 {-# LANGUAGE LambdaCase #-}
-module UI.Error 
+module UI.Error
   (Error(..)
   ,errorToMessage)
-where 
+where
 
 import Parser.Token
 import Syntax.Base
@@ -22,8 +22,8 @@ import Data.List ( intercalate )
 import Data.Map.Strict qualified as Map
 
 -- | The errors that can be found in a FreeST program.
-data Error 
-  = LexicalError Span Char 
+data Error
+  = LexicalError Span Char
   | ParseError Span (Token, [String])
   | VarOutOfScope Span Variable
   | TypeVarOutOfScope Span Variable
@@ -57,7 +57,7 @@ data Error
   | TypeMismatchSelect Span T.Type Identifier E.Exp
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
-  | TypeCtxMismatch Span E.Exp (Map.Map (Either Variable Identifier) T.Type) 
+  | TypeCtxMismatch Span E.Exp (Map.Map (Either Variable Identifier) T.Type)
                                (Map.Map (Either Variable Identifier) T.Type)
   | ConstructorArgumentMismatch Span Identifier Int Int
   | IllegalChoice Span Identifier T.Type
@@ -70,7 +70,7 @@ data Error
 instance Located Error where
   -- | Returns the span of an 'Error', i.e., where the error occurs in the
   -- source code.
-  getSpan = \case 
+  getSpan = \case
     LexicalError s _ -> s
     ParseError s _ -> s
     VarOutOfScope s _ -> s
@@ -126,18 +126,80 @@ getLineFromSPan :: String -> Span -> String
 getLineFromSPan src (Span _ (sl, _) (_, _)) =
   lines src !! (sl - 1)
 
+snippetWithCaret :: String -> Span -> String
+snippetWithCaret src sp@(Span _ (sl, sc) (_, ec)) =
+  let line   = getLineFromSPan src sp
+      start  = max 0 (sc - 1)
+      end    = max start (ec - 1)
+      len    = max 1 (end - start)
+      prefix = "Line " ++ show sl ++ ": "
+      fullLine = prefix ++ line
+      caretLine = replicate (length prefix + start) ' ' ++ replicate len '^'
+  in fullLine ++ "\n" ++ caretLine
 
+shortHeader :: Span -> String -> String
+shortHeader span msg = show (getSpan span) ++ ": error: \n" ++ msg
 
+makeError :: String -> Span -> String -> String -> String -> String
+makeError src span msg explanation hint =
+  unlines
+    [ shortHeader span msg
+    , snippetWithCaret src span
+    , explanation
+    , hint
+    ]
 
-errorToMessage :: String ->Error -> String
+errorToMessage :: String -> Error -> String
 errorToMessage src = \case
-  VarOutOfScope s x -> "Variable `" ++ getFromSpan src s ++ " Span:" ++ show  s ++"` is not in scope. v2"
-  TypeMismatch s t u ep ->
-          "\n Type mismatch in " ++ getFromSpan src s ++ 
-          "\n Expected type: `"++show t++
-          "`\n Actual type: `"++show u++
-          "` in " ++ getLineFromSPan src s
-  
+  TypeMismatch span t u _ ->
+    makeError src span
+      ("Type mismatch: expected `" ++ show t ++ "`, but found `" ++ show u ++ "`")
+      "Explanation: The expression's type does not match the expected type."
+      ("Hint: Ensure the expression has type `" ++ show t ++ "`.")
+
+  LexicalError span c ->
+    let var = getFromSpan src span in
+    makeError src span
+      ("Lexical error: unexpected character " ++ var)
+      "Explanation: This character does not form any valid token."
+      ("Hint: Remove or replace " ++ var ++ " with a valid token.") -- cant show ``
+
+  ParseError span (tok, expected) ->
+    let expectedMsg = case expected of
+                        [] -> ""
+                        xs -> " Expected one of: " ++ intercalate ", " (map (\t -> "`" ++ t ++ "`") xs) ++ "."
+    in makeError src span
+         ("Parse error: unexpected token " ++ show tok)
+         ("Explanation: The parser found " ++ show tok ++ " here, which does not fit the grammar at this position." ++ expectedMsg)
+         "Hint: Check for missing or misplaced symbols."
+
+  VarOutOfScope span _ ->
+    let var = getFromSpan src span
+    in makeError src span
+         ("Variable `" ++ var ++ "` not in scope")
+         "Explanation: This variable is used here but no binding for it is visible in the current scope."
+         ("Hint: Did you mean one of: <suggestion list>? Or define `" ++ var ++ "` before this use.")
+
+  TypeVarOutOfScope span _ ->
+    let var = getFromSpan src span
+    in makeError src span
+         ("Type variable `" ++ var ++ "` not in scope")
+         "Explanation: This type variable is used here but has not been declared as a parameter in this type or function."
+         ("Hint: Add `" ++ var ++ "` as a type parameter in the declaration, or replace it with a concrete type.")
+
+  ConsOutOfScope s _ -> -- idk
+    let con = getFromSpan src s in
+     makeError src s
+      ("Constructor `" ++ con ++ "` not in scope")
+      "Explanation: Data constructor is used but not visible in the current scope."
+      ("Hint: Ensure `" ++ con ++ "` is defined in the current module or imported from another module.")
+
+
+
+
+
+
+
 
 
 
@@ -151,29 +213,29 @@ errorToMessage src = \case
 -- (Needs some work.)
 instance Show Error where
   show e = show (getSpan e) ++ ": error:"++showError e
-    where 
+    where
       showError :: Error -> String
       showError = \case
         LexicalError _ inp ->
           "\n  Lexical error on input `"++show inp++"`"
-        ParseError _ (_,ss) -> 
+        ParseError _ (_,ss) ->
           "\n  Parse error, expected: `"++intercalate "`, `" ss++"`"
-        VarOutOfScope _ x -> 
+        VarOutOfScope _ x ->
           "\n  Not in scope: variable `"++show x++"`"
-        TypeVarOutOfScope _ x -> 
+        TypeVarOutOfScope _ x ->
           "\n  Not in scope: type variable `"++show x++"`"
-        ConsOutOfScope _ i -> 
+        ConsOutOfScope _ i ->
           "\n  Not in scope: constructor `"++show i++"`"
         TypeOutOfScope _ i ->
           "\n Not in scope: type constructor `"++show i++"`"
-        ConflictingDefs vos -> 
+        ConflictingDefs vos ->
           "\n  Conflicting definitions in patterns:"
-          ++Map.foldrWithKey (\case 
-              ExpLevel x -> \ss msg -> 
+          ++Map.foldrWithKey (\case
+              ExpLevel x -> \ss msg ->
                   "\n    Variable `"++x++"` bound at:"
                   ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
                   ++msg
-              TypeLevel a -> \ss msg -> 
+              TypeLevel a -> \ss msg ->
                   "\n    Type variable `"++a++"` bound at:"
                   ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
                   ++msg)
@@ -188,9 +250,9 @@ instance Show Error where
           "\n  Multiple declarations of type `"++show i++"`"
         MultipleKindSigs _ i ->
           "\n  Multiple kind signatures for type `"++show i++"`"
-        LacksKindSig _ i -> 
+        LacksKindSig _ i ->
           "\n Type `"++show i++"` lacks an accompanying kind signature."
-        LacksTypeSig _ x -> 
+        LacksTypeSig _ x ->
           "\n Function `"++show x++"` lacks an accompanying type signature."
         SigLacksDef _ x ->
           "\n Signature for variable `"++show x++"` lacks an accompanying definition."
@@ -204,29 +266,29 @@ instance Show Error where
         LinVarsCreatedInUnFun _ xs e ->
           "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
           "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
-        ExposeError _ s t -> 
+        ExposeError _ s t ->
           "\n  Expecting "++s++", but got type `"++show t++"`"
-        UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
+        UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f ->
           "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++"`"++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
-        UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
+        UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f ->
           "\n  Expecting a value argument "++maybe "" (\t -> "of type `"++show t++"`") t++", but got type argument `"++show u++
           "\n  In the "++ordinal n++" argument of function `"++show f++"`."
-        UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f -> 
+        UnexpectedParam _ (TypeLevel k) (ExpLevel p) n f ->
           "\n  Expecting a type parameter of kind `"++show k++"`, but got pattern `"++show p++
           "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
-        UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f -> 
+        UnexpectedParam _ (ExpLevel  t) (TypeLevel a) n f ->
           "\n  Expecting a pattern of type `"++show t++"`, but got type parameter `"++show a++"`"++
           "\n  In the "++ordinal n++" parameter of function `"++show f++"`."
         NonLinPat s p t ->
           "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
         KindMismatch s k1 t k2 ->
           "\n  Expected kind `"++show k1++"` for type `"++show t++"`, but got kind `"++show k2++"`."
-        ProperKindMismatch s t k -> 
+        ProperKindMismatch s t k ->
           "\n  Expected a proper kind for type `"++show t++"`, but got kind `"++show k++"`."
-        SessionTypeMismatch s t k -> 
+        SessionTypeMismatch s t k ->
           "\n Expected a session type, but found type `"++show t++"` of kind `"++show k++"`."
-        ChannelTypeMismatch s t k -> 
+        ChannelTypeMismatch s t k ->
           "\n Expected a channel type, but found type `"++show t++"` of kind `"++show k++"`."
         ArrowMultiplicityMismatch s e n m t m' ->
           "\n Expected a"++showMult m++" function of type `"++show t++"`, but got "++showMult m'++" function after the "++ordinal n++" parameter of `"++ show e++"`."
@@ -264,17 +326,17 @@ instance Show Error where
                                 ss -> intercalate "," ss
         ConstructorArgumentMismatch _ i n m ->
           "\n  The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
-        LinVarAtEndOfScope _ xi t -> 
+        LinVarAtEndOfScope _ xi t ->
           "\n  "++showVarCons xi++", of linear type `"++show t++"`, was not consumed."
-          where showVarCons = \case Left x  -> "Variable `"    ++show x++"`" 
+          where showVarCons = \case Left x  -> "Variable `"    ++show x++"`"
                                     Right i -> "Constructor `"++show i++"`"
         IllegalChoice s i t ->
           "\n  Choice `"++show i++"` is not allowed by type `"++show t++"`"
-        PartiallyAppliedSelect s i -> 
+        PartiallyAppliedSelect s i ->
           "\n  Cannot synthesize type of partially applied `select` expression."
         UnsupportedError _ m ->
           "\n  " ++ m
 
-      showExpPat = \case 
+      showExpPat = \case
         Left  e -> "expression `"++show e++"`"
         Right p -> "pattern `"++show p++"`"
