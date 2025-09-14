@@ -11,15 +11,15 @@ module UI.Error
   ,errorToMessage)
 where
 
-import Parser.Token
-import Syntax.Base
-import Syntax.Expression qualified as E
-import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
-import Utils
+import           Parser.Token
+import           Syntax.Base
+import qualified Syntax.Expression as E
+import qualified Syntax.Kind       as K
+import qualified Syntax.Type       as T
+import           Utils
 
-import Data.List ( intercalate )
-import Data.Map.Strict qualified as Map
+import           Data.List         (intercalate)
+import qualified Data.Map.Strict   as Map
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -30,7 +30,7 @@ data Error
   | ConsOutOfScope Span Identifier
   | TypeOutOfScope Span Identifier
   | ConflictingDefs (Map.Map (Level String String) [Span])
-  | MultipleVarDecls Span Variable
+  | MultipleVarDecls Span [Variable]
   | MultipleFieldDecls Span Identifier
   | MultipleConsDecls Span Identifier
   | MultipleTypeDecls Span Identifier
@@ -78,7 +78,7 @@ instance Located Error where
     ConsOutOfScope s _ -> s
     TypeOutOfScope s _ -> s
     ConflictingDefs xss -> foldr1 spanFromTo $ concat $ Map.elems xss
-    MultipleVarDecls s _ -> s
+    MultipleVarDecls s _ ->  s
     MultipleFieldDecls s _ -> s
     MultipleConsDecls s _ -> s
     MultipleTypeDecls s _ -> s
@@ -127,42 +127,62 @@ getLineFromSPan src (Span _ (sl, _) (_, _)) =
   lines src !! (sl - 1)
 
 snippetWithCaret :: String -> Span -> String
-snippetWithCaret src sp@(Span _ (sl, sc) (_, ec)) =
-  let line   = getLineFromSPan src sp
-      start  = max 0 (sc - 1)
-      end    = max start (ec - 1)
-      len    = max 1 (end - start)
-      prefix = "Line " ++ show sl ++ ": "
-      fullLine = prefix ++ line
-      caretLine = replicate (length prefix + start) ' ' ++ replicate len '^'
-  in fullLine ++ "\n" ++ caretLine
+snippetWithCaret src (Span _ (sl, sc) (_, ec)) =
+  let line       = lines src !! (sl - 1)
+      start      = max 0 (sc - 1)
+      end        = max start (ec - 1)
+      len        = max 1 (end - start)
+      caretLine  = replicate start ' ' ++ replicate len '^'
+  in "  |\n"
+     ++ show sl ++ " | " ++ line ++ "\n"
+     ++ "  | " ++ caretLine
+
+
+
 
 shortHeader :: Span -> String -> String
 shortHeader span msg = show (getSpan span) ++ ": error: \n" ++ msg
 
-makeError :: String -> Span -> String -> String -> String -> String
-makeError src span msg explanation hint =
+makeError :: String -> Span -> String -> String
+makeError src span msg   =
   unlines
     [ shortHeader span msg
     , snippetWithCaret src span
-    , explanation
-    , hint
-    ]
+  ]
+
+
+
+prettyKind :: K.Kind -> String
+prettyKind = \case
+  K.Proper _ m pk -> prettyMulti m ++ " " ++ prettyPre pk
+  K.Arrow _ k1 k2 -> prettyKind k1 ++ " -> " ++ prettyKind k2
+  K.Var _ v -> "kind variable " ++ show v
+  where
+    prettyMulti = \case
+      K.Lin -> "linear"
+      K.Un -> "unrestricted"
+      K.VarM v -> "multiplicity variable " ++ show v
+    prettyPre = \case
+      K.Top -> "top"
+      K.Session -> "session"
+      K.Channel -> "channel"
+      K.VarPK v -> "prekind variable " ++ show v
 
 errorToMessage :: String -> Error -> String
 errorToMessage src = \case
-  TypeMismatch span t u _ ->
-    makeError src span
-      ("Type mismatch: expected `" ++ show t ++ "`, but found `" ++ show u ++ "`")
-      "Explanation: The expression's type does not match the expected type."
-      ("Hint: Ensure the expression has type `" ++ show t ++ "`.")
+
+
+
+
+
+
+
+
 
   LexicalError span c ->
-    let var = getFromSpan src span in
     makeError src span
       ("Lexical error: unexpected character " ++ var)
-      "Explanation: This character does not form any valid token."
-      ("Hint: Remove or replace " ++ var ++ " with a valid token.") -- cant show ``
+      where var = getFromSpan src span
 
   ParseError span (tok, expected) ->
     let expectedMsg = case expected of
@@ -170,29 +190,157 @@ errorToMessage src = \case
                         xs -> " Expected one of: " ++ intercalate ", " (map (\t -> "`" ++ t ++ "`") xs) ++ "."
     in makeError src span
          ("Parse error: unexpected token " ++ show tok)
-         ("Explanation: The parser found " ++ show tok ++ " here, which does not fit the grammar at this position." ++ expectedMsg)
-         "Hint: Check for missing or misplaced symbols."
 
   VarOutOfScope span _ ->
-    let var = getFromSpan src span
-    in makeError src span
-         ("Variable `" ++ var ++ "` not in scope")
-         "Explanation: This variable is used here but no binding for it is visible in the current scope."
-         ("Hint: Did you mean one of: <suggestion list>? Or define `" ++ var ++ "` before this use.")
+    makeError src span
+         ("VarOutOfScope ::: Variable out of scope: " ++ var)
+         where var = getFromSpan src span
 
-  TypeVarOutOfScope span _ ->
-    let var = getFromSpan src span
-    in makeError src span
-         ("Type variable `" ++ var ++ "` not in scope")
-         "Explanation: This type variable is used here but has not been declared as a parameter in this type or function."
-         ("Hint: Add `" ++ var ++ "` as a type parameter in the declaration, or replace it with a concrete type.")
+  TypeVarOutOfScope span _ -> -- ver depois
+     makeError src span
+         (" TypeVarOutOfScope ::: Type variable out of scope: " ++ var)
+         where var = getFromSpan src span
 
-  ConsOutOfScope s _ -> -- idk
-    let con = getFromSpan src s in
+  ConsOutOfScope s _ ->
      makeError src s
-      ("Constructor `" ++ con ++ "` not in scope")
-      "Explanation: Data constructor is used but not visible in the current scope."
-      ("Hint: Ensure `" ++ con ++ "` is defined in the current module or imported from another module.")
+      ("ConsOutOfScope ::: Constructor out of scope: " ++ con) 
+      where con = getFromSpan src s
+
+  TypeOutOfScope span _ ->
+    makeError src span
+         ("TypeOutOfScope ::: Type out of scope: " ++ ty)
+      where ty = getFromSpan src span
+  -------------------------------------------------------- conflicting defs todo
+
+  MultipleVarDecls span vars ->
+      makeError src span
+         ("Multiple declarations of variable `" ++ var ++ "`"++ show vars)
+         where var = getFromSpan src  span
+
+  MultipleFieldDecls span _ ->
+     makeError src span
+         ("Multiple declarations of field `" ++ field ++ "`")
+         where field = getFromSpan src span
+
+  MultipleConsDecls span _ ->
+     makeError src span
+         ("Multiple declarations of constructor `" ++ con ++ "`")
+         where con = getFromSpan src span
+
+  MultipleTypeDecls span _ ->
+     makeError src span
+         ("Multiple declarations of type `" ++ ty ++ "`")
+         where ty = getFromSpan src span
+
+  MultipleKindSigs span _ ->
+
+     makeError src span
+         ("Multiple kind signatures for type `" ++ ty ++ "`") 
+         where ty = getFromSpan src span
+
+
+  LacksKindSig span ident ->
+     makeError src span
+         ("Type `" ++ ty ++ "` lacks a kind signature") 
+         where ty = getFromSpan src span
+
+
+  LacksTypeSig span _ ->
+     makeError src span
+         ("Function `" ++ var ++ "` lacks an accompanying type signature")
+         where var = getFromSpan src span
+
+
+  SigLacksDef span v ->
+    makeError src span
+      ("Variable `" ++ var ++ "` has a type signature but no definition")
+      where var = getFromSpan src span
+
+
+  GivenTooManyArgs span _ _ expected actual -> 
+    makeError src span
+      ("The funcion" ++ var ++ " is applied to " ++ show actual ++ " arguments, but its type has only " ++ show expected)
+      where var = getFromSpan src span
+
+
+  ExpectsTooManyArgs span _ _ expected actual ->
+    makeError src span
+     "Funcion defenicion expects more arguments than it's type"++
+     ("The equation for" ++ var ++ " has " ++ show expected ++ "arguments, but its type has" ++ show actual ++ ".")
+     where var = getFromSpan src span
+
+
+
+
+  GivenTooManyArgsK span ty expected actual ->
+     makeError src span
+       ("Type `" ++ typeName ++ "` expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
+       where
+        typeName = getFromSpan src span
+        
+
+
+  ExpectsTooManyArgsK span _ expectedKind -> -- mudar , nao falar nos kinds
+    makeError src span
+       ("Type `" ++ typeName ++ "` expects fewer type arguments; should have kind `" ++ prettyKind expectedKind ++ "`")
+         where
+          typeName        = getFromSpan src span
+
+  KindMismatch span expectedKind ty gotKind ->
+     makeError src span
+       ("Kind mismatch: expected kind `" ++ prettyKind expectedKind ++ "` for type `" ++ typeName ++ "`, but got kind `" ++ prettyKind gotKind ++ "`")
+       where
+        typeName      = getFromSpan src span
+
+
+  ProperKindMismatch span ty gotKind ->
+     makeError src span
+       ("Expected a proper kind for type `" ++ typeName ++ "`, but got kind `" ++ show gotKind ++ "`")
+       where
+        typeName      = getFromSpan src span
+
+
+  SessionTypeMismatch span ty kind ->
+    makeError src span
+      ("Session type mismatch: expected a session type, but found `" ++ show ty ++ "` of kind `" ++ prettyKind kind ++ "`")
+
+
+  TypeMismatch span expected actual _ ->
+      makeError src span
+        ("Couldn't match expected type `" ++ show expected ++ "` with actual type `" ++ show actual ++ "`")
+
+  IllegalChoice span (Identifier s str) ty ->
+    makeError src s
+      ("Illegal choice: Selection `" ++ str ++ "` not found in type `" ++ show ty ++ "`")
+
+
+  LinVarsConsumedInUnFun span xs e ->
+    makeError src span
+      ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in body of unrestricted function `" ++ show e ++ "`")
+
+  LinVarAtEndOfScope span xi _ ->
+    makeError src span
+      ("Linear variable " ++ var ++ " was not consumed")
+      where var = getFromSpan src span
+
+
+  InvalidType span t ->
+    makeError src span
+      ("Invalid type: `" ++ show t ++ "`")
+
+  PartiallyAppliedSelect span ident ->
+    makeError src span
+      ("Cannot infer type for partially applied select of label `" ++ show ident ++ "`")
+
+  ConstructorArgumentMismatch span i n m ->
+    makeError src span
+      ("Constructor `" ++ show i ++ "` expects " ++ show n ++ " arguments, but given " ++ show m)
+
+  NonLinPat span p t ->
+    makeError src span
+      ("Non-linear pattern `" ++ show p ++ "` for linear type `" ++ show t ++ "`")
+
+
 
 
 

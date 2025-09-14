@@ -286,6 +286,11 @@ scopeTypeDecls ctx tds = do
 -- equations and detects signatures without accompanying definitions.
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
 scopeDefs ctx ds = do
+  let allSigVars = [x | E.TypeSig xs _ <- ds, x <- xs]
+  let sigMap = foldr (\x m -> Map.insertWith (++) (external x) [x] m) Map.empty allSigVars
+  forM_ (Map.elems $ Map.filter ((> 1) . length) sigMap) $ \vs ->
+    insertError (MultipleVarDecls (getSpan (head vs)) vs)
+    
   (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx(groupEquations ds)
   forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
   return (ctx, ds)
@@ -334,10 +339,8 @@ scopeDefs ctx ds = do
               Nothing -> do
                 x' <- freshInternal x
                 return (insertEVar x' ictx'', xs''++[x'])
-              Just internal -> do
-                -- TODO: better error
-                insertError (MultipleVarDecls (getSpan x) x)
-                return (ictx'',xs''++[x])
+              Just existing -> do
+                return (ictx'', xs''++[x{internal = internal existing}])
           ) (ictx,[]) xs
         t' <- scopeAndQuantifyType ctx t
         let ctx' | isMutual  = foldr insertEVar ctx xs'
