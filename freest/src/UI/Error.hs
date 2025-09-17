@@ -31,10 +31,10 @@ data Error
   | TypeOutOfScope Span Identifier
   | ConflictingDefs (Map.Map (Level String String) [Span])
   | MultipleVarDecls Span [Variable]
-  | MultipleFieldDecls Span Identifier
-  | MultipleConsDecls Span Identifier
-  | MultipleTypeDecls Span Identifier
-  | MultipleKindSigs Span Identifier
+  | MultipleFieldDecls Span [Identifier]
+  | MultipleConsDecls Span [Identifier]
+  | MultipleTypeDecls Span [Identifier]
+  | MultipleKindSigs Span [Identifier]
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | GivenTooManyArgs Span E.Exp T.Type Int Int
@@ -214,28 +214,37 @@ errorToMessage src = \case
 
   MultipleVarDecls span vars ->
       makeError src span
-         ("Multiple declarations of variable `" ++ var ++ "`"++ show vars)
+         ("Multiple declarations of variable `" ++ var ++ "`")++
+         "Duplicate variable declarations for `" ++ var ++ "` at:\n"++
+         unlines (map (\(Variable s ext _) -> "  "++show s) vars)
          where var = getFromSpan src  span
 
-  MultipleFieldDecls span _ ->
+  MultipleFieldDecls span idents ->
      makeError src span
-         ("Multiple declarations of field `" ++ field ++ "`")
+         ("Multiple declarations of field `" ++ field ++ "`")++
+         "Duplicate Field declarations for `" ++ field ++ "` at:\n"++
+         unlines (map (\(Identifier s _) -> "  "++show s) idents)
          where field = getFromSpan src span
 
-  MultipleConsDecls span _ ->
+  MultipleConsDecls span idents ->
      makeError src span
-         ("Multiple declarations of constructor `" ++ con ++ "`")
+         ("Multiple declarations of constructor `" ++ con ++ "`")++
+         "Duplicate Cons declarations for `" ++ con ++ "` at:\n"++
+         unlines (map (\(Identifier s _) -> "  "++show s) idents)
          where con = getFromSpan src span
 
-  MultipleTypeDecls span _ ->
+  MultipleTypeDecls span idents ->
      makeError src span
-         ("Multiple declarations of type `" ++ ty ++ "`")
+         ("Multiple declarations of type `" ++ ty ++ "`")++
+         "Duplicate type declarations for `" ++ ty ++ "` at:\n"++
+         unlines (map (\(Identifier s _) -> "  "++show s) idents)
          where ty = getFromSpan src span
 
-  MultipleKindSigs span _ ->
-
+  MultipleKindSigs span idents ->
      makeError src span
-         ("Multiple kind signatures for type `" ++ ty ++ "`") 
+         ("Multiple kind signatures for type `" ++ ty ++ "`")++
+         "Duplicate kind signatures for `" ++ ty ++ "` at:\n"++
+         unlines (map (\(Identifier s _) -> "  "++show s) idents)
          where ty = getFromSpan src span
 
 

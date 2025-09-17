@@ -219,28 +219,37 @@ scopeModule' ctx m = do
 scopeModule :: ScopingCtx -> M.Module -> Scoping M.Module
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
+external2 :: Identifier -> String
+external2 (Identifier _ str) = str
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
 scopeKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
-scopeKindSigs = foldM scopeKindSig
-  where
-    scopeKindSig ctx (is, k) = 
-      foldM (\ctx i -> do 
-          when (memberKSig i ctx) 
-            (insertError (MultipleKindSigs (getSpan i) i))
-          return (insertKSig i ctx)) 
-        ctx is
-
+scopeKindSigs ctx kindSigs = do
+  let allKSigs = concat [is | (is, _) <- kindSigs]
+  let sigMap = foldr (\i m -> Map.insertWith (++) (external2 i) [i] m) Map.empty allKSigs
+  forM_ (Map.elems $ Map.filter ((> 1) . length) sigMap) $ \ids ->
+    insertError (MultipleKindSigs (getSpan (head ids)) ids)
+  foldM (\ctx' (is, k) ->
+           foldM (\ctx'' i ->
+                    if memberKSig i ctx''
+                      then pure ctx''
+                      else pure (insertKSig i ctx''))
+                 ctx' is) 
+        ctx kindSigs
 -- | Scope a list of @data@ declarations, returning also the updated scoping
 -- context.
 scopeDataDecls :: ScopingCtx 
                -> M.DataDeclList 
                -> Scoping (ScopingCtx, M.DataDeclList)
 scopeDataDecls ctx dds = do
-  ctx' <- foldM (\ctx'' (ti, _, _) -> do
-                  when (memberTId ti ctx'' || memberDId ti ctx'') do 
-                    insertError (MultipleTypeDecls (getSpan ti) ti)
-                  return $ insertDId ti ctx'')
+  let allTis = [ti | (ti, _, _) <- dds]
+  let dataMap = foldr (\ti m -> Map.insertWith (++) (external2 ti) [ti] m) Map.empty allTis
+  forM_ (Map.elems $ Map.filter ((> 1) . length) dataMap) $ \ids ->
+    insertError (MultipleTypeDecls (getSpan (head ids)) ids)
+  ctx' <- foldM (\ctx'' (ti, _, _) -> 
+                   if memberTId ti ctx'' || memberDId ti ctx'' 
+                     then pure ctx''
+                     else pure (insertDId ti ctx'')) 
                 ctx dds
   foldM scopeDataDecl (ctx', []) dds
   where
@@ -251,12 +260,17 @@ scopeDataDecls ctx dds = do
         ks' <- mapM scopeKind ks
         (ctx''',cds') <- scopeConsDecls (fromTVarList as' `union` ctx') cds
         return (foldr deleteTVar ctx''' as', (ti, zip as' ks', cds') : dds')
-    scopeConsDecls ctx = foldM scopeConsDecl (ctx, [])
+    scopeConsDecls ctx cds = do
+      let allCis = [ci | (ci, _) <- cds]
+      let conMap = foldr (\ci m -> Map.insertWith (++) (external2 ci) [ci] m) Map.empty allCis
+      forM_ (Map.elems $ Map.filter ((> 1) . length) conMap) $ \ids ->
+        insertError (MultipleConsDecls (getSpan (head ids)) ids)
+      foldM scopeConsDecl (ctx, []) cds
       where
         scopeConsDecl (ctx', cds') (ci, ts)
           | memberCId ci ctx' = do
-            insertError (MultipleConsDecls (getSpan ci) ci)
-            return (ctx', (ci, ts) : cds')
+            ts' <- mapM (scopeType ctx') ts
+            return (ctx', (ci, ts') : cds')
           | otherwise = do
             ts' <- mapM (scopeType ctx') ts
             let ctx'' = insertCId ci ctx'
@@ -268,11 +282,16 @@ scopeTypeDecls :: ScopingCtx
                -> M.TypeDeclList 
                -> Scoping (ScopingCtx, M.TypeDeclList)
 scopeTypeDecls ctx tds = do
-  ctx' <- foldM (\ctx'' (ti, _) -> do 
-      when (ti `memberTId` ctx'' || ti `memberDId` ctx'') 
-        do insertError (MultipleTypeDecls (getSpan ti) ti)
-      return $ insertTId ti ctx'') 
-    ctx tds
+  let allTis = [ti | (ti, _) <- tds]
+  let typeMap = foldr (\ti m -> Map.insertWith (++) (external2 ti) [ti] m) Map.empty allTis
+  forM_ (Map.elems $ Map.filter ((> 1) . length) typeMap) $ \ids ->
+    insertError (MultipleTypeDecls (getSpan (head ids)) ids)
+
+  ctx' <- foldM (\ctx'' (ti, _) -> 
+                   if ti `memberTId` ctx'' || ti `memberDId` ctx'' 
+                     then pure ctx''
+                     else pure (insertTId ti ctx'')) 
+                ctx tds
   foldM scopeTypeDecl (ctx', []) tds
   where
     scopeTypeDecl (ctx', tds') td@(ti, t) = do
@@ -481,16 +500,14 @@ freshKVar (getSpan -> s) = do
 -- | Scope a type.
 scopeType :: ScopingCtx -> T.Type -> Scoping T.Type
 scopeType ctx = \case
-  -- Functional types
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity m
-  -- Session types
   T.Message s m p -> T.Message s <$> scopeMultiplicity m <*> pure p
-  T.Choice  s m p ls ->
-    T.Choice s <$> scopeMultiplicity m <*> pure p <*>
-      foldM (\ls' l -> do 
-        when (l `elem` ls') (insertError (MultipleFieldDecls (getSpan l) l))
-        return $ ls' ++ [l]) [] ls
-  -- Higher-order
+  T.Choice  s m p ls -> do
+    m' <- scopeMultiplicity m
+    let labelMap = foldr (\i m -> Map.insertWith (++) (external2 i) [i] m) Map.empty ls
+    forM_ (Map.elems $ Map.filter ((> 1) . length) labelMap) $ \ids ->
+      insertError (MultipleFieldDecls (getSpan (head ids)) ids)
+    return $ T.Choice s m' p ls
   T.Abs s (unzip -> (as, ks)) t -> do
     as' <- mapM freshInternal as
     ks' <- mapM scopeKind ks
@@ -499,15 +516,15 @@ scopeType ctx = \case
   t@(T.Var s a) ->
     case lookupTVar a ctx of
       Just a' -> return $ T.Var s a{internal = internal a'}
-      Nothing -> T.Var s <$> freshInternal a -- no error here; leave it for the typechecker
+      Nothing -> T.Var s <$> freshInternal a
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
-  -- Equations
   T.TName s i 
     | memberDId i ctx -> return (T.DName s i)
     | otherwise       -> return (T.TName s i)
   T.DName s i -> return (T.DName s i)
   t -> pure t
+
 
 -- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.
