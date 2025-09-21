@@ -154,7 +154,7 @@ makeError src span msg   =
 
 prettyKind :: K.Kind -> String
 prettyKind = \case
-  K.Proper _ m pk -> prettyMulti m ++ " " ++ prettyPre pk
+  K.Proper _ m pk -> prettyMulti m ++ prettyPre pk
   K.Arrow _ k1 k2 -> prettyKind k1 ++ " -> " ++ prettyKind k2
   K.Var _ v -> "kind variable " ++ show v
   where
@@ -163,21 +163,13 @@ prettyKind = \case
       K.Un -> "unrestricted"
       K.VarM v -> "multiplicity variable " ++ show v
     prettyPre = \case
-      K.Top -> "top"
-      K.Session -> "session"
-      K.Channel -> "channel"
-      K.VarPK v -> "prekind variable " ++ show v
+      K.Top -> ""
+      K.Session -> " session"
+      K.Channel -> " channel"
+      K.VarPK v -> " prekind variable " ++ show v
 
 errorToMessage :: String -> Error -> String
 errorToMessage src = \case
-
-
-
-
-
-
-
-
 
   LexicalError span c ->
     makeError src span
@@ -193,22 +185,22 @@ errorToMessage src = \case
 
   VarOutOfScope span _ ->
     makeError src span
-         ("VarOutOfScope ::: Variable out of scope: " ++ var)
+         ("VarOutOfScope: Variable out of scope: " ++ var)
          where var = getFromSpan src span
 
-  TypeVarOutOfScope span _ -> -- ver depois
+  TypeVarOutOfScope span _ ->
      makeError src span
-         (" TypeVarOutOfScope ::: Type variable out of scope: " ++ var)
+         (" TypeVarOutOfScope: Type variable out of scope: " ++ var)
          where var = getFromSpan src span
 
   ConsOutOfScope s _ ->
      makeError src s
-      ("ConsOutOfScope ::: Constructor out of scope: " ++ con) 
+      ("ConsOutOfScope: Constructor out of scope: " ++ con) 
       where con = getFromSpan src s
 
   TypeOutOfScope span _ ->
     makeError src span
-         ("TypeOutOfScope ::: Type out of scope: " ++ ty)
+         ("TypeOutOfScope: Type out of scope: " ++ ty)
       where ty = getFromSpan src span
   -------------------------------------------------------- conflicting defs todo
 
@@ -284,34 +276,37 @@ errorToMessage src = \case
   GivenTooManyArgsK span ty expected actual ->
      makeError src span
        ("Type `" ++ typeName ++ "` expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
-       where
-        typeName = getFromSpan src span
+       where typeName = getFromSpan src span
         
 
 
   ExpectsTooManyArgsK span _ expectedKind -> -- mudar , nao falar nos kinds
     makeError src span
-       ("Type `" ++ typeName ++ "` expects fewer type arguments; should have kind `" ++ prettyKind expectedKind ++ "`")
-         where
-          typeName        = getFromSpan src span
+       ("Type `" ++ typeName ++ "` expects fewer type arguments") --should have kind `" ++ prettyKind expectedKind ++ "`"
+         where typeName        = getFromSpan src span
 
   KindMismatch span expectedKind ty gotKind ->
      makeError src span
-       ("Kind mismatch: expected kind `" ++ prettyKind expectedKind ++ "` for type `" ++ typeName ++ "`, but got kind `" ++ prettyKind gotKind ++ "`")
-       where
-        typeName      = getFromSpan src span
+       ("Kind mismatch: expected a `" ++ prettyKind expectedKind ++ "` type for `" ++ typeName ++ "`, but got a `" ++ prettyKind gotKind ++ "` type instead")
+       where typeName      = getFromSpan src span
 
 
   ProperKindMismatch span ty gotKind ->
      makeError src span
-       ("Expected a proper kind for type `" ++ typeName ++ "`, but got kind `" ++ show gotKind ++ "`")
-       where
-        typeName      = getFromSpan src span
+       ("Expected a type `" ++ typeName ++ "`of proper kind, but got kind `" ++ prettyKind gotKind ++ "`")
+       where  typeName      = getFromSpan src span
 
 
   SessionTypeMismatch span ty kind ->
-    makeError src span
-      ("Session type mismatch: expected a session type, but found `" ++ show ty ++ "` of kind `" ++ prettyKind kind ++ "`")
+    makeError src span $
+      (\isSession ->
+         if isSession --mudar o 1 caso
+           then "Session type mismatch: expected a session type, but found `" ++ show ty ++ "` of kind `" ++ prettyKind kind ++ "`"
+           else "Session type mismatch: expected a session type, but found non-session type `" ++ show ty ++ "`"
+      ) (case kind of
+           K.Proper _ _ K.Session -> True
+           K.Arrow _ k1 k2        -> True
+           _                      -> False)
 
 
   TypeMismatch span expected actual _ ->
@@ -337,17 +332,98 @@ errorToMessage src = \case
     makeError src span
       ("Invalid type: `" ++ show t ++ "`")
 
-  PartiallyAppliedSelect span ident ->
+  PartiallyAppliedSelect span (Identifier s str) ->
     makeError src span
-      ("Cannot infer type for partially applied select of label `" ++ show ident ++ "`")
+      ("Cannot infer type for partially applied select of label `" ++ str ++ "`")
 
-  ConstructorArgumentMismatch span i n m ->
+  ConstructorArgumentMismatch span (Identifier s str) n m ->
     makeError src span
-      ("Constructor `" ++ show i ++ "` expects " ++ show n ++ " arguments, but given " ++ show m)
+      ("Constructor `" ++ str ++ "` expects " ++ show n ++ " arguments, but given " ++ show m)
 
   NonLinPat span p t ->
     makeError src span
       ("Non-linear pattern `" ++ show p ++ "` for linear type `" ++ show t ++ "`")
+
+ -- ConflictingDefs defs ->
+    
+
+  LinVarsCreatedInUnFun span xs e ->
+    makeError src span
+      ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` created in body of unrestricted function `" ++ show e ++ "`")
+
+  ExposeError span s t ->
+    makeError src span
+      ("Expose error: expecting " ++ s ++ ", but got type `" ++ show t ++ "`")
+
+  UnexpectedArg span (TypeLevel k) (ExpLevel e) n f ->
+    makeError src span
+      ("Unexpected argument: expected a type of kind `" ++ prettyKind k ++ "`, but got expression `" ++ show e ++ "` in the "
+       ++ show n ++ ordinal n ++ " argument")
+
+  UnexpectedArg span (ExpLevel t) (TypeLevel u) n f ->
+    makeError src span
+      ("Unexpected argument: expected an expression"
+       ++ maybe "" (\ty -> " of type `" ++ show ty ++ "`") t
+       ++ ", but got type `" ++ show u ++ "` in the "
+       ++ show n ++ ordinal n ++ " argument")
+
+  UnexpectedParam span (TypeLevel k) (ExpLevel p) n f ->
+    makeError src span
+      ("Unexpected parameter: expected a type parameter of kind `" ++ prettyKind k ++ "`, but got pattern `" ++ show p
+       ++ "` in the " ++ show n ++ ordinal n ++ " parameter of `" ++ show f ++ "`")
+
+  UnexpectedParam span (ExpLevel t) (TypeLevel a) n f ->
+    makeError src span
+      ("Unexpected parameter: expected a pattern of type `" ++ show t ++ "`, but got type parameter `" ++ show a
+       ++ "` in the " ++ show n ++ ordinal n ++ " parameter of `" ++ show f ++ "`")
+
+  ChannelTypeMismatch span ty k ->
+    makeError src span
+      ("Channel type mismatch: expected a channel type, but found `" ++ show ty ++ "` of kind `" ++ prettyKind k ++ "`")
+
+  ArrowMultiplicityMismatch span e n m ty m' ->
+    makeError src span
+      ("Arrow multiplicity mismatch: expected "
+        ++ showMult m ++ " function of type `" ++ show ty ++ "`, but got "
+        ++ showMult m' ++ " function after the " ++ show n ++ ordinal n
+        ++ " parameter of `" ++ show e ++ "`")
+    where
+      showMult = \case
+        K.Lin    -> "a linear"
+        K.Un     -> "an unrestricted"
+        K.VarM x -> "a multiplicity `" ++ show x ++ "`"
+
+  TypeMismatchSelect span expected (Identifier s str) e ->
+    makeError src span
+      ("Couldn't match expected type `" ++ show expected
+        ++ "` with selection `" ++ str)
+
+  TypeMismatchList span expected _ ->
+    makeError src span
+      ("Couldn't match expected type `" ++ show expected ++ "` with a list")
+
+  TypeMismatchTuple span n expected _ ->
+    makeError src span
+      ("Couldn't match expected type `" ++ show expected ++ "` with a "
+       ++ case n of
+            0 -> "unit ()"
+            2 -> "pair"
+            k -> show k ++ "-tuple")
+
+ -- TypeCtxMismatch span e ctx1 ctx2 ->
+   -- makeError src span
+     -- ("Type context mismatch in `" ++ show e ++ "`."
+       -- ++ "\n  First context has: " ++ showCtx (ctx1 Map.\\ ctx2)
+       -- --++ "\n  Second context has: " ++ showCtx (ctx2 Map.\\ ctx1))
+   -- where
+    --  showCtx m =
+      --  case Map.toList m of
+        --  [] -> "nothing"
+        --  xs -> intercalate ", " $ [ either show show v ++ " : " ++ show t| (v,t) <- xs ]
+
+  UnsupportedError span msg ->
+    makeError src span
+      ("Unsupported feature: " ++ msg)
 
 
 
