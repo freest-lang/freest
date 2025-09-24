@@ -18,6 +18,8 @@ module Syntax.Kind
   , isStrictlyLin
   , isStrictlySession
   , isStrictlyAbsorbing
+  , image
+  , depth
   )
 where 
 
@@ -153,3 +155,15 @@ instance Located Kind where
   setSpan s = \case
     Proper _ m pk -> Proper s m pk 
     Arrow _ k1 k2 -> Arrow s k1 k2 
+
+
+
+image :: Kind -> Kind
+image = \case
+  k@Proper{} -> k
+  Arrow _ _ k -> image k
+
+depth :: Kind -> Int
+depth = \case
+  k@Proper{} -> 0
+  Arrow _ _ k -> 1 + depth k

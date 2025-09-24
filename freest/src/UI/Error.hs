@@ -195,7 +195,7 @@ toMessage src = \case
 
   ConsOutOfScope s _ ->
      makeError src s
-      ("ConsOutOfScope: Constructor out of scope: " ++ con) 
+      ("ConsOutOfScope: Constructor out of scope: " ++ con)
       where con = getFromSpan src s
 
   TypeOutOfScope span _ ->
@@ -242,7 +242,7 @@ toMessage src = \case
 
   LacksKindSig span ident ->
      makeError src span
-         ("Type `" ++ ty ++ "` lacks a kind signature") 
+         ("Type `" ++ ty ++ "` lacks a kind signature")
          where ty = getFromSpan src span
 
 
@@ -258,7 +258,7 @@ toMessage src = \case
       where var = getFromSpan src span
 
 
-  GivenTooManyArgs span _ _ expected actual -> 
+  GivenTooManyArgs span _ _ expected actual ->
     makeError src span
       ("The funcion" ++ var ++ " is applied to " ++ show actual ++ " arguments, but its type has only " ++ show expected)
       where var = getFromSpan src span
@@ -277,30 +277,39 @@ toMessage src = \case
      makeError src span
        ("Type `" ++ show ty ++ "` expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
        where typeName = getFromSpan src span
-        
+
 
 
   ExpectsTooManyArgsK span _ expectedKind -> -- mudar , nao falar nos kinds
     makeError src span
-       ("Type `" ++ typeName ++ "` expects fewer type arguments") --should have kind `" ++ prettyKind expectedKind ++ "`"
+       ("Type `" ++ typeName ++ "` expects "++ show arity ++" argument"++ (if arity == 1 then "" else "s"))
          where typeName        = getFromSpan src span
+               arity = K.depth expectedKind
 
   KindMismatch span expectedKind ty gotKind ->
-     makeError src span
-       ("Kind mismatch: expected a `" ++ prettyKind expectedKind ++ "` type for `" ++ typeName ++ "`, but got a `" ++ prettyKind gotKind ++ "` type instead")
-       where typeName      = getFromSpan src span
+    (if K.depth expectedKind /= K.depth gotKind 
+      then makeError src span
+         ("expected " ++ show arity ++ " argument"++ (if arity == 1 then "" else "s") ++", but got " 
+         ++ show (K.depth gotKind) ++ " instead.")
+        else makeError src span -- prekind or multiplicity mismatch
+         ("expected a `" ++ prettyKind expectedKind
+            ++ "` type, but got a `" ++ prettyKind gotKind ++ "` type instead"))
+    where
+      typeName = getFromSpan src span
+      arity = K.depth expectedKind
 
 
   ProperKindMismatch span ty gotKind ->
      makeError src span
-       ("Expected a type `" ++ typeName ++ "`of proper kind, but got kind `" ++ prettyKind gotKind ++ "`")
+       ("Type `" ++ typeName ++ "` expected " ++ show arity ++ " argument" ++ (if arity == 1 then "" else "s"))
        where  typeName      = getFromSpan src span
+              arity = K.depth gotKind
 
 --ty is a session type
   SessionTypeMismatch span ty kind ->
-    makeError src span 
+    makeError src span
       ("Session type mismatch: expected a session type, but found non-session type `" ++ show ty ++ "`")
-      
+
 
   TypeMismatch span expected actual _ ->
       makeError src span
@@ -346,7 +355,7 @@ toMessage src = \case
         restSpansLines = if null restSpans
                          then ""
                          else "\nOther conflicting spans:\n" ++ unlines (map (("  " ++) . show) restSpans)
-        message = "Conflicting definitions in patterns for `" ++ varName ++ "`:" 
+        message = "Conflicting definitions in patterns for `" ++ varName ++ "`:"
       in
         makeError src firstSpan message ++ restSpansLines
 
@@ -355,7 +364,7 @@ toMessage src = \case
       ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` created in body of unrestricted function `" ++ show e ++ "`")
 
   ExposeError span s t ->
-    makeError src span  
+    makeError src span
       ("Expose error: expecting " ++ s ++ ", but got type `" ++ show t ++ "`")
 
   UnexpectedArg span (TypeLevel k) (ExpLevel e) n f ->
@@ -417,7 +426,7 @@ toMessage src = \case
 
   TypeCtxMismatch span e ctx1 ctx2 ->
     makeError src span "In this branch" ++ unlines
-       (map (\key -> "Var " ++ prettyKey key ++ " found in \n" 
+       (map (\key -> "Var " ++ prettyKey key ++ " found in \n"
                      ++ snippetWithCaret src (getSpan key) ++ "\nbut not in other branch\n"
                    ) (ctxDiff ctx1 ctx2))
 
