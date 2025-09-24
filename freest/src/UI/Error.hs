@@ -8,7 +8,7 @@ Errors. A work in progress.
 {-# LANGUAGE LambdaCase #-}
 module UI.Error
   (Error(..)
-  ,errorToMessage)
+  ,toMessage)
 where
 
 import           Parser.Token
@@ -122,8 +122,8 @@ getFromSpan :: String -> Span -> String
 getFromSpan src (Span _ (sl, sc) (_, ec)) =
   take (ec - sc) . drop (sc - 1) $ lines src !! (sl - 1)
 
-getLineFromSPan :: String -> Span -> String
-getLineFromSPan src (Span _ (sl, _) (_, _)) =
+getLineFromSpan :: String -> Span -> String
+getLineFromSpan src (Span _ (sl, _) (_, _)) =
   lines src !! (sl - 1)
 
 snippetWithCaret :: String -> Span -> String
@@ -168,8 +168,8 @@ prettyKind = \case
       K.Channel -> " channel"
       K.VarPK v -> " prekind variable " ++ show v
 
-errorToMessage :: String -> Error -> String
-errorToMessage src = \case
+toMessage :: String -> Error -> String
+toMessage src = \case
 
   LexicalError span c ->
     makeError src span
@@ -275,7 +275,7 @@ errorToMessage src = \case
 
   GivenTooManyArgsK span ty expected actual ->
      makeError src span
-       ("Type `" ++ typeName ++ "` expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
+       ("Type `" ++ show ty ++ "` expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
        where typeName = getFromSpan src span
         
 
@@ -296,18 +296,11 @@ errorToMessage src = \case
        ("Expected a type `" ++ typeName ++ "`of proper kind, but got kind `" ++ prettyKind gotKind ++ "`")
        where  typeName      = getFromSpan src span
 
-
+--ty is a session type
   SessionTypeMismatch span ty kind ->
-    makeError src span $
-      (\isSession ->
-         if isSession --mudar o 1 caso
-           then "Session type mismatch: expected a session type, but found `" ++ show ty ++ "` of kind `" ++ prettyKind kind ++ "`"
-           else "Session type mismatch: expected a session type, but found non-session type `" ++ show ty ++ "`"
-      ) (case kind of
-           K.Proper _ _ K.Session -> True
-           K.Arrow _ k1 k2        -> True
-           _                      -> False)
-
+    makeError src span 
+      ("Session type mismatch: expected a session type, but found non-session type `" ++ show ty ++ "`")
+      
 
   TypeMismatch span expected actual _ ->
       makeError src span
@@ -318,15 +311,13 @@ errorToMessage src = \case
       ("Illegal choice: Selection `" ++ str ++ "` not found in type `" ++ show ty ++ "`")
 
 
-  LinVarsConsumedInUnFun span xs e ->
+  LinVarsConsumedInUnFun span xs e -> -- fazer melhor
     makeError src span
       ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in body of unrestricted function `" ++ show e ++ "`")
 
   LinVarAtEndOfScope span xi _ ->
     makeError src span
-      ("Linear variable " ++ var ++ " was not consumed")
-      where var = getFromSpan src span
-
+      ("Linear variable " ++ prettyKey xi ++ " was not consumed")
 
   InvalidType span t ->
     makeError src span
@@ -344,15 +335,27 @@ errorToMessage src = \case
     makeError src span
       ("Non-linear pattern `" ++ show p ++ "` for linear type `" ++ show t ++ "`")
 
- -- ConflictingDefs defs ->
-    
+  ConflictingDefs vos ->
+    case Map.toList vos of
+    [] -> ""
+    ((lvl, firstSpan:restSpans):_) ->
+      let
+        varName = case lvl of
+                    ExpLevel x  -> x
+                    TypeLevel a -> a
+        restSpansLines = if null restSpans
+                         then ""
+                         else "\nOther conflicting spans:\n" ++ unlines (map (("  " ++) . show) restSpans)
+        message = "Conflicting definitions in patterns for `" ++ varName ++ "`:" 
+      in
+        makeError src firstSpan message ++ restSpansLines
 
-  LinVarsCreatedInUnFun span xs e ->
+  LinVarsCreatedInUnFun span xs e -> -- fazer melhor
     makeError src span
       ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` created in body of unrestricted function `" ++ show e ++ "`")
 
   ExposeError span s t ->
-    makeError src span
+    makeError src span  
       ("Expose error: expecting " ++ s ++ ", but got type `" ++ show t ++ "`")
 
   UnexpectedArg span (TypeLevel k) (ExpLevel e) n f ->
@@ -379,7 +382,7 @@ errorToMessage src = \case
 
   ChannelTypeMismatch span ty k ->
     makeError src span
-      ("Channel type mismatch: expected a channel type, but found `" ++ show ty ++ "` of kind `" ++ prettyKind k ++ "`")
+      ("Channel type mismatch: expected a channel type, but found `" ++ show ty ++ "` of `" ++ prettyKind k ++ "` type")
 
   ArrowMultiplicityMismatch span e n m ty m' ->
     makeError src span
@@ -410,32 +413,31 @@ errorToMessage src = \case
             2 -> "pair"
             k -> show k ++ "-tuple")
 
- -- TypeCtxMismatch span e ctx1 ctx2 ->
-   -- makeError src span
-     -- ("Type context mismatch in `" ++ show e ++ "`."
-       -- ++ "\n  First context has: " ++ showCtx (ctx1 Map.\\ ctx2)
-       -- --++ "\n  Second context has: " ++ showCtx (ctx2 Map.\\ ctx1))
-   -- where
-    --  showCtx m =
-      --  case Map.toList m of
-        --  [] -> "nothing"
-        --  xs -> intercalate ", " $ [ either show show v ++ " : " ++ show t| (v,t) <- xs ]
+
+
+  TypeCtxMismatch span e ctx1 ctx2 ->
+    makeError src span "In this branch" ++ unlines
+       (map (\key -> "Var " ++ prettyKey key ++ " found in \n" 
+                     ++ snippetWithCaret src (getSpan key) ++ "\nbut not in other branch\n"
+                   ) (ctxDiff ctx1 ctx2))
+
+
 
   UnsupportedError span msg ->
     makeError src span
       ("Unsupported feature: " ++ msg)
 
 
+missingInCtx :: Ord k => Map.Map k a -> Map.Map k a -> [k]
+missingInCtx m1 m2 = Map.keys (Map.difference m1 m2)
 
 
+ctxDiff :: Ord k => Map.Map k a -> Map.Map k a -> [k]
+ctxDiff m1 m2 = missingInCtx m1 m2 ++ missingInCtx m2 m1
 
-
-
-
-
-
-
-
+prettyKey :: Either Variable Identifier -> String
+prettyKey (Left (Variable s str i))    = str
+prettyKey (Right (Identifier s ext)) = ext
 
 
 
