@@ -287,16 +287,19 @@ toMessage src = \case
                arity = K.depth expectedKind
 
   KindMismatch span expectedKind ty gotKind ->
-    (if K.depth expectedKind /= K.depth gotKind 
+    if K.depth expectedKind < K.depth gotKind
       then makeError src span
-         ("expected " ++ show arity ++ " argument"++ (if arity == 1 then "" else "s") ++", but got " 
-         ++ show (K.depth gotKind) ++ " instead.")
-        else makeError src span -- prekind or multiplicity mismatch
-         ("expected a `" ++ prettyKind expectedKind
-            ++ "` type, but got a `" ++ prettyKind gotKind ++ "` type instead"))
+             ("expected "++ show  diff  ++" more argument"++ (if diff == 1 then "" else "s"))
+    else if K.depth expectedKind > K.depth gotKind
+      then makeError src span
+             ("expected "++ show  (-diff)   ++" less argument"++ (if (-diff) == 1 then "" else "s"))
+   else -- depths are equal
+      makeError src span
+        ("expected a `" ++ prettyKind (K.image expectedKind)
+           ++ "` type, but got a `" ++ prettyKind (K.image gotKind) ++ "` type instead")
     where
       typeName = getFromSpan src span
-      arity = K.depth expectedKind
+      diff = (K.depth gotKind - K.depth expectedKind)
 
 
   ProperKindMismatch span ty gotKind ->
