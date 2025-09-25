@@ -128,15 +128,18 @@ getLineFromSpan src (Span _ (sl, _) (_, _)) =
 
 snippetWithCaret :: String -> Span -> String
 snippetWithCaret src (Span _ (sl, sc) (_, ec)) =
-  let line       = lines src !! (sl - 1)
-      start      = max 0 (sc - 1)
-      end        = max start (ec - 1)
-      len        = max 1 (end - start)
-      caretLine  = replicate start ' ' ++ replicate len '^'
-  in "  |\n"
-     ++ show sl ++ " | " ++ line ++ "\n"
-     ++ "  | " ++ caretLine
-
+  let line      = lines src !! (sl - 1)
+      start     = max 0 (sc - 1)
+      end       = max start (ec - 1)
+      len       = max 1 (end - start)
+      lineNum    = show sl
+      numWidth  = length lineNum
+      gutterNum  = lineNum ++ " | "
+      gutterSpace = replicate numWidth ' ' ++ " | "
+      caretBody = replicate start ' ' ++ replicate len '^'
+  in replicate numWidth ' ' ++ " |\n"
+     ++ gutterNum ++ line ++ "\n"
+     ++ gutterSpace ++ caretBody
 
 
 
@@ -202,7 +205,6 @@ toMessage src = \case
     makeError src span
          ("TypeOutOfScope: Type out of scope: " ++ ty)
       where ty = getFromSpan src span
-  -------------------------------------------------------- conflicting defs todo
 
   MultipleVarDecls span vars ->
       makeError src span
@@ -280,7 +282,7 @@ toMessage src = \case
 
 
 
-  ExpectsTooManyArgsK span _ expectedKind -> -- mudar , nao falar nos kinds
+  ExpectsTooManyArgsK span _ expectedKind -> 
     makeError src span
        ("Type `" ++ typeName ++ "` expects "++ show arity ++" argument"++ (if arity == 1 then "" else "s"))
          where typeName        = getFromSpan src span
@@ -289,10 +291,10 @@ toMessage src = \case
   KindMismatch span expectedKind ty gotKind ->
     if K.depth expectedKind < K.depth gotKind
       then makeError src span
-             ("expected "++ show  diff  ++" more argument"++ (if diff == 1 then "" else "s"))
+             ("expected "++ show  diff  ++" more argument"++ (if diff == 1 then "" else "s") ++ " to type ")
     else if K.depth expectedKind > K.depth gotKind
       then makeError src span
-             ("expected "++ show  (-diff)   ++" less argument"++ (if (-diff) == 1 then "" else "s"))
+             ("expected "++ show  (-diff)   ++" less argument"++ (if (-diff) == 1 then "" else "s") ++ " to type ")
    else -- depths are equal
       makeError src span
         ("expected a `" ++ prettyKind (K.image expectedKind)
@@ -428,9 +430,9 @@ toMessage src = \case
 
 
   TypeCtxMismatch span e ctx1 ctx2 ->
-    makeError src span "In this branch" ++ unlines
-       (map (\key -> "Var " ++ prettyKey key ++ " found in \n"
-                     ++ snippetWithCaret src (getSpan key) ++ "\nbut not in other branch\n"
+    makeError src span "In this conditional" ++ unlines
+       (map (\key -> "Variable " ++ prettyKey key ++ " used in one branch \n"
+                     ++ snippetWithCaret src (getSpan key) ++ "\nbut not in other"
                    ) (ctxDiff ctx1 ctx2))
 
 
