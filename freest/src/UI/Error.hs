@@ -186,78 +186,71 @@ toMessage src = \case
     in makeError src span
          ("Parse error: unexpected token " ++ show tok)
 
-  VarOutOfScope span _ ->
+  VarOutOfScope span var ->
     makeError src span
-         ("VarOutOfScope: Variable out of scope: " ++ var)
-         where var = getFromSpan src span
+         ("VarOutOfScope: Variable out of scope: " ++ external var)
 
-  TypeVarOutOfScope span _ ->
+  TypeVarOutOfScope span var ->
      makeError src span
-         (" TypeVarOutOfScope: Type variable out of scope: " ++ var)
-         where var = getFromSpan src span
+         (" TypeVarOutOfScope: Type variable out of scope: " ++ external var)
 
-  ConsOutOfScope s _ ->
+  ConsOutOfScope s id ->
      makeError src s
-      ("ConsOutOfScope: Constructor out of scope: " ++ con)
-      where con = getFromSpan src s
+      ("ConsOutOfScope: Constructor out of scope: " ++ show id)
 
-  TypeOutOfScope span _ ->
+  TypeOutOfScope span id ->
     makeError src span
-         ("TypeOutOfScope: Type out of scope: " ++ ty)
-      where ty = getFromSpan src span
+         ("TypeOutOfScope: Type out of scope: " ++ show id)
 
   MultipleVarDecls span vars ->
       makeError src span
          ("Multiple declarations of variable `" ++ var ++ "`")++
          "Duplicate variable declarations for `" ++ var ++ "` at:\n"++
-         unlines (map (\(Variable s ext _) -> "  "++show s) vars)
-         where var = getFromSpan src  span
+         unlines (map (("  " ++) . show . getSpan) vars)
+         where var = external $ head vars
 
   MultipleFieldDecls span idents ->
      makeError src span
          ("Multiple declarations of field `" ++ field ++ "`")++
          "Duplicate Field declarations for `" ++ field ++ "` at:\n"++
-         unlines (map (\(Identifier s _) -> "  "++show s) idents)
-         where field = getFromSpan src span
+         unlines (map (("  " ++) . show . getSpan) idents)
+         where field = show $ head idents
 
   MultipleConsDecls span idents ->
      makeError src span
          ("Multiple declarations of constructor `" ++ con ++ "`")++
          "Duplicate Cons declarations for `" ++ con ++ "` at:\n"++
-         unlines (map (\(Identifier s _) -> "  "++show s) idents)
-         where con = getFromSpan src span
+         unlines (map (("  " ++) . show . getSpan) idents)
+         where con = show $ head idents
 
   MultipleTypeDecls span idents ->
      makeError src span
          ("Multiple declarations of type `" ++ ty ++ "`")++
          "Duplicate type declarations for `" ++ ty ++ "` at:\n"++
-         unlines (map (\(Identifier s _) -> "  "++show s) idents)
-         where ty = getFromSpan src span
+         unlines (map (("  " ++) . show . getSpan) idents)
+         where ty = show $ head idents
 
   MultipleKindSigs span idents ->
      makeError src span
          ("Multiple kind signatures for type `" ++ ty ++ "`")++
          "Duplicate kind signatures for `" ++ ty ++ "` at:\n"++
-         unlines (map (\(Identifier s _) -> "  "++show s) idents)
-         where ty = getFromSpan src span
+         unlines (map (("  " ++) . show . getSpan) idents)
+         where ty = show $ head idents
 
 
   LacksKindSig span ident ->
      makeError src span
-         ("Type `" ++ ty ++ "` lacks a kind signature")
-         where ty = getFromSpan src span
+         ("Type `" ++ show ident ++ "` lacks a kind signature")
 
 
-  LacksTypeSig span _ ->
+  LacksTypeSig span var ->
      makeError src span
-         ("Function `" ++ var ++ "` lacks an accompanying type signature")
-         where var = getFromSpan src span
+         ("Function `" ++ external var ++ "` lacks an accompanying type signature")
 
 
-  SigLacksDef span v ->
+  SigLacksDef span var ->
     makeError src span
-      ("Variable `" ++ var ++ "` has a type signature but no definition")
-      where var = getFromSpan src span
+      ("Variable `" ++  external var ++ "` has a type signature but no definition")
 
 
   GivenTooManyArgs span _ _ expected actual ->
@@ -282,11 +275,10 @@ toMessage src = \case
 
 
 
-  ExpectsTooManyArgsK span _ expectedKind -> 
+  ExpectsTooManyArgsK span id expectedKind -> 
     makeError src span
-       ("Type `" ++ typeName ++ "` expects "++ show arity ++" argument"++ (if arity == 1 then "" else "s"))
-         where typeName        = getFromSpan src span
-               arity = K.depth expectedKind
+       ("Type `" ++ show id ++ "` expects "++ show arity ++" argument"++ (if arity == 1 then "" else "s"))
+         where arity = K.depth expectedKind
 
   KindMismatch span expectedKind ty gotKind ->
     if K.depth expectedKind < K.depth gotKind
@@ -320,9 +312,9 @@ toMessage src = \case
       makeError src span
         ("Couldn't match expected type `" ++ show expected ++ "` with actual type `" ++ show actual ++ "`")
 
-  IllegalChoice span (Identifier s str) ty ->
-    makeError src s
-      ("Illegal choice: Selection `" ++ str ++ "` not found in type `" ++ show ty ++ "`")
+  IllegalChoice span id ty ->
+    makeError src (getSpan id)
+      ("Illegal choice: Selection `" ++ show id ++ "` not found in type `" ++ show ty ++ "`")
 
 
   LinVarsConsumedInUnFun span xs e -> -- fazer melhor
@@ -331,19 +323,19 @@ toMessage src = \case
 
   LinVarAtEndOfScope span xi _ ->
     makeError src span
-      ("Linear variable " ++ prettyKey xi ++ " was not consumed")
+      ("Linear variable " ++ prettyXi xi ++ " was not consumed")
 
   InvalidType span t ->
     makeError src span
       ("Invalid type: `" ++ show t ++ "`")
 
-  PartiallyAppliedSelect span (Identifier s str) ->
+  PartiallyAppliedSelect span id ->
     makeError src span
-      ("Cannot infer type for partially applied select of label `" ++ str ++ "`")
+      ("Cannot infer type for partially applied select of label `" ++ show id ++ "`")
 
-  ConstructorArgumentMismatch span (Identifier s str) n m ->
+  ConstructorArgumentMismatch span id n m ->
     makeError src span
-      ("Constructor `" ++ str ++ "` expects " ++ show n ++ " arguments, but given " ++ show m)
+      ("Constructor `" ++ show id ++ "` expects " ++ show n ++ " arguments, but given " ++ show m)
 
   NonLinPat span p t ->
     makeError src span
@@ -374,25 +366,13 @@ toMessage src = \case
 
   UnexpectedArg span (TypeLevel k) (ExpLevel e) n f ->
     makeError src span
-      ("Unexpected argument: expected a type of kind `" ++ prettyKind k ++ "`, but got expression `" ++ show e ++ "` in the "
-       ++ show n ++ ordinal n ++ " argument")
-
-  UnexpectedArg span (ExpLevel t) (TypeLevel u) n f ->
-    makeError src span
-      ("Unexpected argument: expected an expression"
-       ++ maybe "" (\ty -> " of type `" ++ show ty ++ "`") t
-       ++ ", but got type `" ++ show u ++ "` in the "
-       ++ show n ++ ordinal n ++ " argument")
+      ("Unexpected argument: expected a `" ++ prettyKind k ++ "` type, but got expression `" ++ var ++ "`")
+      where  var      = getFromSpan src span
 
   UnexpectedParam span (TypeLevel k) (ExpLevel p) n f ->
     makeError src span
-      ("Unexpected parameter: expected a type parameter of kind `" ++ prettyKind k ++ "`, but got pattern `" ++ show p
-       ++ "` in the " ++ show n ++ ordinal n ++ " parameter of `" ++ show f ++ "`")
-
-  UnexpectedParam span (ExpLevel t) (TypeLevel a) n f ->
-    makeError src span
-      ("Unexpected parameter: expected a pattern of type `" ++ show t ++ "`, but got type parameter `" ++ show a
-       ++ "` in the " ++ show n ++ ordinal n ++ " parameter of `" ++ show f ++ "`")
+      ("Unexpected argument: expected a `" ++ prettyKind k ++ "` parameter, but got pattern `" ++ var ++ "`")
+      where  var      = getFromSpan src span
 
   ChannelTypeMismatch span ty k ->
     makeError src span
@@ -410,10 +390,10 @@ toMessage src = \case
         K.Un     -> "an unrestricted"
         K.VarM x -> "a multiplicity `" ++ show x ++ "`"
 
-  TypeMismatchSelect span expected (Identifier s str) e ->
+  TypeMismatchSelect span expected id e ->
     makeError src span
       ("Couldn't match expected type `" ++ show expected
-        ++ "` with selection `" ++ str)
+        ++ "` with selection `" ++ show id)
 
   TypeMismatchList span expected _ ->
     makeError src span
@@ -431,8 +411,8 @@ toMessage src = \case
 
   TypeCtxMismatch span e ctx1 ctx2 ->
     makeError src span "In this conditional" ++ unlines
-       (map (\key -> "Variable " ++ prettyKey key ++ " used in one branch \n"
-                     ++ snippetWithCaret src (getSpan key) ++ "\nbut not in other"
+       (map (\key -> "Variable " ++ prettyXi key ++ " used in one branch \n"
+                     ++ snippetWithCaret src (getSpan key) ++ "\nbut not in the other"
                    ) (ctxDiff ctx1 ctx2))
 
 
@@ -449,9 +429,9 @@ missingInCtx m1 m2 = Map.keys (Map.difference m1 m2)
 ctxDiff :: Ord k => Map.Map k a -> Map.Map k a -> [k]
 ctxDiff m1 m2 = missingInCtx m1 m2 ++ missingInCtx m2 m1
 
-prettyKey :: Either Variable Identifier -> String
-prettyKey (Left (Variable s str i))    = str
-prettyKey (Right (Identifier s ext)) = ext
+prettyXi :: Either Variable Identifier -> String
+prettyXi (Left v)    = external v
+prettyXi (Right id) = show id
 
 
 
