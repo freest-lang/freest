@@ -6,6 +6,8 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 Errors. A work in progress.
 -}
 {-# LANGUAGE LambdaCase #-}
+
+
 module UI.Error
   (Error(..)
   ,toMessage)
@@ -20,6 +22,7 @@ import           Utils
 
 import           Data.List         (intercalate)
 import qualified Data.Map.Strict   as Map
+import Syntax.Expression
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -317,9 +320,9 @@ toMessage src = \case
       ("Illegal choice: Selection `" ++ show id ++ "` not found in type `" ++ show ty ++ "`")
 
 
-  LinVarsConsumedInUnFun span xs e -> -- fazer melhor
+  LinVarsConsumedInUnFun span xs e ->
     makeError src span
-      ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in body of unrestricted function `" ++ show e ++ "`")
+      ("Linear variables `" ++ intercalate "`, `" (map external xs) ++ "` consumed in body of unrestricted function")
 
   LinVarAtEndOfScope span xi _ ->
     makeError src span
@@ -356,9 +359,9 @@ toMessage src = \case
       in
         makeError src firstSpan message ++ restSpansLines
 
-  LinVarsCreatedInUnFun span xs e -> -- fazer melhor
+  LinVarsCreatedInUnFun span xs e ->
     makeError src span
-      ("Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` created in body of unrestricted function `" ++ show e ++ "`")
+      ("Linear variables `" ++ intercalate "`, `" (map external xs) ++ "` created in body of unrestricted function `" ++ show e ++ "`")
 
   ExposeError span s t ->
     makeError src span
@@ -410,11 +413,17 @@ toMessage src = \case
 
 
   TypeCtxMismatch span e ctx1 ctx2 ->
-    makeError src span "In this conditional" ++ unlines
-       (map (\key -> "Variable " ++ prettyXi key ++ " used in one branch \n"
-                     ++ snippetWithCaret src (getSpan key) ++ "\nbut not in the other"
-                   ) (ctxDiff ctx1 ctx2))
-
+    makeError src span "In this conditional" ++
+    unlines
+    (map (\(key, usedBranch, missingBranch) ->
+        "Variable " ++ prettyXi key ++ " used in " ++ usedBranch ++ " branch\n"
+        ++ case key of
+             Left v -> case searchVarInList v (expChildren e) of
+                         Just sp -> snippetWithCaret src sp ++ "\n"
+                         Nothing -> "(no occurrence in expression)\n"
+             Right _ -> "" 
+        ++ "but not in the " ++ missingBranch ++ " branch.\n"
+      ) (ctxDiff ctx1 ctx2))
 
 
   UnsupportedError span msg ->
@@ -422,19 +431,58 @@ toMessage src = \case
       ("Unsupported feature: " ++ msg)
 
 
+searchVarInList :: Variable -> [Exp] -> Maybe Span
+searchVarInList _ [] = Nothing
+searchVarInList v (e:es) = case e of
+    Var sp v' | internal v == internal v' -> Just sp
+    _                                     -> searchVarInList v es
+
+
+expChildren :: Exp -> [Exp]
+expChildren = \case
+    e@(Int _ _)      -> [e]
+    e@(Float _ _)    -> [e]
+    e@(Char _ _)     -> [e]
+    e@(DCons _ _)    -> [e]
+    e@(Var _ _)      -> [e]
+    e@(App _ f as) -> e : expChildren f ++ concatMap (\case
+                                                   ExpLevel ex -> expChildren ex
+                                                   _           -> []) as
+    e@(Abs _ _ _ body) -> e : expChildren body
+    e@(Let _ decls body) -> e : expChildren body ++ concatMap letDeclChildren decls
+    e@(Case _ scrutinee pes) -> e : expChildren scrutinee ++ concatMap (\(_, rhs) -> rhsToExp rhs) pes
+    e@(If _ e1 e2 e3) -> e : expChildren e1 ++ expChildren e2 ++ expChildren e3
+    e@(Channel _ _)   -> [e]
+    e@(Select _ _)    -> [e]
+
+letDeclChildren :: LetDecl -> [Exp]
+letDeclChildren = \case
+    ValDef _ rhs        -> rhsToExp rhs
+    FnDef _ clauses     -> concatMap (\(_, rhs) -> rhsToExp rhs) clauses
+    TypeSig _ _         -> []
+    Mutual decls        -> concatMap letDeclChildren decls
+
+rhsToExp :: RHS -> [Exp]
+rhsToExp = \case
+    UnguardedRHS e _    -> expChildren e
+    GuardedRHS guards _ -> concatMap (\(c,r) -> expChildren c ++ expChildren r) guards
+    
+
+
 missingInCtx :: Ord k => Map.Map k a -> Map.Map k a -> [k]
 missingInCtx m1 m2 = Map.keys (Map.difference m1 m2)
 
 
-ctxDiff :: Ord k => Map.Map k a -> Map.Map k a -> [k]
-ctxDiff m1 m2 = missingInCtx m1 m2 ++ missingInCtx m2 m1
+type BranchDiff k = (k, String, String)
+
+ctxDiff :: Ord k => Map.Map k a -> Map.Map k a -> [BranchDiff k]
+ctxDiff ctxThen ctxElse =
+  [(k, "else", "then") | k <- missingInCtx ctxThen ctxElse] ++
+  [(k, "then", "else") | k <- missingInCtx ctxElse ctxThen]
 
 prettyXi :: Either Variable Identifier -> String
-prettyXi (Left v)    = external v
+prettyXi (Left v)    = external  v
 prettyXi (Right id) = show id
-
-
-
 
 
 -- | Convert an error to a readable 'String', which should include its location
