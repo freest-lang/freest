@@ -416,7 +416,7 @@ toMessage src = \case
     makeError src span "In this conditional" ++
     unlines
     (map (\(key, usedBranch, missingBranch) ->
-        "Variable " ++ prettyXi key ++ " used in " ++ usedBranch ++ " branch\n"
+        "Variable " ++ prettyXi key ++ " used in the " ++ usedBranch ++ " branch\n"
         ++ case key of
              Left v -> case searchVarInList v (expChildren e) of
                          Just sp -> snippetWithCaret src sp ++ "\n"
@@ -440,11 +440,6 @@ searchVarInList v (e:es) = case e of
 
 expChildren :: Exp -> [Exp]
 expChildren = \case
-    e@(Int _ _)      -> [e]
-    e@(Float _ _)    -> [e]
-    e@(Char _ _)     -> [e]
-    e@(DCons _ _)    -> [e]
-    e@(Var _ _)      -> [e]
     e@(App _ f as) -> e : expChildren f ++ concatMap (\case
                                                    ExpLevel ex -> expChildren ex
                                                    _           -> []) as
@@ -452,8 +447,7 @@ expChildren = \case
     e@(Let _ decls body) -> e : expChildren body ++ concatMap letDeclChildren decls
     e@(Case _ scrutinee pes) -> e : expChildren scrutinee ++ concatMap (\(_, rhs) -> rhsToExp rhs) pes
     e@(If _ e1 e2 e3) -> e : expChildren e1 ++ expChildren e2 ++ expChildren e3
-    e@(Channel _ _)   -> [e]
-    e@(Select _ _)    -> [e]
+    e -> [e]
 
 letDeclChildren :: LetDecl -> [Exp]
 letDeclChildren = \case
