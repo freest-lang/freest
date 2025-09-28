@@ -186,8 +186,8 @@ toMessage src = \case
       expectedMsg =
         case tokenTypesPresent expected of
           []  -> "Expected something"
-          [x] -> "Expected " ++ x
-          xs  -> "Expected " ++ intercalate " or " xs
+          [x] -> "Expected " ++ show x
+          xs  -> "Expected " ++ intercalate " or " (map show xs)
     in
       makeError src span ("Parse error: " ++ expectedMsg)
 
@@ -496,26 +496,47 @@ stripQuotes s = case s of
     '\'' : xs -> reverse (drop 1 (reverse xs))
     _         -> s
 
-tokenType :: String -> String
+tokenType :: String -> TokenCategory
 tokenType t
-  | t' `elem` ["OPEN","PIPE","CLOSE"] = "layout punctuation"
+  | t' `elem` ["OPEN","PIPE","CLOSE"] = Layout
   | t' `elem` ["module","where","import","data","type","let","in","mutual","case","of",
-              "channel","select","if","then","else","forall","exists"] = "a keyword"
-  | t' `elem` [".","=","{","}","(",")","[","]","\\","->","*->","1->",","] = "a delimiter"
-  | t' `elem` ["|",":","::",";","@","$","|>","||","&&","+","++","+.","-","-.","*","**","*.","/","/.","^","^^","CMP"] = "an operator"
-  | t' `elem` ["Int","Float","Char","Skip","Close","Wait","Dual","Void","?","!","&"] = "a type"
-  | t' `elem` ["1T","*T","1S","*S","1C","*C"] = "a kind"
-  | t' `elem` ["INT_LIT","FLOAT_LIT","CHAR_LIT","STRING_LIT"] = "a literal"
-  | t' `elem` ["UPPER_ID","QUALIFIED_UPPER_ID","WILDCARD","LOWER_ID","LOWER_ID_AT"] = "an identifier"
-  | otherwise = "Unexpected token string: " ++ show t'
+              "channel","select","if","then","else","forall","exists"] = Keyword
+  | t' `elem` [".","=","{","}","(",")","[","]","\\","->","*->","1->",","] = Delimiter
+  | t' `elem` ["|",":","::",";","@","$","|>","||","&&","+","++","+.","-","-.","*","**","*.","/","/.","^","^^","CMP"] = Operator
+  | t' `elem` ["Int","Float","Char","Skip","Close","Wait","Dual","Void","?","!","&"] = Type
+  | t' `elem` ["1T","*T","1S","*S","1C","*C"] = Kind
+  | t' `elem` ["INT_LIT","FLOAT_LIT","CHAR_LIT","STRING_LIT"] = Literal
+  | t' `elem` ["UPPER_ID","QUALIFIED_UPPER_ID","WILDCARD","LOWER_ID","LOWER_ID_AT"] = Ident
+  | otherwise = Unexpected t'
   where
      t' = stripQuotes t
 
-tokenTypesPresent :: [String] -> [String]
+tokenTypesPresent :: [String] -> [TokenCategory]
 tokenTypesPresent toks = nub $ map tokenType toks
 
+data TokenCategory
+  = Layout
+  | Keyword
+  | Delimiter
+  | Operator
+  | Type
+  | Kind
+  | Literal
+  | Ident
+  | Unexpected String
+  deriving (Eq)
 
-
+instance Show TokenCategory where
+  show = \case
+    Layout         -> "layout punctuation"
+    Keyword        -> "a keyword"
+    Delimiter      -> "a delimiter"
+    Operator       -> "an operator"
+    Type           -> "a type"
+    Kind           -> "a kind"
+    Literal        -> "a literal"
+    Ident          -> "an identifier"
+    Unexpected t   -> "Unexpected token: " ++ t
 
 
 
