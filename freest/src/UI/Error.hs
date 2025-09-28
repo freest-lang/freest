@@ -179,8 +179,7 @@ toMessage src = \case
 
   LexicalError span c ->
     makeError src span
-      ("Lexical error: unexpected character " ++ var)
-      where var = getFromSpan src span
+      ("Lexical error: unexpected character " ++ show c)
 
   ParseError span (tok, expected) ->
     let expectedMsg = case expected of
@@ -264,8 +263,8 @@ toMessage src = \case
 
   ExpectsTooManyArgs span _ _ expected actual ->
     makeError src span
-     "Funcion defenicion expects more arguments than it's type"++
-     ("The equation for" ++ var ++ " has " ++ show expected ++ "arguments, but its type has" ++ show actual ++ ".")
+     "Funcion defenition expects more arguments than it's type"++
+     ("The equation for " ++ var ++ " has " ++ show expected ++ "arguments, but its type has " ++ show actual)
      where var = getFromSpan src span
 
 
@@ -273,42 +272,40 @@ toMessage src = \case
 
   GivenTooManyArgsK span ty expected actual ->
      makeError src span
-       ("Type `" ++ show ty ++ "` expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
-       where typeName = getFromSpan src span
+       ("Type " ++ prettyType ty ++ " expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
 
 
 
   ExpectsTooManyArgsK span id expectedKind -> 
     makeError src span
-       ("Type `" ++ show id ++ "` expects "++ show arity ++" argument"++ (if arity == 1 then "" else "s"))
+       ("Type " ++ show id ++ " expects "++ show arity ++" argument"++ (if arity == 1 then "" else "s"))
          where arity = K.depth expectedKind
 
   KindMismatch span expectedKind ty gotKind ->
     if K.depth expectedKind < K.depth gotKind
       then makeError src span
-             ("expected "++ show  diff  ++" more argument"++ (if diff == 1 then "" else "s") ++ " to type ")
+             ("expected "++ show  diff  ++" more argument"++ (if diff == 1 then "" else "s"))
     else if K.depth expectedKind > K.depth gotKind
       then makeError src span
-             ("expected "++ show  (-diff)   ++" less argument"++ (if (-diff) == 1 then "" else "s") ++ " to type ")
+             ("expected "++ show  (-diff)   ++" less argument"++ (if (-diff) == 1 then "" else "s"))
    else -- depths are equal
       makeError src span
         ("expected a " ++ prettyKind (K.image expectedKind)
-           ++ "` type, but got a " ++ prettyKind (K.image gotKind) ++ " type instead")
+           ++ " type, but got a " ++ prettyKind (K.image gotKind) ++ " type instead")
     where
-      typeName = getFromSpan src span
+      typeName = prettyType ty
       diff = (K.depth gotKind - K.depth expectedKind)
 
 
   ProperKindMismatch span ty gotKind ->
      makeError src span
-       ("Type " ++ typeName ++ " expected " ++ show arity ++ " argument" ++ (if arity == 1 then "" else "s"))
-       where  typeName      = getFromSpan src span
-              arity = K.depth gotKind
+       ("Type " ++ prettyType ty ++ " expected " ++ show arity ++ " argument" ++ (if arity == 1 then "" else "s"))
+            where  arity = K.depth gotKind
 
 --ty is a session type
   SessionTypeMismatch span ty kind ->
     makeError src span
-      ("Session type mismatch: expected a session type, but found non-session type " ++ show ty)
+      ("Session type mismatch: expected a session type, but found non-session type " ++ prettyType ty)
 
 
   TypeMismatch span expected actual _ ->
@@ -317,7 +314,7 @@ toMessage src = \case
 
   IllegalChoice span id ty ->
     makeError src (getSpan id)
-      ("Illegal choice: Selection " ++ show id ++ " not found in type `" ++ show ty)
+      ("Illegal choice: Selection " ++ show id ++ " not found in type " ++ prettyType ty)
 
 
   LinVarsConsumedInUnFun span xs e ->
@@ -330,7 +327,7 @@ toMessage src = \case
 
   InvalidType span t ->
     makeError src span
-      ("Invalid type: " ++ show t)
+      ("Invalid type: " ++ prettyType t)
 
   PartiallyAppliedSelect span id ->
     makeError src span
@@ -342,7 +339,7 @@ toMessage src = \case
 
   NonLinPat span p t ->
     makeError src span
-      ("Non-linear pattern " ++ show p ++ " for linear type " ++ show t)
+      ("Non-linear pattern " ++ show p ++ " for linear type" ++ prettyType t)
 
   ConflictingDefs vos ->
     case Map.toList vos of
@@ -365,7 +362,7 @@ toMessage src = \case
 
   ExposeError span s t ->
     makeError src span
-      ("Expose error: expecting " ++ s ++ ", but got type " ++ show t)
+      ("Expose error: expecting " ++ s ++ ", but got type " ++ prettyType t)
 
   UnexpectedArg span (TypeLevel k) (ExpLevel e) n f ->
     makeError src span
@@ -379,12 +376,12 @@ toMessage src = \case
 
   ChannelTypeMismatch span ty k ->
     makeError src span
-      ("Channel type mismatch: expected a channel type, but found " ++ show ty ++ " of " ++ prettyKind k ++ " type")
+      ("Channel type mismatch: expected a channel type, but found " ++ prettyType ty ++ " of " ++ prettyKind k ++ " type")
 
   ArrowMultiplicityMismatch span e n m ty m' ->
     makeError src span
       ("Arrow multiplicity mismatch: expected "
-        ++ showMult m ++ " function of type " ++ show ty ++ ", but got "
+        ++ showMult m ++ " function of type " ++ prettyType ty ++ ", but got "
         ++ showMult m' ++ " function after the " ++ show n ++ ordinal n
         ++ " parameter of " ++ show e)
     where
@@ -482,6 +479,13 @@ ctxDiff ctxThen ctxElse =
 prettyXi :: Either Variable Identifier -> String
 prettyXi (Left v)    = external  v
 prettyXi (Right id) = show id
+
+
+prettyType :: T.Type -> String
+prettyType = \case
+  T.TName _ i        -> show i
+  T.DName _ i        -> show i
+  e -> show e
 
 
 -- | Convert an error to a readable 'String', which should include its location
