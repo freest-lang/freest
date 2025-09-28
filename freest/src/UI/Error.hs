@@ -20,7 +20,7 @@ import qualified Syntax.Kind       as K
 import qualified Syntax.Type       as T
 import           Utils
 
-import           Data.List         (intercalate)
+import           Data.List         (intercalate,nub)
 import qualified Data.Map.Strict   as Map
 import Syntax.Expression
 
@@ -182,11 +182,14 @@ toMessage src = \case
       ("Lexical error: unexpected character " ++ show c)
 
   ParseError span (tok, expected) ->
-    let expectedMsg = case expected of
-                        [] -> ""
-                        xs -> " Expected one of: " ++ intercalate ", " (map (\t -> "`" ++ t ++ "`") xs) ++ "."
-    in makeError src span
-         ("Parse error: unexpected token " ++ show tok)
+    let
+      expectedMsg =
+        case tokenTypesPresent expected of
+          []  -> "Expected something"
+          [x] -> "Expected " ++ x
+          xs  -> "Expected " ++ intercalate " or " xs
+    in
+      makeError src span ("Parse error: " ++ expectedMsg)
 
   VarOutOfScope span var ->
     makeError src span
@@ -486,6 +489,35 @@ prettyType = \case
   T.TName _ i        -> show i
   T.DName _ i        -> show i
   e -> show e
+
+
+stripQuotes :: String -> String
+stripQuotes s = case s of
+    '\'' : xs -> reverse (drop 1 (reverse xs))
+    _         -> s
+
+tokenType :: String -> String
+tokenType t
+  | t' `elem` ["OPEN","PIPE","CLOSE"] = "layout punctuation"
+  | t' `elem` ["module","where","import","data","type","let","in","mutual","case","of",
+              "channel","select","if","then","else","forall","exists"] = "a keyword"
+  | t' `elem` [".","=","{","}","(",")","[","]","\\","->","*->","1->",","] = "a delimiter"
+  | t' `elem` ["|",":","::",";","@","$","|>","||","&&","+","++","+.","-","-.","*","**","*.","/","/.","^","^^","CMP"] = "an operator"
+  | t' `elem` ["Int","Float","Char","Skip","Close","Wait","Dual","Void","?","!","&"] = "a type"
+  | t' `elem` ["1T","*T","1S","*S","1C","*C"] = "a kind"
+  | t' `elem` ["INT_LIT","FLOAT_LIT","CHAR_LIT","STRING_LIT"] = "a literal"
+  | t' `elem` ["UPPER_ID","QUALIFIED_UPPER_ID","WILDCARD","LOWER_ID","LOWER_ID_AT"] = "an identifier"
+  | otherwise = "Unexpected token string: " ++ show t'
+  where
+     t' = stripQuotes t
+
+tokenTypesPresent :: [String] -> [String]
+tokenTypesPresent toks = nub $ map tokenType toks
+
+
+
+
+
 
 
 -- | Convert an error to a readable 'String', which should include its location
