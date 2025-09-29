@@ -219,14 +219,13 @@ scopeModule' ctx m = do
 scopeModule :: ScopingCtx -> M.Module -> Scoping M.Module
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
-external2 :: Identifier -> String
-external2 (Identifier _ str) = str
+
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
 scopeKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
 scopeKindSigs ctx kindSigs = do
   let allKSigs = concat [is | (is, _) <- kindSigs]
-  let sigMap = foldr (\i m -> Map.insertWith (++) (external2 i) [i] m) Map.empty allKSigs
+  let sigMap = foldr (\i m -> Map.insertWith (++) (show i) [i] m) Map.empty allKSigs
   forM_ (Map.elems $ Map.filter ((> 1) . length) sigMap) $ \ids ->
     insertError (MultipleKindSigs (getSpan (head ids)) ids)
   foldM (\ctx' (is, k) ->
@@ -243,7 +242,7 @@ scopeDataDecls :: ScopingCtx
                -> Scoping (ScopingCtx, M.DataDeclList)
 scopeDataDecls ctx dds = do
   let allTis = [ti | (ti, _, _) <- dds]
-  let dataMap = foldr (\ti m -> Map.insertWith (++) (external2 ti) [ti] m) Map.empty allTis
+  let dataMap = foldr (\ti m -> Map.insertWith (++) (show ti) [ti] m) Map.empty allTis
   forM_ (Map.elems $ Map.filter ((> 1) . length) dataMap) $ \ids ->
     insertError (MultipleTypeDecls (getSpan (head ids)) ids)
   ctx' <- foldM (\ctx'' (ti, _, _) -> 
@@ -262,7 +261,7 @@ scopeDataDecls ctx dds = do
         return (foldr deleteTVar ctx''' as', (ti, zip as' ks', cds') : dds')
     scopeConsDecls ctx cds = do
       let allCis = [ci | (ci, _) <- cds]
-      let conMap = foldr (\ci m -> Map.insertWith (++) (external2 ci) [ci] m) Map.empty allCis
+      let conMap = foldr (\ci m -> Map.insertWith (++) (show ci) [ci] m) Map.empty allCis
       forM_ (Map.elems $ Map.filter ((> 1) . length) conMap) $ \ids ->
         insertError (MultipleConsDecls (getSpan (head ids)) ids)
       foldM scopeConsDecl (ctx, []) cds
@@ -283,7 +282,7 @@ scopeTypeDecls :: ScopingCtx
                -> Scoping (ScopingCtx, M.TypeDeclList)
 scopeTypeDecls ctx tds = do
   let allTis = [ti | (ti, _) <- tds]
-  let typeMap = foldr (\ti m -> Map.insertWith (++) (external2 ti) [ti] m) Map.empty allTis
+  let typeMap = foldr (\ti m -> Map.insertWith (++) (show ti) [ti] m) Map.empty allTis
   forM_ (Map.elems $ Map.filter ((> 1) . length) typeMap) $ \ids ->
     insertError (MultipleTypeDecls (getSpan (head ids)) ids)
 
@@ -504,7 +503,7 @@ scopeType ctx = \case
   T.Message s m p -> T.Message s <$> scopeMultiplicity m <*> pure p
   T.Choice  s m p ls -> do
     m' <- scopeMultiplicity m
-    let labelMap = foldr (\i m -> Map.insertWith (++) (external2 i) [i] m) Map.empty ls
+    let labelMap = foldr (\i m -> Map.insertWith (++) (show i) [i] m) Map.empty ls
     forM_ (Map.elems $ Map.filter ((> 1) . length) labelMap) $ \ids ->
       insertError (MultipleFieldDecls (getSpan (head ids)) ids)
     return $ T.Choice s m' p ls
