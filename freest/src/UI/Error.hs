@@ -119,8 +119,7 @@ instance Located Error where
   setSpan = internalError "span not settable for Error type."
 
 
--- span = filePaht POS POS
--- POS = int int
+
 getFromSpan :: String -> Span -> String
 getFromSpan src (Span _ (sl, sc) (_, ec)) =
   take (ec - sc) . drop (sc - 1) $ lines src !! (sl - 1)
@@ -145,7 +144,6 @@ snippetWithCaret src (Span _ (sl, sc) (_, ec)) =
      ++ gutterSpace ++ caretBody
 
 
-
 shortHeader :: Span -> String -> String
 shortHeader span msg = show (getSpan span) ++ ": error: \n" ++ msg
 
@@ -155,8 +153,6 @@ makeError src span msg   =
     [ shortHeader span msg
     , snippetWithCaret src span
   ]
-
-
 
 prettyKind :: K.Kind -> String
 prettyKind = \case
@@ -242,27 +238,22 @@ toMessage src = \case
          unlines (map (("  " ++) . show . getSpan) idents)
          where ty = show $ head idents
 
-
   LacksKindSig span ident ->
      makeError src span
          ("Type " ++ show ident ++ " lacks a kind signature")
-
 
   LacksTypeSig span var ->
      makeError src span
          ("Function " ++ external var ++ " lacks an accompanying type signature")
 
-
   SigLacksDef span var ->
     makeError src span
       ("Variable " ++  external var ++ " has a type signature but no definition")
-
 
   GivenTooManyArgs span _ _ expected actual ->
     makeError src span
       ("The funcion" ++ var ++ " is applied to " ++ show actual ++ " arguments, but its type has only " ++ show expected)
       where var = getFromSpan src span
-
 
   ExpectsTooManyArgs span _ _ expected actual ->
     makeError src span
@@ -270,14 +261,9 @@ toMessage src = \case
      ("The equation for " ++ var ++ " has " ++ show expected ++ "arguments, but its type has " ++ show actual)
      where var = getFromSpan src span
 
-
-
-
   GivenTooManyArgsK span ty expected actual ->
      makeError src span
        ("Type " ++ prettyType ty ++ " expects " ++ show expected ++ " argument" ++ (if expected == 1 then "" else "s") ++ ", but it was given " ++ show actual ++ ".")
-
-
 
   ExpectsTooManyArgsK span id expectedKind -> 
     makeError src span
@@ -299,7 +285,6 @@ toMessage src = \case
       typeName = prettyType ty
       diff = (K.depth gotKind - K.depth expectedKind)
 
-
   ProperKindMismatch span ty gotKind ->
      makeError src span
        ("Type " ++ prettyType ty ++ " expected " ++ show arity ++ " argument" ++ (if arity == 1 then "" else "s"))
@@ -310,7 +295,6 @@ toMessage src = \case
     makeError src span
       ("Session type mismatch: expected a session type, but found non-session type " ++ prettyType ty)
 
-
   TypeMismatch span expected actual _ ->
       makeError src span
         ("Couldn't match expected type " ++ show expected ++ " with actual type " ++ show actual)
@@ -318,7 +302,6 @@ toMessage src = \case
   IllegalChoice span id ty ->
     makeError src (getSpan id)
       ("Illegal choice: Selection " ++ show id ++ " not found in type " ++ prettyType ty)
-
 
   LinVarsConsumedInUnFun span xs e ->
     makeError src span
@@ -410,8 +393,6 @@ toMessage src = \case
             2 -> "pair"
             k -> show k ++ "-tuple")
 
-
-
   TypeCtxMismatch span e ctx1 ctx2 ->
     makeError src span "In this conditional expression" ++
     unlines
@@ -430,7 +411,6 @@ toMessage src = \case
          ++ "but not in the " ++ missingBranch' ++ " " ++ branchWordMissing ++ "\n"
      ) (ctxDiff ctx1 ctx2))
 
-
   UnsupportedError span msg ->
     makeError src span
       ("Unsupported feature: " ++ msg)
@@ -441,7 +421,6 @@ searchVarInList _ [] = Nothing
 searchVarInList v (e:es) = case e of
     Var sp v' | internal v == internal v' -> Just sp
     _                                     -> searchVarInList v es
-
 
 expChildren :: Exp -> [Exp]
 expChildren = \case
@@ -466,11 +445,8 @@ rhsToExp = \case
     UnguardedRHS e _    -> expChildren e
     GuardedRHS guards _ -> concatMap (\(c,r) -> expChildren c ++ expChildren r) guards
     
-
-
 missingInCtx :: Ord k => Map.Map k a -> Map.Map k a -> [k]
 missingInCtx m1 m2 = Map.keys (Map.difference m1 m2)
-
 
 type BranchDiff k = (k, String, String)
 
@@ -483,13 +459,11 @@ prettyXi :: Either Variable Identifier -> String
 prettyXi (Left v)    = external  v
 prettyXi (Right id) = show id
 
-
 prettyType :: T.Type -> String
 prettyType = \case
   T.TName _ i        -> show i
   T.DName _ i        -> show i
   e -> show e
-
 
 stripQuotes :: String -> String
 stripQuotes s = case s of

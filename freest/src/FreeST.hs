@@ -48,12 +48,12 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
                          else mappend preludeModule programModule
         -- Scope the final module.
         runScopeModule finalModule
-    of Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> mapM_ (putStrLn . toMessage programSrc) es >> exitFailure
+    of Left es -> putStrLn "[Scoping failed]" >>  mapM_ (putStrLn . toMessage programSrc) es >> exitFailure
        Right m -> do 
           -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
           -- Validate the module.
           runValidate m & \case 
-            Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> mapM_ (putStrLn . toMessage programSrc) es >> exitFailure     
+            Left es -> putStrLn "[Validation failed]" >> mapM_ (putStrLn . toMessage programSrc) es >> exitFailure     
             Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
 
 -- | The path to the source code of the Prelude.
