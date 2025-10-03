@@ -161,9 +161,9 @@ prettyKind = \case
   K.Var _ v -> "kind variable " ++ show v
   where
     prettyMulti = \case
-      K.Lin -> "linear"
-      K.Un -> "unrestricted"
-      K.VarM v -> "multiplicity variable " ++ show v
+      K.Lin -> "a linear"
+      K.Un -> "an unrestricted"
+      K.VarM v -> "a multiplicity variable " ++ show v
     prettyPre = \case
       K.Top -> ""
       K.Session -> " session"
@@ -279,10 +279,9 @@ toMessage src = \case
              ("expected "++ show  (-diff)   ++" less argument"++ (if (-diff) == 1 then "" else "s"))
    else -- depths are equal
       makeError src span
-        ("expected a " ++ prettyKind (K.image expectedKind)
-           ++ " type, but got a " ++ prettyKind (K.image gotKind) ++ " type instead")
+        ("expected " ++ prettyKind (K.image expectedKind)
+           ++ " type, but got " ++ prettyKind (K.image gotKind) ++ " type instead")
     where
-      typeName = prettyType ty
       diff = (K.depth gotKind - K.depth expectedKind)
 
   ProperKindMismatch span ty gotKind ->
@@ -301,7 +300,7 @@ toMessage src = \case
 
   IllegalChoice span id ty ->
     makeError src (getSpan id)
-      ("Illegal choice: Selection " ++ show id ++ " not found in type " ++ prettyType ty)
+      ("Illegal choice " ++ show id ++ " not found in type " ++ prettyType ty)
 
   LinVarsConsumedInUnFun span xs e ->
     makeError src span
@@ -352,12 +351,12 @@ toMessage src = \case
 
   UnexpectedArg span (TypeLevel k) (ExpLevel e) n f ->
     makeError src span
-      ("Unexpected argument: expected a " ++ prettyKind k ++ " type, but got expression " ++ var)
+      ("Unexpected argument: expected " ++ prettyKind k ++ " type, but got expression " ++ var)
       where  var      = getFromSpan src span
 
   UnexpectedParam span (TypeLevel k) (ExpLevel p) n f ->
     makeError src span
-      ("Unexpected argument: expected a " ++ prettyKind k ++ " parameter, but got pattern " ++ var)
+      ("Unexpected argument: expected " ++ prettyKind k ++ " parameter, but got pattern " ++ var)
       where  var      = getFromSpan src span
 
   ChannelTypeMismatch span ty k ->
@@ -399,7 +398,7 @@ toMessage src = \case
       (map (\(key, usedBranch, missingBranch) ->
          let (usedBranch', missingBranch', branchWordUsed, branchWordMissing) = (\case
                Case{} -> ("this", "other", "branch", "branches") 
-               _      -> (usedBranch, missingBranch, "branch", "branch") 
+               If{}   -> ("the "++ usedBranch, missingBranch, "branch", "branch") 
               ) e
        in
          "Linear variable " ++ prettyXi key ++ " used in " ++ usedBranch' ++ " " ++ branchWordUsed ++ "\n"
