@@ -392,23 +392,30 @@ toMessage src = \case
             2 -> "pair"
             k -> show k ++ "-tuple")
 
-  TypeCtxMismatch span e ctx1 ctx2 ->
-    makeError src span "In this conditional expression" ++
-    unlines
-      (map (\(key, usedBranch, missingBranch) ->
-         let (usedBranch', missingBranch', branchWordUsed, branchWordMissing) = (\case
-               Case{} -> ("this", "other", "branch", "branches") 
-               If{}   -> ("the "++ usedBranch, missingBranch, "branch", "branch") 
-              ) e
-       in
-         "Linear variable " ++ prettyXi key ++ " used in " ++ usedBranch' ++ " " ++ branchWordUsed ++ "\n"
-         ++ case key of
-              Left v -> case searchVarInList v (expChildren e) of
-                          Just sp -> snippetWithCaret src sp ++ "\n"
-                          Nothing -> "(no occurrence in expression)\n"
-              Right _ -> ""
-         ++ "but not in the " ++ missingBranch' ++ " " ++ branchWordMissing ++ "\n"
-     ) (ctxDiff ctx1 ctx2))
+  TypeCtxMismatch _ e ctx1 ctx2 ->  
+    let adjustedSpan = case e of
+          If{}   -> mkSpan 2
+          Case{} -> mkSpan 4
+          _      -> getSpan e
+          where
+            mkSpan n = let (l, c) = startPos (getSpan e)
+                      in Span (filepath (getSpan e)) (l, c) (l, c + n)
+    in makeError src adjustedSpan "In this conditional expression" ++
+     unlines
+       (map (\(key, usedBranch, missingBranch) ->
+          let (usedBranch', missingBranch', branchWordUsed, branchWordMissing) = case e of
+                Case{} -> ("this", "other", "branch", "branches") 
+                If{}   -> ("the " ++ usedBranch, missingBranch, "branch", "branch") 
+                _      -> (usedBranch, missingBranch, "branch", "branch")
+          in
+            "Linear variable " ++ prettyXi key ++ " used in " ++ usedBranch' ++ " " ++ branchWordUsed ++ "\n"
+            ++ case key of
+                 Left v -> case searchVarInList v (expChildren e) of
+                             Just sp -> snippetWithCaret src sp ++ "\n"
+                             Nothing -> "(no occurrence in expression)\n"
+                 Right _ -> ""
+            ++ "but not in the " ++ missingBranch' ++ " " ++ branchWordMissing ++ "\n"
+        ) (ctxDiff ctx1 ctx2))
 
   UnsupportedError span msg ->
     makeError src span
