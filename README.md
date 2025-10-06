@@ -25,7 +25,7 @@ Where `PATH` is the path to a FreeST file. A FreeST file should have the same na
 
 Try running one of the programs found in the valid program test suite:
 ```
-stack run freest/test/prog/valid/functional/Fact/Fact.fst
+stack run freest/test/prog/Valid/Functional/Fact/Fact.fst
 ```
 
 If you have the executable installed, you can skip `stack` and run the following command anywhere.
