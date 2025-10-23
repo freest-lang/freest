@@ -3,7 +3,7 @@
 module Prelude where
 
 -- * Undefined. Useful for builtins, but should also be builtin...
-undefined : forall (a : *T). a
+undefined : forall (a : *T) . a
 undefined @a = undefined @a
 
 -- * Error
@@ -31,16 +31,16 @@ otherwise = True
 type Maybe : *T -> *T
 data Maybe a = Nothing | Just a
 
-maybe : forall (a : *T) (b : *T). b -> (a -> b) -> Maybe a -> b
+maybe : forall (a : *T) (b : *T) . b -> (a -> b) -> Maybe a -> b
 maybe @a @b n _ Nothing  = n
 maybe @a @b _ f (Just x) = f x
 
 type Either : *T -> *T -> *T
 data Either a b = Left a | Right b
 
-either : forall (a b : *T) (c : 1T). (a -> c) -> (b -> c) -> Either a b -> c
-either @a @b @c f _ (Left x)     =  f x
-either @a @b @c _ g (Right y)    =  g y
+either : forall (a b : *T) (c : 1T) . (a -> c) -> (b -> c) -> Either a b -> c
+either @a @b @c f _ (Left x)  =  f x
+either @a @b @c _ g (Right y) =  g y
 
 type Ordering : *T
 data Ordering = LT | EQ | GT
