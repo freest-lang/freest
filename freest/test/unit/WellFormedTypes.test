@@ -1314,3 +1314,8 @@ case
       ((\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
         (\(s : *T -> *T) (z : *T) -> z)) 
   : (*T -> *T) -> *T -> *T
+
+case T
+where
+  type T : 1S
+  type T = +{Stop: Skip, More: forall (alpha:*T) . !alpha ; T ; ?alpha}
