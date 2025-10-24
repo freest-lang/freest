@@ -156,8 +156,6 @@ instance Located Kind where
     Proper _ m pk -> Proper s m pk 
     Arrow _ k1 k2 -> Arrow s k1 k2 
 
-
-
 image :: Kind -> Kind
 image = \case
   k@Proper{} -> k
