@@ -219,22 +219,19 @@ scopeModule' ctx m = do
 scopeModule :: ScopingCtx -> M.Module -> Scoping M.Module
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
-
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
 scopeKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
 scopeKindSigs ctx kindSigs = do
-  let allKSigs = concat [is | (is, _) <- kindSigs]
-  let sigMap = foldr (\i m -> Map.insertWith (++) (show i) [i] m) Map.empty allKSigs
-  forM_ (Map.elems $ Map.filter ((> 1) . length) sigMap) $ \ids ->
-    insertError (MultipleKindSigs (getSpan (head ids)) ids)
-  foldM (\ctx' (is, k) ->
-           foldM (\ctx'' i ->
-                    if memberKSig i ctx''
-                      then pure ctx''
-                      else pure (insertKSig i ctx''))
-                 ctx' is) 
-        ctx kindSigs
+  let (es, ctx') = foldr scopeKindSig (Map.empty, ctx) kindSigs
+  forM_ es (\ids -> when (length ids > 1) $
+    insertError (MultipleKindSigs (getSpan (head ids)) ids))
+  return ctx'
+  where
+   scopeKindSig (ids, k) (err, ctx) = 
+      foldr (\i -> bimap (Map.insertWith (++) i [i]) (insertKSig i))
+             (err, ctx) ids
+
 -- | Scope a list of @data@ declarations, returning also the updated scoping
 -- context.
 scopeDataDecls :: ScopingCtx 
