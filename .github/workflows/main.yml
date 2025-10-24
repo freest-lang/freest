@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: freckle/stack-action@v5
+#      - uses: freckle/stack-action@v5
