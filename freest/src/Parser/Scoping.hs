@@ -234,6 +234,7 @@ checkDupKindSigs ctx kindSigs = do
       foldr (\i -> bimap (Map.insertWith (++) i [i]) (insertKSig i))
             (err, ctx) ids
 
+-- | Check for duplicate data and type declarations.
 checkDupDataTypeDecls :: ScopingCtx -> M.DataDeclList -> M.TypeDeclList -> Scoping ScopingCtx
 checkDupDataTypeDecls ctx dds tds = do
   let (es, ctx'  ) = foldr (\(ti, _, _) -> bimap (Map.insertWith (++) ti [ti]) 
@@ -246,6 +247,7 @@ checkDupDataTypeDecls ctx dds tds = do
     insertError (MultipleTypeDecls (getSpan (head is)) is)
   return ctx''
 
+-- | Check for duplicate data constructor declarations
 checkDupConsDecls :: ScopingCtx -> M.DataDeclList -> Scoping ScopingCtx
 checkDupConsDecls ctx dds = do -- insertCId ci ctx'
   let (es, ctx') = foldr collectConsDecls (Map.empty, ctx) dds
@@ -295,12 +297,7 @@ scopeTypeDecls ctx tds = do
 -- context. Besides scoping the variables, this procedure also groups function
 -- equations and detects signatures without accompanying definitions.
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
-scopeDefs ctx ds = do
-  let allSigVars = [x | E.TypeSig xs _ <- ds, x <- xs]
-  let sigMap = foldr (\x m -> Map.insertWith (++) (external x) [x] m) Map.empty allSigVars
-  forM_ (Map.elems $ Map.filter ((> 1) . length) sigMap) $ \vs ->
-    insertError (MultipleVarDecls (getSpan (head vs)) vs)
-    
+scopeDefs ctx ds = do    
   (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx(groupEquations ds)
   forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
   return (ctx, ds)
@@ -344,14 +341,10 @@ scopeDefs ctx ds = do
             return (ctx'', pars'++[TypeLevel a'])
       (E.TypeSig xs t : ds) -> do
         checkConflictingDefs $ map (\x -> ExpLevel $ E.VarPat (getSpan x) x) xs
-        (ictx', xs') <- foldM (\(ictx'',xs'') x ->
-            case lookupEVar x ictx'' of
-              Nothing -> do
-                x' <- freshInternal x
-                return (insertEVar x' ictx'', xs''++[x'])
-              Just existing -> do
-                return (ictx'', xs''++[x{internal = internal existing}])
-          ) (ictx,[]) xs
+        (ictx', xs') <- foldM (\(ictx'', xs'') x -> do 
+            x' <- freshInternal x
+            return (insertEVar x' ictx'', xs'' ++ [x'])) 
+          (ictx, []) xs
         t' <- scopeAndQuantifyType ctx t
         let ctx' | isMutual  = foldr insertEVar ctx xs'
                  | otherwise = ctx
@@ -457,6 +450,7 @@ scopePat ctx ictx = \case
     Just x' -> second (E.AsPat s x{internal = internal x'}) <$> scopePat ctx (deleteEVar x ictx) p
   p -> pure (ictx, p)
 
+-- | Check conflicting definitions for bindings.
 checkConflictingDefs :: [Level E.Pat Variable] -> Scoping ()
 checkConflictingDefs (partitionLevels -> (ps, as)) = do
   let evos = Map.unionsWith (++) (map patVarOccurs ps)
@@ -502,8 +496,7 @@ scopeType ctx = \case
   T.Abs s (unzip -> (as, ks)) t -> do
     as' <- mapM freshInternal as
     ks' <- mapM scopeKind ks
-    let ctx' = fromTVarList as' `union` ctx
-    T.Abs s (zip as' ks') <$> scopeType ctx' t
+    T.Abs s (zip as' ks') <$> scopeType (fromTVarList as' `union` ctx) t
   t@(T.Var s a) ->
     case lookupTVar a ctx of
       Just a' -> return $ T.Var s a{internal = internal a'}
@@ -515,7 +508,6 @@ scopeType ctx = \case
     | otherwise       -> return (T.TName s i)
   T.DName s i -> return (T.DName s i)
   t -> pure t
-
 
 -- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.
