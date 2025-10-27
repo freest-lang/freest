@@ -1319,3 +1319,7 @@ case T
 where
   type T : 1S
   type T = +{Stop: Skip, More: forall (alpha:*T) . !alpha ; T ; ?alpha}
+
+case forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
+
+case forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)

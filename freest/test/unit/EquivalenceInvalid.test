@@ -26,3 +26,9 @@ case \(a : *T) (b : *T) -> a == \(a : *T) (b : *T) -> b : *T -> *T -> *T
 
 case (\(a : *T) -> \(a : *T) -> a) == (\(a : *T) -> \(b : *T) -> a) : *T -> *T -> *T
 
+-- These two types are isomorphic, https://wiki.haskell.org/Existential_type, but not equivalent
+case
+  forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
+  ==
+  forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)
+  : *T
