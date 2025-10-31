@@ -20,7 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Only renamed internal numbers for variables in renamed types"
   errorsAreFailures
-  \(t, _, m) ->
+  \_ (t, _, m) ->
     let td = buildTypeDecls m
     in onlyRenamed (rename td t) && onlyRenamed td `shouldBe` True
 

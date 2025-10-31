@@ -20,7 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then rename T normalises to rename U" 
   errorsAreFailures
-  \(t, _, m) -> renamePreservesNormalisation (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> renamePreservesNormalisation (buildDataDecls m) t `shouldBe` True
 
 renamePreservesNormalisation :: TypeDeclMap -> T.Type -> Bool
 renamePreservesNormalisation td t = isWhnf t || u == u'

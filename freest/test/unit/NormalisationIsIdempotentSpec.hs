@@ -20,7 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "normalise t == normalise (normalise t)" 
   errorsAreFailures
-  \(t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
 
 normalisationIsIdempotent :: TypeDeclMap -> T.Type -> Bool
 normalisationIsIdempotent td t = normalise td t == normalise td (normalise td t)

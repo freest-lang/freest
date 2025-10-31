@@ -22,7 +22,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T is a whnf then T does not reduce"
   errorsAreFailures
-  \(t, _, m) -> whnfImpliesNotReduces (buildDataDecls m) t >>= (`shouldBe` True)
+  \_ (t, _, m) -> whnfImpliesNotReduces (buildDataDecls m) t >>= (`shouldBe` True)
 
 whnfImpliesNotReduces :: TypeDeclMap -> T.Type -> IO Bool
 whnfImpliesNotReduces m t

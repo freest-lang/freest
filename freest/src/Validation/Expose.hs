@@ -1,12 +1,10 @@
 module Validation.Expose
   ( kindArrow
-  , functionOrPolyExp
   , function
-  , polyExp
+  , arrow
   , internalChoice
   , output
   , input
-  , onExpression
   )
 where
 
@@ -29,27 +27,20 @@ kindArrow :: K.Kind -> ([K.Kind], K.Kind)
 kindArrow (K.Arrow _ k1 k2) = first (k1:) (kindArrow k2)
 kindArrow k = ([], k)
 
-functionOrPolyExp :: Located e => e -> T.Type -> Validation T.Type
-functionOrPolyExp e t = do
+function :: Located e => e -> T.Type -> Validation T.Type
+function e t = do
   ds <- gets typeDecls
   case normalise ds t of
     t'@(T.AppArrow s m u v) -> pure t'
     t'@(T.AppForall s aks u) -> pure t'
-    _ -> throwE (ExposeError (getSpan e) "a function or polymorphic expression" t)
+    _ -> throwE (ExposeError (getSpan e) "a function" t)
 
-function :: Located e => e -> T.Type -> Validation (K.Multiplicity, T.Type, T.Type)
-function e t = do
+arrow :: Located e => e -> T.Type -> Validation (K.Multiplicity, T.Type, T.Type)
+arrow e t = do
   ds <- gets typeDecls
   case normalise ds t of
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
-    _ -> throwE (ExposeError (getSpan e) "a function" t)
-
-polyExp :: Located e => e -> T.Type -> Validation ([(Variable, K.Kind)], T.Type)
-polyExp e t = do -- named it `polyExp` because `forall` is a keyword (and aligns better with error)
-  ds <- gets typeDecls
-  case normalise ds t of
-    t'@(T.AppForall s aks u) -> pure (aks, u)
-    _ -> throwE (ExposeError (getSpan e) "a polymorphic expression" t)
+    _ -> throwE (ExposeError (getSpan e) "a monomorphic function" t)
 
 internalChoice :: Located e => e -> T.Type -> Identifier -> Validation T.Type
 internalChoice e t i = do
@@ -78,10 +69,5 @@ message p e t = do
     t'@(T.AppMessage s K.Un  p' u)               | p == p' -> return (u, t')
     T.AppSemi _    (T.AppMessage _ K.Lin p' u) v | p == p' -> return (u, v)
     T.AppSemi _ t'@(T.AppMessage _ K.Un  p' u) v | p == p' -> return (u, t')
-    _ -> throwE (ExposeError (getSpan e) "an output type" t)
-
-onExpression :: Validation a -> E.Exp -> Validation a
-onExpression v e = catchE v $ \case
-  (ExposeError s msg t) ->
-    throwE (ExposeError (getSpan e) (msg ++ " for expression `"++ show e++"`") t)
-  e -> throwE e
+    _ -> throwE (ExposeError (getSpan e) msg t)
+  where msg = "an " ++ (case p of T.In -> "input"; T.Out -> "output") ++ " type"

@@ -298,7 +298,7 @@ scopeTypeDecls ctx tds = do
 -- equations and detects signatures without accompanying definitions.
 scopeDefs :: ScopingCtx -> [E.LetDecl] -> Scoping (ScopingCtx, [E.LetDecl])
 scopeDefs ctx ds = do    
-  (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx(groupEquations ds)
+  (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx (groupEquations ds)
   forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
   return (ctx, ds)
   where
@@ -405,6 +405,8 @@ scopeExp ctx = \case
   E.Let s ds e -> do
     (ctx', ds') <- scopeDefs ctx ds
     E.Let s ds' <$> scopeExp ctx' e
+  E.Semi s e1 e2 -> 
+    E.Semi s <$> scopeExp ctx e1 <*> scopeExp ctx e2
   E.Case s e prhss -> do
     e' <- scopeExp ctx e
     E.Case s e' <$> mapM scopePatRHS prhss
@@ -447,7 +449,8 @@ scopePat ctx ictx = \case
     Nothing -> do
       x' <- freshInternal x
       second (E.AsPat s x') <$> scopePat ctx ictx p
-    Just x' -> second (E.AsPat s x{internal = internal x'}) <$> scopePat ctx (deleteEVar x ictx) p
+    Just x' -> second (E.AsPat s x{internal = internal x'}) 
+      <$> scopePat ctx (deleteEVar x ictx) p
   p -> pure (ictx, p)
 
 -- | Check conflicting definitions for bindings.
@@ -455,17 +458,19 @@ checkConflictingDefs :: [Level E.Pat Variable] -> Scoping ()
 checkConflictingDefs (partitionLevels -> (ps, as)) = do
   let evos = Map.unionsWith (++) (map patVarOccurs ps)
       tvos = varOccurs as
-      vos = Map.filter ((>1) . length) (Map.union evos tvos)
-  unless (Map.null vos) (insertError (ConflictingDefs vos))
+  forM_ (Map.assocs $ Map.union evos tvos) \(xa, ss) -> 
+    when (length ss > 1) $ insertError (ConflictingDefs (ss !! 1) xa ss)
   where
-    varOccurs :: [Variable] -> Map.Map (Level String String) [Span]
-    varOccurs = foldr (\a occs -> Map.insertWith (++) (TypeLevel $ external a) [getSpan a] occs) Map.empty
-    patVarOccurs :: E.Pat -> Map.Map (Level String String) [Span]
+    varOccurs = foldr (\a occs -> 
+        Map.insertWith (++) (TypeLevel $ external a) [getSpan a] occs) 
+      Map.empty
     patVarOccurs = \case
-      E.VarPat s x     -> Map.singleton (ExpLevel $ external x) [getSpan x]
+      E.VarPat s x      -> Map.singleton (ExpLevel $ external x) [getSpan x]
       E.DConsPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
-      E.AsPat _ x p    -> Map.insertWith (++) (ExpLevel $ external x) [getSpan x] (patVarOccurs p)
-      _                -> Map.empty
+      E.ChoicePat _ _ p -> patVarOccurs p
+      E.AsPat _ x p     -> Map.insertWith (++) (ExpLevel $ external x) 
+                             [getSpan x] (patVarOccurs p)
+      _                 -> Map.empty
 
 -- | The set of variables in a pattern.
 patVars :: E.Pat -> Set.Set Variable

@@ -17,7 +17,7 @@ module Syntax.Kind
   , Meet(..)
   , isStrictlyLin
   , isStrictlySession
-  , isStrictlyAbsorbing
+  , isStrictlyChannel
   , image
   , depth
   )
@@ -123,13 +123,13 @@ uc s = Proper s Un  Channel
 bot :: Span -> Kind
 bot = us -- (ua later)
 
-isStrictlyLin, isStrictlyAbsorbing, isStrictlySession :: Kind -> Bool
+isStrictlyLin, isStrictlyChannel, isStrictlySession :: Kind -> Bool
 
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
 
-isStrictlyAbsorbing (Proper _ _ Channel) = True
-isStrictlyAbsorbing _ = False
+isStrictlyChannel (Proper _ _ Channel) = True
+isStrictlyChannel _ = False
 
 isStrictlySession (Proper _ _ Session) = True
 isStrictlySession _ = False

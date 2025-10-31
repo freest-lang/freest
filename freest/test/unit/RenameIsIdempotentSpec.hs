@@ -19,7 +19,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "rename(t) == rename(rename(t))" 
   errorsAreFailures
-  \(t, _, m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> renameIsIdempotent (buildDataDecls m) t `shouldBe` True
 
 renameIsIdempotent :: TypeDeclMap -> T.Type -> Bool
 renameIsIdempotent td t = rename td t == rename td (rename td t)

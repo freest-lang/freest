@@ -404,10 +404,7 @@ Exp :: { E.Exp }
   --   * à la Haskell (declared by programmer) 
   --   * à la F# (depends on leading chars)
   | Exp '.'  Exp { binOp $1 (E.Var (getSpan $2) $ mkDotVar $2) $3 }
-  | Exp ';'  Exp { E.Let (spanFromTo $1 $3) 
-                         [E.ValDef (E.WildPat (getSpan $1) (mkDefaultVar "_" $1)) 
-                                   (E.UnguardedRHS $1 Nothing)] 
-                         $3 } -- { binOp $1 (E.Var (getSpan $2) $ mkSemiVar $2) $3 }
+  | Exp ';'  Exp { E.Semi (spanFromTo $1 $3) $1 $3 }
   | Exp '$'  Exp { addArgExp (ExpLevel $3) $1 } -- { binOp $1 (E.Var (getSpan $2) $ mkDollarVar $2) $3 }
   | Exp '|>' Exp { addArgExp (ExpLevel $1) $3 } -- { binOp $1 (E.Var (getSpan $2) $ mkRTriangleVar $2) $3 }
   | Exp '||' Exp { binOp $1 (E.Var (getSpan $2) $ mkOrVar $2) $3 }
@@ -597,7 +594,8 @@ TypeTestDecl :: { M.Module -> M.Module }
 lexer cont = scan >>= cont
 
 parseError :: (Token, [String]) -> Lexer a
-parseError (tk,ss) = throwError [ParseError (getSpan tk) (tk, ss)] 
+parseError (tk, ss) = throwError [ParseError s{endPos=(ln, cn + 1)} (tk, ss)]
+  where s@Span{endPos=(ln, cn)} = (getSpan tk)
 
 listMissingTypeAppError :: Token -> Token -> Lexer a
 listMissingTypeAppError tk1 tk2 =

@@ -210,7 +210,7 @@ scan = do
   case alexScan input startcode of
     AlexEOF -> handleEOF
     AlexError (Input l c _ inp f) -> throwError 
-      [LexicalError (Span{startPos=(l,c), endPos=(l,c), filepath=f}) (head inp)]
+      [LexicalError (Span{startPos=(l, c), endPos=(l, c + 1), filepath=f}) (head inp)]
     AlexSkip input' _ -> do
       modify' $ \s -> s { lexerInput = input' }
       scan

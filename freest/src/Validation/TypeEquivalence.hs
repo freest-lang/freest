@@ -36,9 +36,9 @@ equivalent td t u =
 
 fromType :: TypeDeclMap -> [T.Type] -> Grammar
 fromType td ts =
-  trace ("\n\nTypes:   " ++ show ts ++
-         "\nRenamed: " ++ show (map (rename td) ts) ++ 
-         "\n"++show (Grammar w (productions s))) $
+  -- trace ("\n\nTypes:   " ++ show ts ++
+  --        "\nRenamed: " ++ show (map (rename td) ts) ++ 
+  --        "\n"++show (Grammar w (productions s))) $
   Grammar w (productions s)
   where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 

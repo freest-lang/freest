@@ -45,7 +45,7 @@ unOp :: E.Exp -> E.Exp -> E.Exp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
 addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp
-addArgExp a (E.App s e as) = E.App s e (as ++ [a])
+addArgExp a (E.App s e as) = E.App (spanFromTo s a) e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 
 addArgType :: T.Type -> T.Type -> T.Type

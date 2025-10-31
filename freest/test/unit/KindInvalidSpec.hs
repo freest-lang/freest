@@ -15,7 +15,7 @@ spec = mkTypeSpec
   ["test/unit/IllFormedTypes.test"]
   "Invalid kinding tests" 
   errorsAreSuccesses
-  \case
+  \_ -> \case
     (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of
       Left _ -> return ()
       Right _ -> expectationFailure "An error was expected but none was thrown."

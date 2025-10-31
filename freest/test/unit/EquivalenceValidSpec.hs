@@ -4,6 +4,7 @@ import Syntax.Module qualified as M
 import Validation.Base ( TypeDeclMap )
 import Validation.Kinding ( runCheck )
 import Validation.TypeEquivalence ( equivalent )
+import UI.Error ( showErrors )
 import UnitSpecUtils ( mkEquivalenceSpec )
 
 import Data.Map.Strict qualified as Map
@@ -16,8 +17,8 @@ spec :: Spec
 spec = mkEquivalenceSpec
   ["test/unit/EquivalenceValid.test"]
   "Valid type equivalence tests" 
-  \(t,u,k,m) -> case runCheck m t k >> runCheck m u k of
-    Left es -> expectationFailure (unlines $ map show es)
+  \src (t,u,k,m) -> case runCheck m t k >> runCheck m u k of
+    Left es -> expectationFailure (showErrors src es)
     _       -> equivalent (buildDataDecls m) t u `shouldBe` True
 
 -- Warning: code also in from Validation.Base

@@ -24,7 +24,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges"
   errorsAreFailures
-  \(t, _, m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
 
 translateToGrammar :: TypeDeclMap -> T.Type -> Bool
 translateToGrammar td t = trace ("\n" ++ show (fromType td [t])) True
