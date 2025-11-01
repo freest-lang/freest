@@ -23,7 +23,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then U is a whnf" 
   errorsAreFailures
-  \(t, _, m) -> normYieldsWhnf (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> normYieldsWhnf (buildDataDecls m) t `shouldBe` True
 
 normYieldsWhnf :: TypeDeclMap -> T.Type -> Bool
 normYieldsWhnf td t = isWhnf {-$ trace (show $ normalise td t)-} (normalise td t)

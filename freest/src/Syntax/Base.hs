@@ -63,7 +63,8 @@ instance Located Span where
 -- | A span's text representation should be in a format recognized by the 
 -- most common IDEs.
 instance Show Span where 
-  show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
+  show s = filepath s ++ ":" ++ showPos (startPos s) 
+                      ++ "–" ++ showPos (endPos s) -- Not recognized by VS Code. Is there another format for spans?
     where showPos (l,c) = show l++":"++show c
 
 -- | The null span may be used to construct syntactic objects when their 

@@ -20,7 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "T is a whnf iff rename T is a whnf"
   errorsAreFailures
-  \(t, _, m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
 
 renamePreservesWhnf :: TypeDeclMap -> T.Type -> Bool
 renamePreservesWhnf td t = isWhnf t == isWhnf (rename td t)

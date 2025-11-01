@@ -40,6 +40,8 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
   -- Read the source code of the Prelude and the program.
   preludeSrc <- getDataFileName preludePath >>= readFile
   programSrc <- readFile programPath
+  let src = Map.fromList [ (programPath, lines programSrc)
+                         , (preludePath, lines preludeSrc) ]
   case  -- Parse the source code of both the Prelude and the program
         -- and join them in a single module (unless noImplicitPrelude).
     do  programModule  <- runParseModule programPath programSrc
@@ -48,12 +50,12 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
                          else mappend preludeModule programModule
         -- Scope the final module.
         runScopeModule finalModule
-    of Left es -> putStrLn "[Scoping failed]" >> mapM_ print es >> exitFailure
+    of Left es -> putStrLn "[Scoping failed]" >>  printErrors src es >> exitFailure
        Right m -> do 
           -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
           -- Validate the module.
           runValidate m & \case 
-            Left es -> putStrLn "[Validation failed]" >> mapM_ print es >> exitFailure     
+            Left es -> putStrLn "[Validation failed]" >> printErrors src es >> exitFailure     
             Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
 
 -- | The path to the source code of the Prelude.

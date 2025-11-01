@@ -7,7 +7,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import UI.Error (Error)
+import UI.Error (Error, Source, showErrors, printErrors)
 import Validation.Kinding ( runKindModule )
 
 import Control.Monad ( forM, forM_ )
@@ -19,19 +19,20 @@ import Test.Hspec
 
 mkTypeSpec :: [FilePath] 
               -> String 
-              -> ([Error]                          -> Expectation) 
-              -> ((T.Type, Maybe K.Kind, M.Module) -> Expectation) 
+              -> (Source -> [Error]                          -> Expectation) 
+              -> (Source -> (T.Type, Maybe K.Kind, M.Module) -> Expectation) 
               -> Spec
 mkTypeSpec testPaths testDesc failHandler testHandler = do
-  sources <- zip testPaths <$> runIO (mapM readFile testPaths)
-  case concatMapM (uncurry $ runLexer parseKindingTests) sources of
-    Left es  -> runIO $ mapM_ print es >> exitFailure
+  src <- zip testPaths <$> runIO (mapM readFile testPaths)
+  let src' = lines <$> Map.fromList src
+  case concatMapM (uncurry $ runLexer parseKindingTests) src of
+    Left es  -> runIO $ printErrors src' es >> exitFailure
     Right ts -> describe testDesc $ 
       forM_ ts \((t, k), m) -> it
         (show (getSpan t))
         case runScoping scopeKindingTest (t, k, m) >>= kindKindingTest of
-          Left es          -> failHandler es
-          Right (t, k, m)  -> testHandler (t, k, m) 
+          Left es          -> failHandler src' es
+          Right (t, k, m)  -> testHandler src' (t, k, m) 
   where
     scopeKindingTest ctx (t, k, m) = do
       (ctx,m') <- scopeModule' ctx m
@@ -40,21 +41,25 @@ mkTypeSpec testPaths testDesc failHandler testHandler = do
       return (t', k', m')
     kindKindingTest (t, k, m) = (t, k,) <$> runKindModule m
 
-errorsAreFailures, errorsAreSuccesses :: [Error] -> Expectation
-errorsAreFailures  es = expectationFailure (unlines $ map show es)
-errorsAreSuccesses _  = return ()
+errorsAreFailures, errorsAreSuccesses :: Source -> [Error] -> Expectation
+errorsAreFailures  src es = expectationFailure (showErrors src es)
+errorsAreSuccesses _   _  = return ()
 
-mkEquivalenceSpec :: [FilePath] -> String -> ((T.Type, T.Type, K.Kind, M.Module) -> Expectation) -> Spec
+mkEquivalenceSpec :: [FilePath] 
+                  -> String 
+                  -> (Source -> (T.Type, T.Type, K.Kind, M.Module) -> Expectation) 
+                  -> Spec
 mkEquivalenceSpec testPaths testDesc testFun = do
-  sources <- zip testPaths <$> runIO (mapM readFile testPaths)
-  case concatMapM (uncurry $ runLexer parseEquivalenceTests) sources of
-    Left es  -> runIO $ mapM_ print es
+  src <- zip testPaths <$> runIO (mapM readFile testPaths)
+  let src' = lines <$> Map.fromList src
+  case concatMapM (uncurry $ runLexer parseEquivalenceTests) src of
+    Left es  -> runIO $ printErrors src' es
     Right ts -> describe testDesc $ 
       forM_ ts \((t, u, k), m) -> it (show (spanFromTo t u))
         case do (t', u', k', m') <- runScoping scopeEquivalenceTest (t, u, k, m)
                 (t', u', k',) <$> runKindModule m' of
-          Left es      -> expectationFailure (unlines $ map show es)
-          Right (t', u', k', m'') -> testFun (t', u', k', m'')
+          Left es      -> expectationFailure (showErrors src' es)
+          Right (t', u', k', m'') -> testFun src' (t', u', k', m'')
   where
     scopeEquivalenceTest ctx (t, u, k, m) = do
       (ctx',m') <- scopeModule' ctx m

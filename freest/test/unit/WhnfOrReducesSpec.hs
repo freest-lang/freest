@@ -21,7 +21,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "A given type T is either a whnf or reduces"
   errorsAreFailures
-  \(t, _, m) -> whnfOrReduces m t `shouldBe` True
+  \_ (t, _, m) -> whnfOrReduces m t `shouldBe` True
 
 whnfOrReduces :: M.Module -> T.Type -> Bool
 whnfOrReduces m t = isWhnf t || let !_ = reduce (buildDataDecls m) t in True

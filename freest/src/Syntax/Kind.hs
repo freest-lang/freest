@@ -17,7 +17,9 @@ module Syntax.Kind
   , Meet(..)
   , isStrictlyLin
   , isStrictlySession
-  , isStrictlyAbsorbing
+  , isStrictlyChannel
+  , image
+  , depth
   )
 where 
 
@@ -108,6 +110,13 @@ instance Subsort Kind where
   Var _ τ1        <: Var _ τ2        = τ1 == τ2
   _               <: _               = False
 
+-- for debugging
+instance Show Kind where
+  show = \case 
+    Proper _ m1 pk -> show m1 ++ show pk
+    Arrow  _ k1 k2 -> "(" ++ show k1 ++ "->" ++ show k2 ++ ")"
+    Var    _ τ     -> show τ
+
 -- | Abbreviations for the six proper kinds
 lt, ut, ls, us, lc, uc :: Span -> Kind
 lt s = Proper s Lin Top 
@@ -121,13 +130,13 @@ uc s = Proper s Un  Channel
 bot :: Span -> Kind
 bot = us -- (ua later)
 
-isStrictlyLin, isStrictlyAbsorbing, isStrictlySession :: Kind -> Bool
+isStrictlyLin, isStrictlyChannel, isStrictlySession :: Kind -> Bool
 
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
 
-isStrictlyAbsorbing (Proper _ _ Channel) = True
-isStrictlyAbsorbing _ = False
+isStrictlyChannel (Proper _ _ Channel) = True
+isStrictlyChannel _ = False
 
 isStrictlySession (Proper _ _ Session) = True
 isStrictlySession _ = False
@@ -153,3 +162,13 @@ instance Located Kind where
   setSpan s = \case
     Proper _ m pk -> Proper s m pk 
     Arrow _ k1 k2 -> Arrow s k1 k2 
+
+image :: Kind -> Kind
+image = \case
+  k@Proper{} -> k
+  Arrow _ _ k -> image k
+
+depth :: Kind -> Int
+depth = \case
+  k@Proper{} -> 0
+  Arrow _ _ k -> 1 + depth k

@@ -41,7 +41,6 @@ module Syntax.Type
 where
 
 import Syntax.Base
-import Parser.Unparser
 import Syntax.Kind qualified as K
 import Syntax.Names
 import Utils ( internalError )
@@ -205,6 +204,7 @@ instance Dual Type where
   dual t@Skip{} = t
   dual t@Void{} = t
 
+-- for debugging
 instance Show Type where
   show = \case
    -- Functional types

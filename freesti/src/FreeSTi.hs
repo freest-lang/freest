@@ -16,7 +16,7 @@ import Syntax.Type qualified as T
 import Syntax.Expression qualified as E
 import Validation.Kinding qualified as Kinding
 import Data.Function ((&))
-import UI.Error (Error)
+import UI.Error (Error, showErrors, Source)
 import Validation.Typing qualified as Typing
 import Control.Monad.State ( runState )
 import Paths_freest (getDataFileName)
@@ -29,7 +29,8 @@ main :: IO ()
 main = execParser opts >>= freesti
 
 data REPLState = REPLState 
-  { replModule      :: M.Module 
+  { src             :: Source
+  , replModule      :: M.Module 
   , scopingState    :: Scoping.ScopingState
   , scopingCtx      :: Scoping.ScopingCtx
   , validationState :: ValidationState
@@ -38,83 +39,89 @@ data REPLState = REPLState
 
 emptyREPLState :: REPLState
 emptyREPLState = REPLState 
-  { replModule = M.empty
-  , scopingState = Scoping.emptyScopingState
-  , scopingCtx = Scoping.emptyScopingCtx
+  { src             = Map.empty
+  , replModule      = M.empty
+  , scopingState    = Scoping.emptyScopingState
+  , scopingCtx      = Scoping.emptyScopingCtx
   , validationState = emptyValidationState
   , typeCtx         = Typing.emptyTypeCtx
   }
 
+interactivePath :: Int -> String
+interactivePath i = "<input " ++ show i ++ ">"
+
 freesti :: RunOpts -> IO ()
 freesti opts = do
-  let s = emptyREPLState
   preludeSrc <- getDataFileName preludePath >>= readFile
+  let s = emptyREPLState{src = Map.fromList [(preludePath, lines preludeSrc)]}
   runInputT defaultSettings
     case runParseModule preludePath preludeSrc 
          >>= runScopeModule (scopingState s) (scopingCtx s) of 
-      Left es -> outputErrors s es
+      Left es -> outputErrors 1 s es
       Right (m, scopingCtx, scopingState) ->
         case runValidateModule (typeCtx s) m of
-          Left es -> outputErrors s es
+          Left es -> outputErrors 1 s es
           Right (replModule, typeCtx, validationState) -> 
-            repl s{replModule, scopingState, scopingCtx, validationState, typeCtx}
+            repl 1 s{replModule, scopingState, scopingCtx, validationState, typeCtx}
 
-repl :: REPLState -> InputT IO ()
-repl s = do
+repl :: Int -> REPLState -> InputT IO ()
+repl i s = do
   minput <- getInputLine "freesti> "
   case minput of
     Nothing -> lift $ die "Leaving FreeSTi."
     Just (dropWhile isSpace -> ':' : (break isSpace -> (cmd, val))) ->
       if null cmd 
-        then outputStrLn "Incomplete command `:`" >> repl s
-        else handleCommand s cmd val
-    Just input -> do outputStrLn $ "Input was: " ++ input
-                     repl s
+        then outputStrLn "Incomplete command `:`" >> repl (i + 1) s
+        else do
+          let src' = Map.insert (interactivePath i) (lines val) (src s)
+          handleCommand i s{src=src'} cmd val
+    Just input -> do outputStrLn "Cannot evaluate input yet..."
+                     repl (i + 1) s
 
-outputErrors :: REPLState -> [Error] -> InputT IO ()
-outputErrors s es = mapM_ (outputStrLn . show) es >> repl s
+outputErrors :: Int -> REPLState -> [Error] -> InputT IO ()
+outputErrors i s es = (outputStrLn . showErrors (src s)) es >> repl (i + 1) s
 
-commands :: Map.Map String (REPLState -> String -> InputT IO ())
+commands :: Map.Map String (Int -> REPLState -> String -> InputT IO ())
 commands = Map.fromList 
   [ ("type", handleType)
   , ("kind", handleKind)
   , ("quit", handleQuit)
   ]
   where
-    handleKind :: REPLState -> String -> InputT IO ()
-    handleKind s val =
-      runLexer parseType "<interactive>" val 
+    handleKind :: Int -> REPLState -> String -> InputT IO ()
+    handleKind i s val =
+      runLexer parseType (interactivePath i) val 
       >>= runScopeType (scopingState s) (scopingCtx s) & \case 
-        Left es -> outputErrors s es
+        Left es -> outputErrors i s es
         Right (t, scopingCtx, scopingState) -> 
           case runValidation (validationState s) 
                              (Kinding.synth Kinding.emptyKindCtx t) of
-          Left es -> outputErrors s es
+          Left es -> outputErrors i s es
           Right k -> do 
             outputStrLn (show t ++ " : " ++ show k)
-            repl s{scopingState, scopingCtx}
-    handleType :: REPLState -> String -> InputT IO ()
-    handleType s val = 
-      runLexer parseExp "<interactive>" val
+            repl (i + 1) s{scopingState, scopingCtx}
+    handleType :: Int -> REPLState -> String -> InputT IO ()
+    handleType i s val = 
+      runLexer parseExp (interactivePath i) val
       >>= runScopeExp (scopingState s) (scopingCtx s) & \case 
-        Left es -> outputErrors s es
+        Left es -> outputErrors i s es
         Right (e, scopingCtx, scopingState) -> 
           case runValidation (validationState s) 
                              (Typing.synth Kinding.emptyKindCtx (typeCtx s) e) of 
-            Left es -> outputErrors s es
+            Left es -> outputErrors i s es
             Right (t, typeCtx) -> do 
               outputStrLn (show e ++ " : " ++ show t)
-              repl s{scopingState, scopingCtx, typeCtx}
+              repl (i + 1) s{scopingState, scopingCtx, typeCtx}
 
-    handleQuit :: REPLState -> String -> InputT IO ()
-    handleQuit _ _ = lift $ die "Leaving FreeSTi."
+    handleQuit :: Int -> REPLState -> String -> InputT IO ()
+    handleQuit _ _ _ = lift $ die "Leaving FreeSTi."
 
 
-handleCommand :: REPLState -> String -> String -> InputT IO ()
-handleCommand s cmd val =
+handleCommand :: Int -> REPLState -> String -> String -> InputT IO ()
+handleCommand i s cmd val =
   case Map.lookupMin (Map.filterWithKey (\k _ -> cmd `isPrefixOf` k) commands) of
-    Just (_, handler) -> handler s val
-    Nothing -> outputStrLn ("unknown command `:"++ cmd ++"`") >> repl s
+    Just (_, handler) -> handler i s val
+    Nothing -> outputStrLn ("unknown command `:"++ cmd ++"`") >> repl (i + 1) s
 
 runScopeType :: Scoping.ScopingState 
              -> Scoping.ScopingCtx 

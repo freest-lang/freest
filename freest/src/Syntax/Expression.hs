@@ -82,6 +82,7 @@ data Exp
   | App    Span Exp [Level Exp Type]
   | Abs    Span [Level (Pat,Type) (Variable,Kind)] Multiplicity Exp
   | Let    Span [LetDecl] Exp
+  | Semi   Span Exp Exp
   | Case   Span Exp [(Pat, RHS)]
   | If     Span Exp Exp Exp
   | Channel Span Type
@@ -143,6 +144,7 @@ instance Located Exp where
     App s _ _    -> s
     Abs s _ _ _  -> s
     Let s _ _    -> s
+    Semi s _ _   -> s
     Case s _ _   -> s
     If s _ _ _   -> s
     Channel s _  -> s
@@ -157,6 +159,7 @@ instance Located Exp where
     App _ e as    -> App s e as
     Abs _ ps m e  -> Abs s ps m e
     Let _ ds w    -> Let s ds w
+    Semi _ e1 e2  -> Semi s e1 e2
     Case _ e cs   -> Case s e cs
     If _ e1 e2 e3 -> If s e1 e2 e3
     Channel _ t   -> Channel s t
@@ -222,6 +225,7 @@ instance Show Exp where
     Let _ ds e     -> "(let ⦃ "
                       ++intercalate " ⨾ " (map show ds)
                       ++" ⦄ in "++show e++")"
+    Semi _ e1 e2   -> "(" ++ show e1 ++ "; " ++ show e2 ++ ")"
     Case _ e pes   -> "(case "++show e++" of ⦃ "
                       ++intercalate " ⨾ " (map showCase pes)
                       ++" ⦄)"

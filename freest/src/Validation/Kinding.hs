@@ -11,6 +11,7 @@ module Validation.Kinding
   , check
   , checkSubkindOf
   , checkProper
+  , checkPrekind
   , checkSession
   , checkChannel
   , KindCtx
@@ -92,19 +93,19 @@ synth ctx = \case
   T.App s t ts -> do
     k <- synth ctx t
     let (ks,kn) = Expose.kindArrow k
-    checkArgs s t (length ts) (length ks) ts ks kn
+    checkArgs s t k (length ts) (length ks) ts ks kn
+    where
+      checkArgs :: Span -> T.Type -> Kind -> Int -> Int -- error info
+                -> [T.Type] -> [Kind] -> Kind -> Validation Kind
+      checkArgs _ _ _ _ _ [] ks' kn =
+            pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
+      checkArgs s t k nargs npars ts [] kn =
+        throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) t kn npars nargs)
+      checkArgs s t k nargs npars (t' : ts') (k' : ks') kn =
+        check ctx t' k' >> checkArgs s t k nargs npars ts' ks' kn
   T.Abs s aks t -> do
     flip (foldr (\(_, ki) k -> Arrow (spanFromTo ki k) ki k)) aks 
       <$> synth (Map.fromList aks `Map.union` ctx) t
-  where
-    checkArgs :: Span -> T.Type -> Int -> Int -- error info
-              -> [T.Type] -> [Kind] -> Kind -> Validation Kind
-    checkArgs _ _ _ _ [] ks' kn =
-          pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
-    checkArgs s t nargs npars _ [] _ =
-      throwE (GivenTooManyArgsK s t npars nargs)
-    checkArgs s t nargs npars (t' : ts') (k' : ks') kn =
-      check ctx t' k' >> checkArgs s t nargs npars ts' ks' kn
 
 -- | Check a type against a given kind.
 check :: KindCtx -> T.Type -> Kind -> Validation ()
@@ -129,20 +130,21 @@ checkProper ctx t =
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
 checkSession :: KindCtx -> T.Type -> Validation (Multiplicity, Prekind)
-checkSession ctx t = do
-  (m,pk) <- checkProper ctx t
-  unless (pk <: Session) $
-    throwE (SessionTypeMismatch (getSpan t) t (Proper (getSpan t) m pk))
-  return (m,pk)
+checkSession ctx t = checkPrekind ctx t Session
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
 checkChannel :: KindCtx -> T.Type -> Validation (Multiplicity, Prekind)
-checkChannel ctx t = do
-  (m,pk) <- checkProper ctx t
-  unless (pk <: Channel) $
-    throwE (ChannelTypeMismatch (getSpan t) t (Proper (getSpan t) m pk))
-  return (m,pk)
+checkChannel ctx t = checkPrekind ctx t Channel
+
+-- | Check if a type is a proper type of the given prekind. If so, return its 
+-- minimal multiplicity and prekind. Otherwise, throw an error.
+checkPrekind :: KindCtx -> T.Type -> Prekind -> Validation (Multiplicity, Prekind)
+checkPrekind ctx t pk = do
+  (m, pk') <- checkProper ctx t
+  unless (pk' <: pk) $
+    throwE (PrekindMismatch (getSpan t) pk t (Proper (getSpan t) m pk'))
+  return (m, pk')
 
 -- | Check if the kind of a type is a subkind of another. If not, throw an 
 -- error located at the type.

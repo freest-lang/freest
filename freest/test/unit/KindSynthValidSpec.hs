@@ -1,8 +1,10 @@
 module KindSynthValidSpec (spec) where
 
-import           Validation.Kinding
-import           UnitSpecUtils
-import           Test.Hspec
+import Validation.Kinding
+import UI.Error
+import UnitSpecUtils
+
+import Test.Hspec
 
 main :: IO ()
 main = hspec spec
@@ -12,7 +14,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"]
   "Valid kind synthesis tests" 
   errorsAreSuccesses
-  \case
+  \src -> \case
     (t, _, m) -> case runKindModule m >>= (`runSynth` t) of 
-      Left es -> expectationFailure (unlines $ map show es)
+      Left es -> expectationFailure (showErrors src es)
       _       -> return ()

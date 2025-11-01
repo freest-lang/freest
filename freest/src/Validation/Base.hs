@@ -80,5 +80,5 @@ lookupKind i = do
   ctx <- gets kindSigs
   case ctx Map.!? i of
     Just k  -> return k
-    Nothing -> throwE (TypeOutOfScope (getSpan i) i)
+    Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
 
