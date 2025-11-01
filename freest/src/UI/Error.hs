@@ -17,18 +17,19 @@ module UI.Error
   )
 where
 
-import           Parser.Token
-import           Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind       as K
-import qualified Syntax.Type       as T
-import           Utils
+import Parser.Token
+import Parser.Unparser
+import Syntax.Base
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
+import Utils
 
-import           Data.List         (intercalate,nub)
-import qualified Data.Map.Strict   as Map
+import Data.List (intercalate,nub)
+import Data.Map.Strict qualified as Map
 import Syntax.Expression
-import qualified Data.List as List
-import qualified Data.Char as Char
+import Data.List qualified as List
+import Data.Char qualified as Char
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -179,17 +180,17 @@ prettyKind :: K.Kind -> String
 prettyKind = \case
   K.Proper _ m pk -> prettyMulti m ++ prettyPre pk
   K.Arrow _ k1 k2 -> prettyKind k1 ++ " -> " ++ prettyKind k2
-  K.Var _ v -> "kind variable " ++ show v
+  K.Var _ τ       -> "kind variable " ++ external τ
   where
     prettyMulti = \case
       K.Lin -> "a linear"
       K.Un -> "an unrestricted"
-      K.VarM v -> "a multiplicity variable " ++ show v
+      K.VarM φ -> "a multiplicity variable " ++ external φ
     prettyPre = \case
       K.Top -> ""
       K.Session -> " session"
       K.Channel -> " channel"
-      K.VarPK v -> " prekind variable " ++ show v
+      K.VarPK ψ -> " prekind variable " ++ external ψ
 
 toMessage :: Source -> Error -> String
 toMessage src = \case
@@ -205,7 +206,7 @@ toMessage src = \case
       showMult = \case
         K.Lin    -> "a linear"
         K.Un     -> "an unrestricted"
-        K.VarM x -> "a multiplicity" ++ show x
+        K.VarM x -> "a multiplicity" ++ external x
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
       ExpLevel x -> "variable " ++ x
@@ -218,35 +219,35 @@ toMessage src = \case
       ++ " arguments, but it was given " ++ show m)
   ExpectsTooManyArgs s _ t n m -> makeError src s
      ("This function expects " ++ prettyArgs n
-       ++ ", but its type " ++ bt (show t) ++ " takes"
+       ++ ", but its type " ++ bt (unparse t) ++ " takes"
        ++ case m of 
         0 -> " none"
         n -> " only " ++ show n)
   ExpectsTooManyArgsK s i k -> makeError src s
     ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
-      ++ bt (show k) ++ " takes only " ++ show (K.depth k))
+      ++ bt (unparse k) ++ " takes only " ++ show (K.depth k))
   ExposeError s expected t -> makeError src s
-    ("Expected " ++ expected ++ ", but got type " ++ bt (show t))
+    ("Expected " ++ expected ++ ", but got type " ++ bt (unparse t))
   GivenTooManyArgs s e t n m -> makeError src s
     ("Got " ++ prettyQArgs "unexpected" (m - n))
-    ++ "(Cannot apply an expression of type " ++ bt (show t) ++ " to " 
+    ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to " 
     ++ thirdPerson (m - n) ++ ")"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyQArgs "unexpected" (m - n))
-    ++ "(Cannot apply a type of kind " ++ bt (show k) ++ " to " 
+    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to " 
     ++ thirdPerson (m - n) ++ ")"
   IllegalChoice s i t -> makeError src (getSpan i)
-    ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (show t))
+    ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
   KindMismatch s k1 t k2 -> makeError src s 
     -- TODO: this would give us weird errors, like "Expected 1 less argument to
     -- type `Int`" with `type T : *T -> *T` and `type T = Int`
     -- if | K.depth k1 < K.depth k2 ->
-    --      ("Expected " ++ prettyMoreArgs diff ++ " to type " ++ bt (show t))
+    --      ("Expected " ++ prettyMoreArgs diff ++ " to type " ++ bt (unparse t))
     --    | K.depth k1 > K.depth k2 ->
-    --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (show t))
+    --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
     --    | otherwise ->
-      ("Couldn't match expected kind " ++ bt (show k1)
-        ++ " with actual kind " ++ bt (show k2))
+      ("Couldn't match expected kind " ++ bt (unparse k1)
+        ++ " with actual kind " ++ bt (unparse k2))
     where
       diff = (K.depth k2 - K.depth k1)
   LacksKindSig s i -> makeError src s
@@ -259,7 +260,7 @@ toMessage src = \case
     ("Linear variable " ++ prettyVarCons xi ++ " was not consumed")
   LinConsumedInUnFun s xi t fe -> errorHeader s ++ "\n" ++
     ("Linear " ++ prettyVarCons xi
-      ++ " of type " ++ show t ++ ", bound at\n"
+      ++ " of type " ++ unparse t ++ ", bound at\n"
       ++ snippet src xi True
       ++ " was consumed in body of an unrestricted function\n"
       ++ snippet src fe True)
@@ -286,7 +287,7 @@ toMessage src = \case
     ++ "Duplicate declarations at:\n"
     ++ unlines (map (("  " ++) . show . getSpan) xs)
   NonLinPat s p t -> makeError src s
-    ("Non-linear pattern for linear type " ++ bt (show t))
+    ("Non-linear pattern for linear type " ++ bt (unparse t))
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
@@ -295,13 +296,13 @@ toMessage src = \case
   PrekindMismatch s pk t k -> makeError src s
     ("Expected a " ++ prettyPk pk ++ ", but got " ++
       (case k of 
-        K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (show t)
-        k               -> bt (show t) ++ " of kind " ++ bt (show k))
+        K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (unparse t)
+        k               -> bt (unparse t) ++ " of kind " ++ bt (unparse k))
       ++ " instead")
   ProperKindMismatch s t k -> makeError src s
-    ("Expected " ++ prettyMoreArgs arity ++ " to " ++ bt (show t))
-    ++ "(Expected a proper type, but got " ++ bt (show t)
-    ++ " of kind " ++ bt (show k) ++ ")"
+    ("Expected " ++ prettyMoreArgs arity ++ " to " ++ bt (unparse t))
+    ++ "(Expected a proper type, but got " ++ bt (unparse t)
+    ++ " of kind " ++ bt (unparse k) ++ ")"
     where arity = K.depth k
   SigLacksDef s x -> makeError src s
     ("Variable " ++  external x ++ " has a type signature but no definition")
@@ -310,7 +311,7 @@ toMessage src = \case
   LinNotConsumedEvenly s xi t fpe -> errorHeader s ++ "\n" ++
     ("Linear " ++ (case xi of Left x  -> "variable " ++ bt (external x)
                               Right i -> "constructor " ++ bt (show i))
-      ++ " of type " ++ bt (show t) ++", bound at\n" 
+      ++ " of type " ++ bt (unparse t) ++", bound at\n" 
       ++ snippet src xi True
       ++ "was not consumed evenly among the branches of a" 
       ++ (case fpe of
@@ -322,18 +323,18 @@ toMessage src = \case
           _        -> "n expression") ++ "\n"
       ++ snippet src fpe True)
   TypeMismatch s t u _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (show t)
-      ++ " with actual type " ++ bt (show u))
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with actual type " ++ bt (unparse u))
   TypeMismatchList s t _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (show t) ++ " with a list pattern")
+    ("Couldn't match expected type " ++ bt (unparse t) ++ " with a list pattern")
   TypeMismatchChoice s t i p -> makeError src s
-    ("Couldn't match expected type " ++ bt (show t)
+    ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with choice pattern " ++ bt (getFromSpan src i))
   TypeMismatchSelect s t i _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (show t)
+    ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with selection " ++ bt (show i))
   TypeMismatchTuple s n t _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (show t) ++ " with "
+    ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
       ++ (case n of 0 -> "()"
                     2 -> "a pair pattern"
                     m -> "a " ++ show m ++ "-tuple pattern"))
@@ -342,18 +343,18 @@ toMessage src = \case
   UnexpectedArg s n a1 a2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
     (case (a1, a2) of 
       (TypeLevel k, ExpLevel e) ->
-        "Expected a type argument of kind " ++ bt (show k) 
+        "Expected a type argument of kind " ++ bt (unparse k) 
         ++ ", but got value argument"
       (ExpLevel  t, TypeLevel u) ->
         "Expected a value argument "
-        ++ maybe "" (\t -> "of type " ++ bt (show t)) t 
+        ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t 
         ++ ", but got type argument")
   UnexpectedParam s n f p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
     (case (p1, p2) of 
       (TypeLevel k, ExpLevel p ) ->
-        "Expected a type parameter of kind " ++ bt (show k) ++ ", but got a pattern"
+        "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
       (ExpLevel  t, TypeLevel a) ->
-        "Expected a pattern of type " ++ bt (show t) ++ ", but got a type parameter")
+        "Expected a pattern of type " ++ bt (unparse t) ++ ", but got a type parameter")
   UnsupportedError s msg -> makeError src s
     ("Unsupported feature: " ++ msg)
   VarOutOfScope s x -> makeError src s

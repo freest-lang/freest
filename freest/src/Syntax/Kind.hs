@@ -110,6 +110,13 @@ instance Subsort Kind where
   Var _ τ1        <: Var _ τ2        = τ1 == τ2
   _               <: _               = False
 
+-- for debugging
+instance Show Kind where
+  show = \case 
+    Proper _ m1 pk -> show m1 ++ show pk
+    Arrow  _ k1 k2 -> "(" ++ show k1 ++ "->" ++ show k2 ++ ")"
+    Var    _ τ     -> show τ
+
 -- | Abbreviations for the six proper kinds
 lt, ut, ls, us, lc, uc :: Span -> Kind
 lt s = Proper s Lin Top 
