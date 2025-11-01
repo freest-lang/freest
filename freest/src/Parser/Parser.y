@@ -594,8 +594,11 @@ TypeTestDecl :: { M.Module -> M.Module }
 lexer cont = scan >>= cont
 
 parseError :: (Token, [String]) -> Lexer a
-parseError (tk, ss) = throwError [ParseError s{endPos=(ln, cn + 1)} (tk, ss)]
-  where s@Span{endPos=(ln, cn)} = (getSpan tk)
+parseError (tk, ss) = throwError [ParseError s (tk, ss)]
+  where
+    s'@Span{startPos, endPos} = (getSpan tk)
+    s | startPos == endPos = s'{endPos = second (+ 1) endPos}
+      | otherwise          = s'
 
 listMissingTypeAppError :: Token -> Token -> Lexer a
 listMissingTypeAppError tk1 tk2 =
