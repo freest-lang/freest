@@ -24,6 +24,7 @@ import FreeST (preludePath)
 import Control.Monad.Except (runExceptT)
 import System.Exit (die)
 import Control.Monad.Trans (lift)
+import Parser.Unparser
 
 main :: IO ()
 main = execParser opts >>= freesti
@@ -98,8 +99,9 @@ commands = Map.fromList
                              (Kinding.synth Kinding.emptyKindCtx t) of
           Left es -> outputErrors i s es
           Right k -> do 
-            outputStrLn (show t ++ " : " ++ show k)
+            outputStrLn (val ++ " : " ++ unparse k)
             repl (i + 1) s{scopingState, scopingCtx}
+            
     handleType :: Int -> REPLState -> String -> InputT IO ()
     handleType i s val = 
       runLexer parseExp (interactivePath i) val
@@ -110,7 +112,7 @@ commands = Map.fromList
                              (Typing.synth Kinding.emptyKindCtx (typeCtx s) e) of 
             Left es -> outputErrors i s es
             Right (t, typeCtx) -> do 
-              outputStrLn (show e ++ " : " ++ show t)
+              outputStrLn (val ++ " : " ++ unparse t)
               repl (i + 1) s{scopingState, scopingCtx, typeCtx}
 
     handleQuit :: Int -> REPLState -> String -> InputT IO ()
