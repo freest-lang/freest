@@ -73,7 +73,7 @@ data Error
   | UnexpectedArg Span Int (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type)
   | UnexpectedParam Span Int (Either Variable E.Exp) (Level T.Type K.Kind)
     (Level E.Pat Variable) 
-  | UnsupportedError Span String
+  | UnsupportedError Span String String
   | VarOutOfScope Span Variable
 
 -- | Errors can be tracked to the source code.
@@ -118,7 +118,7 @@ instance Located Error where
     TypeVarOutOfScope s _ -> s
     UnexpectedArg s _ _ _ -> s
     UnexpectedParam s _ _ _ _ -> s
-    UnsupportedError s _ -> s
+    UnsupportedError s _ _ -> s
     VarOutOfScope s _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
@@ -355,8 +355,9 @@ toMessage src = \case
         "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
       (ExpLevel  t, TypeLevel a) ->
         "Expected a pattern of type " ++ bt (unparse t) ++ ", but got a type parameter")
-  UnsupportedError s msg -> makeError src s
-    ("Unsupported feature: " ++ msg)
+  UnsupportedError s msg1 msg2 -> makeError src s
+    ("Unsupported feature: " ++ msg1)
+    ++ msg2
   VarOutOfScope s x -> makeError src s
     ("Variable out of scope: " ++ bt (external x))
   where

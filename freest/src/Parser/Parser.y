@@ -305,7 +305,7 @@ TypePrimary :: { T.Type }
   | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
   | TypeVar { T.Var (getSpan $1) $1 }
   -- Lists
-  | '[' ']' {% prefixListConsError $1 $2 }
+  | '[' ']' {% prefixListTypeConsError $1 $2 }
          -- { T.DName (spanFromTo $1 $2) (mkListId (spanFromTo $1 $2)) } -- TODO: multiplicities
   | '[' Type ']' { T.AppDName (spanFromTo $1 $3) (mkNilId (spanFromTo $1 $3)) [$2] }
   -- Parenthesized type
@@ -378,6 +378,7 @@ ExpPrimary :: { E.Exp }
   -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
+  | '(' '::' ')' {% prefixListConsError $1 $3 }
   | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkMinusVar (spanFromTo $1 $3))}
   | '(' '-.' ')' { E.Var (spanFromTo $1 $3) (mkMinusDotVar (spanFromTo $1 $3))}
@@ -602,19 +603,23 @@ parseError (tk, ss) = throwError [ParseError s (tk, ss)]
 
 listMissingTypeAppError :: Token -> Token -> Lexer a
 listMissingTypeAppError tk1 tk2 =
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "List expressions require a type application. Please add `@TYPE` after this expression, where TYPE is the type of the elements of the list."]
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "List expressions require a type application" "Please provide a type application after this expression"]
 
 prefixListConsError :: Token -> Token -> Lexer a
 prefixListConsError tk1 tk2 =
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "The prefix list type constructor is not yet supported. Please provide a type between the brackets."]
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "The prefix list constructor is not yet supported" "(Consider using it infixed)"]
+
+prefixListTypeConsError :: Token -> Token -> Lexer a
+prefixListTypeConsError tk1 tk2 =
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "The prefix list type constructor is not yet supported" "Please provide a type between the brackets"]
 
 prefixTupleTypeConsError :: Token -> Token -> Lexer a
 prefixTupleTypeConsError tk1 tk2 = 
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple type constructors are not yet supported. Consider using a tuple type."] 
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple type constructors are not yet supported" "(Consider using a tuple type)"] 
 
 prefixTupleExpConsError :: Token -> Token -> Lexer a
 prefixTupleExpConsError tk1 tk2 = 
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported. Consider using a tuple expression."] 
+  throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported" "(Consider using a tuple expression)"] 
 
 runParseModule :: FilePath -> String -> Either [Error] M.Module
 runParseModule = runLexer parseModule 
