@@ -57,6 +57,14 @@ type String = [Char]
 show : forall (a : *T). a -> String
 show = undefined @(forall (a : *T). a -> String)
 
+type R : *T -> *T
+type R a = R a -> a
+
+fix : forall (a : *T). ((a -> a) -> (a -> a)) -> (a -> a)
+fix @a f =
+  (\(x : R (a -> a)) -> f (\(z : a) -> x x z))
+  (\(x : R (a -> a)) -> f (\(z : a) -> x x z))
+
 -- ** Tuples
 
 fst : forall (a : 1T) (b : *T) . (a, b) -> a
