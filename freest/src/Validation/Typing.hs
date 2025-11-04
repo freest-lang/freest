@@ -34,7 +34,6 @@ import Data.Functor
 import Data.List qualified as List
 import Data.List.Extra qualified as List
 import Data.Map.Strict qualified as Map
-import Debug.Trace (traceM)
 
 
 -- The type context. It keeps track of the variables and constructors in scope
@@ -171,7 +170,6 @@ synth kctx tctx = \case
     (t, tctx') <- synth kctx tctx e1
     k          <- Kinding.synth kctx t
     when (K.isStrictlyLin k) do
-      traceM ("E.Semi " ++ show e1 ++ " *** " ++ show e2)
       throwE (KindMismatch se1 (K.Proper se1 K.Un K.Top) t k)
     synth kctx tctx' e2
     where se1 = getSpan e1
@@ -414,7 +412,6 @@ checkArgs = checkArgs' 0
       ([], t) -> return (t, tctx)
       -- too many arguments (we could also skip exposure and throw an ExposeError here)
       (as, t) -> do
-        traceM ("*** "++ show as ++ "/" ++ show t)
         throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) f t n (n+length as))
 
 -- | Check for functions. Simultaneously walks down a list of parameters and 
@@ -619,11 +616,12 @@ typeModule m = do
                 buildArrow (Map.fromList aks) ts
             _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
           where
-            buildArrow kctx [] = return $ T.DName (getSpan it) it
-            buildArrow kctx (t:ts) = do
-              k <- Kinding.synth kctx t
-              u <- (if K.isStrictlyLin k then buildLinArrow else buildArrow) kctx ts
-              return $ T.AppArrow (spanFromTo t u) K.Un t u
+            buildArrow kctx = \case 
+              []     -> pure $ T.AppDName (getSpan it) it (map T.fromVariable as)
+              (t:ts) -> do
+                k <- Kinding.synth kctx t
+                u <- (if K.isStrictlyLin k then buildLinArrow else buildArrow) kctx ts
+                return $ T.AppArrow (spanFromTo t u) K.Un t u
             buildLinArrow kctx =
               foldrM (\t u -> return $ T.AppArrow (spanFromTo t u) K.Lin t u)
                      (T.DName (getSpan it) it)

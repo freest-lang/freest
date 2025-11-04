@@ -43,7 +43,6 @@ import Data.Foldable.Extra ( allM )
 import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
-import Debug.Trace (traceM)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map Variable Kind
