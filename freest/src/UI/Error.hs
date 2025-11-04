@@ -344,7 +344,7 @@ toMessage src = \case
     (case (a1, a2) of 
       (TypeLevel k, ExpLevel e) ->
         "Expected a type argument of kind " ++ bt (unparse k) 
-        ++ ", but got value argument"
+        ++ ", but got a value argument"
       (ExpLevel  t, TypeLevel u) ->
         "Expected a value argument "
         ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t 
