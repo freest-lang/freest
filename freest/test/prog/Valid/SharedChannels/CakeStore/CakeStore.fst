@@ -13,7 +13,7 @@ type CakeStore   = *?CakeService
 type CakeService : 1C
 type CakeService = &{Cake: Close, Disappointment: Close}
 
-runCakeStore : Dual CakeStore -> Bool -> Diverge
+runCakeStore : Dual CakeStore -> Bool -> ()
 runCakeStore cakeStore gotCake =
     let s = accept @CakeService cakeStore in
     if gotCake

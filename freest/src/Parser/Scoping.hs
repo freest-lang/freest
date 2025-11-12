@@ -29,7 +29,6 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Validation.Rename ( rename )
 import Validation.Substitution ( freeVars )
 import Syntax.Type qualified as T
 import UI.Error ( Error(..) )
@@ -287,10 +286,10 @@ scopeTypeDecls :: ScopingCtx
 scopeTypeDecls ctx tds = do
   foldM scopeTypeDecl (ctx, []) tds
   where
-    scopeTypeDecl (ctx, tds') td@(ti, t) = do
-      unless (memberKSig ti ctx) (insertError (LacksKindSig (getSpan ti) ti))
-      t'  <- scopeType ctx t
-      return (ctx, (ti, rename tdm t') : tds')
+    scopeTypeDecl (ctx', tds') td@(ti, t) = do
+      unless (memberKSig ti ctx') (insertError (LacksKindSig (getSpan ti) ti))
+      t'  <- scopeType ctx' t
+      return (ctx', (ti, t') : tds')
     tdm = Map.fromList tds
 
 -- | Scope a list of @let@ declarations, returning also the updated scoping 

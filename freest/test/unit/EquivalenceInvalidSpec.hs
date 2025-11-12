@@ -3,7 +3,7 @@ module EquivalenceInvalidSpec (spec) where
 
 import Syntax.Module qualified as M
 import UI.Error ( showErrors )
-import Validation.Base ( TypeDeclMap )
+import Validation.Base ( buildValidationState )
 import Validation.Kinding ( runCheck )
 import Validation.TypeEquivalence ( equivalent )
 import UnitSpecUtils ( mkEquivalenceSpec )
@@ -20,8 +20,4 @@ spec = mkEquivalenceSpec
   "Invalid equivalence tests" 
   \src (t,u,k,m) -> case runCheck m t k >> runCheck m u k of
     Left es -> expectationFailure (showErrors src es)
-    _       -> equivalent (buildDataDecls m) t u `shouldBe` False
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+    _       -> equivalent (buildValidationState m) t u `shouldBe` False

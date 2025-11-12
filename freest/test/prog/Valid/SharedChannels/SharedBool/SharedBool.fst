@@ -3,10 +3,10 @@ module SharedBool where
 type Bool' : *C
 type Bool' = *+{False', True'}
 
-true' : Bool' -> Diverge
+true' : Bool' -> Void@*T
 true' c = true' $ select True' c
 
-false' : Bool' -> Diverge
+false' : Bool' -> Void@*T
 false' c = false' $ select False' c
 
 cond : forall (a : *T) . Dual Bool' -> a -> a -> a

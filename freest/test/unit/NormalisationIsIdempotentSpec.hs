@@ -2,7 +2,7 @@ module NormalisationIsIdempotentSpec (spec) where
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Base ( ValidationState, buildValidationState )
 import Validation.Normalisation ( normalise )
 import UnitSpecUtils
 
@@ -20,11 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "normalise t == normalise (normalise t)" 
   errorsAreFailures
-  \_ (t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> normalisationIsIdempotent (buildValidationState m) t `shouldBe` True
 
-normalisationIsIdempotent :: TypeDeclMap -> T.Type -> Bool
-normalisationIsIdempotent td t = normalise td t == normalise td (normalise td t)
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+normalisationIsIdempotent :: ValidationState -> T.Type -> Bool
+normalisationIsIdempotent vs t = normalise vs t == normalise vs (normalise vs t)

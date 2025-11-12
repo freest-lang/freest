@@ -64,8 +64,6 @@ case Char -> Skip : *T
 
 case Char 1-> Skip : 1T
 
--- Recursive types
-
 case A : 1S
 where 
   type A : 1S
@@ -76,10 +74,17 @@ where
   type A : 1S
   type A = (!Int; Skip; ?Int)
 
+-- Recursive types
+
+case IntStream : 1S
+where
+  type IntStream : 1S
+  type IntStream = !Int ; IntStream
+
 case Tree : 1S
 where
   type Tree : 1S
-  type Tree = &{Leaf: Skip, Node: ?Int;Tree;Tree}
+  type Tree = &{Leaf: Skip, Node: Tree ; ?Int ; Tree}
 
 case TreeChannel : 1S
 where
@@ -126,7 +131,7 @@ where
   type B : 1S -> 1S
   type B a = a
 
-case forall (b : 1S) . A b : 1T
+case forall (b : 1S) . A b : 1T -- An absorbing type which is not of kind C
 where
   type A : 1S -> 1S
   type A b = b ; A b
@@ -163,6 +168,14 @@ where
   type X1 y = X2 y
   type X2 : 1S -> 1S
   type X2 y = y
+
+-- Mutual recursion
+
+case A : *T
+where
+  type A, B : *T
+  type A = Int -> B
+  type B = Char -> A
 
 -- Terminated Recursive Types
 
@@ -267,22 +280,22 @@ where
   type Z : 1S -> 1S
   type Z a = Skip;&{B: (+{A: (&{B: a, C: Skip};+{A: (?Int;Skip), B: (Z a ;Skip), C: (((?Int;&{A: ((((?();a); Z a);+{A: Z a, C: Skip});!Int), C: !Char});Z a);Skip)})};(+{A: !Char};(((?Int;&{A: ((((?();a);Z a);+{A: Z a, C: Skip});!Int), C: !Char}); Z a);(?Char;((?Int;&{A: ((((?();a);Z a);+{A: Z a, C: Skip});!Int), C: !Char});Z a))))), C: Skip}
 
-case forall (a: 1S) . forall (b: 1S) . forall (z: 1S) . B1 : 1T
-where
-  type B1 : 1S
-  type B1 = +{A: (B1;&{A: (Skip;A1), C: (B1;A2)}), B: (Skip;&{A: (Skip;A3), C: (B1;A4)}), C: (!Int;&{A: (Skip;A5), C: (B1;A6)})}
-  type A1 : 1S
-  type A1 = +{A: (B1;&{A: (Skip;A1), C:(B1;A1)}), B: (Skip;&{A: (Skip;A1), C: (B1;A1)}), C: (!Int;&{A: (Skip;A1),C: (B1;A1)})}
-  type A2 : 1S
-  type A2 = +{A: (B1;&{A: (Skip;A2), C: (B1;A2)}), B:(Skip;&{A: (Skip;A2), C: (B1;A2)}), C: (!Int;&{A: (Skip;A2), C:(B1;A2)})}
-  type A3 : 1S
-  type A3 = +{A: (B1;&{A: (Skip;A3), C:(B1;A3)}), B: (Skip;&{A: (Skip;A3), C: (B1;A3)}), C: (!Int;&{A: (Skip;A3),C: (B1;A3)})}
-  type A4 : 1S
-  type A4 = +{A: (B1;&{A: (Skip;A4), C: (B1;A4)}), B:(Skip;&{A: (Skip;A4), C: (B1;A4)}), C: (!Int;&{A: (Skip;A4), C:(B1;A4)})}
-  type A5 : 1S
-  type A5 = +{A: (B1;&{A: (Skip;A5), C:(B1;A5)}), B: (Skip;&{A: (Skip;A5), C: (B1;A5)}), C: (!Int;&{A: (Skip;A5),C: (B1;A5)})}
-  type A6 : 1S
-  type A6 = +{A: (B1;&{A: (Skip;A6), C: (B1;A6)}), B:(Skip;&{A: (Skip;A6), C: (B1;A6)}), C: (!Int;&{A: (Skip;A6), C:(B1;A6)})}
+-- case forall (a: 1S) . forall (b: 1S) . forall (z: 1S) . B1 : 1T
+-- where
+--   type B1 : 1S
+--   type B1 = +{A: (B1;&{A: (Skip;A1), C: (B1;A2)}), B: (Skip;&{A: (Skip;A3), C: (B1;A4)}), C: (!Int;&{A: (Skip;A5), C: (B1;A6)})}
+--   type A1 : 1S
+--   type A1 = +{A: (B1;&{A: (Skip;A1), C:(B1;A1)}), B: (Skip;&{A: (Skip;A1), C: (B1;A1)}), C: (!Int;&{A: (Skip;A1),C: (B1;A1)})}
+--   type A2 : 1S
+--   type A2 = +{A: (B1;&{A: (Skip;A2), C: (B1;A2)}), B:(Skip;&{A: (Skip;A2), C: (B1;A2)}), C: (!Int;&{A: (Skip;A2), C:(B1;A2)})}
+--   type A3 : 1S
+--   type A3 = +{A: (B1;&{A: (Skip;A3), C:(B1;A3)}), B: (Skip;&{A: (Skip;A3), C: (B1;A3)}), C: (!Int;&{A: (Skip;A3),C: (B1;A3)})}
+--   type A4 : 1S
+--   type A4 = +{A: (B1;&{A: (Skip;A4), C: (B1;A4)}), B:(Skip;&{A: (Skip;A4), C: (B1;A4)}), C: (!Int;&{A: (Skip;A4), C:(B1;A4)})}
+--   type A5 : 1S
+--   type A5 = +{A: (B1;&{A: (Skip;A5), C:(B1;A5)}), B: (Skip;&{A: (Skip;A5), C: (B1;A5)}), C: (!Int;&{A: (Skip;A5),C: (B1;A5)})}
+--   type A6 : 1S
+--   type A6 = +{A: (B1;&{A: (Skip;A6), C: (B1;A6)}), B:(Skip;&{A: (Skip;A6), C: (B1;A6)}), C: (!Int;&{A: (Skip;A6), C:(B1;A6)})}
   
 -- Forall
 
@@ -352,6 +365,58 @@ where
   type X, Y : 1C
   type X = Y
   type Y = +{B: !(), C: !Int} ; ((+{A: Y, C: Skip};!())  ; X)
+
+-- Dual and recursion
+
+case Dual IntStream : 1C
+where
+  type IntStream : 1C
+  type IntStream = !Int ; IntStream
+
+case (Dual TreeC) ; Wait : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close) ; TreeC
+    }
+
+case Dual (TreeC ; Wait) : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close) ; TreeC
+    }
+
+case Dual TreeChannel : 1C
+where
+  type TreeChannel : 1C
+  type TreeChannel = TreeC ; Close
+  type TreeC : 1S
+  type TreeC = +{
+      LeafC: Skip,
+      NodeC: TreeC ; !(?Int ; Close) ; TreeC
+    }
+
+-- Forall / Dual
+
+case Dual (exists (a : 1S). a) : 1S
+
+case forall (b : 1S). (Dual b) : 1S
+
+case (exists (a : 1S). a) ; !Int: 1S
+
+case exists (a : 1S). (a ; !Int) : 1S
+
+case (forall (b : 1S). b) ; !Int : 1S
+
+case forall (b : 1S). (b ; !Int) : 1S
+
 
 -- Messages of kind other than ML
 
@@ -499,8 +564,7 @@ where
 
 case U : 1C
 where
-  type T, U : 1C
-  type T = &{N:!Int;!Int;T, L:Close};?Int
+  type U : 1C
   type U = &{N:!Int;!Int;U, L:Skip};Close
 
 case T : 1S
@@ -648,7 +712,26 @@ where
 
 -- Noncontractive types are the big new valid types
 
+case A : 1T
+where
+  type A : 1S
+  type A = A
+
+case Seq Bot : *S
+where
+  type Seq : *S -> *S
+  type Seq a = a ; Seq a
+  type Bot : *S
+  type Bot = Bot
+
 case Seq Bot : *T
+where
+  type Seq : *S -> *S
+  type Seq a = a ; Seq a
+  type Bot : *S
+  type Bot = Bot
+
+case Seq Bot : 1T
 where
   type Seq : *S -> *S
   type Seq a = a ; Seq a
@@ -658,7 +741,7 @@ where
 case B : 1C
 where 
   type B : 1C
-  type B = Skip;B;?Char
+  type B = Skip ; B ; ?Char
 
 case Z : 1C
 where 
@@ -752,31 +835,36 @@ where
   type Z : 1S -> 1S
   type Z b = Z ?Char
 
-case Z : 1S -- Absorbing? Yes! non-contractive
+case Z : 1S
 where
   type Z : 1S
   type Z = Z
 
-case Z !Char : 1S -- Absorbing? Yes! non-contractive
+case Z !Char : 1S
 where
   type Z : 1S -> 1S
   type Z b = Z b
 
-case A : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type
+case Z !Char : 1S -> 1S
+where
+  type Z : 1S -> 1S -> 1S
+  type Z b a = Z b a
+
+case A : 1S
 where
   type A : 1S
   type A = &{B: Z !Char}
   type Z : 1S -> 1C
   type Z b = Z b ; Skip ; b
 
-case W : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type
+case W : 1S
 where
   type W : 1S
   type W = Z ?Char
   type Z : 1S -> 1S
   type Z b = W ; b
 
-case Z : 1S -- Absorbing? Yes! There is a trace ending in a non-contractive type
+case Z : 1S
 where
   type Z, Z', A, Z'', Z''' : 1S
   type Z = Z'
@@ -897,9 +985,9 @@ where
 
 -- Types with the Dual operator
 
-case Dual Close : 1C -- Should be Absorbing
+case Dual Close : 1C
 
-case Dual (Dual (Dual Wait)) : 1C  -- Should be Absorbing
+case Dual (Dual (Dual Wait)) : 1C
 
 case Dual !Int : 1S
 
@@ -941,11 +1029,28 @@ where
   type Id : 1S -> 1S
   type Id a = a
 
+case ABStream Int : *T -> 1S
+where
+  type ABStream : *T -> *T -> 1S
+  type ABStream a b = !a ; !b ; ABStream a b
+
+case Id Wait : 1S
+where
+  type Id : 1S -> 1S
+  type Id a = a
+
 case Convert Id Wait : 1S
 where
   type Convert : (1S -> 1S) -> 1S -> 1S
   type Convert a b = a b
   type Id : 1S -> 1S
+  type Id a = a
+
+case Convert Id Wait : 1C
+where
+  type Convert : (1C -> 1C) -> 1C -> 1C
+  type Convert a b = a b
+  type Id : 1C -> 1C
   type Id a = a
 
 case Convert Id (Tree Int) : 1S
@@ -1086,3 +1191,135 @@ case PTree : 1T -> 1T
 where
   type PTree: 1T -> 1T
   data PTree a = Leaf a | Node (PTree (a, a))
+
+-- Infra and Supra type application
+
+case Infra Int : 1S -> 1S
+where
+  type Infra : *T -> 1S -> 1S
+  type Infra a b = !b
+
+case Supra Int Char : 1S
+where
+  type Supra : 1T -> 1T -> 1S
+  type Supra a = A
+  type A : 1T -> 1S
+  type A b = !b
+
+case Suupra Int Char : 1S -> 1S
+where
+  type Suupra : 1T -> 1T -> 1S -> 1S
+  type Suupra a = A
+  type A : 1T -> 1S -> 1S
+  type A b c = !b
+
+-- Type constants
+
+case (!) : *T -> 1S
+
+case (!) Wait : 1S
+
+case (!) Wait ; Close : 1S
+
+case (?) : *T -> 1S
+
+case (->) : *T -> *T -> *T
+
+case (->) : *T -> *T -> *T
+
+case (1->) Int : 1T -> 1T
+
+case (->) Wait : *T -> *T
+
+case (->) Int !Int : *T
+
+case A ((->) Int) : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = A ((->) Char)
+
+-- Sections
+
+case (->) : 1T -> 1T -> *T
+
+case (1->) : 1T -> 1T -> 1T
+
+case (Int ->) : 1T -> *T
+
+case (Int *->) : 1T -> *T
+
+case (Int 1->) : 1T -> 1T
+
+case (\(a:1T) -> Int 1-> a) : 1T -> 1T
+
+case (-> Int) : 1T -> *T
+
+case (*-> Int) : 1T -> *T
+
+case (1-> Int) : 1T -> 1T
+
+case (Int ->) Int : *T
+
+case (Int *->) Int : *T
+
+case (Int 1->) Int : 1T
+
+case (-> Int) Int : *T
+
+case (*-> Int) Int : *T
+
+case (1-> Int) Int : 1T
+
+case A ((->) Int) : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = a Char
+
+case (!) : 1T -> 1S
+
+-- Type-level abstractions
+
+case \(a : *T) -> a : *T -> *T
+
+case (\(a : *T) -> a) Int : *T
+
+case (\(a : 1T) -> a) Int : 1T
+
+case (\(a : 1T) (b : *T) -> a) !Int Int : 1T
+
+case (\(a : 1T) (b : *T) -> b) !Int Int : *T
+
+case (\(a : *T) (b : 1S) -> !b) Int : 1S -> 1S
+
+case (\(a : 1T) -> (\(b : 1T) -> !b)) Int Char : 1S
+
+case (\(a : 1T) -> \(b : 1T) (c : 1S) -> !b) Int Char : 1S -> 1S
+
+case 
+  (\(a : 1S -> 1S) (b : 1S) -> a b) 
+    (\(a : 1S) -> a) 
+    (Tree Int) 
+  : 1S
+where
+  type Tree : *T -> 1S
+  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+case Succ (Succ (\(s : *T -> *T) (z : *T) -> z)) : (*T -> *T) -> *T -> *T
+where
+  type Succ : ((*T -> *T) -> *T -> *T) -> ((*T -> *T) -> *T -> *T)
+  type Succ = \(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)
+
+case 
+    (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
+      ((\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
+        (\(s : *T -> *T) (z : *T) -> z)) 
+  : (*T -> *T) -> *T -> *T
+
+case T
+where
+  type T : 1S
+  type T = +{Stop: Skip, More: forall (alpha:*T) . !alpha ; T ; ?alpha}
+
+case forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
+
+case forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)

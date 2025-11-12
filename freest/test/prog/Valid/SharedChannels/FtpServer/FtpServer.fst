@@ -43,7 +43,7 @@ type FTPThread = *?(Dual FTPSession)
 
 -- |FTP demon: wait for a client, wait for a thread;
 -- |pass the client to the thread
-ftpd : Dual FTP -> Dual FTPThread -> Diverge
+ftpd : Dual FTP -> Dual FTPThread -> Void@*T
 ftpd pid b = 
   send (accept @FTPSession pid) b;
   ftpd pid b
@@ -51,14 +51,14 @@ ftpd pid b =
 mutual
   -- |An FTP thread: receive a request from the demon;
   -- |authenticate the client; pass the thread to the actions loop
-  ftpThread : State -> FTPThread -> Diverge
+  ftpThread : State -> FTPThread -> Void@*T
   ftpThread state b =
     -- TODO: authenticate the client
     actions state (receive_ @(Dual FTPSession) b) b
 
   -- |A linear interaction with the client;
   -- |once done become an FTP thread
-  actions : State -> Dual FTPSession -> FTPThread 1-> Diverge
+  actions : State -> Dual FTPSession -> FTPThread 1-> Void@*T
   actions state s b =
     case s of
       &Get s ->
@@ -73,7 +73,7 @@ mutual
       &Bye s -> wait s; ftpThread state b
 
 -- |Initialise the server: create n FTP threads and launch the demon
-init : Int -> Dual FTP -> Diverge
+init : Int -> Dual FTP -> Void@*T
 init n pid =
   let (r, w) = channel @(Dual FTPThread) in
   let state  = channel @*?File in
@@ -118,7 +118,7 @@ putgetClient pid file =
 
 -- Application
 
-main : Diverge
+main : Void@*T
 main =
   let (ftpc, ftps) = channel @FTP in
   -- A few clients

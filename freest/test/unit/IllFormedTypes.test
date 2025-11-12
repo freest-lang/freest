@@ -42,3 +42,30 @@ where
   type NestedTree : 1T -> 1S
   type NestedTree a = +{Leaf: !a, Node: NestedTree [a]}
 
+-- (Non) Channel types
+
+case T : 1C -> 1C
+where
+  type T : 1C -> 1C
+  type T a = +{Done: Skip, More: !Int ; T a}
+
+-- Type-level abstractions
+
+case \(a : *T) -> b
+
+case (\(a : *T) -> a) !Int
+
+case (\(a : *T -> *T) -> a Int) Int
+
+case (\(a : 1T) (b : *T) -> a) Int !Int
+
+case (\(a : 1T) (b : *T) -> b) Int !Int
+
+case (\(a : *T) -> !Int; a)
+
+case 
+  \(f : *T -> *T) -> 
+    ((\(f : *T -> *T) (x : *T -> *T) -> f (x x)) f) 
+    ((\(f : *T -> *T) (x : *T -> *T) -> f (x x)) f)
+
+case \(x : *T) (x : *T) -> x -- should give "conflicting definitions"

@@ -11,13 +11,14 @@ module Syntax.Kind
   ( Multiplicity(..)
   , Prekind(..)
   , Kind(..)
-  , lt, ut, ls, us, lc, uc, bot
+  , lt, ut, ls, us, lc, uc
   , Subsort(..)
   , Join(..)
   , Meet(..)
   , isStrictlyLin
   , isStrictlySession
-  , isStrictlyChannel
+  , isSession
+  , isChannel
   , image
   , depth
   )
@@ -93,7 +94,8 @@ instance Eq Kind where
   Proper _ m1 pk1 == Proper _ m2 pk2 = m1 == m2 && pk1 == pk2
   Arrow _ k11 k12 == Arrow _ k21 k22 = k11 == k21 && k12 == k22
   Var _ τ1        == Var _ τ2        = τ1 == τ2 
-
+  _               == _               = False
+  
 instance Meet Kind where
   meet (Proper s m1 b1) (Proper _ m2 b2) = 
     Proper s (meet m1 m2) (meet b1 b2)
@@ -126,20 +128,30 @@ us s = Proper s Un  Session
 lc s = Proper s Lin Channel
 uc s = Proper s Un  Channel
 
--- | Abbreviation for the bottom proper kind
-bot :: Span -> Kind
-bot = us -- (ua later)
-
-isStrictlyLin, isStrictlyChannel, isStrictlySession :: Kind -> Bool
+isStrictlyLin, isStrictlySession, isChannel, isSession :: Kind -> Bool
 
 isStrictlyLin (Proper _ Lin _) = True 
 isStrictlyLin _ = False
 
-isStrictlyChannel (Proper _ _ Channel) = True
-isStrictlyChannel _ = False
-
 isStrictlySession (Proper _ _ Session) = True
 isStrictlySession _ = False
+
+isChannel (Proper _ _ Channel) = True
+isChannel _ = False
+
+isSession (Proper _ _ pk) = pk <: Session
+isSession _ = False
+
+-- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
+image :: Kind -> Kind
+image = \case
+  k@Proper{} -> k
+  Arrow _ _ k -> image k
+
+depth :: Kind -> Int
+depth = \case
+  k@Proper{} -> 0
+  Arrow _ _ k -> 1 + depth k
 
 instance Show Multiplicity where
   show = \case 
@@ -162,13 +174,3 @@ instance Located Kind where
   setSpan s = \case
     Proper _ m pk -> Proper s m pk 
     Arrow _ k1 k2 -> Arrow s k1 k2 
-
-image :: Kind -> Kind
-image = \case
-  k@Proper{} -> k
-  Arrow _ _ k -> image k
-
-depth :: Kind -> Int
-depth = \case
-  k@Proper{} -> 0
-  Arrow _ _ k -> 1 + depth k

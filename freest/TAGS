@@ -1,0 +1,1140 @@
+
+./test/unit/WhnfOrReducesSpec.hs,154
+module WhnfOrReducesSpec WhnfOrReducesSpec0,1
+main main15,16
+spec spec18,19
+whnfOrReduces whnfOrReduces24,25
+buildDataDecls buildDataDecls28,29
+
+./test/unit/RenamePreservesNormalisationSpec.hs,214
+module RenamePreservesNormalisationSpec RenamePreservesNormalisationSpec0,1
+main main14,15
+spec spec17,18
+renamePreservesNormalisation renamePreservesNormalisation23,24
+buildDataDecls buildDataDecls29,30
+
+./test/unit/BoundedValidSpec.hs,144
+module BoundedValidSpec BoundedValidSpec0,1
+main main17,18
+spec spec20,21
+isBounded isBounded26,27
+buildDataDecls buildDataDecls31,32
+
+./test/unit/UnitSpecUtils.hs,118
+module UnitSpecUtils UnitSpecUtils0,1
+mkKindingSpec mkKindingSpec16,17
+mkEquivalenceSpec mkEquivalenceSpec36,37
+
+./test/unit/KindingValidSpec.hs,80
+module KindingValidSpec KindingValidSpec0,1
+main main11,12
+spec spec14,15
+
+./test/unit/RenameYieldsAlphaConguenceSpec.hs,182
+module RenameYieldsAlphaConguenceSpec RenameYieldsAlphaConguenceSpec0,1
+main main13,14
+spec spec16,17
+renameYieldsEq renameYieldsEq22,23
+buildDataDecls buildDataDecls26,27
+
+./test/unit/NormalisationIsIdempotentSpec.hs,202
+module NormalisationIsIdempotentSpec NormalisationIsIdempotentSpec0,1
+main main13,14
+spec spec16,17
+normalisationIsIdempotent normalisationIsIdempotent22,23
+buildDataDecls buildDataDecls26,27
+
+./test/unit/KindingInvalidSpec.hs,82
+module KindingInvalidSpec KindingInvalidSpec0,1
+main main8,9
+spec spec11,12
+
+./test/unit/NormalisationYieldsWhnfSpec.hs,176
+module NormalisationYieldsWhnfSpec NormalisationYieldsWhnfSpec0,1
+main main17,18
+spec spec20,21
+normYieldsWnnf normYieldsWnnf26,27
+buildDataDecls buildDataDecls30,31
+
+./test/unit/EquivalenceInvalidSpec.hs,129
+module EquivalenceInvalidSpec EquivalenceInvalidSpec1,2
+main main11,12
+spec spec14,15
+buildDataDecls buildDataDecls21,22
+
+./test/unit/RenamePreservesReductionSpec.hs,198
+module RenamePreservesReductionSpec RenamePreservesReductionSpec0,1
+main main14,15
+spec spec17,18
+renamePreservesReduction renamePreservesReduction23,24
+buildDataDecls buildDataDecls29,30
+
+./test/unit/ReducesImpliesNotWhnfSpec.hs,186
+module ReducesImpliesNotWhnfSpec ReducesImpliesNotWhnfSpec0,1
+main main17,18
+spec spec20,21
+reducesImpliesNotWhnf reducesImpliesNotWhnf26,27
+buildDataDecls buildDataDecls33,34
+
+./test/unit/EquivalenceValidSpec.hs,125
+module EquivalenceValidSpec EquivalenceValidSpec0,1
+main main10,11
+spec spec13,14
+buildDataDecls buildDataDecls20,21
+
+./test/unit/TranslationToGrammarConvergesSpec.hs,196
+module TranslationToGrammarConvergesSpec TranslationToGrammarConvergesSpec0,1
+main main17,18
+spec spec20,21
+translateToGrammar translateToGrammar26,27
+buildDataDecls buildDataDecls30,31
+
+./test/unit/RenameIsIdempotentSpec.hs,174
+module RenameIsIdempotentSpec RenameIsIdempotentSpec0,1
+main main13,14
+spec spec16,17
+renameIsIdempotent renameIsIdempotent22,23
+buildDataDecls buildDataDecls26,27
+
+./test/unit/UnitSpec.hs,0
+
+./test/unit/BoundedInvalidSpec.hs,148
+module BoundedInvalidSpec BoundedInvalidSpec0,1
+main main17,18
+spec spec20,21
+isBounded isBounded26,27
+buildDataDecls buildDataDecls31,32
+
+./test/unit/RenamePreservesWhnfSpec.hs,178
+module RenamePreservesWhnfSpec RenamePreservesWhnfSpec0,1
+main main14,15
+spec spec17,18
+renamePreservesWhnf renamePreservesWhnf23,24
+buildDataDecls buildDataDecls27,28
+
+./test/prog/ProgSpecUtils.hs,267
+module ProgSpecUtils ProgSpecUtils8,9
+getSource getSource18,19
+  | ".fst" `isExtensionOf`isExtensionOf21,22
+specTest' specTest'24,25
+specTest specTest39,40
+directoryContents directoryContents54,55
+safeRead safeRead59,60
+beforeHandle beforeHandle64,65
+
+./test/prog/InvalidSpec.hs,206
+module InvalidSpec InvalidSpec10,11
+baseTestDir baseTestDir35,36
+spec spec38,39
+testDir testDir41,42
+testInvalid testInvalid49,50
+exitProgram exitProgram74,75
+errorExpected errorExpected78,79
+
+./test/prog/ProgSpec.hs,0
+
+./test/prog/ValidSpec.hs,409
+module ValidSpec ValidSpec9,10
+data TestResult TestResult26,27
+data TestResult = Timeout Timeout26,27
+data TestResult = Timeout | Passed Passed26,27
+data TestResult = Timeout | Passed | FailedFailed26,27
+baseDir baseDir28,29
+spec spec31,32
+test test34,35
+pendingMessage pendingMessage45,46
+doExpectationsMatch doExpectationsMatch48,49
+testOne testOne52,53
+timeInMicro timeInMicro70,71
+
+./src/UI/CLI.hs,208
+module UI.CLI UI.CLI8,9
+data RunOpts RunOpts12,13
+data RunOpts = RunOpts{file RunOpts{file12,13
+data RunOpts = RunOpts{file :: FilePath, least least12,13
+freestOpts freestOpts14,15
+opts opts24,25
+
+./src/UI/Error.hs,1787
+module UI.ErrorUI.Error8,9
+data ErrorError22,23
+  = LexicalError LexicalError23,24
+  | ParseError ParseError24,25
+  | VarOutOfScope VarOutOfScope25,26
+  | TypeVarOutOfScope TypeVarOutOfScope26,27
+  | ConsOutOfScope ConsOutOfScope27,28
+  | TypeOutOfScope TypeOutOfScope28,29
+  | ConflictingDefs ConflictingDefs29,30
+  | MultipleVarDecls MultipleVarDecls30,31
+  | MultipleFieldDecls MultipleFieldDecls31,32
+  | MultipleConsDecls MultipleConsDecls32,33
+  | MultipleTypeDecls MultipleTypeDecls33,34
+  | MultipleKindSigs MultipleKindSigs34,35
+  | LacksKindSig LacksKindSig35,36
+  | LacksTypeSig LacksTypeSig36,37
+  | GivenTooManyArgs GivenTooManyArgs37,38
+  | ExpectsTooManyArgs ExpectsTooManyArgs38,39
+  | LinVarsConsumedInUnFun LinVarsConsumedInUnFun39,40
+  | LinVarsCreatedInUnFun LinVarsCreatedInUnFun40,41
+  | ExposeError ExposeError41,42
+  | UnexpectedArg UnexpectedArg42,43
+  | UnexpectedParam UnexpectedParam43,44
+  | NonLinPat NonLinPat44,45
+  | KindMismatch KindMismatch45,46
+  | ProperKindMismatch ProperKindMismatch46,47
+  | SessionTypeMismatch SessionTypeMismatch47,48
+  | GivenTooManyArgsK GivenTooManyArgsK48,49
+  | ExpectsTooManyArgsK ExpectsTooManyArgsK49,50
+  | InvalidType InvalidType50,51
+  | TypeMismatch TypeMismatch51,52
+  | TypeMismatchList TypeMismatchList52,53
+  | TypeMismatchTuple TypeMismatchTuple53,54
+  | TypeCtxMismatch TypeCtxMismatch54,55
+  | ConstructorArgumentMismatch ConstructorArgumentMismatch56,57
+  | ChoiceNotAllowed ChoiceNotAllowed57,58
+  | LinVarAtEndOfScope LinVarAtEndOfScope58,59
+  | UnsupportedError UnsupportedError59,60
+instance Located Located Error61,62
+  getSpan getSpan62,63
+  setSpan setSpan100,101
+instance Show Show Error102,103
+  show show103,104
+
+./src/Utils.hs,82
+module UtilsUtils0,1
+internalError internalError6,7
+maybeLeft maybeLeft9,10
+
+./src/FreeST.hs,85
+module FreeST FreeST7,8
+main main34,35
+freest freest38,39
+lexAll lexAll68,69
+
+./src/Parser/Token.hs,3535
+module Parser.Token Parser.Token9,10
+data TokenToken14,15
+  = TkLowerId TkLowerId16,17
+  | TkLowerIdAt TkLowerIdAt17,18
+  | TkUpperId TkUpperId18,19
+  | TkQualifiedUpperId TkQualifiedUpperId19,20
+  | TkWildcard TkWildcard20,21
+  | TkIntLit TkIntLit22,23
+  | TkFloatLit TkFloatLit23,24
+  | TkCharLit TkCharLit24,25
+  | TkStringLit TkStringLit25,26
+  | TkModule TkModule27,28
+  | TkModule Span | TkWhere TkWhere27,28
+  | TkModule Span | TkWhere Span | TkImport TkImport27,28
+  | TkData TkData28,29
+  | TkData Span | TkType TkType28,29
+  | TkLet TkLet29,30
+  | TkLet Span | TkIn TkIn29,30
+  | TkCase TkCase30,31
+  | TkCase Span | TkOf TkOf30,31
+  | TkIf TkIf31,32
+  | TkIf Span | TkThen TkThen31,32
+  | TkIf Span | TkThen Span | TkElse TkElse31,32
+  | TkSelect TkSelect32,33
+  | TkSelect Span | TkChannel TkChannel32,33
+  | TkForall TkForall33,34
+  | TkForall Span | TkExists TkExists33,34
+  | TkForall Span | TkExists Span | TkRec TkRec33,34
+  | TkOpen TkOpen35,36
+  | TkOpen Span | TkPipe TkPipe35,36
+  | TkOpen Span | TkPipe Span | TkClose TkClose35,36
+  | TkLParen TkLParen36,37
+  | TkLParen Span | TkRParen TkRParen36,37
+  | TkLParen Span | TkRParen Span | TkLSquare TkLSquare36,37
+  | TkLParen Span | TkRParen Span | TkLSquare Span | TkRSquare TkRSquare36,37
+  | TkEqual TkEqual37,38
+  | TkEqual Span | TkColon TkColon37,38
+  | TkBackslash TkBackslash38,39
+  | TkArrow TkArrow39,40
+  | TkArrow Span | TkUnArrow TkUnArrow39,40
+  | TkArrow Span | TkUnArrow Span | TkLinArrow TkLinArrow39,40
+  | TkDot TkDot40,41
+  | TkDot Span | TkAt TkAt40,41
+  | TkDot Span | TkAt Span | TkComma TkComma40,41
+  | TkSemi TkSemi42,43
+  | TkSemi Span | TkColonColon TkColonColon42,43
+  | TkDollar TkDollar43,44
+  | TkDollar Span | TkPipeGT TkPipeGT43,44
+  | TkPlus TkPlus44,45
+  | TkPlus Span | TkPlusPlus TkPlusPlus44,45
+  | TkPlus Span | TkPlusPlus Span | TkPlusDot TkPlusDot44,45
+  | TkMinus TkMinus45,46
+  | TkMinus Span | TkMinusDot TkMinusDot45,46
+  | TkStar TkStar46,47
+  | TkStar Span | TkStarStar TkStarStar46,47
+  | TkStar Span | TkStarStar Span | TkStarDot TkStarDot46,47
+  | TkSlash TkSlash47,48
+  | TkSlash Span | TkSlashDot TkSlashDot47,48
+  | TkCaret TkCaret48,49
+  | TkCaret Span | TkCaretCaret TkCaretCaret48,49
+  | TkCmp TkCmp49,50
+  | TkAmpAmp TkAmpAmp50,51
+  | TkAmpAmp Span | TkPipePipe TkPipePipe50,51
+  | TkVOpen TkVOpen52,53
+  | TkVOpen Span | TkVPipe TkVPipe52,53
+  | TkVOpen Span | TkVPipe Span | TkVClose TkVClose52,53
+  | TkEOF TkEOF53,54
+  | TkIntType TkIntType55,56
+  | TkIntType Span | TkFloatType TkFloatType55,56
+  | TkIntType Span | TkFloatType Span | TkCharType TkCharType55,56
+  | TkBang TkBang56,57
+  | TkBang Span | TkQuestion TkQuestion56,57
+  | TkBang Span | TkQuestion Span | TkAmp TkAmp56,57
+  | TkSkipType TkSkipType57,58
+  | TkSkipType Span | TkDualType TkDualType57,58
+  | TkSkipType Span | TkDualType Span | TkCloseType TkCloseType57,58
+  | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType TkWaitType57,58
+  | TkLinTopKind TkLinTopKind59,60
+  | TkLinTopKind Span | TkUnTopKind TkUnTopKind59,60
+  | TkLinSessionKind TkLinSessionKind60,61
+  | TkLinSessionKind Span | TkUnSessionKind TkUnSessionKind60,61
+  | TkLinBoundedKind TkLinBoundedKind61,62
+  | TkLinBoundedKind Span | TkUnBoundedKind TkUnBoundedKind61,62
+getText getText67,68
+instance Located Located Token83,84
+  getSpan getSpan84,85
+  setSpan setSpan175,176
+
+./src/Parser/LexerUtils.hs,1089
+module Parser.LexerUtils Parser.LexerUtils12,13
+data AlexInputAlexInput26,27
+  = Input Input27,28
+  = Input { inpLine inpLine27,28
+          , inpColumn inpColumn28,29
+          , inpLast inpLast29,30
+          , inpStream inpStream30,31
+          , inpFile inpFile31,32
+alexPrevInputChar alexPrevInputChar35,36
+alexGetByte alexGetByte38,39
+newtype Lexer Lexer59,60
+newtype Lexer a = Lexer { _getLexer _getLexer59,60
+data Layout Layout62,63
+data Layout = ExplicitLayout ExplicitLayout62,63
+data Layout = ExplicitLayout | LayoutColumn LayoutColumn62,63
+data LexerStateLexerState65,66
+  = LS LS66,67
+  = LS { lexerInput lexerInput66,67
+       , lexerStartCodes lexerStartCodes67,68
+       , lexerLayout lexerLayout68,69
+       , counter counter69,70
+startCode startCode73,74
+pushStartCode pushStartCode76,77
+popStartCode popStartCode81,82
+layout layout89,90
+pushLayout pushLayout92,93
+popLayout popLayout96,97
+incCounter incCounter104,105
+initState initState107,108
+emit emit114,115
+token token119,120
+runLexer runLexer124,125
+
+./src/Parser/ParserUtils.hs,312
+module Parser.ParserUtils Parser.ParserUtils9,10
+dummyKindVar dummyKindVar21,22
+split split25,26
+mkVarTk mkVarTk31,32
+mkIdTk mkIdTk34,35
+infixApp infixApp37,38
+binOp binOp40,41
+unOp unOp43,44
+tupleExp tupleExp46,47
+listExp listExp49,50
+addArgExp addArgExp55,56
+addArgType addArgType59,60
+
+./src/Parser/Scoping.hs,1554
+module Parser.ScopingParser.Scoping11,12
+data ScopingKeyScopingKey42,43
+  = TVar TVar43,44
+  | EVar EVar44,45
+  | KSig KSig45,46
+  | TId TId46,47
+  | DId DId47,48
+  | CId CId48,49
+type ScopingCtx ScopingCtx51,52
+lookupTVar lookupTVar55,56
+lookupEVar lookupEVar56,57
+memberKSig memberKSig60,61
+memberCId memberCId61,62
+memberTId memberTId62,63
+memberDId memberDId63,64
+fromTVarList fromTVarList67,68
+fromEVarList fromEVarList68,69
+insertTVar insertTVar72,73
+insertEVar insertEVar73,74
+deleteTVar deleteTVar74,75
+deleteEVar deleteEVar75,76
+insertKSig insertKSig79,80
+insertCId insertCId80,81
+insertTId insertTId81,82
+insertDId insertDId82,83
+type Scoping Scoping84,85
+data ScopingState ScopingState86,87
+data ScopingState = ScopingState{counter ScopingState{counter86,87
+data ScopingState = ScopingState{counter :: Int, errors errors86,87
+runScoping runScoping88,89
+incCounter incCounter93,94
+insertError insertError99,100
+freshInternal freshInternal102,103
+scopeModule scopeModule105,106
+scopeModule_ scopeModule_116,117
+scopeKindSigs scopeKindSigs119,120
+scopeDataDecls scopeDataDecls129,130
+scopeTypeDecls scopeTypeDecls154,155
+scopeDefs scopeDefs169,170
+scopeRHS scopeRHS224,225
+scopeExp scopeExp237,238
+scopePat scopePat290,291
+checkConflictingDefs checkConflictingDefs312,313
+patVars patVars328,329
+freshKVar freshKVar335,336
+scopeType scopeType341,342
+scopeTypeQ scopeTypeQ372,373
+scopeKind scopeKind385,386
+scopeMultiplicity scopeMultiplicity395,396
+
+./src/FstToLst/FstToLst.hs,1034
+module FstToLst.FstToLst FstToLst.FstToLst0,1
+fstToLst fstToLst12,13
+translateLetDecls translateLetDecls15,16
+generateArgs generateArgs28,29
+translateRHS translateRHS32,33
+translateExp translateExp38,39
+generateLeastIf generateLeastIf56,57
+generatePrimitiveVar generatePrimitiveVar60,61
+generateUnit generateUnit63,64
+translatePat translatePat67,68
+getTypeFromTypeSigs getTypeFromTypeSigs71,72
+generateFixPoint generateFixPoint76,77
+type Equation Equation96,97
+compileEquations compileEquations98,99
+allVars allVars107,108
+allCons allCons113,114
+replaceVar replaceVar122,123
+subs subs127,128
+altsSubs altsSubs134,135
+altSub altSub137,138
+groupEqs groupEqs146,147
+addEq addEq151,152
+mixtureGroup mixtureGroup156,157
+addEqMix addEqMix160,161
+patIsEq patIsEq165,166
+patIsEqMix patIsEqMix175,176
+foo foo185,186
+newKVars newKVars201,202
+updateHeadPattern updateHeadPattern204,205
+updateHeadPattern' updateHeadPattern'207,208
+bar bar214,215
+generateError generateError219,220
+
+./src/Syntax/Names.hs,877
+module Syntax.Names Syntax.Names8,9
+mkOrVar mkOrVar18,19
+mkAndVar mkAndVar19,20
+mkPlusVar mkPlusVar20,21
+mkMinusVar mkMinusVar21,22
+mkTimesVar mkTimesVar22,23
+mkDivVar mkDivVar23,24
+mkPowerVar mkPowerVar24,25
+mkNegateVar mkNegateVar25,26
+mkPlusDotVar mkPlusDotVar26,27
+mkMinusDotVar mkMinusDotVar27,28
+mkTimesDotVar mkTimesDotVar28,29
+mkDivDotVar mkDivDotVar29,30
+mkTimesTimesVar mkTimesTimesVar30,31
+mkDollarVar mkDollarVar31,32
+mkRTriangleVar mkRTriangleVar32,33
+mkSemiVar mkSemiVar33,34
+mkPlusPlusVar mkPlusPlusVar34,35
+mkCaretCaretVar mkCaretCaretVar35,36
+mkCmpVar mkCmpVar37,38
+mkUnitId, mkNilId, mkConsId mkConsId40,41
+mkUnitId, mkNilId,mkNilId40,41
+mkUnitId,mkUnitId40,41
+mkNilId mkNilId42,43
+mkConsId mkConsId43,44
+mkTupleId mkTupleId45,46
+isTupleId isTupleId48,49
+mkBoolId mkBoolId57,58
+mkListId mkListId60,61
+
+./src/Syntax/Base.hs,2087
+module Syntax.BaseSyntax.Base9,10
+type Pos Pos21,22
+data SpanSpan25,26
+  = SpanSpan26,27
+    { filepath filepath27,28
+    , startPos startPos28,29
+    , endPos endPos29,30
+class Located Located34,35
+  getSpan getSpan36,37
+  setSpan setSpan38,39
+  spanFromTo spanFromTo42,43
+instance (L(Located a, Located b) => Located (Either a b)49,50
+  getSpan getSpan50,51
+  setSpan setSpan53,54
+instance Located Located Span58,59
+  getSpan getSpan59,60
+  setSpan setSpan60,61
+instance Show Show Span64,65
+  show show65,66
+nullSpan nullSpan70,71
+data Identifier Identifier77,78
+data Identifier = Identifier Identifier77,78
+instance Located Located Identifier79,80
+  getSpan getSpan80,81
+  setSpan setSpan81,82
+instance Eq Eq Identifier83,84
+  Identifier Identifier84,85
+instance Ord Ord Identifier86,87
+  Identifier Identifier87,88
+instance Show Show Identifier89,90
+  show show90,91
+mkId mkId93,94
+data VariableVariable101,102
+  = VariableVariable102,103
+    { varSpan varSpan103,104
+    , external external104,105
+    , internal internal105,106
+instance Ord Ord Variable108,109
+  a a109,110
+instance Eq Eq Variable111,112
+  a a112,113
+instance Show Show Variable114,115
+  show show115,116
+instance Located Located Variable117,118
+  getSpan getSpan118,119
+  setSpan setSpan119,120
+firstInternal firstInternal122,123
+nullInternal nullInternal126,127
+defaultInternal defaultInternal131,132
+firstRenamed firstRenamed134,135
+nullVar nullVar137,138
+mkDefaultVar mkDefaultVar142,143
+unusedVar unusedVar147,148
+freshVar freshVar152,153
+firstVar firstVar157,158
+data Level Level165,166
+data Level a b = ExpLevel ExpLevel165,166
+data Level a b = ExpLevel a | TypeLevel TypeLevel165,166
+instance (S(Show a, Show b) => Show (Level a b)167,168
+  show show168,169
+instance (L(Located a, Located b) => Located (Level a b)171,172
+  getSpan getSpan172,173
+  setSpan setSpan175,176
+instance Bifunctor Bifunctor Level180,181
+  bimap bimap181,182
+partitionLevels partitionLevels185,186
+
+./src/Syntax/Expression.hs,1675
+module Syntax.ExpressionSyntax.Expression9,10
+data PatPat32,33
+  = IntPat IntPat33,34
+  | FloatPat FloatPat34,35
+  | CharPat CharPat35,36
+  | WildPat WildPat36,37
+  | VarPat VarPat37,38
+  | DConsPat DConsPat38,39
+  | AsPat AsPat39,40
+pattern NilPat NilPat41,42
+pattern NilPat s s42,43
+pattern ConsPat ConsPat45,46
+pattern ConsPat s s46,47
+pattern TuplePat TuplePat49,50
+pattern TuplePat s s50,51
+stringPat stringPat53,54
+data LetDeclLetDecl58,59
+  = ValDef ValDef59,60
+  | FnDef FnDef60,61
+  | TypeSig TypeSig61,62
+data RHSRHS63,64
+  = GuardedRHS GuardedRHS64,65
+  | UnguardedRHS UnguardedRHS65,66
+data ExpExp67,68
+  = Int Int68,69
+  | Float Float69,70
+  | Char Char70,71
+  | DCons DCons71,72
+  | Var Var72,73
+  | App App73,74
+  | Abs Abs74,75
+  | Let Let75,76
+  | Case Case76,77
+  | If If77,78
+  | Channel Channel78,79
+  | Select Select79,80
+pattern Tuple Tuple81,82
+pattern Tuple s s82,83
+pattern Nil Nil88,89
+pattern Nil s s89,90
+pattern Cons Cons92,93
+pattern Cons s s93,94
+instance Located Located Pat96,97
+  getSpan getSpan97,98
+  setSpan setSpan106,107
+instance Located Located LetDecl115,116
+  getSpan getSpan116,117
+  setSpan setSpan120,121
+instance Located Located Exp122,123
+  getSpan getSpan123,124
+  setSpan setSpan137,138
+instance Located Located RHS151,152
+  getSpan getSpan152,153
+  setSpan setSpan158,159
+instance Show Show Pat160,161
+  show show161,162
+instance Show Show LetDecl170,171
+  show show171,172
+instance Show Show RHS180,181
+  show show181,182
+showWhere showWhere187,188
+instance Show Show Exp192,193
+  show show193,194
+
+./src/Syntax/Module.hs,757
+module Syntax.ModuleSyntax.Module9,10
+type ConsDeclList ConsDeclList39,40
+type DataDeclList DataDeclList46,47
+type TypeDeclList TypeDeclList53,54
+type KindSigList KindSigList59,60
+data ModuleModule61,62
+  = Module Module62,63
+  = Module { name name62,63
+           , imports imports63,64
+           , dataDecls dataDecls64,65
+           , typeDecls typeDecls65,66
+           , kindSigs kindSigs66,67
+           , definitions definitions67,68
+type Prog Prog70,71
+setName setName76,77
+insertImport insertImport79,80
+insertDataDecl insertDataDecl82,83
+insertTypeDecl insertTypeDecl85,86
+insertKindSig insertKindSig88,89
+insertDef insertDef91,92
+empty empty94,95
+instance Show Show Module103,104
+  show show104,105
+
+./src/Syntax/Kind.hs,1853
+module Syntax.KindSyntax.Kind9,10
+class Subsort Subsort24,25
+  (<(<:)25,26
+class Join Join27,28
+  join join28,29
+class Meet Meet30,31
+  meet meet31,32
+data Multiplicity Multiplicity33,34
+data Multiplicity = Lin Lin33,34
+data Multiplicity = Lin | Un Un33,34
+data Multiplicity = Lin | Un | VarM VarM33,34
+instance Subsort Subsort Multiplicity36,37
+  Lin Lin37,38
+  _ _38,39
+instance Join Join Multiplicity40,41
+  join join41,42
+instance Meet Meet Multiplicity44,45
+  meet meet45,46
+data Prekind Prekind49,50
+data Prekind = Top Top49,50
+data Prekind = Top | Session Session49,50
+data Prekind = Top | Session | Bounded Bounded49,50
+data Prekind = Top | Session | Bounded | VarPK VarPK49,50
+instance Subsort Subsort Prekind52,53
+  Top Top53,54
+  Session Session55,56
+  _ _56,57
+instance Join Join Prekind58,59
+  join join59,60
+instance Meet Meet Prekind66,67
+  meet meet67,68
+instance Meet Meet Kind73,74
+  meet meet74,75
+data Kind Kind76,77
+data Kind = Proper Proper76,77
+data Kind = Proper Span Multiplicity Prekind | Arrow Arrow76,77
+instance Eq Eq Kind79,80
+  (P(Proper_m1pk1)80,81
+  (A(Arrow_k11k12)81,82
+instance Subsort Subsort Kind83,84
+  Proper Proper84,85
+  Arrow Arrow85,86
+  _ _86,87
+instance Join Join Kind88,89
+  join join89,90
+lt, ut, ls, us, lb, ub ub94,95
+lt, ut, ls, us, lb,lb94,95
+lt, ut, ls, us,us94,95
+lt, ut, ls,ls94,95
+lt, ut,ut94,95
+lt,lt94,95
+ut ut96,97
+ls ls97,98
+us us98,99
+lb lb99,100
+ub ub100,101
+bot bot103,104
+isStrictlyLin isStrictlyLin106,107
+instance Show Show Multiplicity110,111
+  show show111,112
+instance Show Show Prekind116,117
+  show show117,118
+instance Show Show Kind124,125
+  show show125,126
+instance Located Located Kind129,130
+  getSpan getSpan130,131
+  setSpan setSpan134,135
+
+./src/Syntax/Type.hs,2603
+module Syntax.TypeSyntax.Type8,9
+data Polarity Polarity51,52
+data Polarity = In In51,52
+data Polarity = In | OutOut51,52
+class Dual Dual54,55
+  dual dual55,56
+instance Dual Dual Polarity57,58
+  dual dual58,59
+data TypeType61,62
+  = Int Int63,64
+  | Float Float64,65
+  | Char Char65,66
+  | Arrow Arrow66,67
+  | Skip Skip68,69
+  | Semi Semi69,70
+  | Dual Dual70,71
+  | End End71,72
+  | Message Message72,73
+  | Choice Choice73,74
+  | Quant Quant75,76
+  | Var Var77,78
+  | App App78,79
+  | TName TName80,81
+  | DName DName81,82
+pattern Forall Forall87,88
+pattern Forall s s88,89
+pattern Exists Exists91,92
+pattern Exists s s92,93
+pattern AppArrow AppArrow95,96
+pattern AppArrow s s96,97
+pattern AppMessage AppMessage99,100
+pattern AppMessage s s100,101
+pattern AppLinChoice AppLinChoice103,104
+pattern AppLinChoice s s104,105
+pattern SharedChoice SharedChoice108,109
+pattern SharedChoice s s109,110
+pattern AppSemi AppSemi112,113
+pattern AppSemi s s113,114
+pattern AppDual AppDual116,117
+pattern AppDual s s117,118
+pattern AppTName AppTName120,121
+pattern AppTName s s121,122
+pattern Tuple Tuple128,129
+pattern Tuple s s129,130
+pattern List List134,135
+pattern List s s135,136
+pattern AppDName AppDName138,139
+pattern AppDName s s139,140
+pattern AppVar AppVar146,147
+pattern AppVar s s147,148
+variadicQuant variadicQuant154,155
+smartApp smartApp159,160
+bool bool163,164
+isConstant isConstant166,167
+isSkip, isSemi, isAppSemi, isDual, isTName, isDName, isMsg isMsg174,175
+isSkip, isSemi, isAppSemi, isDual, isTName, isDName,isDName174,175
+isSkip, isSemi, isAppSemi, isDual, isTName,isTName174,175
+isSkip, isSemi, isAppSemi, isDual,isDual174,175
+isSkip, isSemi, isAppSemi,isAppSemi174,175
+isSkip, isSemi,isSemi174,175
+isSkip,isSkip174,175
+isSemi isSemi176,177
+isAppSemi isAppSemi177,178
+isDual isDual178,179
+isTName isTName179,180
+isDName isDName180,181
+isMsg isMsg181,182
+fromVariable fromVariable183,184
+instance Show Show Polarity186,187
+  show show187,188
+instance Show Show Type189,190
+  show show190,191
+class Congruence Congruence223,224
+  congruent congruent224,225
+instance Eq Eq Type226,227
+  (=(==)227,228
+instance Congruence Congruence Type229,230
+  congruent congruent231,232
+instance Congruence Congruence [Type]256,257
+  congruent congruent257,258
+instance Congruence Congruence [(Identifier, Type)]261,262
+  congruent congruent262,263
+instance Located Located Type267,268
+  getSpan getSpan268,269
+  setSpan setSpan290,291
+
+./src/LeaST/Interpreter.hs,867
+module LeaST.Interpreter LeaST.Interpreter0,1
+interpret interpret15,16
+type ChannelEnd ChannelEnd20,21
+data Value Value22,23
+data Value = VInt VInt22,23
+  | VFloat VFloat23,24
+  | VChar VChar24,25
+  | VCon VCon25,26
+  | VClosure VClosure26,27
+  | VBuiltin VBuiltin27,28
+  | VIO VIO28,29
+  | VChan VChan29,30
+  | VForkVFork30,31
+  | VFatbarVFatbar31,32
+instance Show Show Value33,34
+  show show34,35
+eval eval46,47
+patternMatch patternMatch89,90
+getStringFromVariable getStringFromVariable97,98
+getStringFromIdentifier getStringFromIdentifier100,101
+unpackAbs unpackAbs103,104
+type Context Context107,108
+getVar getVar109,110
+builtins builtins114,115
+hsToLstBool hsToLstBool221,222
+lstToHsBool lstToHsBool226,227
+chan chan230,231
+receive receive236,237
+send send241,242
+wait wait246,247
+close close250,251
+
+./src/LeaST/PrettyPrint.hs,299
+module LeaST.PrettyPrint LeaST.PrettyPrint0,1
+prettyPrint prettyPrint8,9
+prettyStr prettyStr11,12
+literalStr literalStr22,23
+alternativesStr alternativesStr27,28
+altStr altStr30,31
+getStringFromVariable getStringFromVariable35,36
+getStringFromIdentifier getStringFromIdentifier38,39
+
+./src/LeaST/LeaST.hs,434
+module LeaST.LeaST LeaST.LeaST0,1
+data ExpExp7,8
+  = Var Var8,9
+  | Lit Lit9,10
+  | Abs Abs10,11
+  | App App11,12
+  | Con Con12,13
+  | Case Case13,14
+  | Type Type14,15
+  | TAbs TAbs15,16
+  | TApp TApp16,17
+data Literal Literal20,21
+data Literal = LInt LInt20,21
+  | LFloat LFloat21,22
+  | LChar LChar22,23
+data Alt Alt25,26
+data Alt = ACon ACon25,26
+  | ALit ALit26,27
+  | ADefaultADefault27,28
+
+./src/Validation/Substitution.hs,149
+module Validation.SubstitutionValidation.Substitution10,11
+freeVars freeVars28,29
+allVars allVars35,36
+subs subs43,44
+subsAll subsAll59,60
+
+./src/Validation/Base.hs,760
+module Validation.Base Validation.Base0,1
+type Lambda Lambda18,19
+type TypeDeclMap TypeDeclMap19,20
+type ConsDeclMap ConsDeclMap20,21
+type DataDeclMap DataDeclMap21,22
+data ValidationStateValidationState23,24
+  = ValidationStateValidationState24,25
+    { errors errors25,26
+    , kindSigs kindSigs26,27
+    , typeDecls typeDecls27,28
+    , dataDecls dataDecls28,29
+    , consDecls consDecls29,30
+emptyValidationState emptyValidationState32,33
+buildValidationState buildValidationState41,42
+type Validation Validation50,51
+runValidation runValidation52,53
+putErrorWithDefault putErrorWithDefault60,61
+catch catch65,66
+catchWithDefault catchWithDefault68,69
+lookupKindSig lookupKindSig71,72
+lookupTName lookupTName78,79
+
+./src/Validation/TypeEquivalence/FromType.hs,2466
+module Validation.TypeEquivalence.FromTypeValidation.TypeEquivalence.FromType8,9
+fromType fromType26,27
+word word33,34
+wordWhnf wordWhnf55,56
+varTerminal varTerminal101,102
+type Visited Visited106,107
+data TState TState108,109
+data TState = TStateTState108,109
+  { productions productions109,110
+  , nextIndex nextIndex110,111
+  , visited visited111,112
+  , typeDecls typeDecls112,113
+type TransState TransState115,116
+initial initial117,118
+nextNonTerminal nextNonTerminal125,126
+wasVisited wasVisited131,132
+addVisited addVisited136,137
+addProduction addProduction142,143
+addProductions addProductions146,147
+getTransitions getTransitions150,151
+getLHS getLHS157,158
+reverseLookup reverseLookup168,169
+fatTerminal fatTerminal173,174
+toGrammar ts = {- trace (show ts ++ "\n" ++ show grammar) -} grammargrammar200,201
+typeToGrammar typeToGrammar208,209
+toGrammar toGrammar211,212
+toGrammar' toGrammar'217,218
+fatTerminal fatTerminal248,249
+instance Show Show T-Sort271,272
+  show show272,273
+type SubstitutionList SubstitutionList278,279
+collect collect280,281
+type Substitution Substitution300,301
+type TransState TransState302,303
+data TState TState304,305
+data TState = TState TState304,305
+    productions productions305,306
+  , nextIndex nextIndex306,307
+  , substitution substitution307,308
+bottom bottom312,313
+initial initial317,318
+getFreshVar getFreshVar324,325
+getProductions getProductions331,332
+getTransitions getTransitions334,335
+putProductions putProductions342,343
+putSubstitution putSubstitution346,347
+getLHS getLHS352,353
+addProductions addProductions369,370
+existProductions existProductions375,376
+sameTrans sameTrans381,382
+matchingTrans matchingTrans392,393
+type VisitedProds VisitedProds397,398
+type ToVisitProds ToVisitProds398,399
+type Goals Goals399,400
+compareWords compareWords405,406
+fixedPoint fixedPoint411,412
+findGoals findGoals429,430
+class Substitute Substitute436,437
+  substitute substitute437,438
+instance Substitute Substitute Variable439,440
+  substitute substitute440,441
+instance Substitute Substitute Word442,443
+  substitute substitute443,444
+instance Substitute Substitute [Word]445,446
+  substitute substitute446,447
+instance Substitute Substitute Transitions448,449
+  substitute substitute449,450
+instance Substitute Substitute Productions451,452
+  substitute substitute452,453
+
+./src/Validation/TypeEquivalence/TypeEquivalence.hs,127
+module Validation.TypeEquivalence.TypeEquivalenceValidation.TypeEquivalence.TypeEquivalence9,10
+equivalent equivalent19,20
+
+./src/Validation/TypeEquivalence/Grammar.hs,831
+module Validation.TypeEquivalence.GrammarValidation.TypeEquivalence.Grammar17,18
+type Terminal Terminal38,39
+type NonTerminal NonTerminal41,42
+type Word Word44,45
+type Transitions Transitions47,48
+type Productions Productions50,51
+data Grammar Grammar53,54
+data Grammar = Grammar Grammar53,54
+class TransitionsFrom TransitionsFrom57,58
+  transitions transitions58,59
+instance TransitionsFrom TransitionsFrom NonTerminal61,62
+  transitions transitions62,63
+instance TransitionsFrom TransitionsFrom Word65,66
+  transitions transitions66,67
+insertProduction insertProduction71,72
+insertProductions insertProductions74,75
+bottom bottom83,84
+instance Show Show Grammar88,89
+  show show89,90
+showProductions showProductions95,96
+showWord showWord105,106
+showNonTerminal showNonTerminal109,110
+
+./src/Validation/TypeEquivalence/Bisimulation/State.hs,910
+module Validation.TypeEquivalence.Bisimulation.StateValidation.TypeEquivalence.Bisimulation.State8,9
+type IOF IOF35,36
+type NormMap NormMap38,39
+data Node Node41,42
+data Node = NodeNode41,42
+  { nodeValue nodeValue42,43
+    parentNode parentNode43,44
+type Branch Branch46,47
+type BranchQueue BranchQueue48,49
+type Basis Basis50,51
+data Bpa Bpa52,53
+data Bpa = Bpa1 Bpa152,53
+data Bpa = Bpa1 Word | Bpa2 Bpa252,53
+type GlobalState GlobalState54,55
+data GlobalStateData GlobalStateData56,57
+data GlobalStateData = TStateTState56,57
+  { basis basis57,58
+  ,  visitedPairs visitedPairs58,59
+  , normMap normMap59,60
+  , grammar grammar60,61
+  , log log61,62
+instance Show Show Bpa65,66
+  show show66,67
+replaceVisitedPairs replaceVisitedPairs72,73
+replaceBasis replaceBasis76,77
+updateNormMap updateNormMap80,81
+addLog addLog85,86
+getFullLog getFullLog89,90
+
+./src/Validation/TypeEquivalence/Bisimulation/Bisimulation.hs,1464
+module Validation.TypeEquivalence.Bisimulation.BisimulationValidation.TypeEquivalence.Bisimulation.Bisimulation8,9
+bisimilar bisimilar32,33
+basisUpdate basisUpdate53,54
+pruneNode pruneNode80,81
+pruneWord pruneWord86,87
+partialFail partialFail96,97
+isBPA1Guess isBPA1Guess119,120
+checkIfInBasis checkIfInBasis125,126
+checkChildren checkChildren138,139
+handleBpaMarks handleBpaMarks161,162
+enqueuePrunedNode enqueuePrunedNode185,186
+addChildrenToBranchQueue addChildrenToBranchQueue190,191
+addMatchingTransitions addMatchingTransitions199,200
+orderNode:orderNode216,217
+addPairBpa1ToBasis addPairBpa1ToBasis221,222
+addBetaToPair:addBetaToPair237,238
+addToSecond addToSecond240,241
+addPairBpa2ToBasis addPairBpa2ToBasis246,247
+orderPairsByNorm orderPairsByNorm258,259
+getChildren getChildren273,274
+modifyNode modifyNode283,284
+modifySet modifySet293,294
+enqueue enqueue296,297
+  | element `elem`elem298,299
+updateBpa2Pair updateBpa2Pair301,302
+filterBranchQueue filterBranchQueue313,314
+updateBasis updateBasis329,330
+filterBasis filterBasis339,340
+startsWith startsWith342,343
+filterSet filterSet348,349
+compareTransitions compareTransitions351,352
+checkWords checkWords357,358
+matchTransitions matchTransitions363,364
+createBasisForNonTerminals createBasisForNonTerminals373,374
+calculateBeta calculateBeta378,379
+filterTuples2 filterTuples2397,398
+findMatchingWord findMatchingWord413,414
+
+./src/Validation/TypeEquivalence/Bisimulation/Norm.hs,820
+module Validation.TypeEquivalence.Bisimulation.NormValidation.TypeEquivalence.Bisimulation.Norm8,9
+nonterminals nonterminals30,31
+isNormed isNormed34,35
+class Normalizable Normalizable38,39
+  norm norm39,40
+instance Normalizable Normalizable Word41,42
+  norm norm42,43
+instance Normalizable Normalizable NonTerminal46,47
+  norm norm47,48
+normUsingMap normUsingMap50,51
+deleteFromMap deleteFromMap58,59
+computeNorm computeNorm68,69
+wordNorm wordNorm85,86
+seminorm seminorm133,134
+seminormUsingMap seminormUsingMap141,142
+yk yk155,156
+ykUsingMap ykUsingMap163,164
+valuation valuation182,183
+valuationUsingMap valuationUsingMap190,191
+minWithInf minWithInf196,197
+reducesNorm reducesNorm201,202
+getNormFromMap getNormFromMap204,205
+getNormWordFromMap getNormWordFromMap211,212
+
+./src/Validation/TypeEquivalence/Bisimulation/Congruence.hs,476
+module Validation.TypeEquivalence.Bisimulation.CongruenceValidation.TypeEquivalence.Bisimulation.Congruence8,9
+type VisitedState VisitedState23,24
+newtype VisitedStateData VisitedStateData25,26
+newtype VisitedStateData = TStateTState25,26
+  { visitedPairs visitedPairs26,27
+addVisitedVariable addVisitedVariable29,30
+isCongruent isCongruent33,34
+isCongruentAux3 isCongruentAux339,40
+tryRules tryRules67,68
+applyRules applyRules77,78
+cutWord cutWord89,90
+
+./src/Validation/Expose.hs,163
+module Validation.ExposeValidation.Expose0,1
+kindArrow kindArrow23,24
+typeArrow typeArrow27,28
+dataCons dataCons35,36
+internalChoice internalChoice42,43
+
+./src/Validation/Typing.hs,612
+module Validation.Typing Validation.Typing7,8
+type TypeCtx TypeCtx39,40
+type KindCtx KindCtx42,43
+lookupType lookupType49,50
+lookupType_ lookupType_60,61
+lookupDConsDecl lookupDConsDecl69,70
+typeCtxDifference typeCtxDifference79,80
+synth synth92,93
+synthRHS synthRHS170,171
+check check190,191
+checkDecls checkDecls284,285
+checkArgs checkArgs324,325
+checkParams checkParams358,359
+checkPat checkPat397,398
+checkRHS checkRHS456,457
+checkEquivTypes checkEquivTypes474,475
+checkEquivTypeCtxs checkEquivTypeCtxs483,484
+typeModule typeModule488,489
+runValidate runValidate518,519
+
+./src/Validation/Normalisation.hs,189
+module Validation.NormalisationValidation.Normalisation11,12
+type Visited Visited29,30
+normalise normalise33,34
+tNameRedex tNameRedex46,47
+isWhnf isWhnf55,56
+reduce reduce76,77
+
+./src/Validation/Rename.hs,183
+module Validation.RenameValidation.Rename10,11
+type Visited Visited26,27
+rename rename28,29
+freeReachable freeReachable39,40
+bounded bounded45,46
+absorbing absorbing49,50
+
+./src/Validation/Kinding.hs,499
+module Validation.KindingValidation.Kinding8,9
+type KindingCtx KindingCtx46,47
+synth synth48,49
+check check99,100
+foldCheckProperJoin foldCheckProperJoin102,103
+checkProper checkProper107,108
+checkSession checkSession113,114
+checkSubkindOf checkSubkindOf120,121
+synthCheck synthCheck125,126
+kindModule kindModule131,132
+runKindModule runKindModule169,170
+runSynth runSynth172,173
+runCheck runCheck175,176
+isAbsorbingM isAbsorbingM178,179
+isAbsorbing isAbsorbing184,185

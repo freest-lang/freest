@@ -3,7 +3,7 @@
 module Prelude where
 
 -- * Undefined. Useful for builtins, but should also be builtin...
-undefined : forall (a : *T). a
+undefined : forall (a : *T) . a
 undefined @a = undefined @a
 
 -- * Error
@@ -31,16 +31,16 @@ otherwise = True
 type Maybe : *T -> *T
 data Maybe a = Nothing | Just a
 
-maybe : forall (a : *T) (b : *T). b -> (a -> b) -> Maybe a -> b
+maybe : forall (a : *T) (b : *T) . b -> (a -> b) -> Maybe a -> b
 maybe @a @b n _ Nothing  = n
 maybe @a @b _ f (Just x) = f x
 
 type Either : *T -> *T -> *T
 data Either a b = Left a | Right b
 
-either : forall (a b : *T) (c : 1T). (a -> c) -> (b -> c) -> Either a b -> c
-either @a @b @c f _ (Left x)     =  f x
-either @a @b @c _ g (Right y)    =  g y
+either : forall (a b : *T) (c : 1T) . (a -> c) -> (b -> c) -> Either a b -> c
+either @a @b @c f _ (Left x)  =  f x
+either @a @b @c _ g (Right y) =  g y
 
 type Ordering : *T
 data Ordering = LT | EQ | GT
@@ -331,7 +331,8 @@ accept @a c =
 --   -- send the string to be printed
 --   c |> send "Hello!" |> wait
 -- ```
-forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
+forkWith : forall (a : 1C) (b : *T). (Dual a -> b) -> a -- TODO: more tests passing
+-- forkWith : forall (a : 1C) (b : *T). (Dual a 1-> b) -> a
 forkWith @a @b f =
   let (x, y) = channel @a in
   fork (\(_ : ()) 1-> f y);
@@ -361,17 +362,9 @@ forkWith @a @b f =
 -- runCounterServer : dualof SharedCounter -> Diverge
 -- runCounterServer = runServer @Counter @Int counterService 0 
 -- ```
-runServer : forall (a : 1C) (b : *T). (b -> Dual a 1-> b) -> b -> *!a -> Diverge
+runServer : forall (a : 1C) (b : *T). (b -> Dual a 1-> b) -> b -> *!a -> Void @*T
 runServer @a @b handle state c =
   runServer @a @b handle (handle state (accept @a c)) c 
-
--- | A mark for functions that do not terminate
-type Diverge : *T
-type Diverge = ()
-
--- A function that diverges
--- diverge : Diverge
--- diverge = diverge
 
 -- | Discards an unrestricted value
 sink : forall (a : *T). a -> ()

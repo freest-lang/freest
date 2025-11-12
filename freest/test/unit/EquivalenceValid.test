@@ -132,7 +132,7 @@ where
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
 
--- Dual
+-- Duality
 
 case Dual (Dual !Int) == !Int : 1S
 
@@ -194,6 +194,11 @@ case Dual (FiniteStream ; !Int ; Wait) == Dual FiniteStream ; ?Int ; Close : 1C
 where
   type FiniteStream : 1S
   type FiniteStream = &{Done: Skip, More: ?Int ; FiniteStream}
+
+-- The below types are not (yet?) syntactically valid
+
+-- case exists (Dual Skip) == Dual (forall (Dual Skip)) : 1S
+
 
 -- Unrestricted sessions
 
@@ -506,12 +511,7 @@ where
   type Void' : 1S
   type Void' = Void'
 
-case forall (a : 1S). V ; V ; a == forall (a : 1S). V ; a : 1S
-where
-  type V : 1S
-  type V = forall (b: 1S). !b
-
--- Problems with forall and parameerrised types
+-- Forall and parameterised types
 
 case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
   -- == (forall (a b : *T). forall (c : *T). (a -> c) -> (b -> c) -> c) Int Bool
@@ -554,11 +554,107 @@ where
   type Void' : 1C
   type Void' = Void'
 
--- Duplicated -- debugging in process
-case forall (b : *T). b -> b -> b
-  == Bool
-   : *T
-where
-  type Bool : *T
-  type Bool = forall (b : *T). b -> b -> b
+-- Infra and Supra type applications
 
+case Infra Int == Supra Int Char : 1S -> 1S
+where
+  type Infra : *T -> 1S -> 1S
+  type Infra a b = !b
+  type Supra : 1T -> 1T -> 1S -> 1S
+  type Supra a = A
+  type A : 1T -> 1S -> 1S
+  type A b c = !c
+
+-- Sections
+
+case A ((->) Int) == Int -> Char : *T
+where
+  type A : (*T -> *T) -> *T
+  type A a = a Char
+
+case (->) Int == (Int ->) : 1T -> *T
+
+case \(a : 1T) -> (->) a Int == (-> Int) : 1T -> *T
+
+case (Int ->) Char == Int -> Char : *T
+
+case (-> Char) Int == Int -> Char : *T
+
+-- Type-level abstractions
+
+case (\(a : *T) -> a) == (\(b : *T) -> b) : *T -> *T -- α-equivalence
+
+case (\(a : *T) -> a) Int == Int : *T                -- β-equivalence
+
+case Int == (\(a : *T) -> a) Int : *T
+
+case (\(a : 1T) -> a) Int == Int : 1T
+
+case (\(a : 1T) -> !a) == (!) : 1T -> 1S             -- η-equivalence
+
+case (!) == (\(a : 1T) -> !a) : 1T -> 1S
+
+case (\(a : 1T) -> (!) a) == (!) : 1T -> 1S
+
+case (!) == (\(a : 1T) -> (!) a) : 1T -> 1S
+
+case (\(a : 1T) (b : *T) -> a)
+  == (\(a : 1T) -> \(b : *T) -> a) 
+   : 1T -> *T -> 1T
+
+case (\(a : 1T) (b : *T) -> a) !Int Int 
+  == !Int 
+   : 1T
+
+case (\(a : 1T) (b : *T) -> b) !Int Int 
+  == Int 
+   : *T
+
+case (\(a : *T) (b : 1S) -> !b) Int 
+  == (\(b : 1S) -> !b) 
+   : 1S -> 1S
+
+case (\(a : *T) (b : 1S) -> !a) Int 
+  == (\(b : 1S) -> !Int) 
+   : 1S -> 1S
+
+case (\(a : 1T) -> (\(b : 1T) -> !b)) Int Char 
+  == !Char 
+   : 1S
+
+case (\(a : 1T) -> \(b : 1T) (c : 1S) -> !b) Int Char 
+  == \(c : 1S) -> !Char 
+   : 1S -> 1S
+
+case (\(a : 1S -> 1S) (b : 1S) -> a b) (\(a : 1S) -> a) (Tree Int)
+  == (\(b : 1S) -> (\(a : 1S) -> a) b) (Tree Int)
+   : 1S
+where
+  type Tree : *T -> 1S
+  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+case (\(a : 1S -> 1S) (b : 1S) -> a b) (\(a : 1S) -> a) (Tree Int)
+  == Tree Int
+   : 1S
+where
+  type Tree : *T -> 1S
+  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+
+case Succ Zero
+  == \(s : *T -> *T) (z : *T) -> s z
+   : (*T -> *T) -> *T -> *T
+where
+  type Zero : (*T -> *T) -> *T -> *T
+  type Zero = (\(s : *T -> *T) (z : *T) -> z)
+  type Succ : ((*T -> *T) -> *T -> *T) -> ((*T -> *T) -> *T -> *T)
+  type Succ = \(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)
+
+case (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
+      (\(s : *T -> *T) (z : *T) -> z)
+  == \(s : *T -> *T) (z : *T) -> s (((\(s : *T -> *T) (z : *T) -> z)) s z)
+   : (*T -> *T) -> *T -> *T
+
+case (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
+      (\(s : *T -> *T) (z : *T) -> z)
+  == \(s : *T -> *T) (z : *T) -> s z
+   : (*T -> *T) -> *T -> *T

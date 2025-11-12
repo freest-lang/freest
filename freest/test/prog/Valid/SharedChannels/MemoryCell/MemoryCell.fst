@@ -16,7 +16,7 @@ write n s = (receive_ @IntCellSession s) |> select Write |> sendAndClose @Int n
 read: IntCell -> Int
 read s = (receive_ @IntCellSession s) |> select Read|> receiveAndClose @Int
 
-cell : Int -> Dual IntCell -> Diverge
+cell : Int -> Dual IntCell -> Void @*T
 cell n c =
   case accept @IntCellSession c of
     &Write s -> cell (receiveAndWait @Int s) c
@@ -28,7 +28,7 @@ sleep n = if n == 0 then () else sleep (n - 1)
 -- Expect 0, 5 or 6
 main: Int
 main =
-  let c = forkWith @IntCell @() (cell 0) in
+  let c = forkWith @IntCell @(Void@*T) (cell 0) in
   let (r, w) = channel @*?IntCellSession in
   fork (\(_ : ()) 1-> read c);
   fork (\(_ : ()) 1-> read c);

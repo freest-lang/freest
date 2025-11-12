@@ -4,13 +4,12 @@ import UnitSpecUtils
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Base ( ValidationState, buildValidationState )
 import Validation.TypeEquivalence ( fromType )
 import Language.Simple.Grammar
 
-import Data.Map.Strict qualified as Map
-import Debug.Trace
 import Test.Hspec
+import Debug.Trace ( trace )
 
 -- Requires: This test should be called with well-formed types only
 
@@ -24,12 +23,11 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges"
   errorsAreFailures
-  \_ (t, _, m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
+  \_ (t, _, m) -> translateToGrammar (buildValidationState m) t `shouldBe` True
 
-translateToGrammar :: TypeDeclMap -> T.Type -> Bool
-translateToGrammar td t = trace ("\n" ++ show (fromType td [t])) True
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
-
+translateToGrammar :: ValidationState -> T.Type -> Bool
+translateToGrammar vs t =
+  -- trace (" " ++ show (length productions) ++ " productions") True
+  trace ("\n" ++ show grammar) True
+  where grammar = fromType vs [t]
+        Grammar _ productions = grammar

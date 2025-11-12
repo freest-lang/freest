@@ -29,6 +29,7 @@ module Syntax.Type
   , Dual(..)
   , isConstant
   , isSkip
+  , isVoid
   , isSemi
   , isAppSemi
   , isAppLinChoice
@@ -36,6 +37,7 @@ module Syntax.Type
   , isTName
   , isDName
   , isMsg
+  , isAppQuant
   , fromVariable
   )
 where
@@ -68,6 +70,7 @@ data Type
   | Char Span
   | Arrow Span K.Multiplicity
   | Quant Span Polarity
+  | Void Span K.Kind  -- Only proper kinds are of interest, it seems...
   --   Session types
   | Skip Span
   | End Span Polarity
@@ -78,8 +81,6 @@ data Type
   --   Equations
   | TName Span Identifier
   | DName Span Identifier
-  --   The type equivalent to non-contractive types
-  | Void Span K.Kind
   -- Non-constants
   | Var Span Variable
   | Abs Span [(Variable, K.Kind)] Type
@@ -89,7 +90,7 @@ data Type
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
-pattern AppQuant :: Span -> Polarity ->  [(Variable, K.Kind)] -> Type -> Type
+pattern AppQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
 pattern AppQuant s p aks t <- App s (Quant _ p) [Abs _ aks t]
   where AppQuant s p []  t = t
         AppQuant s p aks t = App s (Quant s p) [Abs s aks t]
@@ -168,27 +169,35 @@ smartApp s t            us = App s t us
 bool :: Span -> Type
 bool s = DName (getSpan s) (mkBoolId s)
 
+-- | Is this type a type constant? An iota an in Cai et alia.
 isConstant :: Type -> Bool
 isConstant = \case
+  -- Given a declaration 'type A a1 ... an = T' with n>0, type 'A T1 ... Tm',
+  -- with m<=n, stands for λa1...λan.μλA.T. Type 'A T1 ... Tm' is an
+  -- application. Not a constant.
+  
+  -- Given a declaration 'type B = U', type B stands for μλA.U. Hence, type B is
+  -- of the form μF, an application that reduces to F(μF). Not a constant.
+  
+  -- Given a declaration 'data A a1 ... an = U' with n>0, type 'A' is understood
+  -- as a type constant.
+  TName{} -> False -- TName is indeed a μF, which reduces (unfolds)
   Var{}   -> False
   Abs{}   -> False
   App{}   -> False
-  -- Given a declaration 'type A a1 ... an = U', type A stands for
-  -- λa1...λan.μλA.U. Hence, type A is then a non value.
-  TName{} -> False
-  -- On the other hand, given a declaration 'data A a1 ... an = U', type A is
-  -- understood as a constant.
   _       -> True
 
-isSkip, isSemi, isAppSemi, isAppLinChoice, isDual, isTName, isDName, isMsg :: Type -> Bool
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuant, isAppLinChoice :: Type -> Bool
 isSkip         = \case Skip{}         -> True; _ -> False
+isVoid         = \case Void{}         -> True; _ -> False
 isSemi         = \case Semi{}         -> True; _ -> False
 isAppSemi      = \case AppSemi{}      -> True; _ -> False
-isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 isDual         = \case Dual{}         -> True; _ -> False
 isTName        = \case TName{}        -> True; _ -> False
 isDName        = \case DName{}        -> True; _ -> False
 isMsg          = \case Message{}      -> True; _ -> False
+isAppQuant     = \case AppQuant{}     -> True; _ -> False
+isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 
 fromVariable :: Variable -> Type
 fromVariable a = Var (varSpan a) a
@@ -234,6 +243,7 @@ instance Show Type where
     Var _ a    -> show a
     AppSemi _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
     Abs _ aks t -> "(\\" ++ showAbs aks " -> " t ++ ")"
+    App _ t [] -> "(" ++ show t ++ "[])"
     App _ t ts -> foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts
     -- Equations
     TName _ i -> show i ++ "#type"
@@ -277,7 +287,7 @@ instance Congruence Type where
   -- Equations
     (TName _ i1) (TName _ i2) -> i1 == i2
     (DName _ i1) (DName _ i2) -> i1 == i2
-  --   The type of non-contractive types
+  -- The type of non-contractive types
     (Void _ k1) (Void _ k2) -> k1 == k2
     _ _ -> False
 
@@ -286,11 +296,11 @@ instance Congruence [Type] where
     length ts == length us &&
     all (uncurry (congruent m)) (zip ts us)
 
-instance Congruence [(Identifier, Type)] where
-  congruent m m1 m2 =
-    length m1 == length m2 &&
-    all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2)
-        (zip (sort m1) (sort m2))
+-- instance Congruence [(Identifier, Type)] where
+--   congruent m m1 m2 =
+--     length m1 == length m2 &&
+--     all (\((id1, t1), (id2, t2)) -> id1 == id2 && congruent m t1 t2)
+--         (zip (sort m1) (sort m2))
 
 instance Located Type where
   getSpan = \case
