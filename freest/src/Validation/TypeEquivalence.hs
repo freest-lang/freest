@@ -132,7 +132,7 @@ word' set ctx = \case
         -- t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding failed for type " ++ show t
+      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ "with kinding context " ++ show ctx ++ ", at  " ++ (show $ getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
 isFullyApplied ctx = \case
