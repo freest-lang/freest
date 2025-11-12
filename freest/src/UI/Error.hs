@@ -146,7 +146,8 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
   where
     sep = " | "
     n = length (show el)
-    l = src Map.! fp !! (sl - 1)
+    srcf = src Map.! fp
+    l = srcf !! (min (length srcf) sl - 1)
     spaces x = replicate x ' '
     carets x = replicate x '^'
 
