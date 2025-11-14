@@ -31,6 +31,9 @@ oneChar  = cons @Char 'a' empty
 
 twoChars = cons @Char 'b' oneChar
 
+anIntlist : List Int
+anIntlist = cons @Int 5 $ cons @Int 9 $ cons @Int 2 $ cons @Int 8 $ cons @Int 9 $ cons @Int 4 $ cons @Int 5 $ nil @Int
+
 -- Function head' takes the head of a non-empty list and diverges otherwise
 head' : forall (a : *T). List a -> a
 head' @a l = (l @(() -> a) (\(hd : a) (tl : () -> a) (_ : ()) -> hd) (diverge @a)) ()
@@ -52,6 +55,10 @@ mainHead = head' @Char twoChars
 
 mainChars : Char
 mainChars = head' @Char twoChars -- null  @Char (nil  @Char)
+
+-- Converting to String
+toString : forall (a:*T) . List a -> String
+toString @a xs = xs @String (\(x:a) -> \(s:String) -> (++) @Char ((++) @Char (show @a x) "::") s) "[]"
 
 -- Pairs in preparation for the tail function
 
@@ -105,3 +112,16 @@ replicate' @a n val = n @(List a) (cons @a val) (nil @a)
 
 main : Int
 main = length' @Char $ replicate' @Char four 'a'
+
+-- sorting
+insert : forall (a:*T) . a -> List a -> List a
+insert @a x xs = xs @(List a)
+                    (\(hd:a) (tl:List a) ->
+                      if x > hd then cons @a hd tl else cons @a x (cons @a hd (tail' @a tl)))
+                    (cons @a x (nil @a))
+
+sort : forall (a:*T) . List a -> List a
+sort @a xs = xs @(List a) (insert @a) (nil @a)
+
+mainSort : String
+mainSort = toString @Int (sort @Int) anIntlist
