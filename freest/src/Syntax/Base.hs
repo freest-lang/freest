@@ -11,10 +11,10 @@ module Syntax.Base
   -- TODO: explicit export list
 where
 
-import qualified Data.Set                      as Set
 
-import Data.List ((\\))
-import           Data.Bifunctor
+import Data.Bifunctor ( Bifunctor(..) )
+import Data.List ( (\\) )
+import Data.Set qualified as Set
 
 -- Positions in the source code
 
@@ -63,7 +63,8 @@ instance Located Span where
 -- | A span's text representation should be in a format recognized by the 
 -- most common IDEs.
 instance Show Span where 
-  show s = filepath s++":"++showPos (startPos s)++"-"++showPos (endPos s)
+  show s = filepath s ++ ":" ++ showPos (startPos s) 
+                      ++ "–" ++ showPos (endPos s) -- Not recognized by VS Code. Is there another format for spans?
     where showPos (l,c) = show l++":"++show c
 
 -- | The null span may be used to construct syntactic objects when their 
@@ -88,7 +89,7 @@ instance Ord Identifier where
   Identifier _ i1 <= Identifier _ i2 = i1 <= i2
 
 instance Show Identifier where
-  show (Identifier _ s) = s
+  show (Identifier _ i) = i
 
 -- | Construct an identifier with the span of the second argument.
 mkId :: Located a => String -> a -> Identifier
@@ -132,6 +133,12 @@ nullInternal = 0
 defaultInternal :: Int
 defaultInternal = -1
 
+firstRenamed :: Int
+firstRenamed = -2
+
+nullVar :: Located a => a -> Variable
+nullVar x = Variable (getSpan x) "_unreachable" nullInternal
+
 -- | Construct a variable given its external representation and a Located value
 -- to extract the span from. The internal representation is the default.
 mkDefaultVar :: Located a => String -> a -> Variable
@@ -142,6 +149,10 @@ mkDefaultVar external l = Variable{varSpan = getSpan l, external, internal = def
 unusedVar :: [Int] -> Variable -> Set.Set Variable -> Variable
 unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as))}
 
+-- | Same as 'unusedVar', but for multiple variables.
+unusedVars :: [Int] -> [Variable] -> Set.Set Variable -> [Variable]
+unusedVars stock as bs  = zipWith (\a i -> a{internal=i}) as (stock \\ map internal (Set.toList bs))
+
 -- | The first variable not in a given set of variables, counting upwards. Used
 -- in substitution, for example.
 freshVar :: Variable -> Set.Set Variable -> Variable
@@ -150,8 +161,11 @@ freshVar = unusedVar [firstInternal..]
 -- | The first variable not in a given set of variables, counting downwards. Used
 -- in the renaming process, prior to translation to simple grammar.
 firstVar :: Variable -> Set.Set Variable -> Variable
-firstVar = unusedVar [defaultInternal, defaultInternal - 1 ..]
+firstVar = unusedVar [firstRenamed, firstRenamed - 1 ..]
 
+-- | Same as 'firstVar', but for multiple variables.
+firstVars :: [Variable] -> Set.Set Variable -> [Variable]
+firstVars = unusedVars [firstRenamed, firstRenamed - 1 ..]
 
 -- Levels
 

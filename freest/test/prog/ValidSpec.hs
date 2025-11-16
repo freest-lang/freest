@@ -1,5 +1,3 @@
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {- |
 Module      :  ValidSpec
 Copyright   :  © The FreeST Team
@@ -14,20 +12,20 @@ import FreeST
 import ProgSpecUtils
 
 import Control.Exception
-import Control.Monad (void)
-import Data.List (intercalate, isPrefixOf)
-import System.Exit (ExitCode(..))
-import System.IO (stdout, stderr)
+import Control.Monad ( void )
+import Data.List ( intercalate, isPrefixOf )
+import System.Exit ( ExitCode(..) )
+import System.IO ( stdout, stderr )
 import System.IO.Silently
 import System.Timeout
 import Test.Hspec
-import Test.HUnit (assertFailure)
+import Test.HUnit ( assertFailure )
 
 
 data TestResult = Timeout | Passed | Failed
 
 baseDir :: String
-baseDir = "/test/prog/valid/"
+baseDir = "/test/prog/Valid/"
 
 spec :: Spec
 spec = specTest' "valid" baseDir test
@@ -63,7 +61,7 @@ testOne file = hCapture [stdout, stderr] $
 
   runTest :: IO TestResult
   runTest = do
-    res <- timeout timeInMicro (freest RunOpts{file})
+    res <- timeout timeInMicro (freest defaultRunOpts{file})
     case res of Just _  -> pure Passed
                 Nothing -> pure Timeout
 

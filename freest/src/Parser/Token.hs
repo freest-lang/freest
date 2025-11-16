@@ -10,11 +10,12 @@ the tokens output by the lexer.
 module Parser.Token where 
 
 import Syntax.Base
-import Data.List (intercalate)
+import Data.List ( intercalate )
 
 data Token
   -- Identifiers
   = TkLowerId Span String 
+  | TkLowerIdAt Span String
   | TkUpperId Span String 
   | TkQualifiedUpperId Span String
   | TkWildcard Span String
@@ -26,7 +27,7 @@ data Token
   -- Keywords
   | TkModule Span | TkWhere Span | TkImport Span
   | TkData Span | TkType Span
-  | TkLet Span | TkIn Span
+  | TkLet Span | TkIn Span | TkMutual Span
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
   | TkSelect Span | TkChannel Span
@@ -55,10 +56,11 @@ data Token
   | TkIntType Span | TkFloatType Span | TkCharType Span
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
+  | TkVoidType Span
   -- Kinds 
   | TkLinTopKind Span | TkUnTopKind Span
   | TkLinSessionKind Span | TkUnSessionKind Span
-  | TkLinAbsorbKind Span | TkUnAbsorbKind Span
+  | TkLinChannelKind Span | TkUnChannelKind Span
 
   deriving (Eq, Show)
 
@@ -66,24 +68,26 @@ data Token
 -- Identifiers
 getText = \case
   -- Identifiers
-  TkLowerId _ s -> s
-  TkUpperId _ s -> s
-  TkQualifiedUpperId _ s -> s
-  TkWildcard _ s -> s
+  TkLowerId _ t -> t
+  TkLowerIdAt _ t -> t
+  TkUpperId _ t -> t
+  TkQualifiedUpperId _ t -> t
+  TkWildcard _ t -> t
   -- Literals 
-  TkIntLit _ s -> s
-  TkFloatLit _ s -> s
-  TkCharLit _ s -> s
-  TkStringLit _ s -> s
-  TkCmp _ s -> s
+  TkIntLit _ t -> t
+  TkFloatLit _ t -> t
+  TkCharLit _ t -> t
+  TkStringLit _ t -> t
+  TkCmp _ t -> t
   -- Keywords
-  _ -> error "Parser.Token.getText: no text"
+  t -> error $ "Parser.Token.getText: no text for token `" ++ show t ++ "`"
 
 instance Located Token where
   getSpan :: Token -> Span
   getSpan = \case 
     -- Identifiers
     TkLowerId s _ -> s
+    TkLowerIdAt s _ -> s
     TkUpperId s _ -> s
     TkQualifiedUpperId s _ -> s
     TkWildcard s _ -> s
@@ -100,6 +104,7 @@ instance Located Token where
     TkType s -> s
     TkLet s -> s
     TkIn s -> s
+    TkMutual s -> s
     TkCase s -> s
     TkOf s -> s
     TkIf s -> s
@@ -107,6 +112,7 @@ instance Located Token where
     TkElse s -> s
     TkSelect s -> s
     TkForall s -> s
+    TkExists s -> s
     TkRec s -> s
     TkChannel s -> s
     -- Punctuation
@@ -162,18 +168,20 @@ instance Located Token where
     TkCloseType s -> s
     TkWaitType s -> s
     TkDualType s -> s
+    TkVoidType s -> s
     -- Kinds
     TkLinTopKind s -> s
     TkUnTopKind s -> s
     TkLinSessionKind s -> s
     TkUnSessionKind s -> s
-    TkLinAbsorbKind s -> s
-    TkUnAbsorbKind s -> s
+    TkLinChannelKind s -> s
+    TkUnChannelKind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
   setSpan s  = \case
     TkLowerId _ i -> TkLowerId s i
+    TkLowerIdAt _ i -> TkLowerIdAt s i
     TkUpperId _ i -> TkUpperId s i
     TkQualifiedUpperId _ i -> TkQualifiedUpperId s i
     TkWildcard _ i -> TkWildcard s i
@@ -190,6 +198,7 @@ instance Located Token where
     TkType _ -> TkType s
     TkLet _ -> TkLet s
     TkIn _ -> TkIn s
+    TkMutual _ -> TkMutual s
     TkCase _ -> TkCase s
     TkOf _ -> TkOf s
     TkIf _ -> TkIf s
@@ -252,11 +261,12 @@ instance Located Token where
     TkDualType _ -> TkDualType s
     TkCloseType _ -> TkCloseType s
     TkWaitType _ -> TkWaitType s
+    TkVoidType _ -> TkVoidType s
     -- Kinds
     TkLinTopKind _ -> TkLinTopKind s
     TkUnTopKind _ -> TkUnTopKind s
     TkLinSessionKind _ -> TkLinSessionKind s
     TkUnSessionKind _ -> TkUnSessionKind s
-    TkLinAbsorbKind _ -> TkLinAbsorbKind s
-    TkUnAbsorbKind _ -> TkUnAbsorbKind s
+    TkLinChannelKind _ -> TkLinChannelKind s
+    TkUnChannelKind _ -> TkUnChannelKind s
 

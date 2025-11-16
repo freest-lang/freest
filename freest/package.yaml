@@ -18,7 +18,13 @@ default-extensions:
   - BlockArguments
   - FlexibleContexts
   - NamedFieldPuns
+  - BangPatterns
+  - ScopedTypeVariables
+  - ImportQualifiedPost
 
+data-dir: data
+data-files:
+  - StandardLib/Prelude.fst
 
 extra-source-files:
   - README.md
@@ -33,6 +39,7 @@ dependencies:
   - optparse-applicative >= 0.16.1.0
   - extra >= 1.7.9
   - transformers >= 0.5.6.2
+  - sgbisim
 
 library:
   source-dirs: src
@@ -41,26 +48,28 @@ library:
     - happy
   exposed-modules:
     - FreeST
-    - UI.CLI
-    - UI.Error
-    - Parser.Parser
     - Parser.LexerUtils
+    - Parser.Parser
     - Parser.Scoping
+    - Parser.Unparser
+    - Paths_freest
     - Syntax.Base
     - Syntax.Expression
     - Syntax.Kind
     - Syntax.Module
     - Syntax.Names
     - Syntax.Type
+    - UI.CLI
+    - UI.Error
+    - Utils
     - Validation.Base
     - Validation.Expose
     - Validation.Kinding
     - Validation.Normalisation
     - Validation.Rename
     - Validation.Substitution
-    - Validation.TypeEquivalence.TypeEquivalence
+    - Validation.TypeEquivalence
     - Validation.Typing
-    - Utils
 executables:
   freest:
     main:        FreeST.hs

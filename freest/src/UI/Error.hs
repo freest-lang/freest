@@ -6,159 +6,391 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 Errors. A work in progress.
 -}
 {-# LANGUAGE LambdaCase #-}
-module UI.Error 
-  (Error(..))
-where 
+
+
+module UI.Error
+  ( Error(..)
+  , Source
+  , toMessage
+  , showErrors
+  , printErrors
+  )
+where
 
 import Parser.Token
+import Parser.Unparser
 import Syntax.Base
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 import Utils
 
-import Data.List (intercalate)
-import qualified Data.Map.Strict as Map
+import Data.List (intercalate,nub)
+import Data.Map.Strict qualified as Map
+import Syntax.Expression
+import Data.List qualified as List
+import Data.Char qualified as Char
 
-data Error 
-  = LexicalError Span Char 
-  | ParseError Span (Token, [String])
-  | OutOfScope Span Variable
+-- | The errors that can be found in a FreeST program.
+data Error
+  = ArrowMultMismatch Span (Either Variable E.Exp) Int
+    K.Multiplicity K.Multiplicity
+  | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
-  | TypeOutOfScope Span Identifier
-  | ConflictingDefs (Map.Map (Level String String) [Span])
-  | MultipleVarDecls Span Variable
-  | MultipleConsDecls Span Identifier
-  | MultipleTypeDecls Span Identifier
-  | MultipleKindSigs Span Identifier
-  | LacksKindSig Span Identifier
-  | GivenTooManyArgs Span E.Exp T.Type Int Int
-  | LinVarsConsumedInUnFun Span [Variable] E.Exp
-  | LinVarsCreatedInUnFun Span [Variable] E.Exp
-  | ExposeError Span String (Either E.Exp E.Pat) T.Type
-  | UnexpectedArg Span (Level T.Type K.Kind) (Level E.Exp T.Type) Int E.Exp
-  | NonLinPat Span E.Pat T.Type
-  | KindMismatch Span K.Kind T.Type K.Kind
-  | ProperKindMismatch Span T.Type K.Kind
-  | GivenTooManyArgsK Span T.Type Int Int
+  | DConsPatArgMismatch Span Identifier Int Int
+  | ExpectsTooManyArgs Span (Either Variable E.Exp) T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | InvalidType Span T.Type
+  | ExposeError Span String T.Type
+  | GivenTooManyArgs Span E.Exp T.Type Int Int
+  | GivenTooManyArgsK Span T.Type K.Kind Int Int
+  | IllegalChoice Span Identifier T.Type
+  | KindMismatch Span K.Kind T.Type K.Kind
+  | LacksKindSig Span Identifier
+  | LacksTypeSig Span Variable
+  | LexicalError Span Char
+  | LinConsumedInUnFun Span (Either Variable Identifier) T.Type (Either Variable E.Exp)
+  | LinNotConsumedEvenly Span (Either Variable Identifier) T.Type 
+    (Either (Either Variable E.Pat) E.Exp)
+  | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
+  | MultipleConsDecls Span [Identifier]
+  | MultipleFieldDecls Span [Identifier]
+  | MultipleKindSigs Span [Identifier]
+  | MultipleTypeDecls Span [Identifier]
+  | MultipleVarDecls Span [Variable]
+  | NonLinPat Span E.Pat T.Type
+  | ParseError Span (Token, [String])
+  | PartiallyAppliedSelect Span Identifier
+  | PrekindMismatch Span K.Prekind T.Type K.Kind
+  | ProperKindMismatch Span T.Type K.Kind
+  | SigLacksDef Span Variable
+  | TypeConsOutOfScope Span Identifier
   | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
-  | TypeCtxMismatch Span E.Exp [(Variable, T.Type)] [(Variable, T.Type)]
-  | ConstructorArgumentMismatch Span Identifier Int Int
-  | ChoiceNotAllowed Span Identifier T.Type
+  | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
+  | TypeMismatchChoice Span T.Type Identifier E.Pat
+  | TypeMismatchSelect Span T.Type Identifier E.Exp
+  | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
+  | TypeVarOutOfScope Span Variable
+  | UnexpectedArg Span Int (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type)
+  | UnexpectedParam Span Int (Either Variable E.Exp) (Level T.Type K.Kind)
+    (Level E.Pat Variable) 
+  | UnsupportedError Span String String
+  | VarOutOfScope Span Variable
 
+-- | Errors can be tracked to the source code.
 instance Located Error where
-  getSpan = \case 
-    LexicalError s _ -> s
-    ParseError s _ -> s
-    OutOfScope s _ -> s
+  -- | Returns the span of an 'Error', i.e., where the error occurs in the
+  -- source code.
+  getSpan = \case
+    ArrowMultMismatch s _ _ _ _ -> s
+    ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
-    TypeOutOfScope s _ -> s
-    ConflictingDefs xss -> foldr1 spanFromTo $ concat $ Map.elems xss
-    MultipleVarDecls s _ -> s
-    MultipleConsDecls s _ -> s
-    MultipleTypeDecls s _ -> s
-    MultipleKindSigs s _ -> s
-    LacksKindSig s _ -> s
-    GivenTooManyArgs s _ _ _ _ -> s
-    LinVarsConsumedInUnFun s _ _ -> s
-    LinVarsCreatedInUnFun s _ _ -> s
-    ExposeError s _ _ _ -> s
-    UnexpectedArg s _ _ _ _ -> s
-    NonLinPat s _ _ -> s
-    KindMismatch s _ _ _ -> s
-    ProperKindMismatch s _ _ -> s
-    GivenTooManyArgsK s _ _ _ -> s
+    DConsPatArgMismatch s _ _ _ -> s
+    ExpectsTooManyArgs s _ _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
-    InvalidType s _ -> s
+    ExposeError s _ _ -> s
+    GivenTooManyArgs s _ _ _ _ -> s
+    GivenTooManyArgsK s _ _ _ _ -> s
+    IllegalChoice s _ _ -> s
+    KindMismatch s _ _ _ -> s
+    LacksKindSig s _ -> s
+    LacksTypeSig s _ -> s
+    LexicalError s _ -> s
+    LinNotConsumedEvenly s _ _ _ -> s
+    LinVarAtEndOfScope s _ _ -> s
+    LinConsumedInUnFun s _ _ _ -> s
+    MultipleConsDecls s _ -> s
+    MultipleFieldDecls s _ -> s
+    MultipleKindSigs s _ -> s
+    MultipleTypeDecls s _ -> s
+    MultipleVarDecls s _ ->  s
+    NonLinPat s _ _ -> s
+    ParseError s _ -> s
+    PartiallyAppliedSelect s _ -> s
+    PrekindMismatch s _ _ _ -> s
+    ProperKindMismatch s _ _ -> s
+    SigLacksDef s _ -> s
+    TypeConsOutOfScope s _ -> s
     TypeMismatch s _ _ _ -> s
-    TypeCtxMismatch s _ _ _ -> s
-    ConstructorArgumentMismatch s _ _ _ -> s
-    ChoiceNotAllowed s _ _ -> s
+    TypeMismatchList s _ _ -> s
+    TypeMismatchChoice s _ _ _ -> s
+    TypeMismatchSelect s _ _ _ -> s
+    TypeMismatchTuple s _ _ _ -> s
+    TypeVarOutOfScope s _ -> s
+    UnexpectedArg s _ _ _ -> s
+    UnexpectedParam s _ _ _ _ -> s
+    UnsupportedError s _ _ -> s
+    VarOutOfScope s _ -> s
 
+  -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
-instance Show Error where
-  show e = show (getSpan e) ++ ": error:"++showError e
-    where 
-      showError :: Error -> String
-      showError = \case
-        LexicalError _ inp ->
-          "\n  Lexical error on input `"++show inp++"`"
-        ParseError _ (_,ss) -> 
-          "\n  Parse error, expected: `"++intercalate "`, `" ss++"`"
-        OutOfScope _ x -> 
-          "\n  Not in scope: variable `"++external x++"`"
-        ConsOutOfScope _ i -> 
-          "\n  Not in scope: constructor `"++show i++"`"
-        TypeOutOfScope _ i ->
-          "\n Not in scope: type constructor `"++show i++"`"
-        ConflictingDefs vos -> 
-          "\n  Conflicting definitions in patterns:"
-          ++Map.foldrWithKey (\case 
-              ExpLevel x -> \ss msg -> 
-                  "\n    Variable `"++x++"` bound at:"
-                  ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
-                  ++msg
-              TypeLevel a -> \ss msg -> 
-                  "\n    Type variable `"++a++"` bound at:"
-                  ++foldr (\s msg' -> "\n      "++show s++msg') "" ss
-                  ++msg)
-          "" vos
-        MultipleVarDecls _ i ->
-          "\n  Multiple declarations of variable `"++show i++"`"
-        MultipleConsDecls _ i ->
-          "\n  Multiple declarations of constructor `"++show i++"`"
-        MultipleTypeDecls _ i ->
-          "\n  Multiple declarations of type `"++show i++"`"
-        MultipleKindSigs _ i ->
-          "\n  Multiple kind signatures for type `"++show i++"`"
-        LacksKindSig _ i -> 
-          "\n Type `"++show i++"` lacks an accompanying kind signature."
-        GivenTooManyArgs _ f t expected actual ->
-          "\n  Expression `"++show f++"` of type `"++show t++"` takes "++show expected++" arguments, but it was given "++show actual++"."
-        LinVarsConsumedInUnFun _ xs e ->
-          "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
-          "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
-        LinVarsCreatedInUnFun _ xs e ->
-          "\n  Linear variables `" ++ intercalate "`, `" (map show xs) ++ "` consumed in the body of unrestricted function `" ++ show e ++"`"++
-          "\n  (This allows duplicating or discarding the variables! Consider using a linear function instead.)"
-        ExposeError _ s e t -> 
-          "\n  Expecting "++s++" type for "++showExpPat e++", but got type `"++show t++"`"
-        UnexpectedArg _ (TypeLevel k) (ExpLevel e) n f -> 
-          "\n  Expecting a type argument of kind `"++show k++"`, but got value argument `"++show e++
-          "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
-        UnexpectedArg _ (ExpLevel  t) (TypeLevel u) n f -> 
-          "\n  Expecting a value argument of type `"++show t++"`, but got type argument `"++show u++
-          "\n  In the "++show n {- TODO: use numerals-}++"th argument of function `"++show f++"`."
-        NonLinPat s p t ->
-          "\n  Non-linear pattern `"++show p++"` on linear type `"++show t++"`." -- TODO: better error
-        KindMismatch s k1 t k2 ->
-          "\n Expected kind "++show k1++" for type "++show t++", but got kind "++show k2
-        ProperKindMismatch s t k -> 
-          "\n Expected a proper kind for type "++show t++", but got kind "++show k
-        GivenTooManyArgsK s t n m ->
-          "\n Type "++show t++" expects "++show n++" arguments, but it was given "++show m++"."
-        ExpectsTooManyArgsK s i k ->
-          "\n Type "++show i++" expects too many arguments, it should have kind "++show k++"."
-        InvalidType s t ->
-          "\n Invalid type: "++show t
-        TypeMismatch s t u ep ->
-          "\n Couldn't match expected type "++show t++" with actual type "++show u++" in the "++showExpPat ep++"."
-        TypeCtxMismatch s e tctx1 tctx2 -> 
-          -- TODO: different messages for abstractions, cases and conditional expressions; ideally better than Freest 3.
-          "\nCouldn't match the final contexts in two distinct branches in a case expression " ++
-          "\n\t       One context is " ++ show tctx1 ++
-          "\n\t         the other is " ++ show tctx2 ++
-          "\n\tand the expression is " ++ show e ++
-          "\n\t(was a variable consumed in one branch and not in the other?)" ++
-          "\n\t(is there a variable with different types in the two contexts?)"
-        ConstructorArgumentMismatch s i n m ->
-          "\n The constructor `"++show i++"` should have "++show n++" arguments, but has been given "++show m++"."
-        ChoiceNotAllowed s i t ->
-          "\n Choice `"++show i++"` is not allowed by type "++show t
+type Source = Map.Map FilePath [String]
 
-      showExpPat = \case 
-        Left  p -> "pattern `"++show p++"`"
-        Right e -> "expression `"++show e++"`"
+getFromSpan :: Located a => Source -> a -> String
+getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
+  take (ec - sc) . drop (sc - 1) $ (src Map.! fp) !! (sl - 1)
+
+getLineFromSpan :: Located a => Source -> a -> String
+getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
+  (src Map.! fp) !! (sl - 1)
+
+snippet :: Located a => Source -> a -> Bool -> String
+snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
+  unlines ([ spaces (n + 1) ++ show s | showSpan ] ++
+           [ spaces n ++ sep
+           , rpad n ' ' (show sl) ++ sep ++ l
+           , spaces n ++ sep ++ spaces (sc - 1) 
+             ++ if sl == el then carets (ec - sc)
+                else carets (length (strip (drop (sc - 1) l))) ++ "..."
+           ])
+  where
+    sep = " | "
+    n = length (show el)
+    srcf = src Map.! fp
+    l = srcf !! (min (length srcf) sl - 1)
+    spaces x = replicate x ' '
+    carets x = replicate x '^'
+
+multiLineSnippet :: Located a => Source -> a -> String
+multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
+  unlines $ (spaces n ++ sep) : zipWith lineCarets [sl..] ls
+  where
+    n = length (show el)
+    sep = " | "
+    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ src Map.! fp
+    spaces x = replicate x ' '
+    lineCarets i li = 
+      rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep 
+      ++ if | sl == el  -> spaces (sc - 1) ++ carets (ec - sc)
+            | i  == sl  -> spaces (sc - 1) ++ caretsFrom (strip (drop (sc - 1) li))
+            | i  == el  -> ws ++ carets (ec - 1 - length ws)
+            | otherwise -> ws ++ caretsFrom (strip li')
+      where
+        carets x = replicate x '^'
+        caretsFrom = map (const '^')
+        (ws, li') = List.span Char.isSpace li
+
+errorHeader :: Located a => a -> String
+errorHeader (getSpan -> s) = show s ++ ": error:"
+
+makeError :: Located a => Source -> a -> String -> String
+makeError src (getSpan -> s) msg =
+  errorHeader s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
+
+prettyKind :: K.Kind -> String
+prettyKind = \case
+  K.Proper _ m pk -> prettyMulti m ++ prettyPre pk
+  K.Arrow _ k1 k2 -> prettyKind k1 ++ " -> " ++ prettyKind k2
+  K.Var _ τ       -> "kind variable " ++ external τ
+  where
+    prettyMulti = \case
+      K.Lin -> "a linear"
+      K.Un -> "an unrestricted"
+      K.VarM φ -> "a multiplicity variable " ++ external φ
+    prettyPre = \case
+      K.Top -> ""
+      K.Session -> " session"
+      K.Channel -> " channel"
+      K.VarPK ψ -> " prekind variable " ++ external ψ
+
+toMessage :: Source -> Error -> String
+toMessage src = \case
+  ArrowMultMismatch s xe i m m' -> makeError src s
+    ("Expected " ++ showMult m ++ " function, but got " ++ showMult m'
+      ++ " one instead" 
+      ++ (if i > 0
+          then " (on the " ++ ordinal (i + 1) ++ " parameter of this " 
+            ++ (case xe of Left _ -> "function definition" -- should not occur
+                           Right _ -> "expression") ++ ")"
+          else ""))
+    where
+      showMult = \case
+        K.Lin    -> "a linear"
+        K.Un     -> "an unrestricted"
+        K.VarM x -> "a multiplicity" ++ external x
+  ConflictingDefs s xa ss -> makeError src s
+    ("Conflicting definitions for " ++ case xa of
+      ExpLevel x -> "variable " ++ x
+      TypeLevel a -> "type variable " ++ bt a)
+    ++ "Conflicting definitions at:\n" ++ unlines (map show ss)
+  ConsOutOfScope s i -> makeError src s
+    ("Constructor out of scope: " ++ bt (show i))
+  DConsPatArgMismatch s i n m -> makeError src s
+    ("Constructor " ++ bt (show i) ++ " takes " ++ show n
+      ++ " arguments, but it was given " ++ show m)
+  ExpectsTooManyArgs s _ t n m -> makeError src s
+     ("This function expects " ++ prettyArgs n
+       ++ ", but its type " ++ bt (unparse t) ++ " takes"
+       ++ case m of 
+        0 -> " none"
+        n -> " only " ++ show n)
+  ExpectsTooManyArgsK s i k -> makeError src s
+    ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
+      ++ bt (unparse k) ++ " takes only " ++ show (K.depth k))
+  ExposeError s expected t -> makeError src s
+    ("Expected " ++ expected ++ ", but got type " ++ bt (unparse t))
+  GivenTooManyArgs s e t n m -> makeError src s
+    ("Got " ++ prettyQArgs "unexpected" (m - n))
+    ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to " 
+    ++ thirdPerson (m - n) ++ ")"
+  GivenTooManyArgsK s t k n m -> makeError src s
+    ("Got " ++ prettyQArgs "unexpected" (m - n))
+    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to " 
+    ++ thirdPerson (m - n) ++ ")"
+  IllegalChoice s i t -> makeError src (getSpan i)
+    ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
+  KindMismatch s k1 t k2 -> makeError src s 
+    -- TODO: this would give us weird errors, like "Expected 1 less argument to
+    -- type `Int`" with `type T : *T -> *T` and `type T = Int`
+    -- if | K.depth k1 < K.depth k2 ->
+    --      ("Expected " ++ prettyMoreArgs diff ++ " to type " ++ bt (unparse t))
+    --    | K.depth k1 > K.depth k2 ->
+    --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
+    --    | otherwise ->
+      ("Couldn't match expected kind " ++ bt (unparse k1)
+        ++ " with actual kind " ++ bt (unparse k2))
+    where
+      diff = (K.depth k2 - K.depth k1)
+  LacksKindSig s i -> makeError src s
+    ("Type " ++ bt (show i) ++ " lacks a kind signature")
+  LacksTypeSig s x -> makeError src s
+    ("Function " ++ bt (external x) ++ " is missing a type signature")
+  LexicalError span c -> makeError src span
+    ("Unsupported character " ++ bt [c])
+  LinVarAtEndOfScope s xi _ -> makeError src s
+    ("Linear variable " ++ prettyVarCons xi ++ " was not consumed")
+  LinConsumedInUnFun s xi t fe -> errorHeader s ++ "\n" ++
+    ("Linear " ++ prettyVarCons xi
+      ++ " of type " ++ unparse t ++ ", bound at\n"
+      ++ snippet src xi True
+      ++ " was consumed in body of an unrestricted function\n"
+      ++ snippet src fe True)
+    ++ "(This would allow duplicating or discarding it. "
+    ++ "Consider using a linear function instead.)"
+  MultipleConsDecls s is -> makeError src s
+    ("Multiple declarations of constructor " ++ bt (show (head is)))
+    ++ "Duplicate declarations at:\n"
+    ++ unlines (map (("  " ++) . show . getSpan) is)
+  MultipleFieldDecls s is -> makeError src s
+    ("Multiple declarations of field " ++ bt (show (head is)))
+    ++ "Duplicate declarations at:\n"
+    ++ unlines (map (("  " ++) . show . getSpan) is)
+  MultipleKindSigs s is -> makeError src s
+    ("Multiple kind signatures for type " ++ bt (show (head is)))
+    ++ "Duplicate signatures  at:\n"
+    ++ unlines (map (("  " ++) . show . getSpan) is)
+  MultipleTypeDecls s is -> makeError src s
+    ("Multiple declarations of type " ++ bt (show (head is)))
+    ++ "Duplicate declarations at:\n"
+    ++ unlines (map (("  " ++) . show . getSpan) is)
+  MultipleVarDecls s xs -> makeError src s
+    ("Multiple declarations of variable " ++ bt (external (head xs)))
+    ++ "Duplicate declarations at:\n"
+    ++ unlines (map (("  " ++) . show . getSpan) xs)
+  NonLinPat s p t -> makeError src s
+    ("Non-linear pattern for linear type " ++ bt (unparse t))
+  ParseError s (_, ss) -> makeError src s
+    "Parse error"
+    ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
+  PartiallyAppliedSelect s id -> makeError src s
+    "Could not infer type for partially applied `select`"
+  PrekindMismatch s pk t k -> makeError src s
+    ("Expected a " ++ prettyPk pk ++ ", but got " ++
+      (case k of 
+        K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (unparse t)
+        k               -> bt (unparse t) ++ " of kind " ++ bt (unparse k))
+      ++ " instead")
+  ProperKindMismatch s t k -> makeError src s
+    ("Expected " ++ prettyMoreArgs arity ++ " to " ++ bt (unparse t))
+    ++ "(Expected a proper type, but got " ++ bt (unparse t)
+    ++ " of kind " ++ bt (unparse k) ++ ")"
+    where arity = K.depth k
+  SigLacksDef s x -> makeError src s
+    ("Variable " ++  external x ++ " has a type signature but no definition")
+  TypeConsOutOfScope s i -> makeError src s
+    ("Type constructor out of scope: " ++ bt (show i))
+  LinNotConsumedEvenly s xi t fpe -> errorHeader s ++ "\n" ++
+    ("Linear " ++ (case xi of Left x  -> "variable " ++ bt (external x)
+                              Right i -> "constructor " ++ bt (show i))
+      ++ " of type " ++ bt (unparse t) ++", bound at\n" 
+      ++ snippet src xi True
+      ++ "was not consumed evenly among the branches of a" 
+      ++ (case fpe of
+        Left (Left  x) -> " function definition"
+        Left (Right p) -> " value definition"
+        Right e        -> case e of
+          E.Case{} -> " case expression"
+          E.If{}   -> " conditional expression"
+          _        -> "n expression") ++ "\n"
+      ++ snippet src fpe True)
+  TypeMismatch s t u _ -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with actual type " ++ bt (unparse u))
+  TypeMismatchList s t _ -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t) ++ " with a list pattern")
+  TypeMismatchChoice s t i p -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with choice pattern " ++ bt (getFromSpan src i))
+  TypeMismatchSelect s t i _ -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with selection " ++ bt (show i))
+  TypeMismatchTuple s n t _ -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
+      ++ (case n of 0 -> "()"
+                    2 -> "a pair pattern"
+                    m -> "a " ++ show m ++ "-tuple pattern"))
+  TypeVarOutOfScope s a -> makeError src s
+    ("Type variable out of scope: " ++ external a)
+  UnexpectedArg s n a1 a2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
+    (case (a1, a2) of 
+      (TypeLevel k, ExpLevel e) ->
+        "Expected a type argument of kind " ++ bt (unparse k) 
+        ++ ", but got a value argument"
+      (ExpLevel  t, TypeLevel u) ->
+        "Expected a value argument "
+        ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t 
+        ++ ", but got type argument")
+  UnexpectedParam s n f p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
+    (case (p1, p2) of 
+      (TypeLevel k, ExpLevel p ) ->
+        "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
+      (ExpLevel  t, TypeLevel a) ->
+        "Expected a pattern of type " ++ bt (unparse t) ++ ", but got a type parameter")
+  UnsupportedError s msg1 msg2 -> makeError src s
+    ("Unsupported feature: " ++ msg1)
+    ++ msg2
+  VarOutOfScope s x -> makeError src s
+    ("Variable out of scope: " ++ bt (external x))
+  where
+    thirdPerson    = \case 
+      1 -> "it"
+      _ -> "them"
+
+    prettyQArgs q  = \case 
+      0 -> "no "   ++ q ++ " arguments"
+      1 -> "1 "    ++ q ++ " argument"
+      n -> show n ++ " " ++ q ++ " arguments"
+
+    prettyArgs     = prettyQArgs ""
+
+    prettyMoreArgs = prettyQArgs "more"
+
+    prettyLessArgs = prettyQArgs "less"
+
+    bt s = "`" ++ s ++ "`"
+
+    prettyVarCons = \case
+      Left x -> "variable " ++ bt (external x)
+      Right i -> "constructor " ++ bt (show i)
+
+    prettyPk = \case 
+      K.Top     -> "type"
+      K.Session -> "session type"
+      K.Channel -> "channel type"
+      K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
+
+showErrors :: Source -> [Error] -> String
+showErrors src = intercalate "\n" . map (toMessage src)
+
+printErrors :: Source -> [Error] -> IO ()
+printErrors src es = putStrLn $ showErrors src es

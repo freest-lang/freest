@@ -10,29 +10,35 @@ module FreeST where
 import Parser.LexerUtils
 import Parser.Lexer
 import Parser.Token
+import Paths_freest ( getDataFileName )
 import Control.Monad.RWS
 import UI.CLI
+import UI.Error
 import Parser.Parser
-import Syntax.Module
-import Parser.Scoping (runScoping, scopeModule_)
+import Syntax.Module qualified as M
+import Parser.Scoping ( runScopeModule )
+import Validation.Base
 import Validation.Kinding
+import Validation.Typing
 
 
-import Control.Monad.State (runState)
-import Data.Function ((&))
-import qualified Data.Map as Map
-import Debug.Trace (traceM)
+import Control.Monad.State ( runState )
+import Data.Function ( (&) )
+import Data.Map qualified as Map
 import Options.Applicative
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit ( exitFailure, exitSuccess )
 
 import Interpreter.Interpreter as I
 
+-- | The entry point of the FreeST compiler. Parses the command line options
+-- and passes them to the compiler pipeline.
 main :: IO ()
 main = do
   execParser opts >>= freest
 
+-- | The FreeST compiler pipeline.
 freest :: RunOpts -> IO ()
-freest RunOpts{file=f} = do
+{- freest RunOpts{file=f} = do
   source <- readFile f
   runLexer parseModule f source 
     >>= runScoping scopeModule_
@@ -49,4 +55,29 @@ lexAll = do
     TkEOF _ -> pure ()
     x -> do
       traceM (show x)
-      lexAll
+      lexAll -}
+freest RunOpts{file=programPath, noImplicitPrelude} = do
+  -- Read the source code of the Prelude and the program.
+  preludeSrc <- getDataFileName preludePath >>= readFile
+  programSrc <- readFile programPath
+  let src = Map.fromList [ (programPath, lines programSrc)
+                         , (preludePath, lines preludeSrc) ]
+  case  -- Parse the source code of both the Prelude and the program
+        -- and join them in a single module (unless noImplicitPrelude).
+    do  programModule  <- runParseModule programPath programSrc
+        preludeModule  <- runParseModule preludePath preludeSrc
+        let finalModule = if noImplicitPrelude then programModule 
+                         else mappend preludeModule programModule
+        -- Scope the final module.
+        runScopeModule finalModule
+    of Left es -> putStrLn "[Scoping failed]" >>  printErrors src es >> exitFailure
+       Right m -> do 
+          -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+          -- Validate the module.
+          runValidate m & \case 
+            Left es -> putStrLn "[Validation failed]" >> printErrors src es >> exitFailure     
+            Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
+
+-- | The path to the source code of the Prelude.
+preludePath :: FilePath
+preludePath = "StandardLib/Prelude.fst"

@@ -1,0 +1,34 @@
+-- Void is non-contractive, hence has no transtions. Wait has a transition (by Wait)
+
+case (Void @*S) ; Wait == Wait : 1S
+
+case Void' ; Wait == Wait : 1S
+where
+  type Void' : *S
+  type Void' = Void'
+
+case forall (a : 1S). (Void @*S) ; Wait ; a == forall (b : 1S). Wait : 1S
+
+case forall (a : 1S). Void' ; Wait ; a == forall (b : 1S). Wait : 1S
+where
+  type Void' : *S
+  type Void' = Void'
+
+case &{Done: Skip} ; Wait == &{Done: Skip} ; Close : 1C
+
+-- Sections
+
+case (-> Int) == (Int ->) : 1T -> *T
+
+-- Type-level abstractions
+
+case \(a : *T) (b : *T) -> a == \(a : *T) (b : *T) -> b : *T -> *T -> *T
+
+case (\(a : *T) -> \(a : *T) -> a) == (\(a : *T) -> \(b : *T) -> a) : *T -> *T -> *T
+
+-- These two types are isomorphic, https://wiki.haskell.org/Existential_type, but not equivalent
+case
+  forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
+  ==
+  forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)
+  : *T

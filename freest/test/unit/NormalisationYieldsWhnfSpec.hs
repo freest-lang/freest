@@ -1,13 +1,14 @@
 module NormalisationYieldsWhnfSpec (spec) where
 
-import qualified Syntax.Module                 as M
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
-import           Validation.Normalisation   ( normalise, isWhnf )
+import Syntax.Module qualified as M
+import Syntax.Type qualified as T
+import Validation.Base ( ValidationState, buildValidationState )
+import Validation.Normalisation ( normalise, isWhnf )
+import UnitSpecUtils
 
-import qualified Data.Map.Strict               as Map
-import           Test.Hspec
-import           UnitSpecUtils
+import Data.Map.Strict qualified as Map
+import Test.Hspec
+-- import           Debug.Trace
 
 -- This test should be called with well-formed types only
 
@@ -18,14 +19,11 @@ main :: IO ()
 main = hspec spec
 
 spec :: Spec
-spec = mkKindingSpec
-  "test/unit/KindingValid.test" 
-  "Normalisation yields WHNF tests" 
-  \(t,m) -> normYieldsWnnf m t `shouldBe` True
+spec = mkTypeSpec
+  ["test/unit/WellFormedTypes.test"] 
+  "If T normalises to U, then U is a whnf" 
+  errorsAreFailures
+  \_ (t, _, m) -> normYieldsWhnf (buildValidationState m) t `shouldBe` True
 
-normYieldsWnnf :: M.Module -> T.Type -> Bool
-normYieldsWnnf m t = isWhnf $ normalise (buildDataDecls m) t
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+normYieldsWhnf :: ValidationState -> T.Type -> Bool
+normYieldsWhnf vs t = isWhnf {-$ trace (show $ normalise vs t)-} (normalise vs t)

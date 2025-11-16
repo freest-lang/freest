@@ -34,6 +34,7 @@ $digit = [ 0-9 ]
 $lower = [ a-z ]
 $upper = [ A-Z ]
 @lowerId = $lower [ $lower $upper $digit _ ' ]*
+@lowerIdAt = @lowerId \@
 @upperId = $upper [ $lower $upper $digit _ ' ]*
 @qualifiedUpperId = @upperId (\. @upperId)+
 @wildcard = _ [ $lower $upper $digit _ ' ]*
@@ -54,13 +55,14 @@ $upper = [ A-Z ]
 <0> "type"   { token TkType }
 <0> "let"    { layoutKw TkLet }
 <0> "in"     { token TkIn }
+<0> "mutual" { layoutKw TkMutual }
 <0> "case"   { token TkCase }
 <0> "of"     { layoutKw TkOf }
 <0> "if"     { token TkIf }
 <0> "then"   { token TkThen }
 <0> "else"   { token TkElse }
 <0> "forall" { token TkForall }
-<0> "exists" { token TkForall }
+<0> "exists" { token TkExists }
 <0> "rec"    { token TkRec }
 <0> "channel"{ token TkChannel }
 <0> "select" { token TkSelect }
@@ -84,15 +86,19 @@ $upper = [ A-Z ]
 <0> "]"    { token TkRSquare }
 
 -- Operators
+<0> "::"  { token TkColonColon }
 <0> ";"   { token TkSemi }
 <0> "$"   { token TkDollar }
 <0> "||"  { token TkPipePipe }
 <0> "&&"  { token TkAmpAmp }
 <0> "|>"  { token TkPipeGT }
 <0> "+"   { token TkPlus }
+<0> "+."  { token TkPlusDot }
 <0> "++"  { token TkPlusPlus }
 <0> "-"   { token TkMinus }
+<0> "-."  { token TkMinusDot }
 <0> "*"   { token TkStar }
+<0> "*."  { token TkStarDot }
 <0> "**"  { token TkStarStar }
 <0> "/"   { token TkSlash }
 <0> "/."  { token TkSlashDot }
@@ -116,6 +122,7 @@ $upper = [ A-Z ]
 <0> "Skip"  { token TkSkipType }
 <0> "Close" { token TkCloseType }
 <0> "Wait"  { token TkWaitType }
+<0> "Void"  { token TkVoidType }
 <0> \!      { token TkBang }
 <0> \?      { token TkQuestion }
 <0> \&      { token TkAmp }
@@ -125,18 +132,19 @@ $upper = [ A-Z ]
 <0> "*T" { token TkUnTopKind }
 <0> "1S" { token TkLinSessionKind }
 <0> "*S" { token TkUnSessionKind }
-<0> "1A" { token TkLinAbsorbKind }
-<0> "*A" { token TkUnAbsorbKind }
+<0> "1C" { token TkLinChannelKind }
+<0> "*C" { token TkUnChannelKind }
 
 -- Literals
 <0> @intLit    { emit TkIntLit }
 <0> @floatLit  { emit TkFloatLit }
 <0> @charLit   { emit TkCharLit }
--- <0> @stringLit { emit TkStringLit }
+<0> @stringLit { emit TkStringLit }
 
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }
 <0> @lowerId          { emit TkLowerId }
+<0> @lowerIdAt        { emit TkLowerIdAt . init }
 <0> @upperId          { emit TkUpperId }
 <0> @qualifiedUpperId { emit TkQualifiedUpperId }
 
@@ -202,7 +210,7 @@ scan = do
   case alexScan input startcode of
     AlexEOF -> handleEOF
     AlexError (Input l c _ inp f) -> throwError 
-      [LexicalError (Span{startPos=(l,c), endPos=(l,c), filepath=f}) (head inp)]
+      [LexicalError (Span{startPos=(l, c), endPos=(l, c + 1), filepath=f}) (head inp)]
     AlexSkip input' _ -> do
       modify' $ \s -> s { lexerInput = input' }
       scan

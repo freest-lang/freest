@@ -17,12 +17,12 @@ import Syntax.Base
 import UI.Error
 
 
-import Data.Word (Word8)
-import Data.List (uncons)
-import qualified Data.List.NonEmpty as NE
-import Data.Char (ord)
-import Control.Monad.State (gets, modify', MonadState, StateT(..))
-import Control.Monad.Except (MonadError)
+import Data.Word ( Word8 )
+import Data.List ( uncons )
+import Data.List.NonEmpty qualified as NE
+import Data.Char ( ord )
+import Control.Monad.State ( gets, modify', MonadState, StateT(..) )
+import Control.Monad.Except ( MonadError )
 
 data AlexInput
   = Input { inpLine   :: {-# UNPACK #-} !Int
@@ -112,15 +112,15 @@ initState f s = LS { lexerInput      = Input 1 1 '\n' s f
                    , counter         = 0
                    }
 
-emit :: (Span -> a -> Token) -> a -> Lexer Token
+emit :: (Span -> String -> Token) -> String -> Lexer Token
 emit t a = do 
   Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
-  return (t Span{startPos=(l,c), endPos=(l,c), filepath=f} a)
+  return (t Span{startPos=(l,c - length a), endPos=(l,c), filepath=f} a)
 
 token :: (Span -> Token) -> String -> Lexer Token
-token t _ = do 
+token t s = do 
   Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
-  return (t Span{startPos=(l,c), endPos=(l,c), filepath=f})
+  return (t Span{startPos=(l,c - length s), endPos=(l,c), filepath=f})
 
 runLexer :: Lexer a -> FilePath -> String -> Either [Error] a
-runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s) 
+runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s)

@@ -9,43 +9,62 @@ This module contains helper functions to generate variables with standard names.
 module Syntax.Names where
 
 import Syntax.Base
-import qualified Syntax.Type as T
 
-; mkOr, mkAnd,
-  mkPlus, mkMinus, mkTimes, mkDiv, mkPower, mkNegate,
-  mkPlusDot, mkMinusDot, mkTimesDot, mkDivDot, mkTimesTimes,
-  mkDollar, mkRTriangle, mkSemi,
-  mkPlusPlus, mkCaretCaret
+; mkOrVar, mkAndVar,
+  mkPlusVar, mkMinusVar, mkTimesVar, mkDivVar, mkPowerVar, mkNegateVar,
+  mkPlusDotVar, mkMinusDotVar, mkTimesDotVar, mkDivDotVar, mkTimesTimesVar, mkNegateFVar,
+  mkDollarVar, mkRTriangleVar, mkSemiVar, mkDotVar,
+  mkPlusPlusVar, mkCaretCaretVar,
+  mkSend, mkReceive, mkFork,
+  mkUndefinedVar
   :: Located a => a -> Variable
-mkOr = mkDefaultVar "(||)"
-mkAnd = mkDefaultVar "(&&)"
-mkPlus = mkDefaultVar "(+)"
-mkMinus = mkDefaultVar "(-)"
-mkTimes = mkDefaultVar "(*)"
-mkDiv = mkDefaultVar "(/)"
-mkPower = mkDefaultVar "(^)"
-mkNegate = mkDefaultVar "negate"
-mkPlusDot = mkDefaultVar "(+.)"
-mkMinusDot = mkDefaultVar "(-.)"
-mkTimesDot = mkDefaultVar "(*.)"
-mkDivDot = mkDefaultVar "(/.)"
-mkTimesTimes = mkDefaultVar "(**)"
-mkDollar = mkDefaultVar "($)"
-mkRTriangle = mkDefaultVar "(|>)"
-mkSemi = mkDefaultVar "(;)"
-mkPlusPlus = mkDefaultVar "(++)"
-mkCaretCaret = mkDefaultVar "(^^)"
+mkOrVar = mkDefaultVar "(||)"
+mkAndVar = mkDefaultVar "(&&)"
+mkPlusVar = mkDefaultVar "(+)"
+mkMinusVar = mkDefaultVar "(-)"
+mkTimesVar = mkDefaultVar "(*)"
+mkDivVar = mkDefaultVar "(/)"
+mkPowerVar = mkDefaultVar "(^)"
+mkNegateVar = mkDefaultVar "negate"
+mkPlusDotVar = mkDefaultVar "(+.)"
+mkMinusDotVar = mkDefaultVar "(-.)"
+mkTimesDotVar = mkDefaultVar "(*.)"
+mkDivDotVar = mkDefaultVar "(/.)"
+mkTimesTimesVar = mkDefaultVar "(**)"
+mkNegateFVar = mkDefaultVar "negateF"
+mkDollarVar = mkDefaultVar "($)"
+mkRTriangleVar = mkDefaultVar "(|>)"
+mkSemiVar = mkDefaultVar "(;)"
+mkDotVar = mkDefaultVar "(.)"
+mkPlusPlusVar = mkDefaultVar "(++)"
+mkCaretCaretVar = mkDefaultVar "(^^)"
+mkSend = mkDefaultVar "send"
+mkReceive = mkDefaultVar "receive"
+mkFork = mkDefaultVar "fork"
+mkUndefinedVar = mkDefaultVar "undefined"
 
-mkCmp :: Located a => String -> a -> Variable
-mkCmp s = mkDefaultVar $ "("++s++")"
+mkCmpVar :: Located a => String -> a -> Variable
+mkCmpVar s = mkDefaultVar $ "("++s++")"
 
-mkUnit, mkNil, mkCons :: Located a => a -> Identifier
-mkUnit = mkId "()"
-mkNil  = mkId "[]"
-mkCons = mkId "(::)"
+mkUnitId, mkNilId, mkConsId :: Located a => a -> Identifier
+mkUnitId = mkId "()"
+mkNilId  = mkId "[]"
+mkConsId = mkId "(::)"
 
-mkTupleCons :: Located a => Int -> a -> Identifier
-mkTupleCons n = mkId $ "("++replicate n ','++")"
+mkTupleId :: Located a => Int -> a -> Identifier
+mkTupleId n = mkId $ "("++replicate n ','++")"
 
-mkBool :: Located a => a -> T.Type
-mkBool (getSpan -> s) = T.AppDName s (mkId "Bool" s) []
+isTupleId :: Identifier -> Bool
+isTupleId (Identifier s ('(':cs)) = isTupleId' cs
+  where
+    isTupleId' = \case 
+      (',':cs) -> isTupleId' cs
+      ")"      -> True
+      _        -> False
+isTupleId _ = False
+
+mkBoolId :: Located a => a -> Identifier
+mkBoolId (getSpan -> s) = mkId "Bool" s
+
+mkListId :: Located a => a -> Identifier
+mkListId (getSpan -> s) = mkId "[]" s

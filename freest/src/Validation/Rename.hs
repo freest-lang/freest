@@ -3,57 +3,90 @@ Module      :  SimpleGrammar.Rename
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Minimal (or canonical) type renaming
+Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
-  ( rename
-  , bounded -- for testing purposes
+  ( first
+  , reachable
+  , absorbing -- for testing purposes only
   )
 where
 
-import           Syntax.Base
-import qualified Syntax.Kind                   as K
-import qualified Syntax.Type                   as T
-import           Validation.Base               ( TypeDeclMap )
+import Syntax.Base
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
+import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, kindSigs, getType, getKind )
+import Validation.Substitution ( subs, subsAll )
+import Validation.Normalisation ( reduce, betaRule, isWhnf, tNameRedex )
+import Validation.Kinding ( runSynth' )
+import Utils ( internalError )
 
-import qualified Data.Map.Strict               as M
-import qualified Data.Set                      as S
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Maybe ( isNothing )
 
-type Visited = S.Set Identifier
+-- | (first s t) is be the smallest variable in set B \ (s union reach t)
+first :: ValidationState -> Set.Set Variable -> T.Type -> Variable
+first vs s t = firstVar var (s `Set.union` reachable vs t)
+  where var = Variable (getSpan t) "α" defaultInternal
 
-rename :: TypeDeclMap -> T.Type -> T.Type
-rename td = ren S.empty
-  where
-    ren :: Visited -> T.Type -> T.Type
-    ren _ = id
+-- | The set of free variables reachable in a type.
+reachable :: ValidationState -> T.Type -> Set.Set Variable
+reachable vs = \case
+  -- C-Const
+  t | T.isConstant t -> Set.empty
+  -- C-Var
+  T.Var _ a -> Set.singleton a
+  -- C-Abs
+  T.Abs _ aks t -> reachable vs t Set.\\ Set.fromList (map fst aks)
+  -- C-Semi1, C-Semi2
+  T.AppSemi _ t u | absorbing vs t -> reachable vs t
+                  | otherwise -> reachable vs t `Set.union` reachable vs u
+  -- C-Dual
+  T.AppDual _ t -> reachable vs t
+  -- C-µ1, C-µ2
+  T.AppTName s name ts | absorbing vs u -> Set.unions (map (reachable vs') ts)
+                       | otherwise -> Set.unions (map (reachable vs') ts)
+    where u = getType vs name
+          k = getKind vs name
+          vs' = vs {typeDecls = Map.insert name (T.Void s k) (typeDecls vs)}
+  -- C-App1, C-App2
+  t@(T.App _ u us) | isWhnf t -> Set.unions (map (reachable vs) (u:us))
+  -- t@(T.App _ u us) | not (T.isSemi u) && isWhnf t -> Set.unions (map (reachable vs) (u:us))
+                   | otherwise -> reachable vs (reduce (typeDecls vs) t)
+                   -- | isNothing (tNameRedex t) -> reachable vs (reduce (typeDecls vs) t)
+  t -> internalError $ "reachable: non-exhaustive pattern: " ++ show t
 
-reachable :: Visited -> T.Type -> S.Set Identifier
-reachable = undefined
+  -- | Is a given type absorbing?
+absorbing :: ValidationState -> T.Type -> Bool
+absorbing vs = \case
+  T.End{} -> True
+  T.Void _ k | K.isSession k -> True
+  T.AppSemi _ t u -> absorbing vs t || absorbing vs u
+  T.SharedChoice{}        -> True -- Unrestricted choice
+  T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
+  T.App _ T.Choice{} ts -> all (absorbing vs) ts
+  T.AppDual _ t -> absorbing vs t
+  -- forall F _ Using instead forall lambda a.T
+  T.AppQuant _ _ _ t -> absorbing vs t
+  -- µ_κ F absorbing if F Void_κ absorbing
+  t@(T.AppTName s name ts) -> absorbing (vs {typeDecls = Map.insert name (T.Void s k) (typeDecls vs)}) (if null ts then u else T.App s u ts)
+    where
+      k = getKind vs name
+      u = getType vs name
+  t -> case betaReduces t of
+    Just u -> absorbing vs u
+    Nothing -> False
 
--- Requires: the type is normalised,
--- otherwise the function may diverge on non-contractive types
-bounded :: TypeDeclMap -> T.Type -> Bool
-bounded td = bound S.empty
-  where
-    bound :: Visited -> T.Type -> Bool
-    bound v = \case
-      -- Session types
-      T.End{} -> True
-      T.AppSemi _ t u -> bound v t || bound v u
-      T.AppMessage _ K.Un _ _ -> True -- Unrestricted type
-      T.Choice _ K.Un _ _ -> True -- Unrestricted type
-      T.Choice _ _ _ its -> all (bound v . snd) its
-      -- Polymorphism
-      T.Quant _ _ _ _ t -> bound v t
-      -- Equations
-      T.AppTName _ id ts
-        | id `S.member` v -> True
-        | otherwise -> bound (S.insert id v) (snd (td M.! id)) -- TODO: Check
-      -- Higher-order, including AppDual
-      T.App _ t ts -> all (bound v) (t:ts)
-      -- Functional types, Skip, Message, DName, Var
-      _ -> False
-
--- first :: S.Set Variable -> Variable -> Variable
--- first s a = head $ filter (\n -> `S.notMember` s)) [-1, -2 ..]
+betaReduces :: T.Type -> Maybe T.Type
+betaReduces = \case
+  -- R-β
+  T.App _ t@T.Abs{} us -> Just $ betaRule t us
+  -- R-VoidApp
+  T.App s (T.Void _ (K.Arrow _ _ k)) [_] -> Just $ T.Void s k
+  -- R-TAppL
+  T.App s t us -> do
+    t' <- betaReduces t
+    Just $ T.App s t' us
+  _ -> Nothing

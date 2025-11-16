@@ -13,15 +13,15 @@ import Parser.Token
 import Parser.LexerUtils
 import Syntax.Base
 import Syntax.Names
-import qualified Syntax.Expression as E
-import qualified Syntax.Kind as K
-import qualified Syntax.Type as T
+import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
+import Syntax.Type qualified as T
 
-import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty qualified as NE
 
 dummyKindVar :: Located a => a -> K.Kind
 dummyKindVar (getSpan -> s) =
-  K.Proper s (K.VarM  (Variable s "φ" (-1))) (K.VarPK (Variable s "ψ" (-1)))
+  K.Var s (Variable s "τ" defaultInternal)
 
 split :: Eq a => a -> [a] -> [[a]]
 split d str =
@@ -44,16 +44,14 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 unOp :: E.Exp -> E.Exp -> E.Exp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
-tupleAppExp :: Span -> [E.Exp] -> E.Exp
-tupleAppExp s es = E.App s (E.Cons s (mkTupleCons (length es) s)) (map ExpLevel es)
-
-consAppExp :: Span -> [E.Exp] -> E.Exp
-consAppExp s = foldr (\e l -> E.App s (E.Cons s $ mkCons s) (map ExpLevel [e,l])) (E.Cons s (mkNil s))
-
-addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp 
-addArgExp a (E.App s e as) = E.App s e (as ++ [a])
+addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp
+addArgExp a (E.App s e as) = E.App (spanFromTo s a) e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 
 addArgType :: T.Type -> T.Type -> T.Type
-addArgType t (T.App s u us)   = T.App s u (us ++ [t])
-addArgType t u                = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppLinChoice{} = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppSemi{}      = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppDual{}      = T.App (spanFromTo u t) u [t]
+addArgType t u@T.AppQuant{}     = T.App (spanFromTo u t) u [t]
+addArgType t (T.App s u us)     = T.App s u (us ++ [t])
+addArgType t u                  = T.App (spanFromTo u t) u [t]

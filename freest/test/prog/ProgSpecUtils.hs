@@ -8,12 +8,12 @@ Utilities for program tests.
 -}
 module ProgSpecUtils where
 
-import Control.Monad (forM_)
-import System.Directory (getCurrentDirectory, listDirectory, doesFileExist)
--- import System.Exit (ExitCode (ExitSuccess))
-import System.FilePath -- (takeExtension)
-import Test.Hspec -- (Spec, runIO, describe, parallel)
+import Control.Monad ( forM_ )
 import Control.Monad.Extra
+import System.Directory ( getCurrentDirectory, listDirectory, doesFileExist )
+-- import System.Exit ( ExitCode (ExitSuccess) )
+import System.FilePath -- ( takeExtension )
+import Test.Hspec -- ( Spec, runIO, describe, parallel )
 
 
 getSource :: [String] -> String

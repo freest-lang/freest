@@ -1,8 +1,0 @@
-module ReversedFunApp where
-
-f : a -> (a -> b) -> b -- ∀a:*T. ∀b:*T. a -> (a -> b) -> b
-f = (|>)
-
-main : Int
-main = f @Int @Int 5 (\x:Int -> x)
-
