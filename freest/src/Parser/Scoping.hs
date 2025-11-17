@@ -316,8 +316,7 @@ scopeDefs ctx ds = do
         checkConflictingDefs [ExpLevel p]
         (ictx', p') <- scopePat ctx ictx p
         rhs' <- scopeRHS ctx rhs
-        let ctx'' = fromEVarList (Set.toList $ patVars p')
-        let ctx' = ctx'' `union` ctx
+        let ctx' = insertPatVars p' ctx
         second (E.ValDef p' rhs':) <$> scopeDefs' isMutual ctx' ictx' ds
       (E.FnDef x psrhss : ds) -> do
         (ictx', x') <- case lookupEVar x ictx of
@@ -332,7 +331,7 @@ scopeDefs ctx ds = do
         where
           scopeParam (ctx',pars') (ExpLevel  p) = do
             (_, p') <- scopePat ctx' emptyScopingCtx p
-            let ctx'' = fromEVarList (Set.toList (patVars p')) `union` ctx'
+            let ctx'' = insertPatVars p' ctx'
             return (ctx'', pars'++[ExpLevel p'])
           scopeParam (ctx',pars') (TypeLevel a) = do
             a' <- freshInternal a
@@ -394,13 +393,17 @@ scopeExp ctx = \case
       scopeTypedParam (ctx',pars') (ExpLevel  (p,t)) = do
         (_, p') <- scopePat ctx' emptyScopingCtx p
         t' <- scopeType ctx' t
-        let ctx'' = fromEVarList (Set.toList (patVars p')) `union` ctx'
+        let ctx'' = insertPatVars p' ctx'
         return (ctx'', pars'++[ExpLevel (p',t')])
       scopeTypedParam (ctx',pars') (TypeLevel (a,k)) = do
         a' <- freshInternal a
         k' <- scopeKind k
         let ctx'' = insertTVar a' ctx'
         return (ctx'', pars'++[TypeLevel (a',k')])
+  E.Pack s ts e ->
+    E.Pack s <$> mapM (scopeType ctx) ts <*> scopeExp ctx e
+  E.Asc s e t ->
+    E.Asc s <$> scopeExp ctx e <*> scopeType ctx t
   E.Let s ds e -> do
     (ctx', ds') <- scopeDefs ctx ds
     E.Let s ds' <$> scopeExp ctx' e
@@ -411,11 +414,10 @@ scopeExp ctx = \case
     E.Case s e' <$> mapM scopePatRHS prhss
     where
       scopePatRHS :: (E.Pat, E.RHS) -> Scoping (E.Pat, E.RHS)
-      scopePatRHS (p,rhs) = do
+      scopePatRHS (p, rhs) = do
         checkConflictingDefs [ExpLevel p]
-        (_,p') <- scopePat ctx emptyScopingCtx p
-        let pvs = Set.toList $ patVars p'
-        let ctx' = fromEVarList pvs `union` ctx
+        (_, p') <- scopePat ctx emptyScopingCtx p
+        let ctx' = insertPatVars p' ctx
         (p',) <$> scopeRHS ctx' rhs
   E.If s e1 e2 e3 ->
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
@@ -436,6 +438,10 @@ scopePat ctx ictx = \case
   E.VarPat s x  -> case lookupEVar x ictx of
     Just x' -> pure (deleteEVar x ictx, E.VarPat s x{internal = internal x'})
     Nothing -> (ictx,) . E.VarPat s <$> freshInternal x
+  E.PackPat s as p -> do 
+    as' <- mapM freshInternal as
+    (ictx', p') <- scopePat (foldr insertTVar ctx as') ictx p
+    return (ictx', E.PackPat s as' p')
   E.DConsPat s c ps -> do
     (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
         (ictx''', p') <- scopePat ctx ictx'' p
@@ -471,14 +477,20 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
                              [getSpan x] (patVarOccurs p)
       _                 -> Map.empty
 
--- | The set of variables in a pattern.
-patVars :: E.Pat -> Set.Set Variable
-patVars = \case
-  E.VarPat _ x      -> Set.singleton x
-  E.DConsPat s _ ps -> Set.unions (map patVars ps)
-  E.ChoicePat _ _ p -> patVars p
-  E.AsPat _ x p     -> Set.insert x (patVars p)
-  _                 -> Set.empty
+-- | Inserts the variables in a pattern into the scoping context.
+insertPatVars :: E.Pat -> ScopingCtx -> ScopingCtx
+insertPatVars p ctx = 
+  foldr (\case (ExpLevel  x) -> insertEVar x
+               (TypeLevel a) -> insertTVar a) ctx (patVars p)
+  where
+    patVars :: E.Pat -> Set.Set (Level Variable Variable)
+    patVars = \case
+      E.VarPat _ x      -> Set.singleton (ExpLevel x)
+      E.PackPat _ as p  -> Set.fromList (map TypeLevel as) `Set.union` patVars p
+      E.DConsPat s _ ps -> Set.unions (map patVars ps)
+      E.ChoicePat _ _ p -> patVars p
+      E.AsPat _ x p     -> Set.insert (ExpLevel x) (patVars p)
+      _                 -> Set.empty
 
 -- | Generate a fresh kind inference variable.
 freshKVar :: Located a => a -> Scoping K.Kind

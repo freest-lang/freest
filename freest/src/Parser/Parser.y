@@ -134,6 +134,7 @@ import Data.List.NonEmpty qualified as NE
   LOWER_ID { TkLowerId _ _ }
   LOWER_ID_AT { TkLowerIdAt _ _ }
 
+%right    ':'
 %right    'in' 'else' 'case'
 %right    '.'
 %right    '=>' '->' '1->' '*->' ARROW
@@ -328,6 +329,10 @@ TypeListComma :: { [T.Type] }
   : Type ',' TypeListComma { $1 : $3 }
   | Type                   { [$1] }
 
+AtTypeListExpComma :: { ([T.Type], E.Exp) }
+  : Exp                             { ([], $1) }
+  | '@' TypePrimary ',' AtTypeListExpComma { first ($2 :) $4 }
+
 Quant :: { (Span, T.Polarity) }
   : 'forall' { (getSpan $1, T.In ) }
   | 'exists' { (getSpan $1, T.Out) }
@@ -376,6 +381,7 @@ ExpPrimary :: { E.Exp }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
                 -- { let s = spanFromTo $1 $3 in E.DCons s (mkTupleId $2 s) } -- TODO: multiplicities
+  | '(' AtTypeListExpComma ')' { uncurry (E.Pack (spanFromTo $1 $3)) $2 }
   | '(' Exp ',' ExpListComma ')' { E.Tuple (spanFromTo $1 $5) ($2 : $4) }
   -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
@@ -390,7 +396,6 @@ ExpPrimary :: { E.Exp }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
   | '(' Exp '-.' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusDotVar $3)) $2) }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
-  | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
 Exp :: { E.Exp }
@@ -399,6 +404,7 @@ Exp :: { E.Exp }
   | '\\' PatTypeOrKindedVarListArrow Exp   { E.Abs (spanFromTo $1 $3) (fst $2) (snd $2) $3 }
   | 'if' Exp 'then' Exp 'else' Exp { E.If (spanFromTo $1 $6) $2 $4 $6 }
   | 'case' Exp 'of' CaseBlock { E.Case (spanFromTo $1 (snd $ last $4)) $2 $4 }
+  | Exp ':' Type { E.Asc (spanFromTo $1 $3) $1 $3 }
   -- Operators
   -- TODO: handle operators more elegantly. They are responsible for most s/r 
   -- conflicts. We should:
@@ -439,6 +445,7 @@ ExpApp :: { E.Exp }
   | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
+  | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpPrimary        { $1 }
 
@@ -513,6 +520,7 @@ PatPrimary :: { E.Pat }
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
   | '[' PatListComma ']' { E.listPat (spanFromTo $1 $3) $2 }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
+  | '(' AtVarListCommaPat ')' { uncurry (E.PackPat (spanFromTo $1 $3)) $2 }
   | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
@@ -546,6 +554,10 @@ PatListComma :: { [E.Pat] }
 PatNEListComma :: { [E.Pat] }
   : Pat { [$1] }
   | Pat ',' PatNEListComma { $1 : $3 }
+
+AtVarListCommaPat :: { ([Variable], E.Pat) }
+  : '@' TypeVar ',' AtVarListCommaPat { first ($2 :) $4 }
+  | Pat { ([], $1) }
 
 LetDeclBlock :: { [E.LetDecl] }
   : OPEN LetDeclListPIPE Close { $2 }

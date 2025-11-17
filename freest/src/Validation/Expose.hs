@@ -42,6 +42,13 @@ arrow e t = do
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
     _ -> throwE (ExposeError (getSpan e) "a monomorphic function" t)
 
+exists :: Either E.Pat E.Exp -> T.Type -> Validation ([(Variable, K.Kind)], T.Type)
+exists poe t = do
+  vs <- get
+  case normalise vs t of
+    t'@(T.AppExists s aks u) -> pure (aks, u)
+    _ -> throwE (TypeMismatchExists (getSpan poe) t poe) 
+
 internalChoice :: Located e => e -> T.Type -> Identifier -> Validation T.Type
 internalChoice e t i = do
   vs <- get

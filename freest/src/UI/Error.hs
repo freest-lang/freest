@@ -35,6 +35,8 @@ import Data.Char qualified as Char
 data Error
   = ArrowMultMismatch Span (Either Variable E.Exp) Int
     K.Multiplicity K.Multiplicity
+  | CannotSynthesisePack Span E.Exp
+  | CannotSynthesiseSelect Span Identifier
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
@@ -59,12 +61,12 @@ data Error
   | MultipleVarDecls Span [Variable]
   | NonLinPat Span E.Pat T.Type
   | ParseError Span (Token, [String])
-  | PartiallyAppliedSelect Span Identifier
   | PrekindMismatch Span K.Prekind T.Type K.Kind
   | ProperKindMismatch Span T.Type K.Kind
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
   | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
+  | TypeMismatchExists Span T.Type (Either E.Pat E.Exp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchChoice Span T.Type Identifier E.Pat
   | TypeMismatchSelect Span T.Type Identifier E.Exp
@@ -82,6 +84,8 @@ instance Located Error where
   -- source code.
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
+    CannotSynthesisePack s _ -> s
+    CannotSynthesiseSelect s _ -> s
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
     DConsPatArgMismatch s _ _ _ -> s
@@ -105,12 +109,12 @@ instance Located Error where
     MultipleVarDecls s _ ->  s
     NonLinPat s _ _ -> s
     ParseError s _ -> s
-    PartiallyAppliedSelect s _ -> s
     PrekindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     SigLacksDef s _ -> s
     TypeConsOutOfScope s _ -> s
     TypeMismatch s _ _ _ -> s
+    TypeMismatchExists s _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchChoice s _ _ _ -> s
     TypeMismatchSelect s _ _ _ -> s
@@ -208,6 +212,10 @@ toMessage src = \case
         K.Lin    -> "a linear"
         K.Un     -> "an unrestricted"
         K.VarM x -> "a multiplicity" ++ external x
+  CannotSynthesisePack s e -> makeError src s
+    "Could not infer a type for this package expression"
+  CannotSynthesiseSelect s id -> makeError src s
+    "Could not infer a type for this `select` expression"
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
       ExpLevel x -> "variable " ++ x
@@ -292,8 +300,6 @@ toMessage src = \case
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
-  PartiallyAppliedSelect s id -> makeError src s
-    "Could not infer type for partially applied `select`"
   PrekindMismatch s pk t k -> makeError src s
     ("Expected a " ++ prettyPk pk ++ ", but got " ++
       (case k of 
@@ -326,8 +332,13 @@ toMessage src = \case
   TypeMismatch s t u _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with actual type " ++ bt (unparse u))
+  TypeMismatchExists s t poe -> makeError src s
+    ("Couldn't match expected type " ++ bt (show t) ++ " with a package " 
+      ++ case poe of Left  p -> "pattern"
+                     Right e -> "expression")
   TypeMismatchList s t _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (unparse t) ++ " with a list pattern")
+    ("Couldn't match expected type " ++ bt (unparse t) 
+      ++ " with a list pattern")
   TypeMismatchChoice s t i p -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with choice pattern " ++ bt (getFromSpan src i))
