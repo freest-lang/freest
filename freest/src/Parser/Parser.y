@@ -518,12 +518,13 @@ PatPrimary :: { E.Pat }
   | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
-  | '[' PatListComma ']' { E.listPat (spanFromTo $1 $3) $2 }
+  | '[' PatListComma ']'           { E.listPat (spanFromTo $1 $3) $2 }
+  | '(' ')'                        { E.TuplePat (spanFromTo $1 $2) [] }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
-  | '(' AtVarListCommaPat ')' { uncurry (E.PackPat (spanFromTo $1 $3)) $2 }
-  | DataConstructor  { E.DConsPat   (getSpan $1) $1 [] }
-  | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
-  | LOWER_ID_AT PatPrimary { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
+  | '(' AtVarListCommaPat ')'      { uncurry (E.PackPat (spanFromTo $1 $3)) $2 }
+  | DataConstructor                { E.DConsPat   (getSpan $1) $1 [] }
+  | '(' Pat ')'                    { setSpan  (spanFromTo $1 $3) $2 }
+  | LOWER_ID_AT PatPrimary         { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
