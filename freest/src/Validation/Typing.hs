@@ -678,14 +678,15 @@ typeModule m = do
             _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
           where
             buildArrow kctx = \case 
-              []     -> pure $ T.AppDName (getSpan it) it (map T.fromVariable as)
+              []     -> pure returnType
               (t:ts) -> do
                 k <- Kinding.synth kctx t
-                u <- (if K.isStrictlyLin k then buildLinArrow else buildArrow) kctx ts
+                u <- (if K.isStrictlyLin k then buildLinArrow 
+                                           else buildArrow   ) kctx ts
                 return $ T.AppArrow (spanFromTo t u) K.Un t u
-            buildLinArrow kctx =
-              foldrM (\t u -> return $ T.AppArrow (spanFromTo t u) K.Lin t u)
-                     (T.DName (getSpan it) it)
+            buildLinArrow kctx = foldrM 
+              (\t u -> pure $ T.AppArrow (spanFromTo t u) K.Lin t u) returnType
+            returnType = T.AppDName (getSpan it) it (map T.fromVariable as)
 
 runValidate :: M.Module -> Either [Error] (M.Module, TypeCtx)
 runValidate m =
