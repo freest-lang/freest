@@ -76,10 +76,8 @@ synth ctx = \case
     synthCheck ctx t (ls s)
   -- Polymorphism
   T.AppQuant s p aks t -> do
-    checkProper (Map.fromList aks `Map.union` ctx) t
-    >>= \case (m, Channel) -> pure (Proper s Lin Channel)
-              (m, Session) -> pure (Proper s Lin Session)
-              (m, Top    ) -> pure (Proper s m   Top    )
+    (m, _) <- checkProper (Map.fromList aks `Map.union` ctx) t 
+    return (Proper s m Top)
   -- Equations (including built-ins)
   T.TName s i -> lookupKind i
   T.Tuple s ts -> Proper s <$> foldCheckProperJoin ctx Un ts <*> pure Top

@@ -36,7 +36,7 @@ isWhnf = \case
   t | T.isConstant t -> True
   -- W-Const1
   T.App _ t us
-    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && length us >= 1 -> True
+    | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && not (null us) -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs
@@ -44,7 +44,7 @@ isWhnf = \case
   -- W-Seq1 _ semi-applied semicolon
   T.App _ T.Semi{} [_] -> True
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppQuant t) -> True
+  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t {- || T.isAppQuant t -- TODO: TypeMsg -}) -> True
   -- W-Dual
   T.AppDual _ T.Var{} -> True
   _ -> False
@@ -59,17 +59,18 @@ reduce td = \case
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
     -- R-ChoiceDist (must come before R.SemiL)
   T.AppSemi _ (T.App s t@T.Choice{} us) v -> T.App s t (map (\u -> T.AppSemi (getSpan u) u v) us)
+    -- TODO: TypeMsg
     -- R-QuantDist - Requires the kind of the quantifier. Implementing the
     -- particular case where the quantifier is followed by a lambda. This should
     -- be enforced by the parser and kept as an invariant. Reading the kind from
     -- the lambda.
-  T.AppSemi s1 (T.App s2 (T.Quant s3 p) [f]) u ->
-    T.AppQuant s1 p [(a,k)] (T.AppSemi s2 (T.App s3 f [T.fromVariable a]) u)
-    where a = freshVariable s1 (freeVars f `Set.union` freeVars u)
-          k = kindOfLambda f
+  -- T.AppSemi s1 (T.App s2 (T.Quant s3 p) [f]) u ->
+  --   T.AppQuant s1 p [(a,k)] (T.AppSemi s2 (T.App s3 f [T.fromVariable a]) u)
+  --   where a = freshVariable s1 (freeVars f `Set.union` freeVars u)
+  --         k = kindOfLambda f
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
-  
+
   -- 2. Dual
     -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
@@ -82,21 +83,22 @@ reduce td = \case
     -- R-DChoice (un and lin)
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
   T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
+    -- TODO: TypeMsg
     -- R-DQuant - Requires the kind of the quantifier. Implementing the
     -- particular case where the quantifier is followed by a lambda. This should
     -- be enforced by the parser and kept as an invariant. Reading the kind from
     -- the lambda.
-  T.AppDual s1 (T.App s2 (T.Quant s3 p) [f]) ->
-    T.AppQuant s1 (T.dual p) [(a,k)] (T.AppDual s2 (T.App s3 f [T.fromVariable a]))
-    where a = freshVariable s1 (freeVars f)
-          k = kindOfLambda f
+  -- T.AppDual s1 (T.App s2 (T.Quant s3 p) [f]) ->
+  --   T.AppQuant s1 (T.dual p) [(a,k)] (T.AppDual s2 (T.App s3 f [T.fromVariable a]))
+  --   where a = freshVariable s1 (freeVars f)
+  --         k = kindOfLambda f
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
     -- -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
     -- R-DCtx
   T.AppDual s t -> T.AppDual s (reduce td t)
-  
+
   -- 3. β, Void, AppL, and μ
     -- R-β
   T.App _ t@T.Abs{} us -> betaRule t us

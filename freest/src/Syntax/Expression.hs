@@ -39,6 +39,7 @@ data Pat
   | CharPat Span Char
   | WildPat Span Variable
   | VarPat Span Variable
+  | PackPat Span [Variable] Pat
   | DConsPat Span Identifier [Pat]
   | ChoicePat Span Identifier Pat
   | AsPat Span Variable Pat
@@ -81,6 +82,8 @@ data Exp
   | Var    Span Variable
   | App    Span Exp [Level Exp Type]
   | Abs    Span [Level (Pat,Type) (Variable,Kind)] Multiplicity Exp
+  | Pack   Span [Type] Exp
+  | Asc    Span Exp Type
   | Let    Span [LetDecl] Exp
   | Semi   Span Exp Exp
   | Case   Span Exp [(Pat, RHS)]
@@ -113,6 +116,7 @@ instance Located Pat where
     CharPat s _     -> s
     WildPat s _     -> s
     VarPat s _      -> s
+    PackPat s _ _   -> s
     DConsPat s _ _  -> s
     ChoicePat s _ _ -> s
     AsPat s _ _     -> s
@@ -123,6 +127,7 @@ instance Located Pat where
     CharPat _ c     -> CharPat s c
     WildPat _ x     -> WildPat s x
     VarPat _ x      -> VarPat s x
+    PackPat _ as p  -> PackPat s as p
     DConsPat _ c ps -> DConsPat s c ps
     ChoicePat _ l p -> ChoicePat s l p
     AsPat _ x p     -> AsPat s x p
@@ -143,6 +148,8 @@ instance Located Exp where
     Var s _      -> s
     App s _ _    -> s
     Abs s _ _ _  -> s
+    Pack s _ _   -> s
+    Asc s _ _    -> s
     Let s _ _    -> s
     Semi s _ _   -> s
     Case s _ _   -> s
@@ -158,6 +165,8 @@ instance Located Exp where
     Var _ x       -> Var s x
     App _ e as    -> App s e as
     Abs _ ps m e  -> Abs s ps m e
+    Pack _ ts e   -> Pack s ts e
+    Asc _ e t     -> Asc s e t
     Let _ ds w    -> Let s ds w
     Semi _ e1 e2  -> Semi s e1 e2
     Case _ e cs   -> Case s e cs
@@ -181,6 +190,7 @@ instance Show Pat where
     CharPat _ c     -> show c
     WildPat _ x     -> show x
     VarPat _ x      -> show x
+    PackPat _ as p  -> "(" ++intercalate ", " (map (('@' :) . show) as) ++ ", " ++ show p ++ ")"
     DConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
     ChoicePat _ l p -> "(&"++show l++" "++show p++")"
     AsPat _ x p     -> show x++"@"++show p
@@ -222,6 +232,8 @@ instance Show Exp where
                       ++show e++")"
                       where showParam (ExpLevel  (p,t)) = show p++":"++show t
                             showParam (TypeLevel (a,k)) = show a++":"++show k
+    Pack _ ts e    -> "(" ++ intercalate ", " (map (('@' :) . show) ts) ++ ", " ++ show e ++ ")"
+    Asc _ e t      -> "(" ++ show e ++ " : " ++ show t ++ ")"
     Let _ ds e     -> "(let ⦃ "
                       ++intercalate " ⨾ " (map show ds)
                       ++" ⦄ in "++show e++")"

@@ -144,7 +144,9 @@ subtract = undefined @(Int -> Int -> Int)
 gcd      = undefined @(Int -> Int -> Int)
 lcm      = undefined @(Int -> Int -> Int)
 
-abs, negate : Int -> Int
+succ, pred, abs, negate : Int -> Int
+succ   = undefined @(Int -> Int)
+pred   = undefined @(Int -> Int)
 abs    = undefined @(Int -> Int)
 negate = undefined @(Int -> Int)
 
