@@ -3,18 +3,21 @@ Module      :  Interpreter.Interpreter
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-This module contains utilities for parsing, namely for generating fresh variables
-and constructing types and expressions more succinctly.
--}
-
-{-
-TODO:
-- Change the environment from an association list to a map
+This module implements FreeST's interpreter.
 -}
 module Interpreter.Interpreter
   (
     interpret
   ) where
+
+{-
+TODO:
+- Change the environment from an association list to a map
+- Why does initEnv evaluates builtin functions? Aren't they already as values?
+- Why do we need initial context in interpret? What's the purpose of builtins? Just to allow evaluation to work while it's not completed?
+- in eval, case E.App, application between a Closure and arguments: only dealing with variable parameters. Need to extend to handle pattern matching, for example.
+- expand initEval, handling order of function evaluation according to dependencies. For mutually dependent functions, how to handle?
+-}
 
 import Data.List (find)
 import Data.Char (chr, ord)
@@ -230,20 +233,15 @@ interpret m = case getMainFunction m of
   -- other modules, prelude, etc
   Just (E.ValDef pat rhs) -> case rhs of
     E.UnguardedRHS mainExp whereDefs -> do
-      initial_ctx <- initEnv m
+      {- initial_ctx <- initEnv m -}
       putStrLn $ "Expression is: " ++ show mainExp
-      eval (initial_ctx ++ builtins, []) mainExp
+      {- eval (initial_ctx ++ builtins, []) mainExp -}
+      eval (builtins, []) mainExp
     _ -> do
       return VUnit
   Just _ -> do return VUnit
   -- Return unit when main function is not present
   Nothing -> do return VUnit
-
-{-
-  Just (E.ValDef _ (E.UnguardedRHS mainExp _)) -> do
-    initial_ctx <- initEnv m
-    eval (initial_ctx ++ builtins, []) mainExp
-  Nothing -> do return VUnit -}
 
 getMainFunction :: M.Module -> Maybe LetDecl
 getMainFunction m = find foo (M.definitions m)
@@ -253,20 +251,20 @@ getMainFunction m = find foo (M.definitions m)
       E.ValDef (E.VarPat _ var) _ -> B.external var == "main"
       _ -> False
 
--- For now add only definitions to the context.  
+-- Evaluates all definitions in the file before running the main function
 initEnv :: M.Module -> IO Env
 initEnv m =
   -- is VarPat the only valid pattern in a valDecl??
   -- the same for the rhs UnguardedRHS
-  sequence $ map (\def -> case def of
+  mapM (\case
     E.ValDef (E.VarPat _ var) (E.UnguardedRHS exp _) -> do
       initial_ctx <- eval (builtins, []) exp
       return (B.external var,  initial_ctx)
-    E.FnDef var fun -> do return $ (B.external var, VFun (map (\(levels, rhs) -> ((map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels)), rhs)) fun))
+    E.FnDef var fun -> do return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) fun))
   -- do not add main to the context
-  ) (filter (\def -> case def of E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
-                                 E.TypeSig _ _ -> False
-                                 _ -> True)
+  ) (filter (\case E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
+                   E.TypeSig _ _ -> False
+                   _ -> True)
     (M.definitions m))
 
 -- Evaluates expressions, written with Syntax.Expression.Exp.
@@ -287,11 +285,23 @@ eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
 eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
   VIO io -> io
   val -> return val
-{- eval (global, local) (E.App _ exp levels) = do
-  args <- sequence $ map (\(B.ExpLevel exp) -> eval (global, local) exp) (filterTypesFromLevels levels)
-  left <- (eval (global, local) exp)
-  case left of
-    VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
+eval (global, local) (E.App _ exp levels) = do
+  -- evaluate left expression
+  func <- eval (global, local) exp
+  -- remove type variable arguments, as these are not useful during reduction
+  let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
+  -- evaluate arguments
+  args <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
+  case func of
+    -- application of closure to arguments
+    VClosure params exp' env' -> do
+      -- extract variable parameters as strings to add to environment
+      let expParams = map (\(E.VarPat _ var) -> B.external var) $ filter (\case E.VarPat _ var -> True; _ -> False) params
+      -- bind parameters to arguments
+      let bindings :: Env = zip expParams args
+      -- evaluate body of closure under new context
+      eval (global, bindings ++ env') exp'
+{-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
     _ -> do res <- consumeAllArgs (global, local) left args
             case res of
               VIO io -> io
