@@ -57,8 +57,8 @@ alexGetByte inp@Input{inpStream = str, inpFile = f} = advance <$> uncons str whe
             }
     )
 
-newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either [Error]) a }
-  deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError [Error])
+newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either [Error Parsed]) a }
+  deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError [Error Parsed])
 
 data Layout = ExplicitLayout | LayoutColumn Int
   deriving (Eq, Show, Ord)
@@ -122,5 +122,5 @@ token t s = do
   Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
   return (t Span{startPos=(l,c - length s), endPos=(l,c), filepath=f})
 
-runLexer :: Lexer a -> FilePath -> String -> Either [Error] a
+runLexer :: Lexer a -> FilePath -> String -> Either [Error Parsed] a
 runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s)

@@ -20,7 +20,7 @@ import Syntax.Type qualified as T
 import Syntax.Module qualified as M
 import UI.Error
 
-import Control.Monad.Except
+import Control.Monad.Except hiding (void)
 import Data.Bifunctor
 import Data.Function ( on )
 import Data.List ( sortBy )
@@ -153,45 +153,45 @@ import Data.List.NonEmpty qualified as NE
 
 %%
 
-Module :: { M.Module }
+Module :: { M.ParsedModule }
   : 'module' ModuleName 'where' ImportModuleDeclBlock { M.setName (split '.' $ getText $2) $4 }
   -- TODO: no module declaration. See notes in Lexer.
   -- | ImportModuleDeclBlock { $1 }
 
 ModuleName :: { Token } : UPPER_ID { $1 } | QUALIFIED_UPPER_ID { $1 }
 
-ImportModuleDeclBlock :: { M.Module }
+ImportModuleDeclBlock :: { M.ParsedModule }
   : OPEN ImportModuleDeclListPIPE Close { $2 }
 
-ImportModuleDeclListPIPE :: { M.Module }
+ImportModuleDeclListPIPE :: { M.ParsedModule }
   : ImportDecl PIPE ImportModuleDeclListPIPE { $1 $3 }
   | ModuleDecl PIPE ModuleDeclListPIPE       { $1 $3 }
   | ImportDecl { $1 M.empty }
   | ModuleDecl { $1 M.empty }
   | {- empty -} { M.empty }
 
-ImportDecl :: { M.Module -> M.Module }
+ImportDecl :: { M.ParsedModule -> M.ParsedModule }
   : 'import' QUALIFIED_UPPER_ID { M.insertImport (split '.' $ getText $2) }
   | 'import' UPPER_ID           { M.insertImport [getText $2] }
 
-ModuleDeclListPIPE :: { M.Module }
+ModuleDeclListPIPE :: { M.ParsedModule }
   : ModuleDecl PIPE ModuleDeclListPIPE { $1 $3 }
   | ModuleDecl                         { $1 M.empty }
   | {- empty -}                        { M.empty }
 
-ModuleDecl :: { M.Module -> M.Module }
+ModuleDecl :: { M.ParsedModule -> M.ParsedModule }
   : LetDecl  { M.insertDef $1 }
   | DataDecl { $1 }
   | TypeDecl { $1 }
   | KindSig  { $1 }
 
-DataDecl :: { M.Module -> M.Module }
+DataDecl :: { M.ParsedModule -> M.ParsedModule }
   : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
 
-TypeDecl :: { M.Module -> M.Module }
+TypeDecl :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
-KindSig :: { M.Module -> M.Module }
+KindSig :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
 
 LetDecl
@@ -200,18 +200,18 @@ LetDecl
   | TypeSig { $1 }
   | 'mutual' OPEN MutualDecls Close { E.Mutual $3 }
 
-MutualDecls :: { [E.LetDecl] }
+MutualDecls :: { [E.ParsedLetDecl] }
   : MutualDecl                  { [$1]    }
   | MutualDecl PIPE MutualDecls { $1 : $3 }
 
-MutualDecl :: { E.LetDecl }
+MutualDecl :: { E.ParsedLetDecl }
   : FnDef { $1 }
   | TypeSig { $1 }
 
-TypeSig :: { E.LetDecl }
+TypeSig :: { E.ParsedLetDecl }
   : ExpVarListComma ':' Type { E.TypeSig $1 $3 }
 
-FnDef :: { E.LetDecl }
+FnDef :: { E.ParsedLetDecl }
   : ExpVar PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
   | PatPrimary OpOrMinus PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
 
@@ -226,16 +226,16 @@ TypeVarNEListWS :: { [Variable] }
   : TypeVar { [$1] }
   | TypeVar TypeVarNEListWS { $1 : $2 }
 
-RHS(sep) :: { E.RHS }
+RHS(sep) :: { E.ParsedRHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
   | GuardedExps(sep) Where { E.GuardedRHS $1 $2   }
 
-GuardedExps(sep) :: { [(E.Exp, E.Exp)] }
+GuardedExps(sep) :: { [(E.ParsedExp, E.ParsedExp)] }
   : '|' Exp sep Exp GuardedExps(sep) { ($2,$4) : $5 }
   | '|' Exp sep Exp                  { [($2,$4)]    }
   -- otherwise is simply a variable defined as True
 
-Where :: { Maybe [E.LetDecl] }
+Where :: { Maybe [E.ParsedLetDecl] }
   : 'where' LetDeclBlock { Just $2 }
   | {- empty -}          { Nothing }
 
@@ -247,14 +247,14 @@ UpperIdListComma :: { [Identifier] }
   : UPPER_ID ',' UpperIdListComma { mkIdTk $1 : $3 }
   | UPPER_ID                      { [mkIdTk $1] }
 
-DataConsListPipe :: { [(Identifier, [T.Type])] }
+DataConsListPipe :: { [(Identifier, [T.ParsedType])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }
   | DataCons                      { [$1]    }
 
-DataCons :: { (Identifier, [T.Type]) }
+DataCons :: { (Identifier, [T.ParsedType]) }
   : UPPER_ID TypePrimaryListWS { (mkIdTk $1, $2) }
 
-TypePrimaryListWS :: { [T.Type] }
+TypePrimaryListWS :: { [T.ParsedType] }
   : TypePrimary TypePrimaryListWS { $1 : $2 }
   | {- empty -}                   { []      }
 
@@ -274,55 +274,55 @@ ProperKind :: { K.Kind }
   | '1C' { K.lc (getSpan $1) }
   | '*C' { K.uc (getSpan $1) }
 
-TypePrimary :: { T.Type }
+TypePrimary :: { T.ParsedType }
   -- Builtins (necessary?)
-  : 'Int'    { T.Int   (getSpan $1)       }
-  | 'Float'  { T.Float (getSpan $1)       }
-  | 'Char'   { T.Char  (getSpan $1)       }
-  | 'Skip'   { T.Skip  (getSpan $1)       }
-  | 'Close'  { T.End   (getSpan $1) T.Out }
-  | 'Wait'   { T.End   (getSpan $1) T.In  }
-  | 'Void' '@' Kind { T.Void (spanFromTo $1 $3) $3 }
+  : 'Int'    { T.Int   (getSpan $1) void  }
+  | 'Float'  { T.Float (getSpan $1) void  }
+  | 'Char'   { T.Char  (getSpan $1) void  }
+  | 'Skip'   { T.Skip  (getSpan $1) void  }
+  | 'Close'  { T.End   (getSpan $1) void T.Out }
+  | 'Wait'   { T.End   (getSpan $1) void T.In  }
+  | 'Void' '@' Kind { T.Void (spanFromTo $1 $3) void $3 }
   -- Unit, Tuples, Operators
-  | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnitId (spanFromTo $1 $2)) }
-  | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }
+  | '(' ')'        { T.DName (spanFromTo $1 $2) void (mkUnitId (spanFromTo $1 $2)) }
+  | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) void ($2 : $4) }
   | '(' Commas ')' {% prefixTupleTypeConsError $1 $3 }
                 -- { T.DName (spanFromTo $1 $3) (mkTupleId $2 (spanFromTo $1 $3)) }
-  | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) (snd $2)}
+  | '(' Arrow ')'  {T.Arrow (spanFromTo $1 $3) void (snd $2)}
   -- | '(' Type Arrow ')' -- TODO: sections
   -- | '(' Arrow Type ')' -- TODO: sections
-  | '(' Polarity ')'     {T.Message (spanFromTo $1 $3) K.Lin (snd $2)}
-  | '(' '*' Polarity ')' {T.Message (spanFromTo $1 $4) K.Un (snd $3)}
+  | '(' Polarity ')'     {T.Message (spanFromTo $1 $3) void K.Lin (snd $2)}
+  | '(' '*' Polarity ')' {T.Message (spanFromTo $1 $4) void K.Un (snd $3)}
   -- | '(' Type ';' ')' -- TODO: sections
   -- | '(' ';' Type ')' -- TODO: sections
   -- Messages
-  | Polarity TypePrimary %prec MSG     { T.AppMessage (spanFromTo (fst $1) $2) K.Lin (snd $1) $2 }
-  | '*' Polarity TypePrimary %prec MSG { T.AppMessage (spanFromTo $1 $3) K.Un  (snd $2) $3 }
+  | Polarity TypePrimary %prec MSG     { T.AppMessage (spanFromTo (fst $1) $2) void void K.Lin (snd $1) $2 }
+  | '*' Polarity TypePrimary %prec MSG { T.AppMessage (spanFromTo $1 $3) void void K.Un  (snd $2) $3 }
   -- Choices
-  | View '{' LabelTypeListComma '}'     { T.AppLinChoice (spanFromTo (fst $1) $4) (snd $1) $3 } -- sorted by AppLinChoice
-  | '*' View '{' LabelListComma '}'     { T.SharedChoice (spanFromTo $1 $5) (snd $2) $4 }       -- sorted by SharedChoice
+  | View '{' LabelTypeListComma '}'     { T.AppLinChoice (spanFromTo (fst $1) $4) void void (snd $1) $3 } -- sorted by AppLinChoice
+  | '*' View '{' LabelListComma '}'     { T.SharedChoice (spanFromTo $1 $5) void (snd $2) $4 }       -- sorted by SharedChoice
   -- Variables and constructors
-  | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
-  | TypeVar { T.Var (getSpan $1) $1 }
+  | UPPER_ID { T.TName (getSpan $1) void (mkIdTk $1) }
+  | TypeVar { T.Var (getSpan $1) void $1 }
   -- Lists
   | '[' ']' {% prefixListTypeConsError $1 $2 }
          -- { T.DName (spanFromTo $1 $2) (mkListId (spanFromTo $1 $2)) } -- TODO: multiplicities
-  | '[' Type ']' { T.AppDName (spanFromTo $1 $3) (mkNilId (spanFromTo $1 $3)) [$2] }
+  | '[' Type ']' { T.AppDName (spanFromTo $1 $3) void void (mkNilId (spanFromTo $1 $3)) [$2] }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 
-Type :: { T.Type }
-  : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
-  | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
+Type :: { T.ParsedType }
+  : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) void void (snd $2) $1 $3 }
+  | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) void $1 $3 }
+  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) void (snd $1)  $2 $4 }
   | TypeApp                     { $1 }
 
-TypeApp :: { T.Type }
+TypeApp :: { T.ParsedType }
   : TypeApp TypePrimary { addArgType $2 $1 }
-  | 'Dual' TypePrimary  { T.AppDual (spanFromTo $1 $2) $2 }
+  | 'Dual' TypePrimary  { T.AppDual (spanFromTo $1 $2) void void $2 }
   | TypePrimary { $1 }
 
-TypeListComma :: { [T.Type] }
+TypeListComma :: { [T.ParsedType] }
   : Type ',' TypeListComma { $1 : $3 }
   | Type                   { [$1] }
 
@@ -342,7 +342,7 @@ View :: { (Span, T.Polarity) }
   : '+' { (getSpan $1, T.Out) }
   | '&' { (getSpan $1, T.In) }
 
-LabelTypeListComma :: { [(Identifier, T.Type)] }
+LabelTypeListComma :: { [(Identifier, T.ParsedType)] }
   : UPPER_ID ':' Type ',' LabelTypeListComma { (mkIdTk $1, $3) : $5 }
   | UPPER_ID ':' Type { [(mkIdTk $1, $3)] }
 
@@ -364,11 +364,11 @@ KindedVar :: { (Variable, K.Kind) }
   : TypeVar { ($1, dummyKindVar $1) }
   | '(' TypeVar ':' Kind ')' { ($2, $4) }
 
-ExpPrimary :: { E.Exp }
+ExpPrimary :: { E.ParsedExp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
-  | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1)) (map (E.Char (getSpan $1)) (getText $1)) }
+  | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1) void) (map (E.Char (getSpan $1)) (getText $1)) }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
@@ -391,7 +391,7 @@ ExpPrimary :: { E.Exp }
   | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
-Exp :: { E.Exp }
+Exp :: { E.ParsedExp }
   -- Keyword expressions
   : 'let' LetDeclBlock 'in' Exp { E.Let (spanFromTo $1 $4) $2 $4 }
   | '\\' PatTypeOrKindedVarListArrow Exp   { E.Abs (spanFromTo $1 $3) (fst $2) (snd $2) $3 }
@@ -432,7 +432,7 @@ Exp :: { E.Exp }
   -- Application etc.  
   | ExpApp               { $1 }
 
-ExpApp :: { E.Exp }
+ExpApp :: { E.ParsedExp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
@@ -467,7 +467,7 @@ OpOrMinus :: { Variable }
 ConsOp :: { Identifier }
   : '::' { mkConsId $1 }
 
-ExpListComma :: { [E.Exp] }
+ExpListComma :: { [E.ParsedExp] }
   : Exp ',' ExpListComma { $1 : $3 }
   | Exp                  { [$1] }
 
@@ -482,27 +482,27 @@ Arrow :: { (Span, K.Multiplicity) }
   : UnArrow  { $1 }
   | LinArrow { $1 }
 
-TypedPat :: { (E.Pat, T.Type) }
+TypedPat :: { (E.ParsedPat, T.ParsedType) }
   : '(' Pat ':' Type ')' { ($2, $4) }
   -- | PatPrimary { ($1, ?) } -- TODO: type inference var?
 
-PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.Type) (Variable, K.Kind)], K.Multiplicity) } 
+PatTypeOrKindedVarListArrow :: { ([Level (E.ParsedPat, T.ParsedType) (Variable, K.Kind)], K.Multiplicity) } 
   : TypedPat PatTypeOrKindedVarListArrow { first (ExpLevel $1 :) $2 }
   | '@' KindedVar PatTypeOrKindedVarListArrow { first (TypeLevel $2 :) $3 }
   | TypedPat Arrow { ([ExpLevel $1], snd $2) }
   | '@' KindedVar UnArrow { ([TypeLevel $2], snd $3) }
 
-CaseBlock :: { [(E.Pat, E.RHS)] }
+CaseBlock :: { [(E.ParsedPat, E.ParsedRHS)] }
   : OPEN CaseListPIPE Close { $2 }
 
-CaseListPIPE :: { [(E.Pat, E.RHS)] }
+CaseListPIPE :: { [(E.ParsedPat, E.ParsedRHS)] }
   : Case PIPE CaseListPIPE { $1 : $3 }
   | Case                   { [$1] }
 
-Case :: { (E.Pat, E.RHS) }
+Case :: { (E.ParsedPat, E.ParsedRHS) }
   : Pat RHS('->') { ($1, $2) }
 
-PatPrimary :: { E.Pat }
+PatPrimary :: { E.ParsedPat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
@@ -515,7 +515,7 @@ PatPrimary :: { E.Pat }
   | '(' Pat ')'     { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
 
-Pat :: { E.Pat }
+Pat :: { E.ParsedPat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
   | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
   | Pat '::' Pat { E.ConsPat (spanFromTo $1 $3) $1 $3 }
@@ -527,28 +527,28 @@ DataConstructor :: { Identifier }
   -- | '(' '::'   ')' { mkConsId  (spanFromTo $1 $3) } -- TODO: multiplicities
   -- | '[' ']' { mkNilId (spanFromTo $1 $2) } -- TODO: multiplicities
 
-PatPrimaryListWS :: { [E.Pat] } 
+PatPrimaryListWS :: { [E.ParsedPat] } 
   : PatPrimary PatPrimaryListWS { $1 : $2 }
   | PatPrimary { [$1] }
 
-PatPrimaryOrAtVarListWS :: { [Level E.Pat Variable] } 
+PatPrimaryOrAtVarListWS :: { [Level E.ParsedPat Variable] } 
   : PatPrimary   PatPrimaryOrAtVarListWS { ExpLevel $1 : $2 }
   | '@' TypeVar PatPrimaryOrAtVarListWS { TypeLevel $2 : $3 }
   | PatPrimary   { [ExpLevel  $1] }
   | '@' TypeVar  { [TypeLevel $2] }
 
-PatListComma :: { [E.Pat] }
+PatListComma :: { [E.ParsedPat] }
   : {- empty -} { [] }
   | PatNEListComma { $1 }
 
-PatNEListComma :: { [E.Pat] }
+PatNEListComma :: { [E.ParsedPat] }
   : Pat { [$1] }
   | Pat ',' PatNEListComma { $1 : $3 }
 
-LetDeclBlock :: { [E.LetDecl] }
+LetDeclBlock :: { [E.ParsedLetDecl] }
   : OPEN LetDeclListPIPE Close { $2 }
 
-LetDeclListPIPE :: { [E.LetDecl] }
+LetDeclListPIPE :: { [E.ParsedLetDecl] }
   : LetDecl PIPE LetDeclListPIPE { $1 : $3 }
   | LetDecl                      { [$1] }
   | {- empty -}                  { [] }
@@ -565,27 +565,27 @@ TypeTestCase(t)
   : 'case' t 'where' TypeTestBlock { ($2, $4) }
   | 'case' t { ($2, M.empty) }
 
-EquivalenceTestCases :: { [((T.Type, T.Type, K.Kind), M.Module)] }
+EquivalenceTestCases :: { [((T.ParsedType, T.ParsedType, K.Kind), M.ParsedModule)] }
   : TypeTestCases(EquivalenceTest) { $1 }
 
-KindingTestCases :: {[((T.Type, Maybe K.Kind), M.Module)]}
+KindingTestCases :: {[((T.ParsedType, Maybe K.Kind), M.ParsedModule)]}
   : TypeTestCases(KindingTest) {$1}
 
-EquivalenceTest :: { (T.Type, T.Type, K.Kind) }
+EquivalenceTest :: { (T.ParsedType, T.ParsedType, K.Kind) }
   : Type CMP Type ':' Kind { ($1, $3, $5) }
 
-KindingTest :: { (T.Type, Maybe K.Kind) }
+KindingTest :: { (T.ParsedType, Maybe K.Kind) }
   : Type ':' Kind { ($1, Just $3) }
   | Type { ($1, Nothing) }
 
-TypeTestBlock :: { M.Module }
+TypeTestBlock :: { M.ParsedModule }
   : OPEN TypeTestDeclListPIPE Close { $2 }
 
-TypeTestDeclListPIPE :: { M.Module }
+TypeTestDeclListPIPE :: { M.ParsedModule }
   : TypeTestDecl PIPE TypeTestDeclListPIPE { $1 $3 }
   | TypeTestDecl { $1 M.empty }
 
-TypeTestDecl :: { M.Module -> M.Module }
+TypeTestDecl :: { M.ParsedModule -> M.ParsedModule }
   : KindSig  { $1 }
   | TypeDecl { $1 }
   | DataDecl { $1 }
@@ -621,7 +621,7 @@ prefixTupleExpConsError :: Token -> Token -> Lexer a
 prefixTupleExpConsError tk1 tk2 = 
   throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported" "(Consider using a tuple expression)"] 
 
-runParseModule :: FilePath -> String -> Either [Error] M.Module
+runParseModule :: FilePath -> String -> Either [ParsedError] M.ParsedModule
 runParseModule = runLexer parseModule 
 
 }
