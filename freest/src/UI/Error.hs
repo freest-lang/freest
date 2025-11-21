@@ -14,6 +14,7 @@ module UI.Error
   , toMessage
   , showErrors
   , printErrors
+  , ParsedError, KindedError, TypedError
   )
 where
 
@@ -25,11 +26,14 @@ import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Utils
 
-import Data.List (intercalate,nub)
+import Data.List (intercalate)
 import Data.Map.Strict qualified as Map
-import Syntax.Expression
 import Data.List qualified as List
 import Data.Char qualified as Char
+
+type ParsedError = Error Parsed
+type KindedError = Error Kinded
+type TypedError = Error Typed
 
 -- | The errors that can be found in a FreeST program.
 data Error x
