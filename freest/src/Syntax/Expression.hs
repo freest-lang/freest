@@ -24,6 +24,9 @@ module Syntax.Expression
        , Cons
        )
   , listExp
+  , ParsedPat, ParsedLetDecl, ParsedRHS, ParsedExp
+  , KindedPat, KindedLetDecl, KindedRHS, KindedExp
+  , TypedPat, TypedLetDecl, TypedRHS, TypedExp
   )
 where
 
@@ -33,6 +36,22 @@ import Syntax.Names
 import Syntax.Type ( Type )
 
 import Data.List ( intercalate )
+
+type ParsedPat = Pat Parsed
+type KindedPat = Pat Kinded
+type TypedPat  = Pat Typed
+
+type ParsedLetDecl = LetDecl Parsed
+type KindedLetDecl = LetDecl Kinded
+type TypedLetDecl  = LetDecl Typed
+
+type ParsedRHS = RHS Parsed
+type KindedRHS = RHS Kinded
+type TypedRHS  = RHS Typed
+
+type ParsedExp = Exp Parsed
+type KindedExp = Exp Kinded
+type TypedExp  = Exp Typed
 
 data Pat x
   = IntPat Span Int
@@ -44,24 +63,24 @@ data Pat x
   | ChoicePat Span Identifier (Pat x)
   | AsPat Span Variable (Pat x)
 
-pattern NilPat :: Span -> (Pat x)
+pattern NilPat :: Span -> Pat x
 pattern NilPat s <- DConsPat s ((== mkNilId s) -> True) []
   where NilPat s =  DConsPat s (mkNilId s) []
 
-pattern ConsPat :: Span -> (Pat x) -> (Pat x) -> (Pat x)
+pattern ConsPat :: Span -> Pat x -> Pat x -> Pat x
 pattern ConsPat s p1 p2 <- DConsPat s ((== mkConsId s) -> True) [p1,p2]
   where ConsPat s p1 p2 =  DConsPat s (mkConsId s) [p1,p2]
 
-pattern TuplePat :: Span -> [Pat x] -> (Pat x)
+pattern TuplePat :: Span -> [Pat x] -> Pat x
 pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
   where TuplePat s ps =  DConsPat s (mkTupleId (length ps - 1) s) ps
 
-listPat :: Span -> [Pat x] -> (Pat x)
+listPat :: Span -> [Pat x] -> Pat x
 listPat s = \case
   []       -> NilPat s
   (p : ps) -> ConsPat s p (listPat s ps)
 
-stringPat :: Span -> String -> (Pat x)
+stringPat :: Span -> String -> Pat x
 stringPat s = listPat s . map (CharPat s)
 
 data LetDecl x
