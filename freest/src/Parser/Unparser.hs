@@ -64,17 +64,17 @@ instance Unparse K.Kind where
         r = bracket (fragment k2) RightAssoc arrowRator
     K.Var _ τ       -> (maxRator, show τ)
 
-instance Unparse T.Type where
+instance Unparse (T.Type x) where
   fragment = \case 
-    T.Int  _ -> (maxRator, "Int")
-    T.Float _ -> (maxRator, "Float")
-    T.Char _ -> (maxRator, "Char")
-    T.Arrow _ m -> (maxRator, "(" ++ arrow m ++ ")")
-    T.Quant _ p -> (maxRator, "(" ++ quant p ++ ")")
-    T.Skip _ -> (maxRator, "Skip")
-    T.End _ p -> (maxRator, case p of T.Out -> "Close"
-                                      T.In  -> "Wait")
-    T.Choice _ m p is -> 
+    T.Int  _ _ -> (maxRator, "Int")
+    T.Float _ _ -> (maxRator, "Float")
+    T.Char _ _ -> (maxRator, "Char")
+    T.Arrow _ _ m -> (maxRator, "(" ++ arrow m ++ ")")
+    T.Quant _ _ p -> (maxRator, "(" ++ quant p ++ ")")
+    T.Skip _ _ -> (maxRator, "Skip")
+    T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
+                                        T.In  -> "Wait")
+    T.Choice _ _ m p is -> 
       (maxRator, choiceMult m ++ view p ++ "{" ++ fields ++ "}")
       where 
         fields = List.intercalate ", " (map show is)
@@ -82,40 +82,40 @@ instance Unparse T.Type where
           K.Lin -> ""
           K.Un  -> "*"
           K.VarM φ -> external φ
-    T.Semi _ -> (maxRator, "(;)")
-    T.Dual _ -> (maxRator, "Dual")
-    T.TName _ i -> (maxRator, show i)
-    T.DName _ i -> (maxRator, show i)
-    T.Void _ k -> (appRator, "Void @" ++ r)
+    T.Semi _ _ -> (maxRator, "(;)")
+    T.Dual _ _ -> (maxRator, "Dual")
+    T.TName _ _ i -> (maxRator, show i)
+    T.DName _ _ i -> (maxRator, show i)
+    T.Void _ _ k -> (appRator, "Void @" ++ r)
       where
         r = bracket (fragment k) RightAssoc appRator
-    T.Var  _ a -> (maxRator, external a)
-    T.Abs _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
-    T.AppArrow _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
+    T.Var _ _ a -> (maxRator, external a)
+    T.Abs _ _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
+    T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
-    T.AppQuant _ p aks t -> 
+    T.AppQuant _ _ p aks t -> 
       (dotRator, quant p ++ " " ++ bindings aks ++ ". " ++ unparse t)
-    T.Tuple _ ts -> 
+    T.Tuple _ _ ts -> 
       (maxRator, "(" ++ List.intercalate ", " (map unparse ts) ++ ")")
-    T.List _ t -> 
+    T.List _ _ t -> 
       (maxRator, "[" ++ unparse t ++ "]")
-    T.AppMessage _ m p t -> 
+    T.AppMessage _ _ _ m p t -> 
       (msgRator, show p ++ bracket (fragment t) RightAssoc msgRator)
-    T.AppLinChoice _ p lts ->
+    T.AppLinChoice _ _ _ p lts ->
       (maxRator, view p ++ "{" ++ fields lts ++ "}")
       where 
         fields = List.intercalate ", " 
                . map (\(l, t) -> show l ++ ": " ++ unparse t)
-    T.AppSemi _ t u -> (semiRator, l ++ "; " ++ r)
+    T.AppSemi _ _ t u -> (semiRator, l ++ "; " ++ r)
       where
         l = bracket (fragment t) LeftAssoc semiRator
         r = bracket (fragment u) RightAssoc semiRator
-    T.App s t ts -> (appRator, l ++ " " ++ r)
+    T.App s x t ts -> (appRator, l ++ " " ++ r)
       where 
         l = bracket (fragment (if length ts == 1 then t 
-                                                 else T.App s t (init ts)))
+                                                 else T.App s x t (init ts)))
                     LeftAssoc appRator
         r = bracket (fragment (last ts)) RightAssoc appRator
     where

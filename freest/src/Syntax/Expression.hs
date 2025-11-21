@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {- |
 Module      :  Syntax.Expression
 Copyright   :  © The FreeST Team
@@ -33,80 +34,80 @@ import Syntax.Type ( Type )
 
 import Data.List ( intercalate )
 
-data Pat
+data Pat x
   = IntPat Span Int
   | FloatPat Span Double
   | CharPat Span Char
   | WildPat Span Variable
   | VarPat Span Variable
-  | DConsPat Span Identifier [Pat]
-  | ChoicePat Span Identifier Pat
-  | AsPat Span Variable Pat
+  | DConsPat Span Identifier [Pat x]
+  | ChoicePat Span Identifier (Pat x)
+  | AsPat Span Variable (Pat x)
 
-pattern NilPat :: Span -> Pat
+pattern NilPat :: Span -> (Pat x)
 pattern NilPat s <- DConsPat s ((== mkNilId s) -> True) []
   where NilPat s =  DConsPat s (mkNilId s) []
 
-pattern ConsPat :: Span -> Pat -> Pat -> Pat
+pattern ConsPat :: Span -> (Pat x) -> (Pat x) -> (Pat x)
 pattern ConsPat s p1 p2 <- DConsPat s ((== mkConsId s) -> True) [p1,p2]
   where ConsPat s p1 p2 =  DConsPat s (mkConsId s) [p1,p2]
 
-pattern TuplePat :: Span -> [Pat] -> Pat
+pattern TuplePat :: Span -> [Pat x] -> (Pat x)
 pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
   where TuplePat s ps =  DConsPat s (mkTupleId (length ps - 1) s) ps
 
-listPat :: Span -> [Pat] -> Pat
+listPat :: Span -> [Pat x] -> (Pat x)
 listPat s = \case
   []       -> NilPat s
   (p : ps) -> ConsPat s p (listPat s ps)
 
-stringPat :: Span -> String -> Pat
+stringPat :: Span -> String -> (Pat x)
 stringPat s = listPat s . map (CharPat s)
 
-data LetDecl
-  = ValDef Pat      RHS
-  | FnDef  Variable [([Level Pat Variable], RHS)]
-  | TypeSig [Variable] Type
-  | Mutual [LetDecl {- FnDef only -}]
+data LetDecl x
+  = ValDef (Pat x)      (RHS x)
+  | FnDef  Variable [([Level (Pat x) Variable], RHS x)]
+  | TypeSig [Variable] (Type x)
+  | Mutual [LetDecl x {- FnDef only -}]
 
-data RHS
-  = GuardedRHS [(Exp, Exp)] (Maybe [LetDecl])
-  | UnguardedRHS Exp (Maybe [LetDecl])
+data RHS x
+  = GuardedRHS [(Exp x, Exp x)] (Maybe [LetDecl x])
+  | UnguardedRHS (Exp x) (Maybe [LetDecl x])
 
-data Exp
+data Exp x
   = Int    Span Int
   | Float  Span Double
   | Char   Span Char
   | DCons  Span Identifier
   | Var    Span Variable
-  | App    Span Exp [Level Exp Type]
-  | Abs    Span [Level (Pat,Type) (Variable,Kind)] Multiplicity Exp
-  | Let    Span [LetDecl] Exp
-  | Semi   Span Exp Exp
-  | Case   Span Exp [(Pat, RHS)]
-  | If     Span Exp Exp Exp
-  | Channel Span Type
+  | App    Span (Exp x) [Level (Exp x) (Type x)]
+  | Abs    Span [Level (Pat x, Type x) (Variable,Kind)] Multiplicity (Exp x)
+  | Let    Span [LetDecl x] (Exp x)
+  | Semi   Span (Exp x) (Exp x)
+  | Case   Span (Exp x) [(Pat x, RHS x)]
+  | If     Span (Exp x) (Exp x) (Exp x)
+  | Channel Span (Type x)
   | Select Span Identifier
 
-pattern Tuple :: Span -> [Exp] -> Exp
+pattern Tuple :: Span -> [Exp x] -> Exp x
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
                              e@(DCons s i@(isTupleId -> True)) -> App s e []
                              e -> e
                       -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_)))
   where Tuple s es =  App s (DCons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
 
-pattern Nil :: Span -> Type -> Exp
+pattern Nil :: Span -> Type x -> Exp x
 pattern Nil s t <- App s (DCons _ ((== mkNilId s) -> True)) [TypeLevel t]
   where Nil s t =  App s (DCons s (mkNilId s)) [TypeLevel t]
 
-pattern Cons :: Span -> Exp -> Exp -> Exp 
+pattern Cons :: Span -> Exp x -> Exp x -> Exp x 
 pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, ExpLevel e2]
   where Cons s e1 e2 =  App s (DCons s (mkConsId s)) (map ExpLevel [e1,e2])
 
-listExp :: Span -> Type -> [Exp] -> Exp
+listExp :: Span -> Type x -> [Exp x] -> Exp x
 listExp s t = foldr (Cons s) (Nil s t)
 
-instance Located Pat where
+instance Located (Pat x) where
   getSpan = \case
     IntPat s _      -> s
     FloatPat s _    -> s
@@ -127,14 +128,14 @@ instance Located Pat where
     ChoicePat _ l p -> ChoicePat s l p
     AsPat _ x p     -> AsPat s x p
 
-instance Located LetDecl where 
+instance Located (LetDecl x) where 
   getSpan = \case
     ValDef p rhs -> spanFromTo p rhs
     FnDef x rhs  -> spanFromTo x (snd $ last rhs)
     TypeSig xs t  -> spanFromTo (head xs) t
   setSpan = error "cannot set span of a LetDecl"
 
-instance Located Exp where
+instance Located (Exp x) where
   getSpan = \case
     Int s _      -> s
     Float s _    -> s
@@ -165,7 +166,7 @@ instance Located Exp where
     Channel _ t   -> Channel s t
     Select _ i -> Select s i
 
-instance Located RHS where
+instance Located (RHS x) where
   getSpan = \case
     GuardedRHS ges w -> 
       spanFromTo (fst $ head ges) 
@@ -174,7 +175,7 @@ instance Located RHS where
       spanFromTo e (maybe (getSpan e) (getSpan . last) w)
   setSpan = error "cannot set span of a RHS"
 
-instance Show Pat where
+instance Show (Pat x) where
   show = \case
     IntPat _ i      -> show i
     FloatPat _ f    -> show f
@@ -185,7 +186,7 @@ instance Show Pat where
     ChoicePat _ l p -> "(&"++show l++" "++show p++")"
     AsPat _ x p     -> show x++"@"++show p
 
-instance Show LetDecl where
+instance Show (LetDecl x) where
   show = \case
     ValDef p rhs   -> show p++show rhs
     FnDef x psrhss -> 
@@ -196,19 +197,19 @@ instance Show LetDecl where
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
     Mutual ds -> "mutual ⦃\n"++intercalate "⨾\n" (map show ds)++"\n⦄"
 
-instance Show RHS where
+instance Show (RHS x) where
   show = \case
     GuardedRHS ges w ->
       concatMap (\(g,e) -> " | "++show g++" = "++show e) ges++showWhere w
     UnguardedRHS e w ->
       " = "++show e++showWhere w
 
-showWhere :: Maybe [LetDecl] -> String
+showWhere :: Maybe [LetDecl x] -> String
 showWhere = \case
   Nothing -> ""
   Just ds -> " where ⦃ "++intercalate " ⨾ " (map show ds)++" ⦄"
 
-instance Show Exp where
+instance Show (Exp x) where
   show = \case
     Int _ i        -> show i
     Float _ d      -> show d

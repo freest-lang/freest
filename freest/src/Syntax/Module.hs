@@ -37,21 +37,21 @@ import           Data.Maybe (fromMaybe)
 --   [ (Leaf, [])
 --   , (Node , [Tree a, a, Tree a])
 --   ]
-type ConsDeclList = [(Identifier, [T.Type])]
+type ConsDeclList x = [(Identifier, [T.Type x])]
 -- Datatype constructor declaration list, e.g.,
 --   data Tree a = Leaf | Node (Tree a) a (Tree a)
 -- In Fµω:
 --   type Tree = λa. µt. {Leaf, Node (t a) a (t a)}
 -- represented as
 --   [(Tree, ([a], <see above>))]
-type DataDeclList = [(Identifier, [(Variable, K.Kind)], ConsDeclList)]
+type DataDeclList x = [(Identifier, [(Variable, K.Kind)], ConsDeclList x)]
 -- Type (type) constructor declaration list, e.g.
 --   type Stream a = !a ; Stream a
 -- In Fµω:
 --   type Stream = λa. µs. !a ; s a
 -- represented as
 --   [(Stream, ([a], (!a ; Stream a))
-type TypeDeclList = [(Identifier, T.Type)]
+type TypeDeclList x = [(Identifier, T.Type x)]
 -- Kind signature list, e.g.
 --   type Tree : *T -> *T
 --   type Stream : 1T -> 1S
@@ -59,41 +59,41 @@ type TypeDeclList = [(Identifier, T.Type)]
 --   [(Tree, *T -> *T), (Stream, 1T -> 1S)]
 type KindSigList = [([Identifier], K.Kind)]
 
-data Module
+data Module x
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
-           , dataDecls   :: DataDeclList
-           , typeDecls   :: TypeDeclList
+           , dataDecls   :: DataDeclList x
+           , typeDecls   :: TypeDeclList x
            , kindSigs    :: KindSigList
-           , definitions :: [E.LetDecl]
+           , definitions :: [E.LetDecl x]
            }
 
-type Prog = [Module]
+type Prog x = [Module x]
 
 -- Typechecking
 -- 1. data & type
 -- 2. verificar que nomes estao definidos
 
-setName :: [String] -> Module -> Module
+setName :: [String] -> Module x -> Module x
 setName n m = m {name = Just n}
 
-insertImport :: [String] -> Module -> Module
+insertImport :: [String] -> Module x -> Module x
 insertImport i m = m{imports = i : imports m}
 
-insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> ConsDeclList -> Module -> Module
+insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> ConsDeclList x -> Module x -> Module x
 insertDataDecl i aks b m = m{dataDecls = (i, aks, b) : dataDecls m}
 
-insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type -> Module -> Module
+insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type x -> Module x -> Module x
 insertTypeDecl i aks t m = m{typeDecls = (i, t') : typeDecls m}
-  where t' = if null aks then t else T.Abs (getSpan t) aks t 
+  where t' = if null aks then t else T.Abs (getSpan t) (T.getExt t) aks t 
 
-insertKindSig :: [Identifier] -> K.Kind -> Module -> Module
+insertKindSig :: [Identifier] -> K.Kind -> Module x -> Module x
 insertKindSig is k m = m{kindSigs = (is, k) : kindSigs m}
 
-insertDef :: E.LetDecl -> Module -> Module
+insertDef :: E.LetDecl x -> Module x -> Module x
 insertDef d m = m{definitions = d : definitions m}
 
-empty :: Module
+empty :: Module x
 empty = Module{ name        = Nothing
               , imports     = []
               , dataDecls   = []
@@ -102,7 +102,7 @@ empty = Module{ name        = Nothing
               , definitions = []
               }
 
-instance Semigroup Module where
+instance Semigroup (Module x) where
   m1 <> m2 =
     Module{ name        = name m2
           , imports     = imports     m1 ++ imports     m2
@@ -112,10 +112,10 @@ instance Semigroup Module where
           , definitions = definitions m1 ++ definitions m2
           }
 
-instance Monoid Module where 
+instance Monoid (Module x) where 
   mempty = empty 
 
-instance Show Module where
+instance Show (Module x) where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
     intercalate "\n" $ filter (not . null)
       [case name of Nothing -> "" ; Just n -> "module "++intercalate "." n++" where"
@@ -130,5 +130,5 @@ instance Show Module where
           showDataDecl (i, aks, cds) =
             "data "++show i++" "++unwords (map show aks)++" = "++intercalate " | " (map showConsDecl cds)
             where showConsDecl (cn,ts) = show cn ++" "++ unwords (map show ts)
-          showTypeDecl (i, T.Abs _ aks t) = "type "++show i++" "++unwords (map show aks)++" = "++show t
+          showTypeDecl (i, T.Abs _ _ aks t) = "type "++show i++" "++unwords (map show aks)++" = "++show t
           showTypeDecl (i, t) = "type "++show i++" = "++show t

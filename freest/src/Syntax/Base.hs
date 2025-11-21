@@ -15,6 +15,16 @@ where
 import Data.Bifunctor ( Bifunctor(..) )
 import Data.List ( (\\) )
 import Data.Set qualified as Set
+import Data.Void
+
+-- The different phases of annotated AST's
+
+data Parsed
+data Kinded
+data Typed
+
+void :: Void
+void = error "Attempt to evaluate void"
 
 -- Positions in the source code
 
