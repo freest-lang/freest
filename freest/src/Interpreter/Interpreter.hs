@@ -17,6 +17,7 @@ TODO:
 - Why do we need initial context in interpret? What's the purpose of builtins? Just to allow evaluation to work while it's not completed?
 - in eval, case E.App, application between a Closure and arguments: only dealing with variable parameters. Need to extend to handle pattern matching, for example.
 - expand initEval, handling order of function evaluation according to dependencies. For mutually dependent functions, how to handle?
+- Missing evaluation for E.App, E.Pack, E.Asc, E.Let, E.Semi, E.Case and E.Select
 -}
 
 import Data.List (find)
@@ -62,7 +63,7 @@ instance Show Value where
   show (VCons str vals) = str ++ " " ++ unwords (map show vals)
   -- show (VTuple tups) = "(" ++ showTups tups ++ ")"
   show (VFun _) = "<fun>"
-  show (VClosure _ _ _) = "<closure>"
+  show (VClosure {}) = "<closure>"
   show (VBuiltin _) = "<builtin>"
   show (VIO io) = "<IO>"
   show (VHandle _) = "<handle>"
@@ -210,12 +211,12 @@ builtins = [
   
   ("id", VBuiltin id)]
 
--- haskell bool to freest bool
+-- encode boolean value into FreeST's value
 hsToFstBool :: Bool -> Value
 hsToFstBool True = VCons "True" []
 hsToFstBool False = VCons "False" []
 
--- freeST bool to haskell bool 
+-- extract boolean value from FreeST's value 
 fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
@@ -278,7 +279,7 @@ initEnv m =
      Can then be reserved keywords, or that's reserved for cons?
 -}
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
-eval _ (E.Int _ n) = return $ VInt n 
+eval _ (E.Int _ n) = return $ VInt n
 eval _ (E.Float _ n) = return $ VFloat n
 eval _ (E.Char _ c) = return $ VChar c
 eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
@@ -320,12 +321,13 @@ eval (_, local) (E.Abs _ levels _ exp) =
     Just (exp, matched) -> eval (global, matched ++ local) exp 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
     Nothing -> undefined -}
-eval ctx (E.If _ ifExp thenExp elseExp) = do
-  ifVal <- eval ctx ifExp
-  thenVal <- eval ctx thenExp
-  elseVal <- eval ctx elseExp
+eval env (E.If _ ifExp thenExp elseExp) = do
+  ifVal <- eval env ifExp
+  thenVal <- eval env thenExp
+  elseVal <- eval env elseExp
   if fstToHsBool ifVal then return thenVal else return elseVal
 eval _ (E.Channel _ _) = do
+  -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
 {- eval ctx (E.Select _ (B.Identifier _ iden) chan) = do
