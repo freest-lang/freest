@@ -20,6 +20,9 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , empty
+  , ParsedConsDeclList, ParsedDataDeclList, ParsedTypeDeclList
+  , KindedConsDeclList, KindedDataDeclList, KindedTypeDeclList
+  , TypedConsDeclList, TypedDataDeclList, TypedTypeDeclList
   )
 where
 
@@ -29,7 +32,18 @@ import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 
 import           Data.List (intercalate)
-import           Data.Maybe (fromMaybe)
+
+type ParsedConsDeclList = ConsDeclList Parsed
+type KindedConsDeclList = ConsDeclList Kinded
+type TypedConsDeclList = ConsDeclList Typed
+
+type ParsedDataDeclList = DataDeclList Parsed
+type KindedDataDeclList = DataDeclList Kinded
+type TypedDataDeclList = DataDeclList Typed
+
+type ParsedTypeDeclList = TypeDeclList Parsed
+type KindedTypeDeclList = TypeDeclList Kinded
+type TypedTypeDeclList = TypeDeclList Typed
 
 -- Datatype constructor declaration list, e.g.,
 --   Leaf | Node (Tree a) a (Tree a)
