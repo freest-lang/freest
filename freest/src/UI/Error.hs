@@ -32,52 +32,52 @@ import Data.List qualified as List
 import Data.Char qualified as Char
 
 -- | The errors that can be found in a FreeST program.
-data Error
-  = ArrowMultMismatch Span (Either Variable E.Exp) Int
+data Error x
+  = ArrowMultMismatch Span (Either Variable (E.Exp x)) Int
     K.Multiplicity K.Multiplicity
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
-  | ExpectsTooManyArgs Span (Either Variable E.Exp) T.Type Int Int
+  | ExpectsTooManyArgs Span (Either Variable (E.Exp x)) (T.Type x) Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span String T.Type
-  | GivenTooManyArgs Span E.Exp T.Type Int Int
-  | GivenTooManyArgsK Span T.Type K.Kind Int Int
-  | IllegalChoice Span Identifier T.Type
-  | KindMismatch Span K.Kind T.Type K.Kind
+  | ExposeError Span String (T.Type x)
+  | GivenTooManyArgs Span (E.Exp x) (T.Type x) Int Int
+  | GivenTooManyArgsK Span (T.Type x) K.Kind Int Int
+  | IllegalChoice Span Identifier (T.Type x)
+  | KindMismatch Span K.Kind (T.Type x) K.Kind
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) T.Type (Either Variable E.Exp)
-  | LinNotConsumedEvenly Span (Either Variable Identifier) T.Type 
-    (Either (Either Variable E.Pat) E.Exp)
-  | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
+  | LinConsumedInUnFun Span (Either Variable Identifier) (T.Type x) (Either Variable (E.Exp x))
+  | LinNotConsumedEvenly Span (Either Variable Identifier) (T.Type x) 
+    (Either (Either Variable (E.Pat x)) (E.Exp x))
+  | LinVarAtEndOfScope Span (Either Variable Identifier) (T.Type x)
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
   | MultipleKindSigs Span [Identifier]
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
-  | NonLinPat Span E.Pat T.Type
+  | NonLinPat Span (E.Pat x) (T.Type x)
   | ParseError Span (Token, [String])
   | PartiallyAppliedSelect Span Identifier
-  | PrekindMismatch Span K.Prekind T.Type K.Kind
-  | ProperKindMismatch Span T.Type K.Kind
+  | PrekindMismatch Span K.Prekind (T.Type x) K.Kind
+  | ProperKindMismatch Span (T.Type x) K.Kind
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
-  | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
-  | TypeMismatchChoice Span T.Type Identifier E.Pat
-  | TypeMismatchSelect Span T.Type Identifier E.Exp
-  | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
+  | TypeMismatch Span (T.Type x) (T.Type x) (Either (E.Exp x) (E.Pat x))
+  | TypeMismatchList Span (T.Type x) (Either (E.Exp x) (E.Pat x))
+  | TypeMismatchChoice Span (T.Type x) Identifier (E.Pat x)
+  | TypeMismatchSelect Span (T.Type x) Identifier (E.Exp x)
+  | TypeMismatchTuple Span Int (T.Type x) (Either (E.Exp x) (E.Pat x))
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type)
-  | UnexpectedParam Span Int (Either Variable E.Exp) (Level T.Type K.Kind)
-    (Level E.Pat Variable) 
+  | UnexpectedArg Span Int (Level (Maybe (T.Type x)) K.Kind) (Level (E.Exp x) (T.Type x))
+  | UnexpectedParam Span Int (Either Variable (E.Exp x)) (Level (T.Type x) K.Kind)
+    (Level (E.Pat x) Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
 
 -- | Errors can be tracked to the source code.
-instance Located Error where
+instance Located (Error x) where
   -- | Returns the span of an 'Error', i.e., where the error occurs in the
   -- source code.
   getSpan = \case
@@ -192,7 +192,7 @@ prettyKind = \case
       K.Channel -> " channel"
       K.VarPK ψ -> " prekind variable " ++ external ψ
 
-toMessage :: Source -> Error -> String
+toMessage :: Source -> (Error x) -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m m' -> makeError src s
     ("Expected " ++ showMult m ++ " function, but got " ++ showMult m'
@@ -388,8 +388,8 @@ toMessage src = \case
       K.Channel -> "channel type"
       K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
 
-showErrors :: Source -> [Error] -> String
+showErrors :: Source -> [Error x] -> String
 showErrors src = intercalate "\n" . map (toMessage src)
 
-printErrors :: Source -> [Error] -> IO ()
+printErrors :: Source -> [Error x] -> IO ()
 printErrors src es = putStrLn $ showErrors src es
