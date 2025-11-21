@@ -23,6 +23,7 @@ module Syntax.Module
   , ParsedConsDeclList, ParsedDataDeclList, ParsedTypeDeclList
   , KindedConsDeclList, KindedDataDeclList, KindedTypeDeclList
   , TypedConsDeclList, TypedDataDeclList, TypedTypeDeclList
+  , ParsedModule, KindedModule, TypedModule
   )
 where
 
@@ -44,6 +45,10 @@ type TypedDataDeclList = DataDeclList Typed
 type ParsedTypeDeclList = TypeDeclList Parsed
 type KindedTypeDeclList = TypeDeclList Kinded
 type TypedTypeDeclList = TypeDeclList Typed
+
+type ParsedModule = Module Parsed
+type KindedModule = Module Kinded
+type TypedModule = Module Typed
 
 -- Datatype constructor declaration list, e.g.,
 --   Leaf | Node (Tree a) a (Tree a)
