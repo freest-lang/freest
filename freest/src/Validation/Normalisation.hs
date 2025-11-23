@@ -27,17 +27,17 @@ import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Debug.Trace
 
-type Visited = S.Set T.Type
+type Visited x = S.Set (T.Type x)
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: TypeDeclMap -> T.Type -> T.Type
+normalise :: Ord (T.XType x) => TypeDeclMap x -> T.Type x -> T.Type x
 normalise td = norm S.empty
   where
-    norm :: Visited -> T.Type -> T.Type
+--    norm :: Visited x -> T.Type x -> T.Type x
     norm visited t
       | isWhnf t = t
-      | reappears = T.Void (getSpan t) (K.lt $ getSpan t)
+      | reappears = T.Void (getSpan t) (T.getExt t) (K.lt $ getSpan t)
       | otherwise = {- trace ("Norm " ++ show t) $ -} norm insert (reduce td t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
@@ -45,77 +45,77 @@ normalise td = norm S.empty
         insert    = maybe visited (`S.insert` visited) u
 
 -- | Extract the applied @type@ name at the head of a type, if any.
-tNameRedex :: T.Type -> Maybe T.Type
+tNameRedex :: T.Type x -> Maybe (T.Type x)
 tNameRedex = \case 
   t@T.AppTName{}                               -> Just t -- µ∗U
-  (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
-  (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
-  (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
+  (T.AppSemi _ _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
+  (T.AppDual _ _ _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
+  (T.AppSemi _ _ (T.AppDual _ _ _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
 -- | Is a given type a weak head normal form?
-isWhnf :: T.Type -> Bool
+isWhnf :: T.Type x -> Bool
 isWhnf = \case
   -- W-Const0
   t | T.isConstant t -> True
   -- W-Const1
-  T.App _ t _
+  T.App _ _ t _
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t) -> True
   -- W-Seq1 _ does not apply, presently; semicolon must be fully applied
-  T.App _ T.Semi{} [_] -> True
+  T.App _ _ T.Semi{} [_] -> True
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
+  T.AppSemi _ _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t) -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Abs
   T.Abs{} -> True
   -- W-Dual
-  T.AppDual _ T.Var{} -> True
+  T.AppDual _ _ _ T.Var{} -> True
   _ -> False
 
 -- | One step type reduction (requires @not (isWhnf t)@?)
-reduce :: TypeDeclMap -> T.Type -> T.Type
+reduce :: TypeDeclMap x -> T.Type x -> T.Type x
 reduce td = \case
   -- 1. Semicolon
   -- R-Neut
-  T.AppSemi _ T.Skip{} t -> t
+  T.AppSemi _ _ T.Skip{} t -> t
   -- R-Assoc (must come before R.SemiL)
-  T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
+  T.AppSemi s1 x1 (T.AppSemi s2 x2 t1 t2) t3 -> T.AppSemi s1 x1 t1 (T.AppSemi s2 x2 t2 t3)
   -- R-Dist (must come before R.SemiL)
-  T.AppSemi _ (T.App s t@T.Choice{} us) v -> T.App s t (map (\u -> T.AppSemi (getSpan u) u v) us)
+  T.AppSemi _ x1 (T.App s x2 t@T.Choice{} us) v -> T.App s x2 t (map (\u -> T.AppSemi (getSpan u) x1 u v) us)
   -- R-SemiL
-  T.AppSemi s t u -> T.AppSemi s (reduce td t) u
+  T.AppSemi s x t u -> T.AppSemi s  x(reduce td t) u
   -- 2. Duality
   -- R-DSkip
-  T.AppDual _ t@T.Skip{} -> t
+  T.AppDual _ _ _ t@T.Skip{} -> t
   -- R-DEnd
-  T.AppDual _ t@T.End{} -> T.dual t
+  T.AppDual _ _ _ t@T.End{} -> T.dual t
   -- R-DVoid
-  T.AppDual _ t@T.Void{} -> t
+  T.AppDual _ _ _ t@T.Void{} -> t
   -- R-DMsg
-  T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
+  T.AppDual _ x _ (T.App s _ u@T.Message{} ts) -> T.App s x (T.dual u) ts
   -- R-DChoice
-  T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
-  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
+  T.AppDual s _ _ u@T.Choice{} -> T.dual u -- for *& and *+
+  T.AppDual s x1 x2 (T.App _ x3 u@T.Choice{} ts) ->  T.App s x3 (T.dual u) (map (T.AppDual s x1 x2) ts)
   -- R-DQuant
-  T.AppDual s1 (T.AppQuant s2 p aks t) -> T.AppQuant s1 (T.dual p) aks (T.AppDual s2 t)
+  T.AppDual s1 x1 _ (T.AppQuant s2 x3 p aks t) -> T.AppQuant s1 x3 (T.dual p) aks (T.AppDual s2 x1 x3 t)
   -- -- R-DDual
-  T.AppDual _ (T.AppDual _ t) -> t
+  T.AppDual _ _ _ (T.AppDual _ _ _ t) -> t
   -- R-DDVar - redundant in face of the above; alone seems not enough (normalisation diverges)
   -- T.AppDual s (T.AppDual _ t@T.AppVar{}) -> t
   -- R-DSemi
-  T.AppDual s1 (T.AppSemi s2 t1 t2) -> T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
+  T.AppDual s1 x1 x2 (T.AppSemi s2 _ t1 t2) -> T.AppSemi s1 x1 (T.AppDual s1 x1 x2 t1) (T.AppDual s2 x1 x2 t2)
   -- R-DCtx
-  T.AppDual s t -> T.AppDual s (reduce td t)
+  T.AppDual s x1 x2 t -> T.AppDual s x1 x2 (reduce td t)
   -- 3. R-μ + R-β + TAppL
   -- Q: What if as and ts are of different lengths?
   -- A: In that case, subsAll considers only the shortest between as and ts
-  T.AppTName s name ts -> case td M.!? name of
-    Just (T.Abs _ (map fst -> as) u) -> subsAll as ts u
+  T.AppTName s _ _ name ts -> case td M.!? name of
+    Just (T.Abs _ _ (map fst -> as) u) -> subsAll as ts u
     Just u -> u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts
   -- R-TAppL
-  T.App s t ts -> T.App s (reduce td t) ts
+  T.App s x t ts -> T.App s x (reduce td t) ts
   -- This last rule must be restricted if we don't want the proviso "Requires:
   -- not (isWhnf t)". Below are only a couple of cases
   -- T.App s t ts | not (T.isDName t || T.isMsg t) -> T.App s (reduce td t) ts

@@ -25,14 +25,14 @@ import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 
 -- | Rename a type.
-rename :: TypeDeclMap -> T.Type -> T.Type
+rename :: TypeDeclMap x -> T.Type x -> T.Type x
 rename td = \case
   t | T.isConstant t -> t
   t@T.Var{} -> t
   t@T.TName{} -> t
-  T.App s t us -> T.App s (rename td t) (map (rename td) us)
-  T.Abs s (unzip -> (as, ks)) t -> 
-    T.Abs s (zip bs ks) (rename td (subsAll as (map T.fromVariable bs) t))
+  T.App s x t us -> T.App s x (rename td t) (map (rename td) us)
+  T.Abs s x (unzip -> (as, ks)) t -> 
+    T.Abs s x (zip bs ks) (rename td (subsAll as (map (T.fromVariable x) bs) t))
     where 
       reach = reachable td t
       bs = foldr (\a bs' -> if a `elem` reach then 
@@ -42,32 +42,32 @@ rename td = \case
                  [] as
 
 -- | The set of free variables reachable in a type.
-reachable :: TypeDeclMap -> T.Type -> S.Set Variable
+reachable :: TypeDeclMap x -> T.Type x -> S.Set Variable
 reachable td = \case
   t | T.isConstant t -> S.empty
   T.TName{} -> S.empty
-  T.Var _ a -> S.singleton a
-  T.Abs _ (map fst -> as) t -> reachable td t S.\\ S.fromList as
-  T.AppSemi _ t u | isAbsorbing td t -> reachable td t
+  T.Var _ _ a -> S.singleton a
+  T.Abs _ _ (map fst -> as) t -> reachable td t S.\\ S.fromList as
+  T.AppSemi _ _ t u | isAbsorbing td t -> reachable td t
                   | otherwise -> reachable td t `S.union` reachable td u
-  T.App _ t us -> S.unions (map (reachable td) (t:us))
+  T.App _ _ t us -> S.unions (map (reachable td) (t:us))
 
 -- | Is a type absorbing?
-isAbsorbing :: TypeDeclMap -> T.Type -> Bool
+isAbsorbing :: TypeDeclMap x -> T.Type x -> Bool
 isAbsorbing td = absorb S.empty
   where
-    absorb :: S.Set Identifier -> T.Type -> Bool
+    absorb :: S.Set Identifier -> T.Type x -> Bool
     absorb v = \case
       T.End{} -> True
       T.Void{} -> True
       T.SharedChoice{} -> True -- Unrestricted choice
-      T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
-      T.AppSemi _ t u -> absorb v t || absorb v u
-      T.App _ T.Choice{} ts -> all (absorb v) ts
-      T.AppDual _ t -> absorb v t
-      T.AppTName _ id ts -> id `S.member` v || case td M.!? id of
-        Just (T.Abs _ _ u) -> absorb (S.insert id v) u
+      T.AppMessage _ _ _ K.Un _ _ -> True -- Unrestricted message
+      T.AppSemi _ _ t u -> absorb v t || absorb v u
+      T.App _ _ T.Choice{} ts -> all (absorb v) ts
+      T.AppDual _ _ _ t -> absorb v t
+      T.AppTName _ _ _ id ts -> id `S.member` v || case td M.!? id of
+        Just (T.Abs _ _ _ u) -> absorb (S.insert id v) u
         Just u  -> absorb (S.insert id v) u
         Nothing -> internalError $ "isAbsorbing: " ++ show id ++ " name not in type declaration map, when applied to " ++ show ts
-      T.AppQuant _ _ _ t -> absorb v t
+      T.AppQuant _ _ _ _ t -> absorb v t
       _ -> False

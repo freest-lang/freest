@@ -26,46 +26,46 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 
 -- | The set of free variables ocurring in a type.
-freeVars :: T.Type -> Set.Set Variable
+freeVars :: T.Type x -> Set.Set Variable
 freeVars = \case
-    T.Abs _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
-    T.Var _ a     -> Set.singleton a
-    T.App _ t ts  -> Set.unions (freeVars t : map freeVars ts)
+    T.Abs _ _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
+    T.Var _ _ a     -> Set.singleton a
+    T.App _ _ t ts  -> Set.unions (freeVars t : map freeVars ts)
     _             -> Set.empty
 
 -- | The set of all variables ocurring in a type.
-allVars :: T.Type -> Set.Set Variable
+allVars :: T.Type x -> Set.Set Variable
 allVars = \case 
-    T.Abs _ aks t -> allVars t
-    T.Var _ a     -> Set.singleton a
-    T.App _ t ts  -> Set.unions (allVars t : map allVars ts)
+    T.Abs _ _ aks t -> allVars t
+    T.Var _ _ a     -> Set.singleton a
+    T.App _ _ t ts  -> Set.unions (allVars t : map allVars ts)
     _             -> Set.empty
 
 -- | Type substitution. Substitutes ocurrences of a variable in a type for 
 -- another type (usually written @[a -> u] t@).
-subs :: Variable -> T.Type -> T.Type -> T.Type
+subs :: Variable -> T.Type x -> T.Type x -> T.Type x
 subs a u = \case 
   -- Variables
-  t@(T.Var _ b)
+  t@(T.Var _ _ b)
     | b == a    -> u
     | otherwise -> t
   -- Abstractions (can we do this more elegantly?)
-  (T.Abs s [] t') -> T.Abs s [] (subs a u t')
-  t@(T.Abs s ((b,k):bks) t')
+  (T.Abs s x [] t') -> T.Abs s x [] (subs a u t')
+  t@(T.Abs s x ((b,k):bks) t')
       | b == a -> t
       | b `Set.member` fvu ->
         let b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
-            T.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') b') (T.Abs s bks t'))
-        in T.Abs s ((b',k):bks') t''
+            T.Abs _ _ bks' t'' = subs a u (subs b (T.Var (getSpan b') x b') (T.Abs s x bks t')) -- TODO: BA - check
+        in T.Abs s x ((b',k):bks') t''
       | otherwise ->
-        let T.Abs _ bks' t'' = subs a u (T.Abs s bks t')
-        in T.Abs s ((b,k):bks') t''
+        let T.Abs _ _ bks' t'' = subs a u (T.Abs s x bks t')
+        in T.Abs s x ((b,k):bks') t''
     where  fvu = freeVars u
   -- Applications
-  T.App s f ts -> T.App s (subs a u f) (fmap (subs a u) ts)
+  T.App s x f ts -> T.App s x (subs a u f) (fmap (subs a u) ts)
   t -> t
 
 -- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
 -- between @as@ and @us@.
-subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
+subsAll :: [Variable] -> [T.Type x] -> T.Type x -> T.Type x
 subsAll as us t = foldr (uncurry subs) t (zip as us)

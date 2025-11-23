@@ -3,42 +3,39 @@ module Validation.Base
 where
 
 import Syntax.Base
-import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
 import UI.Error
-import Validation.Substitution ( subs )
 
-import Control.Monad.State ( State, MonadState, modify, gets, foldM, runState )
+import Control.Monad.State ( State, gets, runState )
 import Data.Map.Strict qualified as Map
-import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
-import Data.List.NonEmpty qualified as NE
+
 
 -- | Maps @type@ names to their declarations.
-type TypeDeclMap = Map.Map Identifier T.Type
+type TypeDeclMap x = Map.Map Identifier (T.Type x)
 
 -- | Maps @data@ names to their declarations.
-type DataDeclMap = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclMap)
+type DataDeclMap x = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclMap x)
 
 -- | Maps @data@ constructor names to their declarations.
-type ConsDeclMap = Map.Map Identifier [T.Type]
+type ConsDeclMap x = Map.Map Identifier [T.Type x]
 
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
-data ValidationState
+data ValidationState x
   = ValidationState
-    { errors    :: [Error]
+    { errors    :: [Error x]
     , kindSigs  :: Map.Map Identifier K.Kind
-    , typeDecls :: TypeDeclMap
-    , dataDecls :: DataDeclMap
-    , consDecls :: Map.Map Identifier (Identifier, [(Variable, K.Kind)], [T.Type])
+    , typeDecls :: TypeDeclMap x
+    , dataDecls :: DataDeclMap x 
+    , consDecls :: Map.Map Identifier (Identifier, [(Variable, K.Kind)], [T.Type x])
     }
 
 -- | The empty validation state. No errors or declarations.
-emptyValidationState :: ValidationState
+emptyValidationState :: ValidationState x
 emptyValidationState = ValidationState 
   { errors    = []
   , kindSigs  = Map.empty
@@ -49,7 +46,7 @@ emptyValidationState = ValidationState
 
 -- | Build an initial validation state from a module, storing its declarations
 -- for easy lookup. The resulting state contains no errors.
-buildValidationState :: M.Module -> ValidationState
+buildValidationState :: M.Module x -> ValidationState x
 buildValidationState m = ValidationState -- TODO: traverse module once.
   { errors    = []
   , kindSigs  = Map.fromList (concatMap (\(is, k) -> map (, k) is) $ M.kindSigs m)
@@ -60,13 +57,13 @@ buildValidationState m = ValidationState -- TODO: traverse module once.
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
 -- type 'ValidationState'.
-type Validation = ExceptT Error (State ValidationState)
+type Validation x = ExceptT (Error x) (State (ValidationState x))
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 
 --     * a list of errors, if any was encountered;
 --     * the result of the validation procedure, otherwise.
-runValidation :: ValidationState -> Validation t -> Either [Error] t
+runValidation :: ValidationState x -> Validation x t -> Either [Error x] t
 runValidation s v =
   let (x, ValidationState{errors}) = runState (runExceptT v) s
   in case x of
@@ -75,7 +72,7 @@ runValidation s v =
              | otherwise   -> Left errors
 
 -- | Look up the kind of a @type@ or @data@ name in the validation state.
-lookupKind :: Identifier -> Validation K.Kind
+lookupKind :: Identifier -> Validation x K.Kind
 lookupKind i = do 
   ctx <- gets kindSigs
   case ctx Map.!? i of
