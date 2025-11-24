@@ -308,7 +308,7 @@ eval (global, local) (E.App _ exp levels) = do
 
     -- application of select with a channel
     VSelect iden -> do
-      VChan chan <- eval (global, local) $ head args
+      let (VChan chan) = head args
       chan2 <- send (VLabel iden) chan
       return $ VChan chan2
 
