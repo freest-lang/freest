@@ -14,9 +14,7 @@ module Interpreter.Interpreter
 TODO:
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
-- Why do we need initial context in interpret? What's the purpose of builtins? Just to allow evaluation to work while it's not completed?
 - in eval, case E.App, application between a Closure and arguments: only dealing with variable parameters. Need to extend to handle pattern matching, for example.
-- expand initEval, handling order of function evaluation according to dependencies. For mutually dependent functions, how to handle?
 - Missing evaluation for E.App, E.Pack, E.Asc, E.Let, E.Semi, E.Case and E.Select
 -}
 
@@ -70,6 +68,7 @@ instance Show Value where
   show (VHandle _) = "<handle>"
   show (VLabel str) = "<label> string"
   show (VChan _) = "<chan>"
+  show (VSelect _) = "<select>"
 
 showTups :: [Value] -> String
 showTups [val] = show val
@@ -91,8 +90,8 @@ receive c = do
 
 receiveLabel :: ChannelEnd -> IO String
 receiveLabel c = do 
-  val <- C.readChan (fst c)
-  return $ (\(VLabel str) -> str) val
+  VLabel val <- C.readChan (fst c)
+  return val
 
 send :: Value -> ChannelEnd -> IO ChannelEnd
 send v c = do
@@ -287,7 +286,6 @@ eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
 eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
   VIO io -> io
   val -> return val
-
 eval (global, local) (E.App _ exp levels) = do
   -- evaluate left expression
   func <- eval (global, local) exp
@@ -311,6 +309,10 @@ eval (global, local) (E.App _ exp levels) = do
       let (VChan chan) = head args
       chan2 <- send (VLabel iden) chan
       return $ VChan chan2
+
+    -- application of builtins to arguments
+    VBuiltin builtin -> do
+      return $ builtin $ head args
 
 {-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
     _ -> do res <- consumeAllArgs (global, local) left args
