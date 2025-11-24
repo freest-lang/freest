@@ -53,6 +53,7 @@ data Value = VInt Int
            | VLabel String
            | VFork
            | VChan ChannelEnd
+           | VSelect String
 
 instance Show Value where
   show VUnit = "()"
@@ -221,7 +222,7 @@ fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
 
--- Using a simple context for now for simplicity
+-- Using a simple environment for now for simplicity
 -- TODO: change to a hashmap
 type Env = [(String, Value)]
 type GlobalEnv = Env
@@ -286,6 +287,7 @@ eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
 eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
   VIO io -> io
   val -> return val
+
 eval (global, local) (E.App _ exp levels) = do
   -- evaluate left expression
   func <- eval (global, local) exp
@@ -294,6 +296,7 @@ eval (global, local) (E.App _ exp levels) = do
   -- evaluate arguments
   args <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
   case func of
+
     -- application of closure to arguments
     VClosure params exp' env' -> do
       -- extract variable parameters as strings to add to environment
@@ -302,6 +305,13 @@ eval (global, local) (E.App _ exp levels) = do
       let bindings :: Env = zip expParams args
       -- evaluate body of closure under new context
       eval (global, bindings ++ env') exp'
+
+    -- application of select with a channel
+    VSelect iden -> do
+      VChan chan <- eval (global, local) $ head args
+      chan2 <- send (VLabel iden) chan
+      return $ VChan chan2
+
 {-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
     _ -> do res <- consumeAllArgs (global, local) left args
             case res of
@@ -330,10 +340,7 @@ eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
-{- eval ctx (E.Select _ (B.Identifier _ iden) chan) = do
-  VChan chan2 <- eval ctx chan
-  chan3 <- send (VLabel iden) chan2
-  return $ VChan chan3 -}
+eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
 
 -- catch all, used for debugging
 eval _ exp = do
