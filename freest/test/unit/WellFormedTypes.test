@@ -1323,3 +1323,5 @@ where
 case forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
 
 case forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)
+
+case forall (a:*T) (b:1S) . ?a ; b -> (?a ; b, a) : *T
