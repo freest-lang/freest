@@ -16,6 +16,7 @@ TODO:
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
 - in eval, case E.App, application between a Closure and arguments: only dealing with variable parameters. Need to extend to handle pattern matching, for example.
 - Missing evaluation for E.App, E.Pack, E.Asc, E.Let, E.Semi, E.Case and E.Select
+- Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
 import Data.List (find)
@@ -268,16 +269,7 @@ initEnv m =
                    _ -> True)
     (M.definitions m))
 
--- Evaluates expressions, written with Syntax.Expression.Exp.
-{-
-  TODO:
-  1. Eval can fail due to non-existent patterns during pattern marching.
-     Hence return type should Either [IOE.Error] Value.
-
-  Questions:
-  1. What can variables be?
-     Can then be reserved keywords, or that's reserved for cons?
--}
+-- Evaluates expressions Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
 eval _ (E.Int _ n) = return $ VInt n
 eval _ (E.Float _ n) = return $ VFloat n
@@ -312,7 +304,7 @@ eval (global, local) (E.App _ exp levels) = do
 
     -- application of builtins to arguments
     VBuiltin builtin -> do
-      return $ builtin $ head args
+      return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
 
 {-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
     _ -> do res <- consumeAllArgs (global, local) left args
@@ -323,9 +315,12 @@ eval (_, local) (E.Abs _ levels _ exp) =
   -- remove type variable parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
   in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) exp local
+eval (global, local) (E.Pack span types exp) = undefined
+eval (global, local) (E.Asc span exp typ) = undefined
 {- eval (global, local) (E.Let _ letDecls exp) = do
   letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
   eval (global, letDeclsCtx ++ local) exp -}
+eval (global, local) (E.Semi span exp1 exp2) = undefined
 {- eval (global, local) (E.Case _ exp pats) = do
   val <- (eval (global, local) exp)
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
