@@ -37,22 +37,23 @@ import Syntax.Expression ( LetDecl )
 
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
-data Value = VInt Int
-           | VFloat Double
-           | VUnit
-           | VChar Char
-           | VString String
-           | VCons String [Value]
-           -- | VTuple [Value]
-           | VFun [([E.Pat], E.RHS)]
-           | VClosure [E.Pat] E.Exp Env
-           | VBuiltin (Value -> Value)
-           | VIO (IO Value)
-           | VHandle Handle
-           | VLabel String
-           | VFork
-           | VChan ChannelEnd
-           | VSelect String
+data Value
+  = VInt Int
+  | VFloat Double
+  | VUnit
+  | VChar Char
+  | VString String
+  | VCons String [Value]
+  -- | VTuple [Value]
+  | VFun [([E.Pat], E.RHS)]
+  | VClosure [E.Pat] E.Exp Env
+  | VBuiltin (Value -> Value)
+  | VIO (IO Value)
+  | VHandle Handle
+  | VLabel String
+  | VFork
+  | VChan ChannelEnd
+  | VSelect String
 
 instance Show Value where
   show VUnit = "()"
@@ -315,12 +316,12 @@ eval (_, local) (E.Abs _ levels _ exp) =
   -- remove type variable parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
   in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) exp local
-eval (global, local) (E.Pack span types exp) = undefined
-eval (global, local) (E.Asc span exp typ) = undefined
+-- eval (global, local) (E.Pack span types exp) = undefined
+eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
 {- eval (global, local) (E.Let _ letDecls exp) = do
   letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
   eval (global, letDeclsCtx ++ local) exp -}
-eval (global, local) (E.Semi span exp1 exp2) = undefined
+-- eval (global, local) (E.Semi span exp1 exp2) = undefined
 {- eval (global, local) (E.Case _ exp pats) = do
   val <- (eval (global, local) exp)
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
