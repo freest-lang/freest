@@ -318,10 +318,12 @@ eval (_, local) (E.Abs _ levels _ exp) =
   in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) exp local
 -- eval (global, local) (E.Pack span types exp) = undefined
 eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
-{- eval (global, local) (E.Let _ letDecls exp) = do
+eval (global, local) (E.Let _ letDecls exp) = do
   letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
-  eval (global, letDeclsCtx ++ local) exp -}
--- eval (global, local) (E.Semi span exp1 exp2) = undefined
+  eval (global, letDeclsCtx ++ local) exp
+eval (global, local) (E.Semi span exp1 exp2) = do
+  eval (global, local) exp1
+  eval (global, local) exp2
 {- eval (global, local) (E.Case _ exp pats) = do
   val <- (eval (global, local) exp)
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
@@ -401,7 +403,7 @@ consumeAllArgs (global, local) (VFun patExps) args = do
                                             Nothing -> return [])
          whereCtx2 <- whereCtx
          if length pats == length args then eval (global, matched++whereCtx2) exp 
-         else if length pats < length args then do val <- (eval (global, matched++whereCtx2) exp)
+         else if length pats < length args then do val <- eval (global, matched++whereCtx2) exp
                                                    consumeAllArgs (global, matched++whereCtx2) val (drop (length pats) args)
          else return $ VClosure (drop (length args) pats) exp (matched++whereCtx2)
     -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
