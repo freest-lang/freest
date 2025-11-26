@@ -3,7 +3,7 @@ Module      :  TypeEquivalence.AlphaCongruence
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Context-free grammars of a certain kind:
+Simple grammars are context-free grammars where:
 
 - Right-hand sides in productions are composed of (exactly) one terminal,
 followed by a (possibly empty) word (a sequence of non-terminals)
@@ -14,98 +14,85 @@ This allows representing the productions of a grammar by a map from
 non-terminals to a map from terminals to words.
 
 -}
-
-module Language.Simple.Grammar
+module Language.Simple.Grammar 
   ( Terminal
-  , NonTerminal
-  , Word
-  , Transitions
-  , Productions
-  , Grammar(..)
-  , transitions
-  , insertProduction
-  , insertProductions
-  , bottom
---, trans
-  )
+  , Nonterminal
+  , Word, emptyWord
+  , Transitions, emptyTransitions
+  , Productions, emptyProductions
+               , insertProduction
+               , insertProductions
+               , lookupTransitions
+               , nonterminals
+  , HasTransitions(..)
+  , Norm(..), addNorm
+  ) 
 where
 
-import Data.Map.Strict qualified as M
-import Data.List ( intercalate )
-import Prelude hiding ( Word )
+import Prelude hiding (Word)
+
+import Data.Map qualified as Map
+import Data.Maybe qualified as Maybe
+import Data.Set qualified as Set
 
 -- Terminal symbols in the grammar
 type Terminal = String
 
 -- Non-terminal symbols in the grammar
-type NonTerminal = Int
+type Nonterminal = Int
 
 -- Words are strings of non-terminal symbols
-type Word = [NonTerminal]
+type Word = [Nonterminal]
 
--- The transitions from a given non-terminal
-type Transitions = M.Map Terminal Word
+emptyWord :: Word
+emptyWord = []
+
+-- The transitions from a given non-terminal in the grammar
+type Transitions = Map.Map Terminal Word
+
+emptyTransitions :: Transitions
+emptyTransitions = Map.empty
 
 -- The productions of a grammar
-type Productions = M.Map NonTerminal Transitions
+type Productions = Map.Map Nonterminal Transitions
 
--- The grammar, we have one initial word for each type that we convert together
-data Grammar = Grammar [Word] Productions
+emptyProductions :: Productions
+emptyProductions = Map.empty
 
--- Operations on grammars
+-- Add a production to the grammar
+insertProduction :: Nonterminal -> Terminal -> Word -> Productions -> Productions
+insertProduction x a w = Map.insertWith Map.union x (Map.singleton a w)
 
-class TransitionsFrom t where
-  transitions :: t -> Productions -> Transitions
-
--- The transitions from a non-terminal
-instance TransitionsFrom NonTerminal where
-  transitions = M.findWithDefault M.empty
-
--- The transitions from a word
-instance TransitionsFrom Word where
-  transitions []       _ = M.empty
-  transitions (x : xs) p = M.map (++ xs) (transitions x p)
-
--- Add a production X -> aw; the productions may already contain transitions for
--- the given nonterminal (hence the insertWith and union)
-insertProduction :: NonTerminal -> Terminal -> Word -> Productions -> Productions
-insertProduction x a w = M.insertWith M.union x (M.singleton a w)
-
-insertProductions :: [(NonTerminal, Terminal, Word)]-> Productions -> Productions
+-- Add productions to the grammar
+insertProductions :: [(Nonterminal, Terminal, Word)]-> Productions -> Productions
 insertProductions xs p =
   foldr (\(x, a, w) p -> insertProduction x a w p) p xs
 
+lookupTransitions :: Nonterminal -> Productions -> Transitions
+lookupTransitions x ps =
+  Maybe.fromMaybe Map.empty (ps Map.!? x)
+
+nonterminals :: Productions -> Set.Set Nonterminal
+nonterminals ps = Set.union (Map.keysSet ps) (Set.fromList $ concat $ concatMap Map.elems $ Map.elems ps)
+
+class HasTransitions t where
+  transitions :: t -> Productions -> Transitions
+
+-- The transitions from a non-terminal
+instance HasTransitions Nonterminal where
+  transitions = Map.findWithDefault Map.empty
+
 -- The transitions from a word
--- trans :: Productions -> Word -> [Word]
--- trans p xs = M.elems (transitions xs p)
+instance HasTransitions Word where
+  transitions []       _ = Map.empty
+  transitions (x : xs) p = Map.map (++ xs) (transitions x p)
 
--- "⊥" - A nonterminal without transitions (up to clients to keep the invariant)
-bottom :: NonTerminal
-bottom = 0
-
--- Showing a grammar
-
-instance Show Grammar where
-  show (Grammar xss p) =
-    "Start words: (" ++ intercalate ", " (map showWord xss) ++
-    ")\nProductions (" ++ show nProds ++ " in total): " ++ showProductions p
-    where nProds = M.foldr' (\t n -> M.size t + n) 0 p
-
--- Cannot be a flexible instance for there is an instance Show Map in module Map
-showProductions :: Productions -> String
-showProductions = M.foldrWithKey showTransitions ""
-  where
-    showTransitions :: NonTerminal -> Transitions -> String -> String
-    showTransitions x m s = s ++ M.foldrWithKey (showTransition x) "" m
-
-    showTransition :: NonTerminal -> Terminal -> Word -> String -> String
-    showTransition x l xs s =
-      s ++ "\n" ++ showNonTerminal x ++ " -> (" ++ l ++ ") " ++ showWord xs
-
-showWord :: Word -> String
-showWord w = intercalate " " (map showNonTerminal w)
-
--- Cannot be a flexible instance for there is an instance Show Int in the Prelude
-showNonTerminal :: NonTerminal -> String
-showNonTerminal 0 = "⊥"
-showNonTerminal n = 'Y' : show n
+-- | The norm of a word is the length @n@ of the shortest sequence of 
+-- transitions from that word to the empty word, represented as @Normed n@.
+-- If no such sequence exists, the word is said to be unnormed and its norm
+-- is represented as @Unnormed@.
+data Norm = Normed Int | Unnormed
+  deriving (Eq, Ord, Show)
+  
+Normed n `addNorm` Normed m = Normed (n + m)
+_        `addNorm` _        = Unnormed

@@ -4,7 +4,7 @@ import Syntax.Module qualified as M
 import UI.Error ( showErrors )
 import Validation.Base ( buildValidationState )
 import Validation.Kinding ( runCheck )
-import Validation.TypeEquivalence ( fromType )
+import Validation.TypeEquivalence ( fromTypes, showGrammar )
 import UnitSpecUtils ( mkEquivalenceSpec )
 import Language.Simple.Bisimulation ( bisimilar )
 
@@ -22,7 +22,7 @@ spec = mkEquivalenceSpec
   \src (t, u, k, m) -> case runCheck m t k >> runCheck m u k of
     Left es -> expectationFailure (showErrors src es)
     _       ->
-      trace ("\n" ++ show grammar)
+      trace ("\n" ++ showGrammar g)
       -- trace ("\n" ++ show t ++ " vs. " ++ show u)
-      bisimilar grammar  `shouldBe` True
-      where grammar = fromType (buildValidationState m) [t, u]
+      bisimilar ps xs ys `shouldBe` True
+      where g@([xs, ys], ps) = fromTypes (buildValidationState m) [t, u]

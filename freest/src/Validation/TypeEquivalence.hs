@@ -9,7 +9,8 @@ alpha-congruent and, if not, whether they are bisimilar.
 
 module Validation.TypeEquivalence
   ( equivalent
-  , fromType
+  , fromTypes
+  , showGrammar
   )
 where
 
@@ -26,6 +27,7 @@ import Utils ( internalError )
 import Language.Simple.Grammar
 import Language.Simple.Bisimulation ( bisimilar )
 
+import Data.List qualified as List
 import Data.Maybe
 import Control.Monad.State
 import Data.Map.Strict qualified as Map
@@ -34,16 +36,20 @@ import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
 equivalent :: ValidationState -> T.Type -> T.Type -> Bool
-equivalent vs t u =
-  t == u ||
-  bisimilar (fromType vs [t, u])
+equivalent vs t u = t == u || bisimilar ps xs ys
+  where ([xs, ys], ps) = fromTypes vs [t, u]
 
-fromType :: ValidationState -> [T.Type] -> Grammar
-fromType vs ts =
+fromTypes :: ValidationState -> [T.Type] -> ([Word], Productions)
+fromTypes vs ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
-  --        "\n"++show (Grammar w (productions s))) $
-  Grammar w (productions s)
-  where (w, s) = runState (mapM (word Set.empty Map.empty) ts) (initial vs)
+  --        "\n"++showGrammar (xss, productions s)) $
+  (xss, productions s)
+  where 
+    (xss, s) = runState (mapM (word Set.empty Map.empty) ts) (initial vs)
+
+-- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
+bottom :: Nonterminal
+bottom = 0
 
 word :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
 word set ctx t = wasVisited t >>= \case
@@ -55,18 +61,18 @@ word' set ctx = \case
   -- Skip
   T.Skip{} -> pure []
   -- End
-  t@T.End{} -> getNonTerminal $ Map.singleton (show t) [bottom]
+  t@T.End{} -> getNonterminal $ Map.singleton (show t) [bottom]
   -- Void
-  t@T.Void{} -> getNonTerminal $ Map.singleton (show t) [bottom]
+  t@T.Void{} -> getNonterminal $ Map.singleton (show t) [bottom]
   -- Int, Float, Char, Variant types
-  t@T.Int{} -> getNonTerminal $ Map.singleton (show t) []
-  t@T.Float{} -> getNonTerminal $ Map.singleton (show t) []
-  t@T.Char{} -> getNonTerminal $ Map.singleton (show t) []
-  t@T.DName{} -> getNonTerminal $ Map.singleton (show t) []
+  t@T.Int{} -> getNonterminal $ Map.singleton (show t) []
+  t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
+  t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
+  t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
   -- #T
   T.AppMessage _ m p u -> do
     w <- word set ctx u
-    getNonTerminal $ Map.fromList [
+    getNonterminal $ Map.fromList [
       (show m ++ show p ++ "_1", w ++ [bottom]),
       (show m ++ show p ++ "_2", [bottom | m /= K.Lin])]
   -- T ; U
@@ -77,30 +83,30 @@ word' set ctx = \case
   -- Dual α
   T.AppDual s T.Var{} -> do
     let label = show $ T.Dual s
-    getNonTerminal $ Map.singleton (label ++ "_2") []
+    getNonterminal $ Map.singleton (label ++ "_2") []
   -- Dual (α T1 ··· Tm) , m >= 1
   T.AppDual s t@(T.App _ (T.Var{}) _) -> do
     w <- word set ctx t
     let label = show $ T.Dual s
-    getNonTerminal $ Map.fromList [
+    getNonterminal $ Map.fromList [
       (label ++ "_1", w),
       (label ++ "_2", [])]
   -- *+{} and *&{}
-  t@(T.Choice _ K.Un _ _) -> getNonTerminal $ Map.singleton (show t) [bottom]
+  t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- ι T1···Tm with ι being ->, ∀, ∃, variants and choices
   t@(T.App s u vs) | isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
     let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
-    getNonTerminal $ Map.fromList (zip terminals words)
+    getNonterminal $ Map.fromList (zip terminals words)
   -- α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
     ws <- mapM (word set ctx) us
     let words = [] : ws
-    let terminals = (map (\n -> varTerminal a ++ "_" ++ show n) [0..])
-    getNonTerminal $ Map.fromList (zip terminals words)
+    let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
+    getNonterminal $ Map.fromList (zip terminals words)
   -- μ-redex
   t | isJust (tNameRedex t) -> do
-    y <- nextNonTerminal
+    y <- nextNonterminal
     addVisited t y
     vs <- gets validationState
     let u = normalise vs t
@@ -108,7 +114,7 @@ word' set ctx = \case
       -- t normalises to Skip
       T.Skip{} -> pure []
       -- t normalises to a type other than Skip
-      _ -> do 
+      _ -> do
         ~(z:δ) <- word set ctx u
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
@@ -127,7 +133,7 @@ word' set ctx = \case
         let ctx' = Map.insert a k ctx
         w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
         let label = "λ" ++ show a ++ ":" ++ show k
-        getNonTerminal $ Map.singleton label w
+        getNonterminal $ Map.singleton label w
       Right _ -> do
         -- t reduces
         td <- getTypeDecls
@@ -157,7 +163,7 @@ varTerminal α = "α" ++ show (internal α)
 
 -- The state of the translation to grammar procedure
 
-type Visited = Map.Map T.Type NonTerminal
+type Visited = Map.Map T.Type Nonterminal
 
 data TState = TState
   { productions :: Productions
@@ -169,25 +175,25 @@ data TState = TState
 initial :: ValidationState -> TState
 initial vs = TState
   { productions = Map.empty
-  , nextIndex = 1 -- 0 is for bottom
+  , nextIndex = succ bottom -- 0 is for bottom
   , visited = Map.empty
   , validationState = vs
   }
 
 type TransState = State TState
 
-nextNonTerminal :: TransState NonTerminal
-nextNonTerminal = do
+nextNonterminal :: TransState Nonterminal
+nextNonterminal = do
   n <- gets nextIndex
   modify $ \s -> s { nextIndex = n + 1 }
   pure n
 
-wasVisited :: T.Type -> TransState (Maybe NonTerminal)
+wasVisited :: T.Type -> TransState (Maybe Nonterminal)
 wasVisited t = do
   v <- gets visited
   pure $ v Map.!? t
 
-addVisited :: T.Type -> NonTerminal -> TransState ()
+addVisited :: T.Type -> Nonterminal -> TransState ()
 addVisited t y = do
   v <- gets visited
   -- trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
@@ -199,29 +205,29 @@ getTypeDecls = do
   pure (typeDecls vs)
 
 -- TODO: Add only if needed
-addProduction :: NonTerminal -> Terminal -> Word -> TransState ()
+addProduction :: Nonterminal -> Terminal -> Word -> TransState ()
 addProduction x a w =
   modify $ \s -> s { productions = insertProduction x a w (productions s) }
 
-addProductions :: NonTerminal -> Transitions -> TransState ()
+addProductions :: Nonterminal -> Transitions -> TransState ()
 addProductions x m =
   modify $ \s -> s { productions = Map.insert x m (productions s) }
 
-getTransitions :: NonTerminal -> TransState Transitions
+getTransitions :: Nonterminal -> TransState Transitions
 getTransitions x = do
   p <- gets productions
   case p Map.!? x of
-    Just transitions -> pure $ transitions
+    Just transitions -> pure transitions
     Nothing -> internalError $ "TypeEquivalence.getTransitions: nonterminal " ++ show x ++ " not in map " ++ show p
 
 -- | Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS.
-getNonTerminal :: Transitions -> TransState Word
-getNonTerminal ts = do
+getNonterminal :: Transitions -> TransState Word
+getNonterminal ts = do
   ps <- gets productions
   case reverseLookup ts ps of
     Nothing -> do
-      y <- nextNonTerminal
+      y <- nextNonterminal
       addProductions y ts
       pure [y]
     Just y -> pure [y]
@@ -248,3 +254,27 @@ fatTerminal = \case
   t@T.DName{} -> Just t
   -- Otherwise
   _ -> Nothing
+
+showGrammar :: ([Word], Productions) -> String
+showGrammar (xss, ps) =
+  "Start words: (" ++ List.intercalate ", " (map showWord xss) ++")\n" ++
+  "Productions (" ++ show nProds ++ " in total): " ++ showProductions ps
+    where
+      nProds = Map.foldr' (\t n -> Map.size t + n) 0 ps
+
+      showProductions :: Productions -> String
+      showProductions = Map.foldrWithKey showTransitions ""
+
+      showTransitions :: Nonterminal -> Transitions -> String -> String
+      showTransitions x m s = s ++ Map.foldrWithKey (showTransition x) "" m
+
+      showTransition :: Nonterminal -> Terminal -> Word -> String -> String
+      showTransition x l xs s =
+        s ++ "\n" ++ showNonterminal x ++ " -> (" ++ l ++ ") " ++ showWord xs
+
+      showWord :: Word -> String
+      showWord w = unwords (map showNonterminal w)
+
+      showNonterminal :: Nonterminal -> String
+      showNonterminal 0 = "⊥"
+      showNonterminal n = 'Y' : show n
