@@ -15,7 +15,7 @@ TODO:
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
 - in eval, case E.App, application between a Closure and arguments: only dealing with variable parameters. Need to extend to handle pattern matching, for example.
-- Missing evaluation for E.App, E.Pack, E.Asc, E.Let, E.Semi, E.Case and E.Select
+- Missing evaluation for E.App, E.Pack, E.Let, E.Case
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -357,16 +357,16 @@ envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
 envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 envLookup (global, local) var =
   -- search in local context first
-  case ctxLookup local var of
+  case envLookup' local var of
     Just (_, val) -> val
     -- search in global context after
-    Nothing -> case ctxLookup global var of
+    Nothing -> case envLookup' global var of
       Just (_, val) -> val
       Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
                        " This should not happen. This is a bug in the compiler")
   where
-    ctxLookup :: Env -> B.Variable -> Maybe (String, Value)
-    ctxLookup ctx var = find (\(variable, value) -> B.external var == variable) ctx
+    envLookup' :: Env -> B.Variable -> Maybe (String, Value)
+    envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
 
 -- TODO REMOVE
 -- removes the type arguments (i.e. @Int) from arguments
