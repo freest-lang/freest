@@ -14,7 +14,7 @@ module Interpreter.Interpreter
 TODO:
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
-- Missing evaluation for E.App, E.Pack, E.Let, E.Case
+- Missing evaluation for E.Pack, E.Let, E.Case
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -271,10 +271,18 @@ initEnv m =
                    _ -> True)
     (M.definitions m))
 
+
+{- data Exp
+
+  | If     Span Exp Exp Exp
+  | Channel Span Type
+  | Select Span Identifier -}
+
+
 -- Evaluates expressions Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
-eval _ (E.Int _ n) = return $ VInt n
-eval _ (E.Float _ n) = return $ VFloat n
+eval _ (E.Int _ i) = return $ VInt i
+eval _ (E.Float _ f) = return $ VFloat f
 eval _ (E.Char _ c) = return $ VChar c
 eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
 eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
@@ -292,15 +300,15 @@ eval (_, local) (E.Abs _ levels _ exp) =
   -- remove type variable parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
   in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) exp local
--- eval (global, local) (E.Pack span types exp) = undefined
+eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not implemented"
 eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
-eval (global, local) (E.Let _ letDecls exp) = do
+eval (global, local) (E.Let _ decls exp) = do
+  let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
+  error "Evaluation of E.Lec not implemented" {- do
   letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
-  eval (global, letDeclsCtx ++ local) exp
-eval (global, local) (E.Semi span exp1 exp2) = do
-  eval (global, local) exp1
-  eval (global, local) exp2
-{- eval (global, local) (E.Case _ exp pats) = do
+  eval (global, letDeclsCtx ++ local) exp -}
+eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
+eval (global, local) (E.Case _ exp pats) = error "Evaluation of E.Case not implemented" {- do
   val <- (eval (global, local) exp)
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
   case chooseCase pats val labels of
@@ -317,16 +325,6 @@ eval _ (E.Channel _ _) = do
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
 eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
-
--- catch all, used for debugging
-eval _ exp = do
-  putStrLn $ "Evaluating " ++ show exp
-  return VUnit
--- eval _ (E.String _ str) = return $ VString str
--- [Exp] -> [Value]
--- eval ctx (E.Tuple _ tup) = do
---   vals <- sequence $ map (eval ctx) tup
---   return $ VTuple vals
 
 -- lookup a variable in both local and global context, in that order
 envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
@@ -348,19 +346,19 @@ envLookup (global, local) var =
 handleApplication :: (Env, Env) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
-handleApplication (global, local) (VFun equations) args = undefined
+handleApplication (global, local) (VFun equations) args = error "Evaluation of application between VFun and args not implemented"
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
   -- extract bindings through pattern matching
   let patternMatchRes = zipWithM resolvePatternMatching pats args
   case patternMatchRes of
-          Left _ -> error $ "Pattern matching failed!"
+          Left _ -> error "Pattern matching failed!"
           -- evaluate body of closure under new context
           Right bindings -> eval (global, concat bindings ++ env) body
 -- application of builtins to arguments
 handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-handleApplication (global, local) VFork args = undefined
+handleApplication (global, local) VFork args = error "Evaluation of application between VFork and args not implemented"
 {-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
     _ -> do res <- consumeAllArgs (global, local) left args
             case res of
@@ -398,6 +396,7 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
     VCons iden' vals' -> do
       -- if data constructors match
       if patIden == iden' then do
+        -- TODO: check if arity of data constructors matches number of patters/arguments
         -- get results from pattern matching underlying patterns and terms
         let binding = zipWithM resolvePatternMatching pats vals'
         case binding of
