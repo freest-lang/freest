@@ -14,7 +14,6 @@ module Interpreter.Interpreter
 TODO:
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
-- in eval, case E.App, application between a Closure and arguments: only dealing with variable parameters. Need to extend to handle pattern matching, for example.
 - Missing evaluation for E.App, E.Pack, E.Let, E.Case
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
@@ -24,6 +23,7 @@ import Data.Char (chr, ord)
 import Data.Functor (($>), (<&>), void)
 import System.IO (Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose)
 import Control.Concurrent (forkIO)
+import Control.Monad (zipWithM)
 import qualified Control.Concurrent.Chan as C (Chan, newChan, readChan, writeChan)
 import GHC.Float
 -- for debuging don't forget to remove
@@ -33,9 +33,8 @@ import Debug.Trace
 import qualified Syntax.Module as M
 import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
-import Syntax.Expression ( LetDecl )
 
-type ChannelEnd = (C.Chan Value, C.Chan Value)
+import Syntax.Expression ( LetDecl )
 
 data Value
   = VInt Int
@@ -76,6 +75,14 @@ showTups :: [Value] -> String
 showTups [val] = show val
 showTups (val:vals) = show val ++ ", " ++ showTups vals
 
+-- Using a simple environment for now for simplicity
+-- TODO: change to a hashmap
+type Env = [(String, Value)]
+type GlobalEnv = Env
+type LocalEnv = Env
+
+type ChannelEnd = (C.Chan Value, C.Chan Value)
+
 {- tupToList :: (a,a) -> [a]
 tupToList (x, y) = [x, y] -}
 
@@ -91,7 +98,7 @@ receive c = do
   return (v, c)
 
 receiveLabel :: ChannelEnd -> IO String
-receiveLabel c = do 
+receiveLabel c = do
   VLabel val <- C.readChan (fst c)
   return val
 
@@ -168,7 +175,7 @@ builtins = [
   ("log1pexp", VBuiltin (\(VFloat x) -> VFloat (log1pexp x))),
   ("log1mexp", VBuiltin (\(VFloat x) -> VFloat (log1mexp x))),
   ("fromInteger", VBuiltin (\(VInt x) -> VFloat (fromInteger (toInteger x)))),
-  
+
   ("(&&)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x && fstToHsBool y)))),
   ("(||)", VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x || fstToHsBool y)))),
 
@@ -210,7 +217,7 @@ builtins = [
   ("readFileLine", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hGetLine handle <&> VString)),
   ("isEOF", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hIsEOF handle <&> hsToFstBool)),
   ("closeFile", VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hClose handle $> VUnit)),
-  
+
   ("id", VBuiltin id)]
 
 -- encode boolean value into FreeST's value
@@ -222,12 +229,6 @@ hsToFstBool False = VCons "False" []
 fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
-
--- Using a simple environment for now for simplicity
--- TODO: change to a hashmap
-type Env = [(String, Value)]
-type GlobalEnv = Env
-type LocalEnv = Env
 
 interpret :: M.Module -> IO Value
 interpret m = case getMainFunction m of
@@ -286,32 +287,7 @@ eval (global, local) (E.App _ exp levels) = do
   let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
   -- evaluate arguments
   args <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
-  case func of
-
-    -- application of closure to arguments
-    VClosure params exp' env' -> do
-      -- extract variable parameters as strings to add to environment
-      let expParams = map (\(E.VarPat _ var) -> B.external var) $ filter (\case E.VarPat _ var -> True; _ -> False) params
-      -- bind parameters to arguments
-      let bindings :: Env = zip expParams args
-      -- evaluate body of closure under new context
-      eval (global, bindings ++ env') exp'
-
-    -- application of select with a channel
-    VSelect iden -> do
-      let (VChan chan) = head args
-      chan2 <- send (VLabel iden) chan
-      return $ VChan chan2
-
-    -- application of builtins to arguments
-    VBuiltin builtin -> do
-      return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-
-{-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
-    _ -> do res <- consumeAllArgs (global, local) left args
-            case res of
-              VIO io -> io
-              _ -> return res -}
+  handleApplication (global, local) func args
 eval (_, local) (E.Abs _ levels _ exp) =
   -- remove type variable parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
@@ -368,6 +344,85 @@ envLookup (global, local) var =
     envLookup' :: Env -> B.Variable -> Maybe (String, Value)
     envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
 
+-- evaluate application
+handleApplication :: (Env, Env) -> Value -> [Value] -> IO Value
+handleApplication (global, local) (VCons cons vals) args =
+  return $ VCons cons $ vals ++ args
+handleApplication (global, local) (VFun equations) args = undefined
+-- application of closure to arguments
+handleApplication (global, local) (VClosure pats body env) args = do
+  -- extract bindings through pattern matching
+  let patternMatchRes = zipWithM resolvePatternMatching pats args
+  case patternMatchRes of
+          Left _ -> error $ "Pattern matching failed!"
+          -- evaluate body of closure under new context
+          Right bindings -> eval (global, concat bindings ++ env) body
+-- application of builtins to arguments
+handleApplication (global, local) (VBuiltin builtin) args =
+  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
+handleApplication (global, local) VFork args = undefined
+{-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
+    _ -> do res <- consumeAllArgs (global, local) left args
+            case res of
+              VIO io -> io
+              _ -> return res -}
+handleApplication _ (VSelect label) args =
+  case args of
+    -- application of select with a channel
+    [VChan chan] -> do
+      chan2 <- send (VLabel label) chan
+      return $ VChan chan2
+    -- otherwise
+    _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
+
+-- match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
+resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [(String, Value)]
+resolvePatternMatching (E.IntPat s i) val =
+  case val of
+    VInt i' -> if i == i' then Right [] else Left (E.IntPat s i, val)
+    otherVal -> Left (E.IntPat s i, otherVal)
+resolvePatternMatching (E.FloatPat s f) val =
+  case val of
+    VFloat f' -> if f == f' then Right [] else Left (E.FloatPat s f, val)
+    otherVal -> Left (E.FloatPat s f, otherVal)
+resolvePatternMatching (E.CharPat s c) val =
+  case val of
+    VChar c' -> if c == c' then Right [] else Left (E.CharPat s c, val)
+    otherVal -> Left (E.CharPat s c, otherVal)
+resolvePatternMatching (E.WildPat _ _) _ = Right []
+resolvePatternMatching (E.VarPat _ var) val = Right [(B.external var, val)]
+resolvePatternMatching (E.PackPat _ vars pat) val = undefined
+resolvePatternMatching (E.DConsPat s iden pats) val = do
+  let (B.Identifier s' patIden) = iden
+  case val of
+    VCons iden' vals' -> do
+      -- if data constructors match
+      if patIden == iden' then do
+        -- get results from pattern matching underlying patterns and terms
+        let binding = zipWithM resolvePatternMatching pats vals'
+        case binding of
+          Left _ -> Left (E.DConsPat s iden pats, val)
+          Right bindings -> Right $ concat bindings
+      else Left (E.DConsPat s iden pats, val)
+    {- VChan (c1, c2) -> do
+      if patIden == "(,)" then do
+        -- get results from pattern matching underlying patterns and terms
+        let binding = zipWithM resolvePatternMatching pats [VChan (c1, c2)]
+        case binding of
+          Left _ -> Left (E.DConsPat s iden pats, val)
+          Right bindings -> Right $ concat bindings
+      else Left (E.DConsPat s iden pats, val) -}
+    otherVal -> Left (E.DConsPat s iden pats, val)
+resolvePatternMatching (E.ChoicePat _ iden pat) val = undefined
+resolvePatternMatching (E.AsPat s var pat) val = do
+  let binding = resolvePatternMatching pat val
+  case binding of
+    Left _ -> Left (E.AsPat s var pat, val)
+    Right bindings -> Right $ (B.external var, val) : bindings
+
+
+-- OLD DEFINITIONS
+
 -- TODO REMOVE
 -- removes the type arguments (i.e. @Int) from arguments
 filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
@@ -389,7 +444,7 @@ consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequenc
     if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
     else if length pats < length args then do val <- (eval (global, patternMatching ++ local_ctx ++ local) exp)
                                               consumeAllArgs (global, patternMatching ++ local_ctx ++ local) val (drop (length pats) args)
-    else return $ VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx) 
+    else return $ VClosure (drop (length args) pats) exp (patternMatching ++ local_ctx)
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
   Nothing -> undefined
 consumeAllArgs (global, local) (VFun patExps) args = do
@@ -402,7 +457,7 @@ consumeAllArgs (global, local) (VFun patExps) args = do
          let whereCtx = (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
                                             Nothing -> return [])
          whereCtx2 <- whereCtx
-         if length pats == length args then eval (global, matched++whereCtx2) exp 
+         if length pats == length args then eval (global, matched++whereCtx2) exp
          else if length pats < length args then do val <- eval (global, matched++whereCtx2) exp
                                                    consumeAllArgs (global, matched++whereCtx2) val (drop (length pats) args)
          else return $ VClosure (drop (length args) pats) exp (matched++whereCtx2)
@@ -413,7 +468,7 @@ consumeAllArgs ctx (VBuiltin builtin) [] = return $ builtin VUnit
 consumeAllArgs ctx (VBuiltin builtin) [arg] = return $ builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
 
-consumeAllArgs ctx (VCons str vals) args = return $ VCons str (vals++args) 
+consumeAllArgs ctx (VCons str vals) args = return $ VCons str (vals++args)
 
 -- TODO: think of a better name for this function
 resolveLetDecls :: Env -> [LetDecl] -> IO [(String, Value)]
@@ -432,12 +487,12 @@ resolveLetDecls global ((E.ValDef pat rhs):letDecls) = do
     Nothing -> undefined
 
 resolveLetDecls global ((E.FnDef var levelRhss):letDecls) = do
-  letDeclsCtx <- resolveLetDecls global letDecls 
+  letDeclsCtx <- resolveLetDecls global letDecls
   return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : letDeclsCtx
 
 -- TODO: create a resolveWhereDecls for more readable code (Env -> Maybe [LetDecl] -> [(String, Value)])
 
--- TODO: refactor to use map and filter?
+-- TODO: DELETE, refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
 doPatternMatching :: [E.Pat] -> [Value] -> [String] -> [Maybe (String, Value)]
 doPatternMatching [] [] _ = []
@@ -482,7 +537,7 @@ chooseCase ((pat, exp):patsExps) val labels = case doPatternMatching [pat] [val]
 
 chooseGuard :: (Env, Env) -> [(E.Exp, E.Exp)] -> IO E.Exp
 -- TODO: error for no exaustive guards
-chooseGuard _ [] = undefined 
+chooseGuard _ [] = undefined
 chooseGuard ctx ((pred, exp):predExps) = do
   val <- eval ctx pred
   if fstToHsBool val then return exp else chooseGuard ctx predExps
