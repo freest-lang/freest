@@ -7,19 +7,21 @@ This module TODO
 -}
 
 module Language.Simple.State
-  ( IOF
-  , NormMap
-  , GlobalState
-  , GlobalStateData (..)
+  ( Norm(..)
+  , NormTable
+  , Bisimulation
+  , BisimulationState (..)
   , Basis
   , Bpa (..)
   , Node (..)
-  , BranchQueue (..)
+  , Queue
   , Branch
-  , addLog
-  , updateNormMap
-  , replaceBasis
-  , replaceVisitedPairs
+  , putBasis
+  , modifyBasis
+  , lookupBasis
+  , modifyNormTable
+  , putVisitedPairs
+  , modifyVisitedPairs
   )
 where
 
@@ -31,60 +33,53 @@ import Data.Set qualified as Set
 import Data.Sequence qualified as Seq
 import Prelude hiding ( Word, log )
 
--- Type used in norm
-type IOF = Maybe Int
-
--- Map to store the norm of each nonTerminal
-type NormMap = Map.Map NonTerminal IOF
+-- Table to store the norm of each non-terminal
+type NormTable = Map.Map Nonterminal Norm
 
 -- isBisimilar types
 data Node = Node
-  { nodeValue :: (Word, Word),
-    parentNode :: Maybe Node -- Pode ser Nothing para a raiz da árvore
-  } deriving (Show, Eq)
+  { pair   :: (Word, Word)                                                     
+  , parent :: Maybe Node
+  } 
+  deriving (Show, Eq)
 
 type Branch = Node
 
-type BranchQueue = Seq.Seq Branch
+type Queue = Seq.Seq Branch
 
-type Basis = Map.Map (NonTerminal, NonTerminal) Bpa
+type Basis = Map.Map (Nonterminal, Nonterminal) Bpa
 
 data Bpa = Bpa1 Word | Bpa2 (Word, Word)
-
-type GlobalState = State GlobalStateData
-
-data GlobalStateData = TState
-  { basis :: Basis
-  ,  visitedPairs :: Set.Set (Word, Word)
-  , normMap :: NormMap
-  , grammar :: Grammar
-  , log :: [String]
-    -- ver log do haskell
-  }
 
 instance Show Bpa where
   show (Bpa1 n) = show n
   show (Bpa2 (n, m)) = show (n, m)
 
--- Functions created for the Monad type
--- Function to replace all elements in TStateData
+type Bisimulation = State BisimulationState
 
-replaceVisitedPairs :: Set.Set (Word, Word) -> GlobalState ()
-replaceVisitedPairs newVisitedPairs =
-  modify (\s -> s {visitedPairs = newVisitedPairs})
+data BisimulationState = BisimulationState
+  { basis :: Basis
+  , visitedPairs :: Set.Set (Word, Word)
+  , normTable :: NormTable
+  , productions :: Productions
+  }
 
-replaceBasis :: Basis -> GlobalState ()
-replaceBasis b =
-  modify (\s -> s {basis = b})
+putVisitedPairs :: Set.Set (Word, Word) -> Bisimulation ()
+putVisitedPairs = modifyVisitedPairs . const
 
-updateNormMap :: NormMap -> GlobalState ()
-updateNormMap newMap = do
-  modify (\s -> s {normMap = newMap})
+modifyVisitedPairs :: (Set.Set (Word, Word) -> Set.Set (Word, Word)) -> Bisimulation ()
+modifyVisitedPairs f = 
+  modify \s -> s{visitedPairs = f (visitedPairs s)}
 
--- Function to add a log message
-addLog :: String -> State GlobalStateData ()
-addLog msg = modify $ \s -> s {log = log s ++ [msg]}
+putBasis :: Basis -> Bisimulation ()
+putBasis = modifyBasis . const
 
--- Function to get the entire log
-getFullLog :: State GlobalStateData [String]
-getFullLog = gets log
+modifyBasis :: (Basis -> Basis) -> Bisimulation ()
+modifyBasis f = modify \s -> s{basis = f (basis s)}
+
+lookupBasis :: (Nonterminal, Nonterminal) -> Bisimulation (Maybe Bpa)
+lookupBasis (x, y) | x == y    = return (Just (Bpa1 []))
+                   | otherwise = gets (Map.lookup (x,y) . basis)
+
+modifyNormTable :: (NormTable -> NormTable) -> Bisimulation ()
+modifyNormTable f = modify \s -> s{normTable = f (normTable s)}

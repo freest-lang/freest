@@ -9,8 +9,18 @@ homepage:   https://freest-lang.github.io/
 category:   Simple grammars
 
 default-extensions:
+  - BangPatterns
+  - BlockArguments
+  - FlexibleContexts
   - FlexibleInstances
   - ImportQualifiedPost
+  - LambdaCase
+  - MultiWayIf
+  - NamedFieldPuns
+  - PatternSynonyms
+  - ScopedTypeVariables
+  - TupleSections
+  - ViewPatterns
 
 extra-source-files:
   - README.md

@@ -5,7 +5,7 @@ import UnitSpecUtils
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
 import Validation.Base ( ValidationState, buildValidationState )
-import Validation.TypeEquivalence ( fromType )
+import Validation.TypeEquivalence ( fromTypes, showGrammar )
 import Language.Simple.Grammar
 
 import Test.Hspec
@@ -28,6 +28,5 @@ spec = mkTypeSpec
 translateToGrammar :: ValidationState -> T.Type -> Bool
 translateToGrammar vs t =
   -- trace (" " ++ show (length productions) ++ " productions") True
-  trace ("\n" ++ show grammar) True
-  where grammar = fromType vs [t]
-        Grammar _ productions = grammar
+  trace ("\n" ++ showGrammar g) True
+  where g@(_, productions) = fromTypes vs [t]

@@ -658,10 +658,3 @@ case (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z))
       (\(s : *T -> *T) (z : *T) -> z)
   == \(s : *T -> *T) (z : *T) -> s z
    : (*T -> *T) -> *T -> *T
-
-case
-  forall (a:*T) (b:1S) . ?a ; b -> (?a ; b, a)
-  ==
-  forall (a:*T) (b:1S) . ?a ; b -> (?a ; b, a)
-  :
-  *T

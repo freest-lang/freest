@@ -32,3 +32,10 @@ case
   ==
   forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)
   : *T
+
+case
+  forall (a:*T) (b:1S) . ?a ; b -> (?a ; b, a)
+  ==
+  forall (a:*T) (b:1S) . ?a ; b -> (a, ?a ; b)
+  :
+  *T
