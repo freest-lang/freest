@@ -271,14 +271,6 @@ initEnv m =
                    _ -> True)
     (M.definitions m))
 
-
-{- data Exp
-
-  | If     Span Exp Exp Exp
-  | Channel Span Type
-  | Select Span Identifier -}
-
-
 -- Evaluates expressions Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
 eval _ (E.Int _ i) = return $ VInt i
