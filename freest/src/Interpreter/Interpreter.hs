@@ -296,7 +296,7 @@ eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not i
 eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
   let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
-  letBindings <- collectLetDecls (global, []) expDecls
+  letBindings <- collectLetDecls (global, local) expDecls
   eval (global, letBindings ++ local) exp
 eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
 eval (global, local) (E.Case _ exp pats) = error "Evaluation of E.Case not implemented" {- do
@@ -338,7 +338,23 @@ handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
 handleApplication (global, local) (VFun clauses) args =
-  error "Evaluation of application between VFun and args not implemented"
+  -- obtain correct clause via pattern matching
+  case chooseClause clauses args of
+    Nothing -> error "Non-exaustive clauses!"
+    -- extract expression and where declarations from either guarded or unguarded rhs
+    Just (clause, bindings) -> do
+      (exp, whereDecls) <- case snd clause of
+        E.UnguardedRHS exp' whereDecls' -> return (exp', whereDecls')
+        -- in case of guarded, choose the right guard
+        E.GuardedRHS guards' whereDecls' -> do
+          exp' <- chooseGuard (global, local) guards'
+          return (exp', whereDecls')
+      -- get bindings from where declaration
+      whereBindings <- case whereDecls of
+        Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
+        Nothing -> return []
+      -- evaluate expression
+      eval (global, bindings ++ whereBindings ++ local) exp
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
   -- extract bindings through pattern matching
@@ -451,6 +467,13 @@ chooseGuard env ((guard, exp):guards) = do
   if fstToHsBool val then return exp else chooseGuard env guards
 
 
+chooseClause :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (([E.Pat], E.RHS), [(String, Value)])
+chooseClause [] _ = Nothing
+chooseRhs ((pats, rhs) : clauses) args =
+  case resolvePatternMatching pats args of
+    Right bindings -> Just ((pats, rhs), bindings)
+    Left _ -> chooseRhs clauses args
+
 -- OLD DEFINITIONS
 
 -- TODO REMOVE
@@ -546,12 +569,6 @@ getInternalChoiceChannels (pat:pats) (arg:args) = case pat of
     VCons _ consArgs -> getInternalChoiceChannels patCons consArgs ++ getInternalChoiceChannels pats args
     VChan chan -> chan : getInternalChoiceChannels pats args
   _  -> getInternalChoiceChannels pats args
-
-chooseRhs :: [([E.Pat], E.RHS)] -> [Value] -> [String] -> Maybe (E.RHS, [(String, Value)], [E.Pat])
-chooseRhs [] _ _ = Nothing
-chooseRhs ((pats, rhs):rest) args labels = case sequence $ doPatternMatching pats args labels of
-  Just matching -> Just (rhs, matching, pats)
-  Nothing -> chooseRhs rest args labels
 
 chooseCase :: [(E.Pat, E.Exp)] -> Value -> [String] -> Maybe (E.Exp, [(String, Value)])
 chooseCase [] _ _ = Nothing
