@@ -14,7 +14,7 @@ module Interpreter.Interpreter
 TODO:
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
-- Missing evaluation for E.Pack, E.Let, E.Case
+- Missing evaluation for E.Pack, E.Case
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -296,9 +296,8 @@ eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not i
 eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
   let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
-  error "Evaluation of E.Lec not implemented" {- do
-  letDeclsCtx <- resolveLetDecls global (filterTypesFromLetDecls letDecls)
-  eval (global, letDeclsCtx ++ local) exp -}
+  letBindings <- collectLetDecls (global, []) expDecls
+  eval (global, letBindings ++ local) exp
 eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
 eval (global, local) (E.Case _ exp pats) = error "Evaluation of E.Case not implemented" {- do
   val <- (eval (global, local) exp)
@@ -335,10 +334,11 @@ envLookup (global, local) var =
     envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
 
 -- evaluate application
-handleApplication :: (Env, Env) -> Value -> [Value] -> IO Value
+handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
-handleApplication (global, local) (VFun equations) args = error "Evaluation of application between VFun and args not implemented"
+handleApplication (global, local) (VFun clauses) args =
+  error "Evaluation of application between VFun and args not implemented"
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
   -- extract bindings through pattern matching
@@ -350,7 +350,8 @@ handleApplication (global, local) (VClosure pats body env) args = do
 -- application of builtins to arguments
 handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-handleApplication (global, local) VFork args = error "Evaluation of application between VFork and args not implemented"
+handleApplication (global, local) VFork args =
+  error "Evaluation of application between VFork and args not implemented"
 {-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
     _ -> do res <- consumeAllArgs (global, local) left args
             case res of
@@ -411,6 +412,44 @@ resolvePatternMatching (E.AsPat s var pat) val = do
     Left _ -> Left (E.AsPat s var pat, val)
     Right bindings -> Right $ (B.external var, val) : bindings
 
+collectLetDecls :: (GlobalEnv, LocalEnv) -> [LetDecl] -> IO [(String, Value)]
+collectLetDecls _ [] = return []
+collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
+  -- extract expression and where declarations from either guarded or unguarded rhs
+  (exp, whereDecls) <- case rhs of
+    E.UnguardedRHS exp' whereDecls' -> return (exp', whereDecls')
+    E.GuardedRHS guards' whereDecls' -> do
+      exp <- chooseGuard (global, local) guards'
+      return (exp, whereDecls')
+  -- get bindings from where declaration
+  whereBindings <- case whereDecls of
+    Just whereDecls' -> collectLetDecls (global, local) whereDecls'
+    Nothing -> return []
+  -- evaluate expression
+  val <- eval (global, whereBindings ++ local) exp
+  -- resolve pattern matching to match variables from pattern to the value from rhs
+  let patternMatchRes = resolvePatternMatching pat val
+  bindings <- case patternMatchRes of
+    Left _ -> error "Pattern matching failed!"
+    Right bindings -> return bindings
+  -- collect the rest of the let declarations, inserting into the environment the bindings obtained from the first expression
+  remainingBindings <- collectLetDecls (global, bindings ++ local) letdecls
+  return $ bindings ++ remainingBindings
+collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
+  -- convert clauses (in E.FnDef) into clauses (in VFun)
+  let clauses' = map (\(params,body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
+  -- create binding for function
+  let binding = (B.external var, VFun clauses')
+  remainingBindings <- collectLetDecls (global, binding : local) letdecls
+  return $ binding : remainingBindings
+collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
+
+chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.Exp, E.Exp)] -> IO E.Exp
+chooseGuard _ [] = error "Non-exaustive guards!"
+chooseGuard env ((guard, exp):guards) = do
+  val <- eval env guard
+  if fstToHsBool val then return exp else chooseGuard env guards
+
 
 -- OLD DEFINITIONS
 
@@ -419,13 +458,7 @@ resolvePatternMatching (E.AsPat s var pat) val = do
 filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
 filterTypesFromLevels = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False)
 
-filterTypesFromLetDecls :: [LetDecl] -> [LetDecl]
-filterTypesFromLetDecls = filter (\letDecl -> case letDecl of
-  E.ValDef _ _ -> True
-  E.FnDef _ _ -> True
-  E.TypeSig _ _ -> False)
-
--- Here is where the function application is done.
+{- -- Here is where the function application is done.
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
@@ -459,15 +492,16 @@ consumeAllArgs ctx (VBuiltin builtin) [] = return $ builtin VUnit
 consumeAllArgs ctx (VBuiltin builtin) [arg] = return $ builtin arg
 consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin arg) args
 
-consumeAllArgs ctx (VCons str vals) args = return $ VCons str (vals++args)
+consumeAllArgs ctx (VCons str vals) args = return $ VCons str (vals++args) -}
 
--- TODO: think of a better name for this function
+{- -- TODO: think of a better name for this function
 resolveLetDecls :: Env -> [LetDecl] -> IO [(String, Value)]
 resolveLetDecls _ [] = return []
-resolveLetDecls global ((E.ValDef pat rhs):letDecls) = do
-  (exp, whereDecls) <- case rhs of E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
-                                   E.GuardedRHS predExps whereDecls -> do guardsCtx <- chooseGuard (global, []) predExps
-                                                                          return (guardsCtx, whereDecls)
+resolveLetDecls global ((E.ValDef pat rhs):letDecls) = do (exp, whereDecls) <- case rhs of
+    E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
+    E.GuardedRHS predExps whereDecls -> do 
+      guardsCtx <- chooseGuard (global, []) predExps
+      return (guardsCtx, whereDecls)
   whereCtx2 <- (case whereDecls of Just letDecls -> resolveLetDecls global letDecls
                                    Nothing -> return [])
   val <- eval (global, whereCtx2) exp
@@ -479,11 +513,11 @@ resolveLetDecls global ((E.ValDef pat rhs):letDecls) = do
 
 resolveLetDecls global ((E.FnDef var levelRhss):letDecls) = do
   letDeclsCtx <- resolveLetDecls global letDecls
-  return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : letDeclsCtx
+  return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : letDeclsCtx -}
 
 -- TODO: create a resolveWhereDecls for more readable code (Env -> Maybe [LetDecl] -> [(String, Value)])
 
--- TODO: DELETE, refactor to use map and filter?
+{- -- TODO: DELETE, refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
 doPatternMatching :: [E.Pat] -> [Value] -> [String] -> [Maybe (String, Value)]
 doPatternMatching [] [] _ = []
@@ -500,9 +534,9 @@ doPatternMatching (pat:pats) (arg:args) labels = case pat of
   E.FloatPat _ n -> if (\(VFloat n) -> n) arg == n then doPatternMatching pats args labels else Nothing : doPatternMatching pats args labels
   E.CharPat _ c -> if (\(VChar c) -> c) arg == c then doPatternMatching pats args labels else Nothing : doPatternMatching pats args labels
   -- E.StringPat _ str -> if (\(VString str) -> str) arg == str then doPatternMatching pats args else Nothing : doPatternMatching pats args
-  E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] labels ++ doPatternMatching pats args labels
+  E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] labels ++ doPatternMatching pats args labels -}
 
--- necessary to find out if there is an internal choice in the pattern matching to pre receive the label
+{- -- necessary to find out if there is an internal choice in the pattern matching to pre receive the label
 getInternalChoiceChannels :: [E.Pat] -> [Value] -> [ChannelEnd]
 getInternalChoiceChannels [] [] = []
 getInternalChoiceChannels pats [] = []
@@ -524,11 +558,4 @@ chooseCase [] _ _ = Nothing
 chooseCase ((pat, exp):patsExps) val labels = case doPatternMatching [pat] [val] labels of
   [] -> Just (exp, [])
   [Just (var, val)] -> Just (exp, [(var, val)])
-  [Nothing] -> chooseCase patsExps val labels
-
-chooseGuard :: (Env, Env) -> [(E.Exp, E.Exp)] -> IO E.Exp
--- TODO: error for no exaustive guards
-chooseGuard _ [] = undefined
-chooseGuard ctx ((pred, exp):predExps) = do
-  val <- eval ctx pred
-  if fstToHsBool val then return exp else chooseGuard ctx predExps
+  [Nothing] -> chooseCase patsExps val labels -}
