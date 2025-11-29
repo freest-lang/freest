@@ -377,26 +377,34 @@ handleApplication (global, local) (VFun clauses) args =
       eval (global, bindings ++ whereBindings ++ local) exp
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
-  -- check the number of parameters and arguments
+  -- get the number of parameters and arguments
   let numParams = length pats
       numArgs = length args
-  -- error if too many args
-  if numParams < numArgs then
-    error "To many arguments!"
-  -- apply otherwise
-  else do
-    let diff = numParams - numArgs
-        pats' = take numArgs pats
-        pats'' = drop diff pats
+  
+  -- if there's not enough arguments, partially apply
+  if numParams > numArgs then do
     -- extract bindings through pattern matching
-    case zipWithM resolvePatternMatching pats' args of
+    -- use only the necessary parameters
+    case zipWithM resolvePatternMatching (take numArgs pats) args of
+          Left _ -> error "Pattern matching failed!"
+          Right bindings ->
+            -- create a new closure with the remaining parameters
+            return $ VClosure (drop (numParams - numArgs) pats) body $ concat bindings ++ env
+
+  -- if numParams <= numArgs, evaluate app, return app against remaining arguments
+  else do
+    -- extract bindings through pattern matching
+    -- use only the necessary arguments
+    case zipWithM resolvePatternMatching pats (take numParams args) of
           Left _ -> error "Pattern matching failed!"
           Right bindings -> do
-            if diff == 0 then
-              -- evaluate body of closure under new context
-              eval (global, concat bindings ++ env) body
-            -- if not enough arguments, create a new closure with the remaining parameters
-            else return $ VClosure pats'' body $ concat bindings ++ env
+            -- evaluate application of closure against arguments
+            func <- eval (global, concat bindings ++ env) body
+            -- the number of arguments is the same as parameters, return result of evaluation
+            if numArgs == numParams then
+              return func
+            -- otherwise, create a new application with the remaining arguments
+            else handleApplication (global, local) func (drop (numArgs - numParams) args)  
 -- application of builtins to arguments
 handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
