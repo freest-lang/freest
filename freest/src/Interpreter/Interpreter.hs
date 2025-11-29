@@ -298,21 +298,23 @@ eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
 eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
   VIO io -> io
   val -> return val
-eval (global, local) (E.App _ exp levels) = do
+eval (global, local) (E.App _ exp args) = do
   -- evaluate left expression
   func <- eval (global, local) exp
-  -- remove type variable arguments, as these are not useful during reduction
-  let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
+  -- remove type arguments, as these are not useful during reduction
+  let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
   -- evaluate arguments
-  args <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
-  handleApplication (global, local) func args
-eval (_, local) (E.Abs _ levels _ exp) =
-  -- remove type variable parameters, as these are not useful during reduction
-  let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels
-  in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) exp local
+  evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
+  handleApplication (global, local) func evalArgs
+eval (_, local) (E.Abs _ params _ body) =
+  -- remove type parameters, as these are not useful during reduction
+  let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
+  -- convert to a closure, capturing the local environment, so we don't lose bindings
+  in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) body local
 eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not implemented"
 eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
+  -- remove type signature declarations
   let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
   letBindings <- collectLetDecls (global, local) expDecls
   eval (global, letBindings ++ local) exp
@@ -348,7 +350,7 @@ envLookup (global, local) var =
       Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
                        " This should not happen. This is a bug in the compiler")
   where
-    envLookup' :: Env -> B.Variable -> Maybe (String, Value)
+    envLookup' :: Env -> B.Variable -> Maybe Binding
     envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
 
 -- | Evaluate application expressions
@@ -400,7 +402,7 @@ handleApplication _ (VSelect label) args =
     _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
 
 -- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
-resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [(String, Value)]
+resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [Binding]
 resolvePatternMatching (E.IntPat s i) val =
   case val of
     VInt i' -> if i == i' then Right [] else Left (E.IntPat s i, val)
@@ -446,7 +448,7 @@ resolvePatternMatching (E.AsPat s var pat) val = do
     Right bindings -> Right $ (B.external var, val) : bindings
 
 -- | Collect bindings from variables to values from declarations
-collectLetDecls :: (GlobalEnv, LocalEnv) -> [LetDecl] -> IO [(String, Value)]
+collectLetDecls :: (GlobalEnv, LocalEnv) -> [LetDecl] -> IO [Binding]
 collectLetDecls _ [] = return []
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
   -- extract expression and where declarations from either guarded or unguarded rhs
