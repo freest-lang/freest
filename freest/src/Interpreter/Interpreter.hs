@@ -75,8 +75,7 @@ showTups :: [Value] -> String
 showTups [val] = show val
 showTups (val:vals) = show val ++ ", " ++ showTups vals
 
--- Using a simple environment for now for simplicity
--- TODO: change to a hashmap
+-- | Environment where bindings from variables to values are stored
 type Env = [(String, Value)]
 type GlobalEnv = Env
 type LocalEnv = Env
@@ -220,12 +219,12 @@ builtins = [
 
   ("id", VBuiltin id)]
 
--- encode boolean value into FreeST's value
+-- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
 hsToFstBool True = VCons "True" []
 hsToFstBool False = VCons "False" []
 
--- extract boolean value from FreeST's value 
+-- | Extract True and False from FreeST's value representation 
 fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
@@ -271,7 +270,7 @@ initEnv m =
                    _ -> True)
     (M.definitions m))
 
--- Evaluates expressions Syntax.Expression.Exp
+-- | Evaluate expressions, encoded as Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
 eval _ (E.Int _ i) = return $ VInt i
 eval _ (E.Float _ f) = return $ VFloat f
@@ -317,7 +316,7 @@ eval _ (E.Channel _ _) = do
   return $ VCons "(,)" [VChan chanL, VChan chanR]
 eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
 
--- lookup a variable in both local and global context, in that order
+-- | Lookup a variable in both local and global context, in that order
 envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
 envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 envLookup (global, local) var =
@@ -333,7 +332,7 @@ envLookup (global, local) var =
     envLookup' :: Env -> B.Variable -> Maybe (String, Value)
     envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
 
--- evaluate application
+-- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
@@ -382,7 +381,7 @@ handleApplication _ (VSelect label) args =
     -- otherwise
     _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
 
--- match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
+-- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
 resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [(String, Value)]
 resolvePatternMatching (E.IntPat s i) val =
   case val of
@@ -428,6 +427,7 @@ resolvePatternMatching (E.AsPat s var pat) val = do
     Left _ -> Left (E.AsPat s var pat, val)
     Right bindings -> Right $ (B.external var, val) : bindings
 
+-- | Collect bindings from variables to values from declarations
 collectLetDecls :: (GlobalEnv, LocalEnv) -> [LetDecl] -> IO [(String, Value)]
 collectLetDecls _ [] = return []
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
@@ -460,13 +460,14 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
 
+-- | Choose the correct guard via evaluation
 chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.Exp, E.Exp)] -> IO E.Exp
 chooseGuard _ [] = error "Non-exaustive guards!"
 chooseGuard env ((guard, exp):guards) = do
   val <- eval env guard
   if fstToHsBool val then return exp else chooseGuard env guards
 
-
+-- | Choose the correct clause via pattern matching
 chooseClause :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (([E.Pat], E.RHS), [(String, Value)])
 chooseClause [] _ = Nothing
 chooseRhs ((pats, rhs) : clauses) args =
