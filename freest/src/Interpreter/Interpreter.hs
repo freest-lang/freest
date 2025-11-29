@@ -377,11 +377,26 @@ handleApplication (global, local) (VFun clauses) args =
       eval (global, bindings ++ whereBindings ++ local) exp
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
-  -- extract bindings through pattern matching
-  case zipWithM resolvePatternMatching pats args of
+  -- check the number of parameters and arguments
+  let numParams = length pats
+      numArgs = length args
+  -- error if too many args
+  if numParams < numArgs then
+    error "To many arguments!"
+  -- apply otherwise
+  else do
+    let diff = numParams - numArgs
+        pats' = take numArgs pats
+        pats'' = drop diff pats
+    -- extract bindings through pattern matching
+    case zipWithM resolvePatternMatching pats' args of
           Left _ -> error "Pattern matching failed!"
-          -- evaluate body of closure under new context
-          Right bindings -> eval (global, concat bindings ++ env) body
+          Right bindings -> do
+            if diff == 0 then
+              -- evaluate body of closure under new context
+              eval (global, concat bindings ++ env) body
+            -- if not enough arguments, create a new closure with the remaining parameters
+            else return $ VClosure pats'' body $ concat bindings ++ env
 -- application of builtins to arguments
 handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
