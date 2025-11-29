@@ -36,6 +36,14 @@ import qualified Syntax.Base as B
 
 import Syntax.Expression ( LetDecl )
 
+type Clause = ([E.Pat], E.RHS)
+type Binding = (String, Value)
+
+-- | Environment where bindings from variables to values are stored
+type Env = [Binding]
+type GlobalEnv = Env
+type LocalEnv = Env
+
 data Value
   = VInt Int
   | VFloat Double
@@ -44,7 +52,7 @@ data Value
   | VString String
   | VCons String [Value]
   -- | VTuple [Value]
-  | VFun [([E.Pat], E.RHS)]
+  | VFun [Clause]
   | VClosure [E.Pat] E.Exp Env
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
@@ -74,11 +82,6 @@ instance Show Value where
 showTups :: [Value] -> String
 showTups [val] = show val
 showTups (val:vals) = show val ++ ", " ++ showTups vals
-
--- | Environment where bindings from variables to values are stored
-type Env = [(String, Value)]
-type GlobalEnv = Env
-type LocalEnv = Env
 
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
@@ -229,6 +232,22 @@ fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
 
+-- | Choose the correct guard via evaluation
+chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.Exp, E.Exp)] -> IO E.Exp
+chooseGuard _ [] = error "Non-exaustive guards!"
+chooseGuard env ((guard, exp):guards) = do
+  val <- eval env guard
+  if fstToHsBool val then return exp else chooseGuard env guards
+
+-- | Choose the correct clause, matching it against a list of arguments via pattern matching
+chooseClause :: [Clause] -> [Value] -> Maybe (Clause, [Binding])
+chooseClause [] _ = Nothing
+chooseClause ((pats, rhs) : clauses) args =
+  -- try to match patterns and arguments through pattern matching
+  case zipWithM resolvePatternMatching pats args of
+          Left _ -> chooseClause clauses args
+          Right bindings -> Just ((pats, rhs), concat bindings)
+
 interpret :: M.Module -> IO Value
 interpret m = case getMainFunction m of
   -- Assuming that the RHS of main is always in the form main = <exp>
@@ -357,8 +376,7 @@ handleApplication (global, local) (VFun clauses) args =
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
   -- extract bindings through pattern matching
-  let patternMatchRes = zipWithM resolvePatternMatching pats args
-  case patternMatchRes of
+  case zipWithM resolvePatternMatching pats args of
           Left _ -> error "Pattern matching failed!"
           -- evaluate body of closure under new context
           Right bindings -> eval (global, concat bindings ++ env) body
@@ -459,21 +477,6 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   remainingBindings <- collectLetDecls (global, binding : local) letdecls
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
-
--- | Choose the correct guard via evaluation
-chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.Exp, E.Exp)] -> IO E.Exp
-chooseGuard _ [] = error "Non-exaustive guards!"
-chooseGuard env ((guard, exp):guards) = do
-  val <- eval env guard
-  if fstToHsBool val then return exp else chooseGuard env guards
-
--- | Choose the correct clause via pattern matching
-chooseClause :: [([E.Pat], E.RHS)] -> [Value] -> Maybe (([E.Pat], E.RHS), [(String, Value)])
-chooseClause [] _ = Nothing
-chooseRhs ((pats, rhs) : clauses) args =
-  case resolvePatternMatching pats args of
-    Right bindings -> Just ((pats, rhs), bindings)
-    Left _ -> chooseRhs clauses args
 
 -- OLD DEFINITIONS
 
