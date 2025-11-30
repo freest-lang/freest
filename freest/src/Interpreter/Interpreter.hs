@@ -12,10 +12,10 @@ module Interpreter.Interpreter
 
 {-
 TODO:
-- Translate functions into closures of cases. Need a function to generate fresh variables.
+- Translate functions into closures of cases. Need a function to generate fresh variables. Remove VFun
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
-- Missing evaluation for E.Pack, E.Case
+- Missing evaluation for E.Pack, E.Case (what about labels?)
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -53,7 +53,7 @@ data Value
   | VChar Char
   | VString String
   | VCons String [Value]
-  -- | VTuple [Value]
+  -- TODO: delete
   | VFun [Clause]
   | VClosure [E.Pat] E.Exp Env
   | VBuiltin (Value -> Value)
@@ -71,7 +71,6 @@ instance Show Value where
   show (VChar c) = show c
   show (VString str) = show str
   show (VCons str vals) = str ++ " " ++ unwords (map show vals)
-  -- show (VTuple tups) = "(" ++ showTups tups ++ ")"
   show (VFun _) = "<fun>"
   show (VClosure {}) = "<closure>"
   show (VBuiltin _) = "<builtin>"
@@ -86,9 +85,6 @@ showTups [val] = show val
 showTups (val:vals) = show val ++ ", " ++ showTups vals
 
 type ChannelEnd = (C.Chan Value, C.Chan Value)
-
-{- tupToList :: (a,a) -> [a]
-tupToList (x, y) = [x, y] -}
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do
@@ -269,6 +265,23 @@ extractFromRHS (global, local) rhs = do
       exp <- chooseGuard (global, local) guards
       return (exp, whereDecls)
 
+-- | Convert function definition into a closure
+functionToClosure :: [Clause] -> Value
+functionToClosure clauses = do
+  let arity = length $ fst $ head clauses
+      freshVars = undefined
+      -- generate case expressions
+      cases = clausesToCases freshVars clauses
+      -- attach closures
+  VClosure [E.VarPat B.nullSpan fVar | fVar <- freshVars] cases []
+  where
+    -- recursively apply groupPatterns, generating Closures
+    clausesToCases :: [String] -> [Clause] -> E.Exp
+    clausesToCases freshVars clauses = undefined
+    -- group clauses by equal patterns
+    groupPatterns :: [Clause] -> [(E.Pat, [Clause])]
+    groupPatterns clauses = undefined
+
 interpret :: M.Module -> IO Value
 interpret m = case getMainFunction m of
   -- Assuming that the RHS of main is always in the form main = <exp>
@@ -389,7 +402,7 @@ envLookup (global, local) var =
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
--- application of function to arguments
+{- -- application of function to arguments
 handleApplication (global, local) (VFun clauses) args =
   -- obtain correct clause via pattern matching
   case chooseClause clauses args of
@@ -402,7 +415,7 @@ handleApplication (global, local) (VFun clauses) args =
         Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
         Nothing -> return []
       -- evaluate expression
-      eval (global, bindings ++ whereBindings ++ local) exp
+      eval (global, bindings ++ whereBindings ++ local) exp -}
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
   -- get the number of parameters and arguments
