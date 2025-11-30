@@ -12,6 +12,7 @@ module Interpreter.Interpreter
 
 {-
 TODO:
+- Translate functions into closures of cases. Need a function to generate fresh variables.
 - Change the environment from an association list to a map
 - Why does initEnv evaluates builtin functions? Aren't they already as values?
 - Missing evaluation for E.Pack, E.Case
@@ -37,6 +38,7 @@ import qualified Syntax.Base as B
 import Syntax.Expression ( LetDecl )
 
 type Clause = ([E.Pat], E.RHS)
+type Alternative = (E.Pat, E.RHS)
 type Binding = (String, Value)
 
 -- | Environment where bindings from variables to values are stored
@@ -245,8 +247,27 @@ chooseClause [] _ = Nothing
 chooseClause ((pats, rhs) : clauses) args =
   -- try to match patterns and arguments through pattern matching
   case zipWithM resolvePatternMatching pats args of
-          Left _ -> chooseClause clauses args
-          Right bindings -> Just ((pats, rhs), concat bindings)
+    Left _ -> chooseClause clauses args
+    Right bindings -> Just ((pats, rhs), concat bindings)
+
+-- | Choose the correct alternative, matching it against an argument via pattern matching
+chooseCase :: [Alternative] -> Value -> Maybe (Alternative, [Binding])
+chooseCase [] _ = Nothing
+chooseCase ((pat, rhs) : alternatives) val =
+  -- try to match pattern and argument through pattern matching
+  case resolvePatternMatching pat val of
+    Left _ -> chooseCase alternatives val
+    Right bindings -> Just ((pat, rhs), bindings)
+
+-- | Extract an expression and let declarations from case alternatives
+extractFromRHS :: (GlobalEnv, LocalEnv) -> E.RHS -> IO (E.Exp, Maybe [LetDecl])
+extractFromRHS (global, local) rhs = do
+  -- extract expression and where declarations from either guarded or unguarded rhs
+  case rhs of
+    E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
+    E.GuardedRHS guards whereDecls -> do
+      exp <- chooseGuard (global, local) guards
+      return (exp, whereDecls)
 
 interpret :: M.Module -> IO Value
 interpret m = case getMainFunction m of
@@ -319,8 +340,19 @@ eval (global, local) (E.Let _ decls exp) = do
   letBindings <- collectLetDecls (global, local) expDecls
   eval (global, letBindings ++ local) exp
 eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
-eval (global, local) (E.Case _ exp pats) = error "Evaluation of E.Case not implemented" {- do
-  val <- (eval (global, local) exp)
+eval (global, local) (E.Case _ exp alternatives) = do
+  val <- eval (global, local) exp
+  case chooseCase alternatives val of
+    Nothing -> error "Non-exaustive patterns in case alternatives"
+    Just (alternative, bindings) -> do
+      -- extract expression and where declarations from either guarded or unguarded rhs
+      (exp', whereDecls) <- extractFromRHS (global, bindings ++ local) (snd alternative)
+      -- get bindings from where declaration
+      whereBindings <- case whereDecls of
+        Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
+        Nothing -> return []
+      eval (global, whereBindings ++ bindings ++ local) exp'      
+  {- do
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
   case chooseCase pats val labels of
     Just (exp, matched) -> eval (global, matched ++ local) exp 
@@ -357,18 +389,14 @@ envLookup (global, local) var =
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
+-- application of function to arguments
 handleApplication (global, local) (VFun clauses) args =
   -- obtain correct clause via pattern matching
   case chooseClause clauses args of
     Nothing -> error "Non-exaustive clauses!"
-    -- extract expression and where declarations from either guarded or unguarded rhs
     Just (clause, bindings) -> do
-      (exp, whereDecls) <- case snd clause of
-        E.UnguardedRHS exp' whereDecls' -> return (exp', whereDecls')
-        -- in case of guarded, choose the right guard
-        E.GuardedRHS guards' whereDecls' -> do
-          exp' <- chooseGuard (global, local) guards'
-          return (exp', whereDecls')
+      -- extract expression and where declarations from either guarded or unguarded rhs
+      (exp, whereDecls) <- extractFromRHS (global, local) (snd clause)
       -- get bindings from where declaration
       whereBindings <- case whereDecls of
         Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
@@ -475,11 +503,7 @@ collectLetDecls :: (GlobalEnv, LocalEnv) -> [LetDecl] -> IO [Binding]
 collectLetDecls _ [] = return []
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
   -- extract expression and where declarations from either guarded or unguarded rhs
-  (exp, whereDecls) <- case rhs of
-    E.UnguardedRHS exp' whereDecls' -> return (exp', whereDecls')
-    E.GuardedRHS guards' whereDecls' -> do
-      exp <- chooseGuard (global, local) guards'
-      return (exp, whereDecls')
+  (exp, whereDecls) <- extractFromRHS (global, local) rhs
   -- get bindings from where declaration
   whereBindings <- case whereDecls of
     Just whereDecls' -> collectLetDecls (global, local) whereDecls'
@@ -598,10 +622,4 @@ getInternalChoiceChannels (pat:pats) (arg:args) = case pat of
     VCons _ consArgs -> getInternalChoiceChannels patCons consArgs ++ getInternalChoiceChannels pats args
     VChan chan -> chan : getInternalChoiceChannels pats args
   _  -> getInternalChoiceChannels pats args
-
-chooseCase :: [(E.Pat, E.Exp)] -> Value -> [String] -> Maybe (E.Exp, [(String, Value)])
-chooseCase [] _ _ = Nothing
-chooseCase ((pat, exp):patsExps) val labels = case doPatternMatching [pat] [val] labels of
-  [] -> Just (exp, [])
-  [Just (var, val)] -> Just (exp, [(var, val)])
-  [Nothing] -> chooseCase patsExps val labels -}
+-}
