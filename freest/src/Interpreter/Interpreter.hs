@@ -19,8 +19,9 @@ TODO:
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
-import Data.List (find)
+import Data.List (find, groupBy)
 import Data.Char (chr, ord)
+import Data.Function (on)
 import Data.Functor (($>), (<&>), void)
 import System.IO (Handle, putStr, hPutStr, getChar, getLine, getContents, stderr, openFile, IOMode(..), hGetChar, hGetLine, hIsEOF, hClose)
 import Control.Concurrent (forkIO)
@@ -265,22 +266,41 @@ extractFromRHS (global, local) rhs = do
       exp <- chooseGuard (global, local) guards
       return (exp, whereDecls)
 
--- | Convert function definition into a closure
+-- | Convert functions into a closure with cases
 functionToClosure :: [Clause] -> Value
 functionToClosure clauses = do
   let arity = length $ fst $ head clauses
+      -- generate list of fresh variables according to arity
       freshVars = undefined
       -- generate case expressions
       cases = clausesToCases freshVars clauses
       -- attach closures
   VClosure [E.VarPat B.nullSpan fVar | fVar <- freshVars] cases []
   where
-    -- recursively apply groupPatterns, generating Closures
-    clausesToCases :: [String] -> [Clause] -> E.Exp
-    clausesToCases freshVars clauses = undefined
-    -- group clauses by equal patterns
-    groupPatterns :: [Clause] -> [(E.Pat, [Clause])]
-    groupPatterns clauses = undefined
+    -- group clauses by the leading parameter pattern
+    groupClausesByPatterns :: [Clause] -> [(E.Pat, [Clause])]
+    groupClausesByPatterns clauses =
+      -- extract leading pattern
+      let leadingPat = map (\(pats, rhs) -> (head pats, (tail pats, rhs))) clauses
+      -- group by leading pattern
+          groups = groupBy ((==) `on` fst) leadingPat
+      -- place clauses that share a leading pattern in the same group
+      in map (\x -> (fst $ head x, map snd x)) groups
+
+    -- convert clauses to cases
+    clausesToCases :: [E.Exp] -> [Clause] -> E.Exp
+    clausesToCases (freshVar:freshVars) clauses =
+      E.Case B.nullSpan freshVar $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
+      where
+        groupedClauses = groupClausesByPatterns clauses
+        -- control recursion, stopping when there's no more patterns to extract
+        convertToRHS :: [E.Exp] -> [Clause] -> E.RHS
+        convertToRHS freshVars clauses =
+          -- if no more patterns, just return first clause RHS
+          -- Warning: if length clauses >= 1, this means there's redundant patterns
+          if null $ fst $ head clauses then snd $ head clauses
+          -- otherwise, recursively call clausesToCases and wrap resulting case in a unguarged rhs
+          else E.UnguardedRHS (clausesToCases freshVars clauses) Nothing
 
 interpret :: M.Module -> IO Value
 interpret m = case getMainFunction m of
