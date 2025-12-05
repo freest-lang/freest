@@ -238,15 +238,6 @@ chooseGuard env ((guard, exp):guards) = do
   val <- eval env guard
   if fstToHsBool val then return exp else chooseGuard env guards
 
--- | Choose the correct clause, matching it against a list of arguments via pattern matching
-chooseClause :: [Clause] -> [Value] -> Maybe (Clause, [Binding])
-chooseClause [] _ = Nothing
-chooseClause ((pats, rhs) : clauses) args =
-  -- try to match patterns and arguments through pattern matching
-  case zipWithM resolvePatternMatching pats args of
-    Left _ -> chooseClause clauses args
-    Right bindings -> Just ((pats, rhs), concat bindings)
-
 -- | Choose the correct alternative, matching it against an argument via pattern matching
 chooseCase :: [Alternative] -> Value -> Maybe (Alternative, [Binding])
 chooseCase [] _ = Nothing
@@ -286,11 +277,9 @@ functionToClosure clauses = do
           groups = groupBy ((==) `on` fst) leadingPat
       -- place clauses that share a leading pattern in the same group
       in map (\x -> (fst $ head x, map snd x)) groups
-
     -- convert clauses to cases
     clausesToCases :: [E.Exp] -> [Clause] -> E.Exp
-    clausesToCases (freshVar:freshVars) clauses =
-      E.Case B.nullSpan freshVar $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
+    clausesToCases (freshVar:freshVars) clauses = E.Case B.nullSpan freshVar $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
       where
         groupedClauses = groupClausesByPatterns clauses
         -- control recursion, stopping when there's no more patterns to extract
@@ -422,20 +411,6 @@ envLookup (global, local) var =
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args =
   return $ VCons cons $ vals ++ args
-{- -- application of function to arguments
-handleApplication (global, local) (VFun clauses) args =
-  -- obtain correct clause via pattern matching
-  case chooseClause clauses args of
-    Nothing -> error "Non-exaustive clauses!"
-    Just (clause, bindings) -> do
-      -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp, whereDecls) <- extractFromRHS (global, local) (snd clause)
-      -- get bindings from where declaration
-      whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
-        Nothing -> return []
-      -- evaluate expression
-      eval (global, bindings ++ whereBindings ++ local) exp -}
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
   -- get the number of parameters and arguments
