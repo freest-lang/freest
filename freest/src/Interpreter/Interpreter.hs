@@ -291,22 +291,23 @@ functionToClosure clauses = do
           -- otherwise, recursively call clausesToCases and wrap resulting case in a unguarged rhs
           else E.UnguardedRHS (clausesToCases freshVars clauses) Nothing
 
+-- | Interprets a module and returns the result
 interpret :: M.Module -> IO Value
-interpret m = case getMainFunction m of
-  -- Assuming that the RHS of main is always in the form main = <exp>
-  -- necessary to initialize the context with information from the module
-  -- other modules, prelude, etc
-  Just (E.ValDef pat rhs) -> case rhs of
-    E.UnguardedRHS mainExp whereDefs -> do
-      {- initial_ctx <- initEnv m -}
-      putStrLn $ "Expression is: " ++ show mainExp
-      {- eval (initial_ctx ++ builtins, []) mainExp -}
-      eval (builtins, []) mainExp
-    _ -> do
-      return VUnit
-  Just _ -> do return VUnit
-  -- Return unit when main function is not present
-  Nothing -> do return VUnit
+interpret m = do
+  -- collect module declarations, forming the initial environment
+  {- initial_env <- initEnv m -}
+  case getMainFunction m of
+    -- main function of the form main = <exp>
+    Just (E.ValDef pat rhs) -> do
+      -- extract expression and where declarations from either guarded or unguarded rhs
+      (exp, whereDecls) <- extractFromRHS ({- initial_env ++  -}builtins, []) rhs
+      -- get bindings from where declaration
+      whereBindings <- case whereDecls of
+        Just whereDecls' -> collectLetDecls ({- initial_env ++  -}builtins, []) whereDecls'
+        Nothing -> return []
+      eval ({- initial_env ++  -}builtins, whereBindings) exp
+    -- if main function is not present, return unit
+    Nothing -> do return VUnit
 
 -- | Obtain the main function from a module.
 getMainFunction :: M.Module -> Maybe LetDecl
