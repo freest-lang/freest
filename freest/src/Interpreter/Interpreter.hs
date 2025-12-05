@@ -308,13 +308,9 @@ interpret m = case getMainFunction m of
   -- Return unit when main function is not present
   Nothing -> do return VUnit
 
+-- | Obtain the main function from a module.
 getMainFunction :: M.Module -> Maybe LetDecl
-getMainFunction m = find foo (M.definitions m)
-  -- main should be a ValDecl VarPat because it is the form main = <body>
-  where
-    foo funDef = case funDef of
-      E.ValDef (E.VarPat _ var) _ -> B.external var == "main"
-      _ -> False
+getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
 
 -- Evaluates all definitions in the file before running the main function
 initEnv :: M.Module -> IO Env
