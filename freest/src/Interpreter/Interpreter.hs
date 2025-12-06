@@ -295,7 +295,7 @@ functionToClosure clauses = do
 interpret :: M.Module -> IO Value
 interpret m = do
   -- collect module declarations, forming the initial environment
-  {- initial_env <- initEnv m -}
+  {- initial_env <- buildEnv m -}
   case getMainFunction m of
     -- main function of the form main = <exp>
     Just (E.ValDef pat rhs) -> do
@@ -313,21 +313,26 @@ interpret m = do
 getMainFunction :: M.Module -> Maybe LetDecl
 getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
 
--- Evaluates all definitions in the file before running the main function
-initEnv :: M.Module -> IO Env
-initEnv m =
-  -- is VarPat the only valid pattern in a valDecl??
-  -- the same for the rhs UnguardedRHS
+-- | Collect declarations from the module, and bind these to variables in an environment
+buildEnv :: M.Module -> IO Env
+buildEnv m = 
   mapM (\case
-    E.ValDef (E.VarPat _ var) (E.UnguardedRHS exp _) -> do
+    -- in the case of value definitions
+    {- E.ValDef (E.VarPat _ var) (E.UnguardedRHS exp _) -> do
       initial_ctx <- eval (builtins, []) exp
-      return (B.external var,  initial_ctx)
-    E.FnDef var fun -> do return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) fun))
-  -- do not add main to the context
-  ) (filter (\case E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
-                   E.TypeSig _ _ -> False
-                   _ -> True)
-    (M.definitions m))
+      return (B.external var,  initial_ctx) -}
+    -- in the case of functions, convert to closure of cases
+    E.FnDef var fun -> do
+      -- remove type arguments
+      let clauses = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels, rhs)) fun
+      return (B.external var, functionToClosure clauses) 
+  ) letDecls
+  where
+    -- obtain all let declarations from the module except the main function
+    letDecls = filter (\case
+      E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
+      E.TypeSig _ _ -> False
+      _ -> True) (M.definitions m)
 
 -- | Evaluate expressions, encoded as Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
