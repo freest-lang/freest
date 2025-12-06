@@ -322,10 +322,10 @@ buildEnv m =
       initial_ctx <- eval (builtins, []) exp
       return (B.external var,  initial_ctx) -}
     -- in the case of functions, convert to closure of cases
-    E.FnDef var fun -> do
-      -- remove type arguments
-      let clauses = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels, rhs)) fun
-      return (B.external var, functionToClosure clauses) 
+    E.FnDef var clauses -> do
+      -- remove type arguments from clauses
+      let clauses' = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels, rhs)) clauses
+      return (B.external var, functionToClosure clauses')
   ) letDecls
   where
     -- obtain all let declarations from the module except the main function
@@ -538,11 +538,6 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- OLD DEFINITIONS
-
--- TODO REMOVE
--- removes the type arguments (i.e. @Int) from arguments
-filterTypesFromLevels :: [B.Level a b] -> [B.Level a b]
-filterTypesFromLevels = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False)
 
 {- -- Here is where the function application is done.
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
