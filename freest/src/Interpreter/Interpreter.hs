@@ -315,24 +315,12 @@ getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var ==
 
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.Module -> IO Env
-buildEnv m = 
-  mapM (\case
-    -- in the case of value definitions
-    {- E.ValDef (E.VarPat _ var) (E.UnguardedRHS exp _) -> do
-      initial_ctx <- eval (builtins, []) exp
-      return (B.external var,  initial_ctx) -}
-    -- in the case of functions, convert to closure of cases
-    E.FnDef var clauses -> do
-      -- remove type arguments from clauses
-      let clauses' = map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) levels, rhs)) clauses
-      return (B.external var, functionToClosure clauses')
-  ) letDecls
-  where
-    -- obtain all let declarations from the module except the main function
-    letDecls = filter (\case
-      E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
-      E.TypeSig _ _ -> False
-      _ -> True) (M.definitions m)
+buildEnv m = collectLetDecls (builtins,[]) letDecls
+  -- obtain all let declarations from the module except the main function
+  where letDecls = filter (\case
+          E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
+          E.TypeSig _ _ -> False
+          _ -> True) (M.definitions m)
 
 -- | Evaluate expressions, encoded as Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
@@ -529,10 +517,10 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
   remainingBindings <- collectLetDecls (global, bindings ++ local) letdecls
   return $ bindings ++ remainingBindings
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
-  -- convert clauses (in E.FnDef) into clauses (in VFun)
-  let clauses' = map (\(params,body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
+  -- remove type arguments from clauses
+  let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
   -- create binding for function
-  let binding = (B.external var, VFun clauses')
+  let binding = (B.external var, functionToClosure clauses')
   remainingBindings <- collectLetDecls (global, binding : local) letdecls
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
