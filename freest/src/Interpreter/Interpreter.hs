@@ -38,11 +38,14 @@ import qualified Syntax.Base as B
 
 import Syntax.Expression ( LetDecl )
 
+-- | A clause in a function definition
 type Clause = ([E.Pat], E.RHS)
+-- | An alternative of a case expression
 type Alternative = (E.Pat, E.RHS)
+-- | A binding of variable to value
 type Binding = (String, Value)
 
--- | Environment where bindings from variables to values are stored
+-- | An environment, where bindings from variables to values are stored
 type Env = [Binding]
 type GlobalEnv = Env
 type LocalEnv = Env
@@ -221,6 +224,8 @@ builtins = [
 
   ("id", VBuiltin id)]
 
+-- AUXILIARY FUNCTIONS
+
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
 hsToFstBool True = VCons "True" []
@@ -290,165 +295,6 @@ functionToClosure clauses = do
           if null $ fst $ head clauses then snd $ head clauses
           -- otherwise, recursively call clausesToCases and wrap resulting case in a unguarged rhs
           else E.UnguardedRHS (clausesToCases freshVars clauses) Nothing
-
--- | Interprets a module and returns the result
-interpret :: M.Module -> IO Value
-interpret m = do
-  -- collect module declarations, forming the initial environment
-  {- initial_env <- buildEnv m -}
-  case getMainFunction m of
-    -- main function of the form main = <exp>
-    Just (E.ValDef pat rhs) -> do
-      -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp, whereDecls) <- extractFromRHS ({- initial_env ++  -}builtins, []) rhs
-      -- get bindings from where declaration
-      whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls ({- initial_env ++  -}builtins, []) whereDecls'
-        Nothing -> return []
-      eval ({- initial_env ++  -}builtins, whereBindings) exp
-    -- if main function is not present, return unit
-    Nothing -> do return VUnit
-
--- | Obtain the main function from a module.
-getMainFunction :: M.Module -> Maybe LetDecl
-getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
-
--- | Collect declarations from the module, and bind these to variables in an environment
-buildEnv :: M.Module -> IO Env
-buildEnv m = collectLetDecls (builtins,[]) letDecls
-  -- obtain all let declarations from the module except the main function
-  where letDecls = filter (\case
-          E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
-          E.TypeSig _ _ -> False
-          _ -> True) (M.definitions m)
-
--- | Evaluate expressions, encoded as Syntax.Expression.Exp
-eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
-eval _ (E.Int _ i) = return $ VInt i
-eval _ (E.Float _ f) = return $ VFloat f
-eval _ (E.Char _ c) = return $ VChar c
-eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
-eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
-  VIO io -> io
-  val -> return val
-eval (global, local) (E.App _ exp args) = do
-  -- evaluate left expression
-  func <- eval (global, local) exp
-  -- remove type arguments, as these are not useful during reduction
-  let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
-  -- evaluate arguments
-  evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
-  handleApplication (global, local) func evalArgs
-eval (_, local) (E.Abs _ params _ body) =
-  -- remove type parameters, as these are not useful during reduction
-  let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
-  -- convert to a closure, capturing the local environment, so we don't lose bindings
-  in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) body local
-eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not implemented"
-eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
-eval (global, local) (E.Let _ decls exp) = do
-  -- remove type signature declarations
-  let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
-  letBindings <- collectLetDecls (global, local) expDecls
-  eval (global, letBindings ++ local) exp
-eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
-eval (global, local) (E.Case _ exp alternatives) = do
-  val <- eval (global, local) exp
-  case chooseCase alternatives val of
-    Nothing -> error "Non-exaustive patterns in case alternatives"
-    Just (alternative, bindings) -> do
-      -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp', whereDecls) <- extractFromRHS (global, bindings ++ local) (snd alternative)
-      -- get bindings from where declaration
-      whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
-        Nothing -> return []
-      eval (global, whereBindings ++ bindings ++ local) exp'      
-  {- do
-  labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
-  case chooseCase pats val labels of
-    Just (exp, matched) -> eval (global, matched ++ local) exp 
-  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
-    Nothing -> undefined -}
-eval env (E.If _ ifExp thenExp elseExp) = do
-  ifVal <- eval env ifExp
-  thenVal <- eval env thenExp
-  elseVal <- eval env elseExp
-  if fstToHsBool ifVal then return thenVal else return elseVal
-eval _ (E.Channel _ _) = do
-  -- obtain channel ends for a fresh channel
-  (chanL, chanR) <- chan
-  return $ VCons "(,)" [VChan chanL, VChan chanR]
-eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
-
--- | Lookup a variable in both local and global context, in that order
-envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
-envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
-envLookup (global, local) var =
-  -- search in local context first
-  case envLookup' local var of
-    Just (_, val) -> val
-    -- search in global context after
-    Nothing -> case envLookup' global var of
-      Just (_, val) -> val
-      Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
-                       " This should not happen. This is a bug in the compiler")
-  where
-    envLookup' :: Env -> B.Variable -> Maybe Binding
-    envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
-
--- | Evaluate application expressions
-handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
-handleApplication (global, local) (VCons cons vals) args =
-  return $ VCons cons $ vals ++ args
--- application of closure to arguments
-handleApplication (global, local) (VClosure pats body env) args = do
-  -- get the number of parameters and arguments
-  let numParams = length pats
-      numArgs = length args
-  
-  -- if there's not enough arguments, partially apply
-  if numParams > numArgs then do
-    -- extract bindings through pattern matching
-    -- use only the necessary parameters
-    case zipWithM resolvePatternMatching (take numArgs pats) args of
-          Left _ -> error "Pattern matching failed!"
-          Right bindings ->
-            -- create a new closure with the remaining parameters
-            return $ VClosure (drop (numParams - numArgs) pats) body $ concat bindings ++ env
-
-  -- if numParams <= numArgs, evaluate app, return app against remaining arguments
-  else do
-    -- extract bindings through pattern matching
-    -- use only the necessary arguments
-    case zipWithM resolvePatternMatching pats (take numParams args) of
-          Left _ -> error "Pattern matching failed!"
-          Right bindings -> do
-            -- evaluate application of closure against arguments
-            func <- eval (global, concat bindings ++ env) body
-            -- the number of arguments is the same as parameters, return result of evaluation
-            if numArgs == numParams then
-              return func
-            -- otherwise, create a new application with the remaining arguments
-            else handleApplication (global, local) func (drop (numArgs - numParams) args)  
--- application of builtins to arguments
-handleApplication (global, local) (VBuiltin builtin) args =
-  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-handleApplication (global, local) VFork args =
-  error "Evaluation of application between VFork and args not implemented"
-{-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
-    _ -> do res <- consumeAllArgs (global, local) left args
-            case res of
-              VIO io -> io
-              _ -> return res -}
-handleApplication _ (VSelect label) args =
-  case args of
-    -- application of select with a channel
-    [VChan chan] -> do
-      chan2 <- send (VLabel label) chan
-      return $ VChan chan2
-    -- otherwise
-    _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
 
 -- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
 resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [Binding]
@@ -524,6 +370,167 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   remainingBindings <- collectLetDecls (global, binding : local) letdecls
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
+
+-- | Obtain the main function from a module.
+getMainFunction :: M.Module -> Maybe LetDecl
+getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
+
+-- | Collect declarations from the module, and bind these to variables in an environment
+buildEnv :: M.Module -> IO Env
+buildEnv m = collectLetDecls (builtins,[]) letDecls
+  -- obtain all let declarations from the module except the main function
+  where letDecls = filter (\case
+          E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
+          E.TypeSig _ _ -> False
+          _ -> True) (M.definitions m)
+
+-- | Lookup a variable in both local and global context, in that order
+envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
+envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
+envLookup (global, local) var =
+  -- search in local context first
+  case envLookup' local var of
+    Just (_, val) -> val
+    -- search in global context after
+    Nothing -> case envLookup' global var of
+      Just (_, val) -> val
+      Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
+                       " This should not happen. This is a bug in the compiler")
+  where
+    envLookup' :: Env -> B.Variable -> Maybe Binding
+    envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
+
+-- | Evaluate application expressions
+handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
+handleApplication (global, local) (VCons cons vals) args =
+  return $ VCons cons $ vals ++ args
+-- application of closure to arguments
+handleApplication (global, local) (VClosure pats body env) args = do
+  -- get the number of parameters and arguments
+  let numParams = length pats
+      numArgs = length args
+  
+  -- if there's not enough arguments, partially apply
+  if numParams > numArgs then do
+    -- extract bindings through pattern matching
+    -- use only the necessary parameters
+    case zipWithM resolvePatternMatching (take numArgs pats) args of
+          Left _ -> error "Pattern matching failed!"
+          Right bindings ->
+            -- create a new closure with the remaining parameters
+            return $ VClosure (drop (numParams - numArgs) pats) body $ concat bindings ++ env
+
+  -- if numParams <= numArgs, evaluate app, return app against remaining arguments
+  else do
+    -- extract bindings through pattern matching
+    -- use only the necessary arguments
+    case zipWithM resolvePatternMatching pats (take numParams args) of
+          Left _ -> error "Pattern matching failed!"
+          Right bindings -> do
+            -- evaluate application of closure against arguments
+            func <- eval (global, concat bindings ++ env) body
+            -- the number of arguments is the same as parameters, return result of evaluation
+            if numArgs == numParams then
+              return func
+            -- otherwise, create a new application with the remaining arguments
+            else handleApplication (global, local) func (drop (numArgs - numParams) args)  
+-- application of builtins to arguments
+handleApplication (global, local) (VBuiltin builtin) args =
+  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
+handleApplication (global, local) VFork args =
+  error "Evaluation of application between VFork and args not implemented"
+{-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
+    _ -> do res <- consumeAllArgs (global, local) left args
+            case res of
+              VIO io -> io
+              _ -> return res -}
+handleApplication _ (VSelect label) args =
+  case args of
+    -- application of select with a channel
+    [VChan chan] -> do
+      chan2 <- send (VLabel label) chan
+      return $ VChan chan2
+    -- otherwise
+    _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
+
+-- MAIN FUNCTIONS
+
+-- | Evaluate expressions, encoded as Syntax.Expression.Exp
+eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
+eval _ (E.Int _ i) = return $ VInt i
+eval _ (E.Float _ f) = return $ VFloat f
+eval _ (E.Char _ c) = return $ VChar c
+eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
+eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
+  VIO io -> io
+  val -> return val
+eval (global, local) (E.App _ exp args) = do
+  -- evaluate left expression
+  func <- eval (global, local) exp
+  -- remove type arguments, as these are not useful during reduction
+  let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
+  -- evaluate arguments
+  evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
+  handleApplication (global, local) func evalArgs
+eval (_, local) (E.Abs _ params _ body) =
+  -- remove type parameters, as these are not useful during reduction
+  let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
+  -- convert to a closure, capturing the local environment, so we don't lose bindings
+  in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) body local
+eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not implemented"
+eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
+eval (global, local) (E.Let _ decls exp) = do
+  -- remove type signature declarations
+  let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
+  letBindings <- collectLetDecls (global, local) expDecls
+  eval (global, letBindings ++ local) exp
+eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
+eval (global, local) (E.Case _ exp alternatives) = do
+  val <- eval (global, local) exp
+  case chooseCase alternatives val of
+    Nothing -> error "Non-exaustive patterns in case alternatives"
+    Just (alternative, bindings) -> do
+      -- extract expression and where declarations from either guarded or unguarded rhs
+      (exp', whereDecls) <- extractFromRHS (global, bindings ++ local) (snd alternative)
+      -- get bindings from where declaration
+      whereBindings <- case whereDecls of
+        Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
+        Nothing -> return []
+      eval (global, whereBindings ++ bindings ++ local) exp'      
+  {- do
+  labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
+  case chooseCase pats val labels of
+    Just (exp, matched) -> eval (global, matched ++ local) exp 
+  -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
+    Nothing -> undefined -}
+eval env (E.If _ ifExp thenExp elseExp) = do
+  ifVal <- eval env ifExp
+  thenVal <- eval env thenExp
+  elseVal <- eval env elseExp
+  if fstToHsBool ifVal then return thenVal else return elseVal
+eval _ (E.Channel _ _) = do
+  -- obtain channel ends for a fresh channel
+  (chanL, chanR) <- chan
+  return $ VCons "(,)" [VChan chanL, VChan chanR]
+eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
+
+-- | Interprets a module and returns the result
+interpret :: M.Module -> IO Value
+interpret m = do
+  -- collect module declarations, forming the initial environment
+  {- initial_env <- buildEnv m -}
+  case getMainFunction m of
+    -- main function of the form main = <exp>
+    Just (E.ValDef pat rhs) -> do
+      -- extract expression and where declarations from either guarded or unguarded rhs
+      (exp, whereDecls) <- extractFromRHS ({- initial_env ++  -}builtins, []) rhs
+      -- get bindings from where declaration
+      whereBindings <- case whereDecls of
+        Just whereDecls' -> collectLetDecls ({- initial_env ++  -}builtins, []) whereDecls'
+        Nothing -> return []
+      eval ({- initial_env ++  -}builtins, whereBindings) exp
+    -- if main function is not present, return unit
+    Nothing -> do return VUnit
 
 -- OLD DEFINITIONS
 
