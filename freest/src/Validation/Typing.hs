@@ -345,13 +345,13 @@ check kctx tctx e t = get >>= \vs -> case e of
         throwE (TypeMismatch s t u (Left e))
   E.Select s i -> do
     case normalise vs t of
-      T.AppArrow s m u v -> do
+      T.AppArrow s' m u v -> do
         case normalise vs u of
-          T.AppLinChoice s T.Out us ->
+          T.AppLinChoice _ T.Out us ->
             case lookup i us of
               Just ui -> do
-                checkEquivTypes (Left e) (T.AppArrow s m u ui)
-                                         (T.AppArrow s m u v )
+                checkEquivTypes (Left e) (T.AppArrow s' m u ui)
+                                         (T.AppArrow s' m u v )
                 return tctx
               Nothing -> throwE (IllegalChoice s i u)
           _ -> throwE (TypeMismatchSelect s t i e)

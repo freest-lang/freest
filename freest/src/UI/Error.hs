@@ -344,7 +344,7 @@ toMessage src = \case
       ++ " with choice pattern " ++ bt (getFromSpan src i))
   TypeMismatchSelect s t i _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with selection " ++ bt (show i))
+      ++ " with a select expression")
   TypeMismatchTuple s n t _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
       ++ (case n of 0 -> "()"
