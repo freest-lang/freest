@@ -12,9 +12,9 @@ module Interpreter.Interpreter
 
 {-
 TODO:
-- Translate functions into closures of cases. Need a function to generate fresh variables. Remove VFun
+- Improve treatment of functions: generate fresh variables for the closures
 - Change the environment from an association list to a map
-- Why does initEnv evaluates builtin functions? Aren't they already as values?
+- How to handle Prelude definitions that come as undefined? Do I need to filter them, or attach builtins to each declaration from the Prelude?
 - Missing evaluation for E.Pack, E.Case (what about labels?)
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
@@ -518,17 +518,17 @@ eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
 interpret :: M.Module -> IO Value
 interpret m = do
   -- collect module declarations, forming the initial environment
-  {- initial_env <- buildEnv m -}
+  initial_env <- buildEnv m
   case getMainFunction m of
     -- main function of the form main = <exp>
     Just (E.ValDef pat rhs) -> do
       -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp, whereDecls) <- extractFromRHS ({- initial_env ++  -}builtins, []) rhs
+      (exp, whereDecls) <- extractFromRHS (initial_env ++ builtins, []) rhs
       -- get bindings from where declaration
       whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls ({- initial_env ++  -}builtins, []) whereDecls'
+        Just whereDecls' -> collectLetDecls (initial_env ++ builtins, []) whereDecls'
         Nothing -> return []
-      eval ({- initial_env ++  -}builtins, whereBindings) exp
+      eval (initial_env ++ builtins, whereBindings) exp
     -- if main function is not present, return unit
     Nothing -> do return VUnit
 
