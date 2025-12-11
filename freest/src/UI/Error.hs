@@ -36,7 +36,9 @@ data Error
   = ArrowMultMismatch Span (Either Variable E.Exp) Int
     K.Multiplicity K.Multiplicity
   | CannotSynthesisePack Span E.Exp
+  | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
+  | CannotSynthesiseSendType Span
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
@@ -69,7 +71,9 @@ data Error
   | TypeMismatchExists Span T.Type (Either E.Pat E.Exp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
   | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
   | TypeMismatchChoice Span T.Type Identifier E.Pat
+  | TypeMismatchReceiveType Span T.Type
   | TypeMismatchSelect Span T.Type Identifier E.Exp
+  | TypeMismatchSendType Span T.Type
   | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
   | TypeVarOutOfScope Span Variable
   | UnexpectedArg Span Int (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type)
@@ -77,6 +81,7 @@ data Error
     (Level E.Pat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
+  deriving Show -- for debugging
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -85,7 +90,9 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
+    CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
+    CannotSynthesiseSendType s -> s
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
     DConsPatArgMismatch s _ _ _ -> s
@@ -117,7 +124,9 @@ instance Located Error where
     TypeMismatchExists s _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchChoice s _ _ _ -> s
+    TypeMismatchReceiveType s _ -> s
     TypeMismatchSelect s _ _ _ -> s
+    TypeMismatchSendType s _ -> s
     TypeMismatchTuple s _ _ _ -> s
     TypeVarOutOfScope s _ -> s
     UnexpectedArg s _ _ _ -> s
@@ -214,8 +223,12 @@ toMessage src = \case
         K.VarM x -> "a multiplicity" ++ external x
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
+  CannotSynthesiseReceiveType s -> makeError src s
+    "Could not infer a type for this `receiveType` expression"
   CannotSynthesiseSelect s id -> makeError src s
     "Could not infer a type for this `select` expression"
+  CannotSynthesiseSendType s -> makeError src s
+    "Could not infer a type for this `sendType` expression"
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
       ExpLevel x -> "variable " ++ x
@@ -257,8 +270,8 @@ toMessage src = \case
     --    | otherwise ->
       ("Couldn't match expected kind " ++ bt (unparse k1)
         ++ " with actual kind " ++ bt (unparse k2))
-    where
-      diff = (K.depth k2 - K.depth k1)
+    -- where
+    --   diff = (K.depth k2 - K.depth k1)
   LacksKindSig s i -> makeError src s
     ("Type " ++ bt (show i) ++ " lacks a kind signature")
   LacksTypeSig s x -> makeError src s
@@ -342,9 +355,15 @@ toMessage src = \case
   TypeMismatchChoice s t i p -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with choice pattern " ++ bt (getFromSpan src i))
+  TypeMismatchReceiveType s t -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with a `receiveType` expression")
   TypeMismatchSelect s t i _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with a select expression")
+      ++ " with a `select` expression")
+  TypeMismatchSendType s t -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with a `sendType` expression")
   TypeMismatchTuple s n t _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
       ++ (case n of 0 -> "()"

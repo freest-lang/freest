@@ -14,6 +14,7 @@ module Syntax.Type
         , AppExists
         , AppArrow
         , AppMessage
+        , AppTypeMsg
         , AppLinChoice
         , SharedChoice
         , AppSemi
@@ -37,7 +38,7 @@ module Syntax.Type
   , isTName
   , isDName
   , isMsg
-  , isAppQuant
+  , isAppTypeMsg
   , fromVariable
   )
 where
@@ -75,6 +76,7 @@ data Type
   | Skip Span
   | End Span Polarity
   | Message Span K.Multiplicity Polarity
+  | TypeMsg Span Polarity
   | Choice Span K.Multiplicity Polarity [Identifier]
   | Semi Span
   | Dual Span
@@ -110,6 +112,10 @@ pattern AppArrow s m t u <- App s (Arrow _ m) [t,u]
 pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> Type -> Type
 pattern AppMessage s m p t <- App s (Message _ m p) [t]
   where AppMessage s m p t  = App s (Message s m p) [t]
+
+pattern AppTypeMsg :: Span -> Polarity -> Variable -> K.Kind -> Type -> Type
+pattern AppTypeMsg s p a k t <- App s (TypeMsg _ p) [Abs _ [(a, k)] t]
+  where AppTypeMsg s p a k t  = App s (TypeMsg s p) [Abs s [(a, k)] t]
 
 pattern AppLinChoice :: Span -> Polarity -> [(Identifier, Type)] -> Type
 pattern AppLinChoice s p lts <- App s (Choice _ K.Lin p ls) (zip ls -> lts)
@@ -187,7 +193,7 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuant, isAppLinChoice :: Type -> Bool
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isAppLinChoice :: Type -> Bool
 isSkip         = \case Skip{}         -> True; _ -> False
 isVoid         = \case Void{}         -> True; _ -> False
 isSemi         = \case Semi{}         -> True; _ -> False
@@ -196,7 +202,7 @@ isDual         = \case Dual{}         -> True; _ -> False
 isTName        = \case TName{}        -> True; _ -> False
 isDName        = \case DName{}        -> True; _ -> False
 isMsg          = \case Message{}      -> True; _ -> False
-isAppQuant     = \case AppQuant{}     -> True; _ -> False
+isAppTypeMsg   = \case AppTypeMsg{}   -> True; _ -> False
 isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 
 fromVariable :: Variable -> Type
@@ -228,11 +234,15 @@ instance Show Type where
     Dual{}            -> "Dual"
     End _ In          -> "Wait"
     End _ Out         -> "Close"
-    Message _ K.Un p  -> "*" ++ show p
-    Message _ _ p     -> show p
+    Message _ m p  -> "(" ++ showMsgMult m ++ show p ++ ")"
+    TypeMsg _ p       -> "(" ++ show p ++ show p ++ ")"
     Choice _ m p ls   ->
       (if m == K.Un then "*" else "")
       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
+    AppMessage _ m p t  -> showMsgMult m ++ show p ++ show t
+    AppTypeMsg _ p a k t -> 
+      "(" ++ show p ++ show p ++ "(" ++ show a ++ " : " ++ show k ++ "). "
+      ++ show t ++ ")"
     AppLinChoice  _ p lts -> showView p ++ "{"
       ++ intercalate ", " (map showField lts)
       ++ "}"
@@ -250,8 +260,9 @@ instance Show Type where
     DName _ i -> show i ++ "#data"
     -- The type of non-contractive types
     Void _ k -> "(Void @" ++ show k ++ ")"
-    where 
-      showView  = \case In -> "&"     ; Out -> "+"
+    where
+      showMsgMult = \case K.Lin -> ""; m -> show m
+      showView = \case In -> "&"; Out -> "+"
       showQuant = \case In -> "forall"; Out -> "exists"
       showAbs aks sep t =
         unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t
@@ -276,6 +287,7 @@ instance Congruence Type where
     Dual{} Dual{} -> True
     (End _ p1) (End _ p2) -> p1 == p2
     (Message _ m1 p1) (Message _ m2 p2) -> m1 == m2 && p1 == p2
+    (TypeMsg _ p1) (TypeMsg _ p2) -> p1 == p2
     (Choice _ m1 p1 is1) (Choice _ m2 p2 is2) -> m1 == m2 && p1 == p2 && is1 == is2
   -- Higher-order
     (Var _ v1) (Var _ v2) ->
@@ -311,6 +323,7 @@ instance Located Type where
     Arrow s _       -> s
     -- Session types
     Message s _ _   -> s
+    TypeMsg s _     -> s
     Choice  s _ _ _ -> s
     End s _         -> s
     Skip s          -> s
@@ -337,6 +350,7 @@ instance Located Type where
     Quant _ p        -> Quant s p
     -- Session types
     Message _ m p    -> Message s m p
+    TypeMsg _ p      -> TypeMsg s p
     Choice  _ m p ls -> Choice s m p ls
     End _ p          -> End s p
     Skip _           -> Skip s

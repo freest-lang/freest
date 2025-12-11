@@ -16,6 +16,28 @@ case ([Int], Char, Float) : *T
 
 case [[Int]] : *T
 
+-- Functions
+
+case Int -> Int : *T
+
+case Int 1-> Int : 1T
+
+case Char -> Skip : *T
+
+case Char 1-> Skip : 1T
+
+case Int -> Int -> Int : *T
+
+case (Int -> Int) -> Int : *T
+
+case Int 1-> Int -> Int : 1T
+
+case Int -> Int 1-> Int : 1T
+
+case (Int 1-> Int) -> Int : *T
+
+case (Int -> Int) 1-> Int : 1T
+
 -- Pairs
 
 case (Int,Int) : *T
@@ -56,13 +78,20 @@ case (!Int, Skip) : 1T
 
 case (Int 1-> Char -> (Int -> ()), Int -> Skip -> ()) : 1T
 
-case Int -> Int : *T
+-- Polymorphism
 
-case Int 1-> Int : 1T
+case forall (a : *T). a -> a -> a : *T
 
-case Char -> Skip : *T
+case forall (a : *T). (a -> a) -> a -> a : *T
 
-case Char 1-> Skip : 1T
+case exists (a : *T) . (a, a -> Int, a -> a) : *T
+
+case exists (a : *T) . (a, a -> Bool, a -> a, a -> a) : *T
+where
+  type Bool : *T
+  data Bool = True | False
+
+-- Type names
 
 case A : 1S
 where 
@@ -155,14 +184,14 @@ where
   type A : *T
   type A = forall (b : 1S) . A
 
-case forall (y : 1S). +{C: X1};(y;(X2 y;Skip)) : 1S
+case !!(y : 1S). +{C: X1};(y;(X2 y;Skip)) : 1S
 where
   type X1 : *S
   type X1 = Skip
   type X2 : 1S -> 1S
   type X2 y = y
 
-case forall (y : 1S). +{C: (Skip;((y;X1 (X2 y));Skip))} : 1S
+case !!(y : 1S). +{C: (Skip;((y;X1 (X2 y));Skip))} : 1S
 where
   type X1 : 1S -> 1S
   type X1 y = X2 y
@@ -405,17 +434,17 @@ where
 
 -- Forall / Dual
 
-case Dual (exists (a : 1S). a) : 1S
+case Dual (??(a : 1S). a) : 1S
 
-case forall (b : 1S). (Dual b) : 1S
+case !!(b : 1S). (Dual b) : 1S
 
-case (exists (a : 1S). a) ; !Int: 1S
+case (??(a : 1S). a) ; !Int: 1S
 
-case exists (a : 1S). (a ; !Int) : 1S
+case !!(a : 1S). (a ; !Int) : 1S
 
-case (forall (b : 1S). b) ; !Int : 1S
+case (!!(b : 1S). b) ; !Int : 1S
 
-case forall (b : 1S). (b ; !Int) : 1S
+case !!(b : 1S). (b ; !Int) : 1S
 
 
 -- Messages of kind other than ML
@@ -593,11 +622,11 @@ case !(!Int;Close) : 1S
 
 case !(!Int;Skip;Close;?Int) : 1S 
 
-case forall (a:1S). Close;a;!Int : 1C
+case !!(a:1S). Close;a;!Int : 1C
 
-case forall (b:1S). (Close;b);Skip : 1C
+case !!(b:1S). (Close;b);Skip : 1C
 
-case forall (a:1S). T a : 1S
+case !!(a:1S). T a : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -608,7 +637,7 @@ where
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
-case forall (b: 1S) . U b : 1S
+case !!(b: 1S) . U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -685,19 +714,19 @@ where
 case OutStream : 1C
 where
   type OutStream : 1C
-  type OutStream = exists (a:*T) . !a ; OutStream
+  type OutStream = ??(a:*T) . !a ; OutStream
 
 case InStream : 1C
 where
   type InStream : 1C
-  type InStream = forall (a:*T) . ?a ; InStream
+  type InStream = !!(a:*T) . ?a ; InStream
 
 -- Same, with a function to consume the values
 
 case PolyStream Bool : 1C
 where
   type PolyStream : 1T -> 1C
-  type PolyStream b = forall (a:*T) . ?(a -> b) ; ?a ; PolyStream b
+  type PolyStream b = !!(a:*T) . ?(a -> b) ; ?a ; PolyStream b
   type Bool : 1T
   data Bool = False | True
 
@@ -706,7 +735,7 @@ where
 case PolyStream Bool : 1C
 where
   type PolyStream : 1T -> 1C
-  type PolyStream b = exists (a:*T) . !(a -> b) ; !a ; PolyStream b
+  type PolyStream b = ??(a:*T) . !(a -> b) ; !a ; PolyStream b
   type Bool : 1T
   data Bool = False | True
 
@@ -1315,13 +1344,13 @@ case
         (\(s : *T -> *T) (z : *T) -> z)) 
   : (*T -> *T) -> *T -> *T
 
-case T
+case T : 1S
 where
   type T : 1S
-  type T = +{Stop: Skip, More: forall (alpha:*T) . !alpha ; T ; ?alpha}
+  type T = +{Stop: Skip, More: !!(alpha:*T) . !alpha ; T ; ?alpha}
 
-case forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
+case forall (t : *T -> *T). forall (r : *T). (forall (a : *T). (t a -> r)) : *T
 
-case forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)
+case forall (t : *T -> *T). forall (r : *T). ((exists (a : *T). t a) -> r) : *T
 
-case forall (a:*T) (b:1S) . ?a ; b -> (?a ; b, a) : *T
+case forall (a : *T) (b : 1S) . ?a ; b -> (?a ; b, a) : *T

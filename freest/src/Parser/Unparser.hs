@@ -74,14 +74,12 @@ instance Unparse T.Type where
     T.Skip _ -> (maxRator, "Skip")
     T.End _ p -> (maxRator, case p of T.Out -> "Close"
                                       T.In  -> "Wait")
+    T.Message _ m p -> (maxRator, "(" ++ multiplicity m ++ polarity p ++ ")")
+    T.TypeMsg _ p -> (maxRator, "(" ++ polarity p ++ polarity p ++ ")")
     T.Choice _ m p is -> 
-      (maxRator, choiceMult m ++ view p ++ "{" ++ fields ++ "}")
+      (maxRator, multiplicity m ++ view p ++ "{" ++ fields ++ "}")
       where 
         fields = List.intercalate ", " (map show is)
-        choiceMult = \case
-          K.Lin -> ""
-          K.Un  -> "*"
-          K.VarM φ -> external φ
     T.Semi _ -> (maxRator, "(;)")
     T.Dual _ -> (maxRator, "Dual")
     T.TName _ i -> (maxRator, show i)
@@ -102,7 +100,9 @@ instance Unparse T.Type where
     T.List _ t -> 
       (maxRator, "[" ++ unparse t ++ "]")
     T.AppMessage _ m p t -> 
-      (msgRator, show p ++ bracket (fragment t) RightAssoc msgRator)
+      (msgRator, multiplicity m ++ polarity p ++ bracket (fragment t) RightAssoc msgRator)
+    T.AppTypeMsg _ p a k t ->
+      (dotRator, polarity p ++ polarity p ++ bindings [(a, k)] ++ ". " ++ unparse t)
     T.AppLinChoice _ p lts ->
       (maxRator, view p ++ "{" ++ fields lts ++ "}")
       where 
@@ -126,6 +126,13 @@ instance Unparse T.Type where
         K.Lin    -> "1->"
         K.Un     -> "->"
         K.VarM φ -> external φ ++ "->"
+      multiplicity = \case
+        K.Lin    -> ""
+        K.Un     -> "*"
+        K.VarM φ -> external φ
+      polarity = \case
+        T.In  -> "?"
+        T.Out -> "!"
       bindings = 
         unwords . map \(a, k) -> "(" ++ external a ++ " : " ++ unparse k ++ ")"
       view = \case

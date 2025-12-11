@@ -59,6 +59,8 @@ import Data.List.NonEmpty qualified as NE
   'of'     { TkOf _ }
   'channel'{ TkChannel _ }
   'select' {TkSelect _ }
+  'sendType'    { TkSendType _ }
+  'receiveType' { TkReceiveType _ }
   'if'     { TkIf _ }
   'then'   { TkThen _ }
   'else'   { TkElse _ }
@@ -317,6 +319,7 @@ Type :: { T.Type }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
   | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
+  | Polarity2 KindedVar '.' Type { let (a, k) = $2 in T.AppTypeMsg (spanFromTo (fst $1) $4) (snd $1) a k $4 }
   | '\\' KindedVars '->' Type   { T.Abs (spanFromTo $1 $4) $2 $4 }
   | TypeApp                     { $1 }
 
@@ -344,6 +347,10 @@ Commas :: { Int }
 Polarity :: { (Span, T.Polarity) }
   : '!'  { (getSpan $1, T.Out) }
   | '?'  { (getSpan $1, T.In) }
+
+Polarity2 :: { (Span, T.Polarity) }
+  : '!' '!' {(spanFromTo $1 $2, T.Out) }
+  | '?' '?' {(spanFromTo $1 $2, T.In ) }
 
 View :: { (Span, T.Polarity) }
   : '+' { (getSpan $1, T.Out) }
@@ -378,6 +385,7 @@ ExpPrimary :: { E.Exp }
   | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1)) (map (E.Char (getSpan $1)) (getText $1)) }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
+  | 'receiveType' { E.ReceiveType (getSpan $1) }
   | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
                 -- { let s = spanFromTo $1 $3 in E.DCons s (mkTupleId $2 s) } -- TODO: multiplicities
@@ -443,6 +451,7 @@ Exp :: { E.Exp }
 ExpApp :: { E.Exp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
+  | 'sendType' '@' TypePrimary { E.SendType (spanFromTo $1 $3) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
   | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities

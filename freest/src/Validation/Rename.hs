@@ -69,7 +69,7 @@ absorbing vs = \case
   T.App _ T.Choice{} ts -> all (absorbing vs) ts
   T.AppDual _ t -> absorbing vs t
   -- forall F _ Using instead forall lambda a.T
-  -- T.AppQuant _ _ _ t -> absorbing vs t -- TODO: TypeMsg
+  T.AppTypeMsg _ _ _ _ t -> absorbing vs t
   -- µ_κ F absorbing if F Void_κ absorbing
   t@(T.AppTName s name ts) -> absorbing (vs {typeDecls = Map.insert name (T.Void s k) (typeDecls vs)}) (if null ts then u else T.App s u ts)
     where

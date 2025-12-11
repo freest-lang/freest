@@ -130,19 +130,38 @@ synth kctx tctx = \case
       (T.AppArrow (getSpan e) K.Lin (T.DName s (mkUnitId s)) t2)
     return (T.DName s (mkUnitId s), tctx')
   -- select l e1 ... en
-  E.App s f@(E.Select _ i) as ->
+  E.App s f@(E.Select s' i) as ->
     case as of
-      [] -> throwE (CannotSynthesiseSelect s i)
+      [] -> throwE (CannotSynthesiseSelect s' i)
       (TypeLevel t : _  ) ->
         throwE (UnexpectedArg (getSpan t) 1 (ExpLevel Nothing) (TypeLevel t))
       (ExpLevel  e : as') -> do
         (u, tctx') <- synth kctx tctx e
         ui <- Expose.internalChoice e u i
-        checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
+        checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui as'
+  E.App s f@(E.SendType s' t) as -> -- TODO: avoid this duplication. find a way to deal with select, sendType and receiveType
+    case as of
+      [] -> throwE (CannotSynthesiseSendType s)
+      (TypeLevel u : _) ->
+        throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel t))
+      (ExpLevel e : as') -> do
+        (u, tctx') <- synth kctx tctx e
+        (a, _, u') <- Expose.outputType e u
+        checkArgs (E.App s f [ExpLevel e]) kctx tctx' (subs a t u') as'
+  E.App s f@(E.ReceiveType s') as ->
+    case as of 
+      [] -> throwE (CannotSynthesiseReceiveType s)
+      (TypeLevel t : _) ->
+        throwE (UnexpectedArg (getSpan t) 1 (ExpLevel Nothing) (TypeLevel t))
+      (ExpLevel e : as') -> do
+        (u, tctx') <- synth kctx tctx e
+        (a, k, u') <- Expose.inputType e u
+        let v = T.AppExists (spanFromTo f e) [(a, k)] u'
+        checkArgs (E.App s f [ExpLevel e]) kctx tctx' v as'
   E.App s f as    -> do
     (t, tctx') <- synth kctx tctx f
     t' <- Expose.function f t
-    checkArgs f kctx tctx' t' (as, t')
+    checkArgs f kctx tctx' t' as
   e@(E.Abs s ps m e') -> synthAbs kctx tctx ps
     where
       synthAbs kctxi tctxi = \case
@@ -198,6 +217,10 @@ synth kctx tctx = \case
     pure (T.Tuple s [t, T.AppDual s t], tctx)
   E.Select s i -> do
     throwE (CannotSynthesiseSelect s i)
+  E.SendType s t -> do
+    throwE (CannotSynthesiseSendType s)
+  E.ReceiveType s -> do
+    throwE (CannotSynthesiseReceiveType s)
 
 -- | Synthesis for RHSs. Given kind and type contexts (and the 
 -- pattern/expression where the RHS occurs in, for error messages), this 
@@ -283,20 +306,43 @@ check kctx tctx e t = get >>= \vs -> case e of
     checkEquivTypes (Left e) t u
     return tctx'
   -- select l e1 ... en
-  E.App s f@(E.Select _ i) as -> do
+  E.App s f@(E.Select _ i) as ->
     case as of
       [] -> throwE (CannotSynthesiseSelect s i)
       (TypeLevel u : _  ) ->
         throwE (UnexpectedArg (getSpan t) 1 (ExpLevel Nothing) (TypeLevel u))
-      (ExpLevel  e : as') -> do
-        (u, tctx') <- synth kctx tctx e
-        ui <- Expose.internalChoice e u i
-        (ui', tctx'') <- checkArgs (E.App s f [ExpLevel e]) kctx tctx' ui (as', ui)
-        checkEquivTypes (Left e) t ui'
+      (ExpLevel  e' : as') -> do
+        (u, tctx') <- synth kctx tctx e'
+        ui <- Expose.internalChoice e' u i
+        (t', tctx'') <- checkArgs (E.App s f [ExpLevel e']) kctx tctx' ui as'
+        checkEquivTypes (Left e) t t'
+        return tctx''
+  E.App s f@(E.SendType s' u) as ->
+    case as of
+      [] -> throwE (CannotSynthesiseSendType s')
+      (TypeLevel v : _) ->
+        throwE (UnexpectedArg (getSpan v) 1 (ExpLevel Nothing) (TypeLevel v))
+      (ExpLevel e' : as') -> do
+        (v, tctx') <- synth kctx tctx e'
+        (a, _, v') <- Expose.outputType e' v
+        (t', tctx'') <- checkArgs (E.App s f [ExpLevel e']) kctx tctx' (subs a u v') as'
+        checkEquivTypes (Left e) t t'
+        return tctx''
+  E.App s f@(E.ReceiveType s') as ->
+    case as of 
+      [] -> throwE (CannotSynthesiseReceiveType s)
+      (TypeLevel u : _) ->
+        throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel u))
+      (ExpLevel e' : as') -> do
+        (u, tctx') <- synth kctx tctx e'
+        (a, k, u') <- Expose.inputType e' u
+        let v = T.AppExists (spanFromTo f e') [(a, k)] u'
+        (t', tctx'') <- checkArgs (E.App (spanFromTo f e') f [ExpLevel e']) kctx tctx' v as'
+        checkEquivTypes (Left e) t t'
         return tctx''
   E.App s f as -> do
     (u, tctx') <- synth kctx tctx f
-    (v, tctx'') <- checkArgs f kctx tctx' u (as, u)
+    (v, tctx'') <- checkArgs f kctx tctx' u as
     checkEquivTypes (Left e) t v
     return tctx''
   E.Abs s ps m e' -> do
@@ -345,17 +391,38 @@ check kctx tctx e t = get >>= \vs -> case e of
         throwE (TypeMismatch s t u (Left e))
   E.Select s i -> do
     case normalise vs t of
-      T.AppArrow s' m u v -> do
-        case normalise vs u of
-          T.AppLinChoice _ T.Out us ->
-            case lookup i us of
-              Just ui -> do
-                checkEquivTypes (Left e) (T.AppArrow s' m u ui)
-                                         (T.AppArrow s' m u v )
+      T.AppArrow s' m t1 t2 -> do
+        case normalise vs t1 of
+          T.AppLinChoice _ T.Out t1s ->
+            case lookup i t1s of
+              Just t1i -> do
+                checkEquivTypes (Left e) (T.AppArrow s' m t1 t1i)
+                                         (T.AppArrow s' m t1 t2 )
                 return tctx
-              Nothing -> throwE (IllegalChoice s i u)
+              Nothing -> throwE (IllegalChoice s i t1)
           _ -> throwE (TypeMismatchSelect s t i e)
       _ -> throwE (TypeMismatchSelect s t i e)
+  E.SendType s u -> do
+    case normalise vs t of
+      T.AppArrow s m t1 t2 -> do
+        case normalise vs t2 of
+          T.AppTypeMsg s T.Out a k t2' -> do
+            checkEquivTypes (Left e) (T.AppArrow s m t1 (subs a u t2'))
+                                     (T.AppArrow s m t1 t2)
+            return tctx
+          _ -> throwE (TypeMismatchSendType s t)
+      _ -> throwE (TypeMismatchSendType s t)
+  E.ReceiveType s -> do
+    case normalise vs t of
+      T.AppArrow s' m t1 t2 -> do
+        case normalise vs t2 of
+          T.AppTypeMsg s'' T.In a k t2' -> do
+            checkEquivTypes (Left e) 
+              (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t2'))
+              (T.AppArrow s' m t1 t2)
+            return tctx
+          _ -> throwE (TypeMismatchReceiveType s t)
+      _ -> throwE (TypeMismatchReceiveType s t)
 
 
 -- | Checking for declarations. Given kind and type contexts, it validates a
@@ -408,18 +475,18 @@ checkArgs :: E.Exp
           -> KindCtx
           -> TypeCtx
           -> T.Type
-          -> ([Level E.Exp T.Type],T.Type)
+          -> [Level E.Exp T.Type]
           -> Validation (T.Type, TypeCtx)
 checkArgs = checkArgs' 0
   where
-    checkArgs' n f kctx tctx t0 (as, t) = get >>= \vs -> case (as, t) of
+    checkArgs' n f kctx tctx t as = get >>= \vs -> case (as, t) of
       -- regular cases first
       (TypeLevel t : as, normalise vs -> T.AppForall s' ((a, k) : aks) u) -> do
         Kinding.check kctx t k
-        checkArgs' (n + 1) f kctx tctx t0 (as, T.AppForall s' aks (subs a t u))
+        checkArgs' (n + 1) f kctx tctx (T.AppForall s' aks (subs a t u)) as
       (ExpLevel  e : as, normalise vs -> T.AppArrow s' m u v) -> do
         tctx' <- check kctx tctx e u
-        checkArgs' (n + 1) f kctx tctx' t0 (as, v)
+        checkArgs' (n + 1) f kctx tctx' v as
       -- expected expression, given type
       (TypeLevel t : as, normalise vs -> T.AppArrow s' m u v) -> do
         throwE (UnexpectedArg (getSpan t) n (ExpLevel (Just u)) (TypeLevel t))

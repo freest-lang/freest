@@ -138,7 +138,7 @@ word' set ctx = \case
         -- t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ " with kinding context " ++ show ctx ++ ", at  " ++ show (getSpan t)
+      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ " with kinding context " ++ show ctx ++ " with errors " ++ show errors ++ ", at  " ++ show (getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
 isFullyApplied ctx = \case
@@ -146,6 +146,7 @@ isFullyApplied ctx = \case
   T.Float{} -> True
   T.AppArrow{} -> True
   T.AppQuant{} -> True
+  T.AppTypeMsg{} -> True
   T.AppLinChoice{} -> True
   T.SharedChoice{} -> True
   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied

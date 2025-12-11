@@ -61,6 +61,9 @@ synth ctx = \case
   T.Arrow s m -> pure (Arrow s (lt s) (Arrow s (lt s) (Proper s m Top)))
   -- Session types
   T.Message s m _ -> pure (Arrow s (lt s) (if m == Lin then ls s else uc s))
+  T.AppTypeMsg s _ a k t -> do
+    (_, pk) <- checkSession (Map.insert a k ctx) t
+    return (Proper s Lin pk)
   T.SharedChoice s p ls -> pure (uc s)
   T.AppLinChoice s p lts -> do
     pk <- foldM (\pk (_,t) -> meet pk . snd <$> checkSession ctx t) Session lts

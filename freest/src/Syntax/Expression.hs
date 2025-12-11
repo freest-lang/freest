@@ -90,6 +90,8 @@ data Exp
   | If     Span Exp Exp Exp
   | Channel Span Type
   | Select Span Identifier
+  | SendType Span Type
+  | ReceiveType Span
 
 pattern Tuple :: Span -> [Exp] -> Exp
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
@@ -155,7 +157,9 @@ instance Located Exp where
     Case s _ _   -> s
     If s _ _ _   -> s
     Channel s _  -> s
-    Select s _ -> s
+    Select s _   -> s
+    SendType s _ -> s
+    ReceiveType s -> s
 
   setSpan s = \case
     Int _ i       -> Int s i
@@ -173,6 +177,8 @@ instance Located Exp where
     If _ e1 e2 e3 -> If s e1 e2 e3
     Channel _ t   -> Channel s t
     Select _ i -> Select s i
+    SendType _ t -> SendType s t
+    ReceiveType _ -> ReceiveType s
 
 instance Located RHS where
   getSpan = \case
@@ -245,3 +251,5 @@ instance Show Exp where
     If _ e1 e2 e3  -> "(if "++show e1++" then "++show e2++" else "++show e3++")"
     Channel _ t    -> "(channel @"++show t++")"
     Select _ i     -> "(select "++show i++")"
+    SendType _ t   -> "(sendType @" ++ show t ++ ")"
+    ReceiveType _  -> "receiveType"
