@@ -445,11 +445,19 @@ scopePat ctx ictx = \case
     (ictx', p') <- scopePat (foldr insertTVar ctx as') ictx p
     return (ictx', E.PackPat s as' p')
   E.DConsPat s c ps -> do
-    (ictx', ps') <- foldM (\(ictx'',ps'') p -> do
+    (ictx', ps') <- foldM (\(ictx'', ps'') p -> do
         (ictx''', p') <- scopePat ctx ictx'' p
         return (ictx''', ps''++[p']))
       (emptyScopingCtx, []) ps
     return (ictx', E.DConsPat s c ps')
+  E.InPat s p1 p2 -> do
+    (ictx', p1') <- scopePat ctx ictx p1
+    (ictx'', p2') <- scopePat ctx ictx' p2
+    return (ictx'', E.InPat s p1' p2')
+  E.TypeInPat s a p -> do
+    a' <- freshInternal a
+    (ictx', p') <- scopePat (insertTVar a' ctx) ictx p
+    return (ictx', E.TypeInPat s a' p')
   E.ChoicePat s c p -> do
     second (E.ChoicePat s c) <$> scopePat ctx ictx p
   E.AsPat s x p -> case lookupEVar x ictx of
@@ -480,6 +488,7 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
       _                 -> Map.empty
 
 -- | Inserts the variables in a pattern into the scoping context.
+-- TODO: can we do this in one pass with scopePat?
 insertPatVars :: E.Pat -> ScopingCtx -> ScopingCtx
 insertPatVars p ctx = 
   foldr (\case (ExpLevel  x) -> insertEVar x
@@ -489,7 +498,9 @@ insertPatVars p ctx =
     patVars = \case
       E.VarPat _ x      -> Set.singleton (ExpLevel x)
       E.PackPat _ as p  -> Set.fromList (map TypeLevel as) `Set.union` patVars p
-      E.DConsPat s _ ps -> Set.unions (map patVars ps)
+      E.DConsPat _ _ ps -> Set.unions (map patVars ps)
+      E.InPat _ p1 p2   -> patVars p1 `Set.union` patVars p2
+      E.TypeInPat _ a p'-> Set.insert (TypeLevel a) (patVars p')
       E.ChoicePat _ _ p -> patVars p
       E.AsPat _ x p     -> Set.insert (ExpLevel x) (patVars p)
       _                 -> Set.empty

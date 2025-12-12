@@ -118,7 +118,7 @@ synth kctx tctx = \case
   -- receive e
   E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
     (t, tctx') <- synth kctx tctx e
-    (t1, t2) <- Expose.input e t
+    (t1, t2) <- Expose.input (Right e) t
     return (T.Tuple s [t1,t2], tctx')
   -- fork e
   E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
@@ -146,7 +146,7 @@ synth kctx tctx = \case
         throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel t))
       (ExpLevel e : as') -> do
         (u, tctx') <- synth kctx tctx e
-        (a, _, u') <- Expose.outputType e u
+        (a, _, u') <- Expose.typeOutput e u
         checkArgs (E.App s f [ExpLevel e]) kctx tctx' (subs a t u') as'
   E.App s f@(E.ReceiveType s') as ->
     case as of 
@@ -155,7 +155,7 @@ synth kctx tctx = \case
         throwE (UnexpectedArg (getSpan t) 1 (ExpLevel Nothing) (TypeLevel t))
       (ExpLevel e : as') -> do
         (u, tctx') <- synth kctx tctx e
-        (a, k, u') <- Expose.inputType e u
+        (a, k, u') <- Expose.typeInput (Right e) u
         let v = T.AppExists (spanFromTo f e) [(a, k)] u'
         checkArgs (E.App s f [ExpLevel e]) kctx tctx' v as'
   E.App s f as    -> do
@@ -324,7 +324,7 @@ check kctx tctx e t = get >>= \vs -> case e of
         throwE (UnexpectedArg (getSpan v) 1 (ExpLevel Nothing) (TypeLevel v))
       (ExpLevel e' : as') -> do
         (v, tctx') <- synth kctx tctx e'
-        (a, _, v') <- Expose.outputType e' v
+        (a, _, v') <- Expose.typeOutput e' v
         (t', tctx'') <- checkArgs (E.App s f [ExpLevel e']) kctx tctx' (subs a u v') as'
         checkEquivTypes (Left e) t t'
         return tctx''
@@ -335,7 +335,7 @@ check kctx tctx e t = get >>= \vs -> case e of
         throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel u))
       (ExpLevel e' : as') -> do
         (u, tctx') <- synth kctx tctx e'
-        (a, k, u') <- Expose.inputType e' u
+        (a, k, u') <- Expose.typeInput (Right e') u
         let v = T.AppExists (spanFromTo f e') [(a, k)] u'
         (t', tctx'') <- checkArgs (E.App (spanFromTo f e') f [ExpLevel e']) kctx tctx' v as'
         checkEquivTypes (Left e) t t'
@@ -539,9 +539,9 @@ checkFun kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
               throwE (ArrowMultMismatch (spanFromTo pi fe) fe i m m')
             Nothing -> return ()
           (kctxp, tctxp) <- checkPat kctxi pi u
-          tctxi' <- checkFun' (i + 1) (Map.union kctxp kctxi) 
-                                      (Map.union tctxp tctxi) ps'' v
-          tctxi'' <- typeCtxDifference kctxi tctxi' tctxp
+          let kctxi' = Map.union kctxp kctxi
+          tctxi' <- checkFun' (i + 1) kctxi' (Map.union tctxp tctxi) ps'' v
+          tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
           when (m == K.Un) do checkEquivTypeCtxsUnFun tctxi'' tctxi fe
           return tctxi''
         -- anomalous cases
@@ -626,7 +626,7 @@ checkPat kctx p t = get >>= \vs -> case p of
         return (kctx'', Map.union tctxp1 tctxp2)
       t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
   -- (p1 ... , pn)
-  p@(E.TuplePat s ps)   -> do
+  E.TuplePat s ps -> do
     case normalise vs t of
       t'@(T.Tuple s ts) -> do
         foldM (\(kctx', tctxi) (pi, ti) -> 
@@ -647,19 +647,24 @@ checkPat kctx p t = get >>= \vs -> case p of
       t' -> throwE 
         (TypeMismatch (getSpan p) t 
           (T.AppDName (getSpan i) i' (map (T.Var (getSpan i)) as)) (Right p))
+  -- Wait
+  E.WaitPat s -> do
+    Expose.wait p t
+    return (kctx, Map.empty)
+  -- ?p; p
+  E.InPat s p1 p2 -> do
+    (t1, t2) <- Expose.input (Left p) t
+    (kctx' , tctxp1) <- checkPat kctx p1 t1
+    (kctx'', tctxp2) <- checkPat kctx' p2 t2
+    return (kctx'', Map.union tctxp1 tctxp2)
+  -- ?@a. p
+  E.TypeInPat s a p' -> do
+    (b, k, t') <- Expose.typeInput (Left p) t
+    checkPat (Map.insert a k kctx) p' (subs b (T.fromVariable a) t')
   -- (&C p)
   E.ChoicePat s i p' -> do
-    case normalise vs t of
-      T.AppLinChoice _ T.In lts -> case lookup i lts of
-        Just ti -> checkPat kctx p' ti
-        Nothing -> throwE (IllegalChoice (getSpan i) i t)
-      t'@(T.SharedChoice _ T.In ls)
-        | i `elem` ls -> checkPat kctx p' t'
-        | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-      (T.AppSemi _ t'@(T.SharedChoice _ T.In ls) u)
-        | i `elem` ls -> checkPat kctx p' t'
-        | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-      _ -> throwE (TypeMismatchChoice (getSpan p) t i p)
+    ti <- Expose.externalChoice p t i
+    checkPat kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
     k <- Kinding.synth kctx t

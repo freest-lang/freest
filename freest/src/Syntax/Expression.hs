@@ -41,7 +41,10 @@ data Pat
   | VarPat Span Variable
   | PackPat Span [Variable] Pat
   | DConsPat Span Identifier [Pat]
+  | WaitPat Span
+  | InPat Span Pat Pat
   | ChoicePat Span Identifier Pat
+  | TypeInPat Span Variable Pat
   | AsPat Span Variable Pat
 
 pattern NilPat :: Span -> Pat
@@ -120,7 +123,10 @@ instance Located Pat where
     VarPat s _      -> s
     PackPat s _ _   -> s
     DConsPat s _ _  -> s
+    WaitPat s       -> s
+    InPat s _ _     -> s
     ChoicePat s _ _ -> s
+    TypeInPat s _ _ -> s
     AsPat s _ _     -> s
 
   setSpan s = \case
@@ -131,7 +137,10 @@ instance Located Pat where
     VarPat _ x      -> VarPat s x
     PackPat _ as p  -> PackPat s as p
     DConsPat _ c ps -> DConsPat s c ps
-    ChoicePat _ l p -> ChoicePat s l p
+    WaitPat _       -> WaitPat s
+    InPat s p1 p2   -> InPat s p1 p2
+    ChoicePat _ i p -> ChoicePat s i p
+    TypeInPat _ a p -> TypeInPat s a p
     AsPat _ x p     -> AsPat s x p
 
 instance Located LetDecl where 
@@ -198,7 +207,10 @@ instance Show Pat where
     VarPat _ x      -> show x
     PackPat _ as p  -> "(" ++intercalate ", " (map (('@' :) . show) as) ++ ", " ++ show p ++ ")"
     DConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
+    WaitPat _       -> "Wait"
+    InPat _ p1 p2   -> "(?" ++ show p1 ++ "; " ++ show p2 ++ ")"
     ChoicePat _ l p -> "(&"++show l++" "++show p++")"
+    TypeInPat _ a p -> "(?@" ++ show a ++ ". " ++ show p ++ ")"
     AsPat _ x p     -> show x++"@"++show p
 
 instance Show LetDecl where

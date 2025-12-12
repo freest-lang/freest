@@ -527,6 +527,7 @@ PatPrimary :: { E.Pat }
   | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
+  | 'Wait'           { E.WaitPat   (getSpan $1) }
   | '[' PatListComma ']'           { E.listPat (spanFromTo $1 $3) $2 }
   | '(' ')'                        { E.TuplePat (spanFromTo $1 $2) [] }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
@@ -537,9 +538,11 @@ PatPrimary :: { E.Pat }
 
 Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
+  | '?' PatPrimary ';' Pat           { E.InPat (spanFromTo $1 $4) $2 $4 } 
   | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
-  | Pat '::' Pat { E.ConsPat (spanFromTo $1 $3) $1 $3 }
-  | PatPrimary { $1 }
+  | '?' '?' TypeVar '.' Pat      { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
+  | Pat '::' Pat                     { E.ConsPat (spanFromTo $1 $3) $1 $3 }
+  | PatPrimary                       { $1 }
 
 DataConstructor :: { Identifier }
   : UPPER_ID { mkIdTk $1 }

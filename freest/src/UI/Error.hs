@@ -44,7 +44,7 @@ data Error
   | DConsPatArgMismatch Span Identifier Int Int
   | ExpectsTooManyArgs Span (Either Variable E.Exp) T.Type Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span String T.Type
+  | ExposeError Span (Either E.Pat E.Exp) String T.Type
   | GivenTooManyArgs Span E.Exp T.Type Int Int
   | GivenTooManyArgsK Span T.Type K.Kind Int Int
   | IllegalChoice Span Identifier T.Type
@@ -98,7 +98,7 @@ instance Located Error where
     DConsPatArgMismatch s _ _ _ -> s
     ExpectsTooManyArgs s _ _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
-    ExposeError s _ _ -> s
+    ExposeError s _ _ _ -> s
     GivenTooManyArgs s _ _ _ _ -> s
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
@@ -248,8 +248,11 @@ toMessage src = \case
   ExpectsTooManyArgsK s i k -> makeError src s
     ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
       ++ bt (unparse k) ++ " takes only " ++ show (K.depth k))
-  ExposeError s expected t -> makeError src s
-    ("Expected " ++ expected ++ ", but got type " ++ bt (unparse t))
+  ExposeError s pe msg t -> makeError src s
+    case pe of
+      Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
+      Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
+    ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
   GivenTooManyArgs s e t n m -> makeError src s
     ("Got " ++ prettyQArgs "unexpected" (m - n))
     ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to " 
