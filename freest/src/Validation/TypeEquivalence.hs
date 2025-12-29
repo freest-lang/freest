@@ -37,19 +37,15 @@ import Debug.Trace ( trace )
 
 equivalent :: ValidationState -> T.Type -> T.Type -> Bool
 equivalent vs t u = t == u || bisimilar ps xs ys
-  where ([xs, ys], ps) = fromTypes vs [t, u]
+  where (ps, [xs, ys]) = fromTypes vs [t, u]
 
-fromTypes :: ValidationState -> [T.Type] -> ([Word], Productions)
+fromTypes :: ValidationState -> [T.Type] -> (Productions, [Word])
 fromTypes vs ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
-  (xss, productions s)
+  (productions s, xss)
   where 
     (xss, s) = runState (mapM (word Set.empty Map.empty) ts) (initial vs)
-
--- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
-bottom :: Nonterminal
-bottom = 0
 
 word :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
 word set ctx t = wasVisited t >>= \case
@@ -58,9 +54,9 @@ word set ctx t = wasVisited t >>= \case
 
 word' :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
 word' set ctx = \case
-  -- Skip
+  -- W-Skip
   T.Skip{} -> pure []
-  -- End
+  -- W-End
   t@T.End{} -> getNonterminal $ Map.singleton (show t) [bottom]
   -- Void
   t@T.Void{} -> getNonterminal $ Map.singleton (show t) [bottom]
@@ -69,51 +65,48 @@ word' set ctx = \case
   t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
-  -- #T
+  -- W-Msg
   T.AppMessage _ m p u -> do
     w <- word set ctx u
-    getNonterminal $ Map.fromList [
-      (show m ++ show p ++ "_1", w ++ [bottom]),
-      (show m ++ show p ++ "_2", [bottom | m /= K.Lin])]
-  -- T ; U
+    getNonterminal $ Map.fromList
+      [ (show m ++ show p, w ++ [bottom])
+      , ("1", [bottom | m == K.Un])
+      ]
+  -- W-Seq, T ; U
   T.AppSemi _ t u -> do
     vs <- gets validationState
     let set' = set `Set.union` reachable vs u
     liftM2 (++) (word set' ctx t) (word set ctx u)
-  -- Dual α
-  T.AppDual s T.Var{} -> do
-    let label = show $ T.Dual s
-    getNonterminal $ Map.singleton (label ++ "_2") []
-  -- Dual (α T1 ··· Tm) , m >= 1
-  T.AppDual s t@(T.App _ (T.Var{}) _) -> do
-    w <- word set ctx t
-    let label = show $ T.Dual s
-    getNonterminal $ Map.fromList [
-      (label ++ "_1", w),
-      (label ++ "_2", [])]
+  -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
+  T.AppDual s (T.AppVar _ a ts) -> do
+    words <- mapM (word set ctx) ts
+    getNonterminal $ Map.fromList $
+      ("dual " ++ show a, []) :
+      zip (map show [1..]) (map (++ [bottom]) words)
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
-  -- ι T1···Tm with ι being ->, ∀, ∃, variants and choices
-  t@(T.App s u vs) | isFullyApplied ctx t -> do
+  -- W_Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
+  t@(T.App _ u vs) | isFullyApplied ctx t -> do
     words <- mapM (word set ctx) vs
-    let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
-    getNonterminal $ Map.fromList (zip terminals words)
-  -- α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
+    getNonterminal $ Map.fromList $
+      (show u, [bottom]) :
+      zip (map show [1..]) words
+  -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
-    ws <- mapM (word set ctx) us
-    let words = [] : ws
-    let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
-    getNonterminal $ Map.fromList (zip terminals words)
-  -- μ-redex
+    words <- mapM (word set ctx) us
+    getNonterminal $ Map.fromList $
+      (show a, []) :
+      zip (map show [1..]) (map (++ [bottom]) words)
+  -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
     y <- nextNonterminal
     addVisited t y
     vs <- gets validationState
     let u = normalise vs t
     case u of
-      -- t normalises to Skip
+      -- W-μSkip, t normalises to Skip
       T.Skip{} -> pure []
-      -- t normalises to a type other than Skip
+      -- W-μNSkip, t normalises to a type other than Skip
       _ -> do
         ~(z:δ) <- word set ctx u
         γ <- getTransitions z
@@ -161,6 +154,10 @@ kindOf ctx a = case ctx Map.!? a of
 
 varTerminal :: Variable -> Terminal
 varTerminal α = "α" ++ show (internal α)
+
+-- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
+bottom :: Nonterminal
+bottom = 0
 
 -- The state of the translation to grammar procedure
 
@@ -256,8 +253,8 @@ fatTerminal = \case
   -- Otherwise
   _ -> Nothing
 
-showGrammar :: ([Word], Productions) -> String
-showGrammar (xss, ps) =
+showGrammar :: (Productions, [Word]) -> String
+showGrammar (ps, xss) =
   "Start words: (" ++ List.intercalate ", " (map showWord xss) ++")\n" ++
   "Productions (" ++ show nProds ++ " in total): " ++ showProductions ps
     where

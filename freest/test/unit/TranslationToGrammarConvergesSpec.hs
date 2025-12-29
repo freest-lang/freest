@@ -29,4 +29,4 @@ translateToGrammar :: ValidationState -> T.Type -> Bool
 translateToGrammar vs t =
   -- trace (" " ++ show (length productions) ++ " productions") True
   trace ("\n" ++ showGrammar g) True
-  where g@(_, productions) = fromTypes vs [t]
+  where g@(productions, _) = fromTypes vs [t]

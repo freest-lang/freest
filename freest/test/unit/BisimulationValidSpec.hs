@@ -22,7 +22,7 @@ spec = mkEquivalenceSpec
   \src (t, u, k, m) -> case runCheck m t k >> runCheck m u k of
     Left es -> expectationFailure (showErrors src es)
     _       ->
-      trace ("\n" ++ showGrammar g)
+      -- trace ("\n" ++ showGrammar g)
       -- trace ("\n" ++ show t ++ " vs. " ++ show u)
       bisimilar ps xs ys `shouldBe` True
-      where g@([xs, ys], ps) = fromTypes (buildValidationState m) [t, u]
+      where g@(ps, [xs, ys]) = fromTypes (buildValidationState m) [t, u]
