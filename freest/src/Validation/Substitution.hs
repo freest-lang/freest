@@ -55,7 +55,7 @@ subs a u = \case
   t@(T.Abs s ((b,k):bks) t')
       | b == a -> t
       | b `Set.member` fvu ->
-        let b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
+        let b' = mkFreshVar (getSpan b) (Set.insert a fvu `Set.union` allVars t')
             T.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') b') (T.Abs s bks t'))
         in T.Abs s ((b',k):bks') t''
       | otherwise ->

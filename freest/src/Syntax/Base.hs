@@ -8,7 +8,22 @@ represent FreeST's external syntax.
 -}
 
 module Syntax.Base
-  -- TODO: explicit export list
+  ( -- Span
+    Span (..)
+  , Located (..)
+  -- Identifier
+  , Identifier (..)
+  , mkId
+  -- Variable
+  , Variable (..)
+  , mkDefaultVar
+  , mkFreshVar
+  , firstInternal
+  , defaultInternal
+  -- Level
+  , Level (..)
+  , partitionLevels
+  )
 where
 
 
@@ -16,7 +31,7 @@ import Data.Bifunctor ( Bifunctor(..) )
 import Data.List ( (\\) )
 import Data.Set qualified as Set
 
--- Positions in the source code
+-- 1 _ Positions in the source code
 
 -- | A position in the source code is a pair of line and column numbers.
 type Pos = (Int, Int)
@@ -72,7 +87,7 @@ instance Show Span where
 nullSpan :: Span
 nullSpan = Span "" (0,0) (0,0)
 
--- Identifiers
+-- 2 _ Identifiers
 
 -- | Identifiers are used to represent labels, type names and datatype 
 -- constructors. Unlike variables, they have no internal representation.
@@ -95,7 +110,7 @@ instance Show Identifier where
 mkId :: Located a => String -> a -> Identifier
 mkId i l = Identifier (getSpan l) i
 
--- Variables
+-- 3 _ Variables
 
 -- | Variables are used to represent expression and type variables. Unlike
 -- identifiers, they have an internal representation that depends on their
@@ -124,53 +139,26 @@ instance Located Variable where
 firstInternal :: Int
 firstInternal = 1
 
--- | Reserved for renaming; represents an unreachable variable in a type.
--- nullInternal :: Int
--- nullInternal = 0
-
 -- | The default internal. Included in variables created by the parser. Scoping
 -- must eliminate all defaults.
 defaultInternal :: Int
 defaultInternal = -1
-
-firstRenamed :: Int
-firstRenamed = -2
-
--- nullVar :: Located a => a -> Variable
--- nullVar x = Variable (getSpan x) "_unreachable" nullInternal
 
 -- | Construct a variable given its external representation and a Located value
 -- to extract the span from. The internal representation is the default.
 mkDefaultVar :: Located a => String -> a -> Variable
 mkDefaultVar external l = Variable{varSpan = getSpan l, external, internal = defaultInternal}
 
--- | The first variable in a list of internals, and not in a given set of
--- variables.
-unusedVar :: [Int] -> Variable -> Set.Set Variable -> Variable
-unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as))}
-
--- | Same as 'unusedVar', but for multiple variables.
-unusedVars :: [Int] -> [Variable] -> Set.Set Variable -> [Variable]
-unusedVars stock as bs  = zipWith (\a i -> a{internal=i}) as (stock \\ map internal (Set.toList bs))
-
--- | The first variable not in a given set of variables, counting upwards. Used
--- in substitution, for example.
-freshVar :: Variable -> Set.Set Variable -> Variable
-freshVar = unusedVar [firstInternal..]
-
-freshVariable :: Span -> Set.Set Variable -> Variable -- TODO:review
-freshVariable s fvs = freshVar (mkDefaultVar "γ" s) fvs
-
--- | The first variable not in a given set of variables, counting downwards. Used
--- in the renaming process, prior to translation to simple grammar.
-firstVar :: Variable -> Set.Set Variable -> Variable
-firstVar = unusedVar [firstRenamed, firstRenamed - 1 ..]
-
--- | Same as 'firstVar', but for multiple variables.
-firstVars :: [Variable] -> Set.Set Variable -> [Variable]
-firstVars = unusedVars [firstRenamed, firstRenamed - 1 ..]
-
--- Levels
+-- | The a variable that does not appear in a set of given variables
+mkFreshVar :: Span -> Set.Set Variable -> Variable
+mkFreshVar s fvs = unusedVar [firstInternal..] (mkDefaultVar "_γ" s) fvs
+  where
+    -- | The first variable in a list of internals, and not in a given set of
+    -- variables.
+    unusedVar :: [Int] -> Variable -> Set.Set Variable -> Variable
+    unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as))}
+    
+-- 4 _ Levels
 
 -- | Used to separate the syntax of different computational levels 
 -- (expressions vs. types).

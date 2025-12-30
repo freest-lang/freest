@@ -64,7 +64,7 @@ reduce td = \case
     -- the parser and kept as an invariant. Reading the kind from the lambda.
   T.AppSemi s1 (T.App s2 (T.TypeMsg s3 p) [f]) u ->
     T.AppTypeMsg s1 p a k (T.AppSemi s2 (T.App s3 f [T.fromVariable a]) u)
-    where a = freshVariable s1 (freeVars f `Set.union` freeVars u)
+    where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
           k = kindOfLambdaVar f
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce td t) u
@@ -88,7 +88,7 @@ reduce td = \case
     -- the lambda.
   T.AppDual s1 (T.App s2 (T.TypeMsg s3 p) [f]) ->
     T.AppTypeMsg s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable a]))
-    where a = freshVariable s1 (freeVars f)
+    where a = mkFreshVar s1 (freeVars f)
           k = kindOfLambdaVar f
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
