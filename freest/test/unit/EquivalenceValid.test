@@ -251,7 +251,6 @@ where
 
 -- case ??(Dual Skip) == Dual (!!(Dual Skip)) : 1S
 
-
 -- Unrestricted sessions
 
 case *!Int == *!Int ; ?Char : *C
@@ -363,9 +362,9 @@ case ?(!!(a : 1S). Wait ; a)
   == ?(!!(b : 1S). Wait) 
    : 1S
 
--- case !!(a : 1S). Wait ; a -> Char 
---   == !!(b : 1S). Wait     -> Char 
---    : *T
+case (!!(a : 1S). Wait ; a) -> Char 
+  == (!!(b : 1S). Wait)     -> Char 
+   : *T
 
 case (!!(a : 1S). Wait ; a) -> (!!(b : 1S). Wait    ) 
   == (!!(b : 1S). Wait    ) -> (!!(a : 1S). Wait ; a) 
@@ -549,19 +548,19 @@ where
 
 -- Troublesome with reachable/unreachable vars
 
--- case !!(a b : 1S). (Void @1S) ; a ; b == !!(b a : 1S). (Void @1S) : 1S
+case !!(a : 1S) . !!(b : 1S) . (Void @1S) ; a ; b == !!(a : 1S) . !!(a : 1S) . (Void @1S) : 1S
 
--- case !!(a b : 1S). Void' ; a ; b == !!(b a : 1S). Void' : 1S
--- where
---   type Void' : 1S
---   type Void' = Void'
+case !!(a : 1S) . !!(b : 1S) . Void' ; a ; b == !!(a : 1S) . !!(b : 1S) . Void' : 1S
+where
+  type Void' : 1S
+  type Void' = Void'
 
--- case !!(a b : 1S). (Void @1S) ; a ; b == !!(b a : 1S). (Void @1S) : 1S
+case !!(a : 1S) . !!(b : 1S) . (Void @1S) ; a ; b == !!(a : 1S) . !!(b : 1S) . (Void @1S) : 1S
 
--- case !!(a b : 1S). Void' ; a ; b == !!(b a : 1S). Void' : 1S
--- where
---   type Void' : 1S
---   type Void' = Void'
+case !!(a : 1S) . !!(b : 1S) . Void' ; a ; b == !!(a : 1S) . !!(b : 1S) . Void' : 1S
+where
+  type Void' : 1S
+  type Void' = Void'
 
 -- Forall and parameterised types
 
