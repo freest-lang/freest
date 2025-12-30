@@ -158,6 +158,9 @@ unusedVars stock as bs  = zipWith (\a i -> a{internal=i}) as (stock \\ map inter
 freshVar :: Variable -> Set.Set Variable -> Variable
 freshVar = unusedVar [firstInternal..]
 
+freshVariable :: Span -> Set.Set Variable -> Variable -- TODO:review
+freshVariable s fvs = freshVar (mkDefaultVar "γ" s) fvs
+
 -- | The first variable not in a given set of variables, counting downwards. Used
 -- in the renaming process, prior to translation to simple grammar.
 firstVar :: Variable -> Set.Set Variable -> Variable

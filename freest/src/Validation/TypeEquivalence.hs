@@ -23,6 +23,7 @@ import Validation.Rename ( first, reachable )
 import Validation.Kinding ( runSynth', KindCtx )
 import Validation.Substitution ( freeVars, subs )
 import Utils ( internalError )
+import Parser.Unparser
 
 import Language.Simple.Grammar
 import Language.Simple.Bisimulation ( bisimilar )
@@ -119,8 +120,11 @@ word' set ctx = \case
       Right (K.Arrow _ k _) -> do
         -- W-Abs, F : k => k'
         let s = getSpan t -- The same span for all newly created vars & types?
-        let α = mkDefaultVar "α" s -- of kind k
-        let β = mkDefaultVar "β" s -- of kind k
+        let vs = freeVars t
+        let α = freshVariable s vs
+        let β = freshVariable s (Set.insert α vs)
+        -- let α = mkDefaultVar ('α' : show k) s -- of kind k
+        -- let β = mkDefaultVar ('β' : show k) s -- of kind k
         wtα <- word set (Map.insert α k ctx) $ T.smartApp s t [T.fromVariable α]
         wtβ <- word set (Map.insert β k ctx) $ T.smartApp s t [T.fromVariable β]
         getNonterminal $ Map.fromList $
@@ -140,7 +144,7 @@ word' set ctx = \case
         -- W-τ, t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ " with kinding context " ++ show ctx ++ " with errors " ++ show errors ++ ", at " ++ show (getSpan t)
+      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ unparse t ++ " with kinding context " ++ show ctx ++ " with errors " ++ show errors ++ ", at " ++ show (getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
 isFullyApplied ctx = \case
