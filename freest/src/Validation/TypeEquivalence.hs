@@ -30,7 +30,6 @@ import Data.List qualified as List
 import Data.Maybe
 import Control.Monad.State
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
