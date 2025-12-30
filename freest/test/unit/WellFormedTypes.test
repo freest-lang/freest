@@ -1324,21 +1324,42 @@ case (\(a : 1T) -> (\(b : 1T) -> !b)) Int Char : 1S
 
 case (\(a : 1T) -> \(b : 1T) (c : 1S) -> !b) Int Char : 1S -> 1S
 
-case 
-  (\(a : 1S -> 1S) (b : 1S) -> a b) 
-    (\(a : 1S) -> a) 
-    (Tree Int) 
-  : 1S
+case (\(a : 1S -> 1S) (b : 1S) -> a b) 
+       (\(a : 1S) -> a) 
+       (Tree Int) : 1S
 where
   type Tree : *T -> 1S
   type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
 
+case \(a : 1C -> 1S) (b : 1C) -> a b : (1C -> 1S) -> 1C -> 1S
+
+case \(a : 1C -> 1S) -> \(b : 1C) -> a b : (1C -> 1S) -> 1C -> 1S
+
+case \(a : 1C -> 1S -> 1T) -> \(b : 1C) -> \(c : 1S) -> a b c : (1C -> 1S -> 1T) -> 1C -> 1S -> 1T
+
+case \(a : 1C -> 1S -> 1T) (b : 1C) (c : 1S) -> a b c : (1C -> 1S -> 1T) -> 1C -> 1S -> 1T
+
+case \(a : (1C -> 1S) -> 1T) -> \(b : 1C -> 1S) -> a b : ((1C -> 1S) -> 1T) -> (1C -> 1S) -> 1T
+
+case \(a : (1C -> 1S) -> 1T) (b : 1C -> 1S) -> a b : ((1C -> 1S) -> 1T) -> (1C -> 1S) -> 1T
+
 case Succ (Succ (\(s : *T -> *T) (z : *T) -> z)) : (*T -> *T) -> *T -> *T
 where
-  type Succ : ((*T -> *T) -> *T -> *T) -> ((*T -> *T) -> *T -> *T)
+  type Succ : ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
+  type Succ = \(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)
+
+case Succ (Succ (\(s : *T -> *T) (z : *T) -> z)) : (*T -> *T) -> *T -> *T
+where
+  type Succ : ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
   type Succ = \(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)
 
-case 
+case
+    (\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)) 
+      ((\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)) 
+        (\(s : *T -> *T) -> \(z : *T) -> z)) 
+  : (*T -> *T) -> *T -> *T
+
+case
     (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
       ((\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
         (\(s : *T -> *T) (z : *T) -> z)) 

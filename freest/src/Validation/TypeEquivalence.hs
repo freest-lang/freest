@@ -120,16 +120,14 @@ word' set ctx = \case
       Right (K.Arrow _ k _) -> do
         -- W-Abs, F : k => k'
         let s = getSpan t -- The same span for all newly created vars & types?
-        let vs = freeVars t
-        let α = freshVariable s vs
-        let β = freshVariable s (Set.insert α vs)
-        -- let α = mkDefaultVar ('α' : show k) s -- of kind k
-        -- let β = mkDefaultVar ('β' : show k) s -- of kind k
-        wtα <- word set (Map.insert α k ctx) $ T.smartApp s t [T.fromVariable α]
-        wtβ <- word set (Map.insert β k ctx) $ T.smartApp s t [T.fromVariable β]
+        let internal = toInt k
+        let αk = Variable s ('α' : show k) internal
+        let βk = Variable s ('β' : show k) (1009 * internal)
+        wtα <- word set (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk]
+        wtβ <- word set (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk]
         getNonterminal $ Map.fromList $
-          [ ('λ' : show α, wtα)
-          , ('λ' : show β, wtβ)
+          [ ('λ' : unparse αk, wtα)
+          , ('λ' : unparse βk, wtβ)
           ]
         -- let s = getSpan t
         -- let a = first vs set t
@@ -144,7 +142,7 @@ word' set ctx = \case
         -- W-τ, t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ unparse t ++ " with kinding context " ++ show ctx ++ " with errors " ++ show errors ++ ", at " ++ show (getSpan t)
+      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for\n\tType: " ++ show t ++ "\n\tKinding context: " ++ show ctx ++ "\n\tErrors: " ++ show errors ++ ", at " ++ show (getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
 isFullyApplied ctx = \case
@@ -171,6 +169,15 @@ kindOf ctx a = case ctx Map.!? a of
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal
 bottom = 0
+
+toInt :: K.Kind -> Int
+toInt (K.Proper _ K.Lin K.Top) = 1
+toInt (K.Proper _ K.Un  K.Top) = 2
+toInt (K.Proper _ K.Lin K.Session) = 3
+toInt (K.Proper _ K.Un  K.Session) = 4
+toInt (K.Proper _ K.Lin K.Channel) = 5
+toInt (K.Proper _ K.Un  K.Channel) = 6
+toInt (K.Arrow _ k1 k2) = toInt k1 + 503 * toInt k2 -- TODO: Fix me!
 
 -- The state of the translation to grammar procedure
 

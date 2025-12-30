@@ -36,9 +36,9 @@ minRator
 minRator   = (minBound, NonAssoc)
 dotRator   = (PDot    , RightAssoc)
 arrowRator = (PArrow  , RightAssoc)
-semiRator  = (PSemi, RightAssoc)
-msgRator   = (PMsg, RightAssoc)
-appRator   = (PApp, LeftAssoc)
+semiRator  = (PSemi   , RightAssoc)
+msgRator   = (PMsg    , RightAssoc)
+appRator   = (PApp    , LeftAssoc)
 maxRator   = (maxBound, NonAssoc)
 
 noparens :: Rator -> Rator -> Associativity -> Bool
@@ -64,6 +64,9 @@ instance Unparse K.Kind where
         r = bracket (fragment k2) RightAssoc arrowRator
     K.Var _ τ       -> (maxRator, show τ)
 
+instance Unparse Variable where
+  fragment a = (maxRator, external a)
+  
 instance Unparse T.Type where
   fragment = \case 
     T.Int  _ -> (maxRator, "Int")
@@ -87,7 +90,7 @@ instance Unparse T.Type where
     T.Void _ k -> (appRator, "Void @" ++ r)
       where
         r = bracket (fragment k) RightAssoc appRator
-    T.Var  _ a -> (maxRator, external a)
+    T.Var  _ a -> fragment a
     T.Abs _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
     T.AppArrow _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
       where
