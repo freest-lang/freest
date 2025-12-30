@@ -125,15 +125,6 @@ word' ctx = \case
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)
           ]
-        -- let s = getSpan t
-        -- let a = first vs set t
-        -- let t' = case ctx Map.!? a of
-        --       Just k -> subs a (T.Void s k) t
-        --       Nothing -> t
-        -- let ctx' = Map.insert a k ctx
-        -- w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
-        -- let label = "λ" ++ show a ++ ":" ++ show k
-        -- getNonterminal $ Map.singleton label w
       Right _ -> do
         -- W-τ, t reduces
         td <- getTypeDecls
@@ -159,13 +150,11 @@ kindOf ctx a = case ctx Map.!? a of
     Just k -> k
     Nothing -> internalError $ "Validation.TypeEquivalence.kindOf: variable " ++ show a ++ " not in context " ++ show ctx ++ ", at " ++ show (getSpan a)
 
--- varTerminal :: Variable -> Terminal
--- varTerminal α = "α" ++ show (internal α)
-
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal
 bottom = 0
 
+-- An (should be *the*) integer associated to a kind
 toInt :: K.Kind -> Int
 toInt (K.Proper _ K.Lin K.Top) = 1
 toInt (K.Proper _ K.Un  K.Top) = 2
