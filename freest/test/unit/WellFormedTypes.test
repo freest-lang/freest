@@ -1348,6 +1348,7 @@ where
   type Succ : ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
   type Succ = \(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)
 
+-- problematic
 case Succ (Succ (\(s : *T -> *T) (z : *T) -> z)) : (*T -> *T) -> *T -> *T
 where
   type Succ : ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
@@ -1359,6 +1360,7 @@ case
         (\(s : *T -> *T) -> \(z : *T) -> z)) 
   : (*T -> *T) -> *T -> *T
 
+-- problematic
 case
     (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
       ((\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z)) 
@@ -1375,3 +1377,9 @@ case forall (t : *T -> *T). forall (r : *T). (forall (a : *T). (t a -> r)) : *T
 case forall (t : *T -> *T). forall (r : *T). ((exists (a : *T). t a) -> r) : *T
 
 case forall (a : *T) (b : 1S) . ?a ; b -> (?a ; b, a) : *T
+
+case (\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)) :
+     ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
+
+case (\(n : (*T -> *T) -> *T -> *T)     (s : *T -> *T)     (z : *T) -> s (n s z)) :
+     ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T

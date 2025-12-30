@@ -19,7 +19,6 @@ import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
-import Validation.Rename ( first, reachable )
 import Validation.Kinding ( runSynth', KindCtx )
 import Validation.Substitution ( freeVars, subs )
 import Utils ( internalError )
@@ -46,15 +45,15 @@ fromTypes vs ts =
   --        "\n"++showGrammar (xss, productions s)) $
   (productions s, xss)
   where 
-    (xss, s) = runState (mapM (word Set.empty Map.empty) ts) (initial vs)
+    (xss, s) = runState (mapM (word Map.empty) ts) (initial vs)
 
-word :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
-word set ctx t = wasVisited t >>= \case
+word :: KindCtx -> T.Type -> TransState Word
+word ctx t = wasVisited t >>= \case
   Just y -> pure [y]
-  Nothing -> word' set ctx t
+  Nothing -> word' ctx t
 
-word' :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
-word' set ctx = \case
+word' :: KindCtx -> T.Type -> TransState Word
+word' ctx = \case
   -- W-Skip
   T.Skip{} -> pure []
   -- W-End
@@ -68,7 +67,7 @@ word' set ctx = \case
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
   -- W-Msg
   T.AppMessage _ m p u -> do
-    w <- word set ctx u
+    w <- word ctx u
     getNonterminal $ Map.fromList
       [ (show m ++ show p, w ++ [bottom])
       , ("1", [bottom | m == K.Un])
@@ -76,11 +75,10 @@ word' set ctx = \case
   -- W-Seq, T ; U
   T.AppSemi _ t u -> do
     vs <- gets validationState
-    let set' = set `Set.union` reachable vs u
-    liftM2 (++) (word set' ctx t) (word set ctx u)
+    liftM2 (++) (word ctx t) (word ctx u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
   T.AppDual s (T.AppVar _ a ts) -> do
-    words <- mapM (word set ctx) ts
+    words <- mapM (word ctx) ts
     getNonterminal $ Map.fromList $
       ("dual " ++ show a, []) :
       zip (map show [1..]) (map (++ [bottom]) words)
@@ -88,13 +86,13 @@ word' set ctx = \case
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- W_Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.App _ u vs) | isFullyApplied ctx t -> do
-    words <- mapM (word set ctx) vs
+    words <- mapM (word ctx) vs
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
       zip (map show [1..]) words
   -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
-    words <- mapM (word set ctx) us
+    words <- mapM (word ctx) us
     getNonterminal $ Map.fromList $
       (show a, []) :
       zip (map show [1..]) (map (++ [bottom]) words)
@@ -109,7 +107,7 @@ word' set ctx = \case
       T.Skip{} -> pure []
       -- W-μNSkip, t normalises to a type other than Skip
       _ -> do
-        ~(z:δ) <- word set ctx u
+        ~(z:δ) <- word ctx u
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
@@ -123,8 +121,8 @@ word' set ctx = \case
         let internal = toInt k
         let αk = Variable s ('α' : show k) internal
         let βk = Variable s ('β' : show k) (1009 * internal)
-        wtα <- word set (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk]
-        wtβ <- word set (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk]
+        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk]
+        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk]
         getNonterminal $ Map.fromList $
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)
@@ -141,7 +139,7 @@ word' set ctx = \case
       Right _ -> do
         -- W-τ, t reduces
         td <- getTypeDecls
-        word set ctx (reduce td t)
+        word ctx (reduce td t)
       Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for\n\tType: " ++ show t ++ "\n\tKinding context: " ++ show ctx ++ "\n\tErrors: " ++ show errors ++ ", at " ++ show (getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
