@@ -20,7 +20,6 @@ import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Kinding ( runSynth', KindCtx )
-import Validation.Substitution ( freeVars, subs )
 import Utils ( internalError )
 import Parser.Unparser
 
