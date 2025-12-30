@@ -60,10 +60,10 @@ externalChoice p t i = do
     T.AppLinChoice _ T.In lts -> case lookup i lts of
       Just ti -> return ti
       Nothing -> throwE (IllegalChoice (getSpan i) i t)
-    t'@(T.SharedChoice _ T.In ls)
+    t'@(T.UnChoice _ T.In ls)
       | i `elem` ls -> return t'
       | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-    (T.AppSemi _ t'@(T.SharedChoice _ T.In ls) u)
+    (T.AppSemi _ t'@(T.UnChoice _ T.In ls) u)
       | i `elem` ls -> return t'
       | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
     _ -> throwE (ExposeError (getSpan p) (Left p) "an external choice channel" t)
@@ -76,7 +76,7 @@ internalChoice e t i = do
       case lookup i its of
         Just t' -> return t'
         Nothing -> throwE (IllegalChoice s i t)
-    t'@(T.SharedChoice s T.Out its)
+    t'@(T.UnChoice s T.Out its)
       | i `elem` its -> return t'
       | otherwise    -> throwE (IllegalChoice s i t)
     _ -> throwE (ExposeError (getSpan e) (Right e) "an internal choice channel" t)

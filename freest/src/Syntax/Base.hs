@@ -125,8 +125,8 @@ firstInternal :: Int
 firstInternal = 1
 
 -- | Reserved for renaming; represents an unreachable variable in a type.
-nullInternal :: Int
-nullInternal = 0
+-- nullInternal :: Int
+-- nullInternal = 0
 
 -- | The default internal. Included in variables created by the parser. Scoping
 -- must eliminate all defaults.
@@ -136,8 +136,8 @@ defaultInternal = -1
 firstRenamed :: Int
 firstRenamed = -2
 
-nullVar :: Located a => a -> Variable
-nullVar x = Variable (getSpan x) "_unreachable" nullInternal
+-- nullVar :: Located a => a -> Variable
+-- nullVar x = Variable (getSpan x) "_unreachable" nullInternal
 
 -- | Construct a variable given its external representation and a Located value
 -- to extract the span from. The internal representation is the default.

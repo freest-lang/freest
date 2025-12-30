@@ -81,7 +81,7 @@ reduce td = \case
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
     -- R-DChoice (un and lin)
   T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
-  T.AppDual s (T.App _ u@T.Choice{} ts) ->  T.App s (T.dual u) (map (T.AppDual s) ts)
+  T.AppDual s (T.App _ u@T.Choice{} ts) -> T.App s (T.dual u) (map (T.AppDual s) ts)
     -- R-DTypeMsg - Requires the kind of the quantifier. Implementing the
     -- particular case where the quantifier is followed by a lambda. This should
     -- be enforced by the parser and kept as an invariant. Reading the kind from

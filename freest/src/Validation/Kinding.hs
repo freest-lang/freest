@@ -64,7 +64,7 @@ synth ctx = \case
   T.AppTypeMsg s _ a k t -> do
     (_, pk) <- checkSession (Map.insert a k ctx) t
     return (Proper s Lin pk)
-  T.SharedChoice s p ls -> pure (uc s)
+  T.UnChoice s p ls -> pure (uc s)
   T.AppLinChoice s p lts -> do
     pk <- foldM (\pk (_,t) -> meet pk . snd <$> checkSession ctx t) Session lts
     pure (Proper s Lin pk)

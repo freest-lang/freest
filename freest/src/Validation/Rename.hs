@@ -64,7 +64,7 @@ absorbing vs = \case
   T.End{} -> True
   T.Void _ k | K.isSession k -> True
   T.AppSemi _ t u -> absorbing vs t || absorbing vs u
-  T.SharedChoice{}        -> True -- Unrestricted choice
+  T.UnChoice{}        -> True -- Unrestricted choice
   T.AppMessage _ K.Un _ _ -> True -- Unrestricted message
   T.App _ T.Choice{} ts -> all (absorbing vs) ts
   T.AppDual _ t -> absorbing vs t

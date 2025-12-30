@@ -112,26 +112,35 @@ word' set ctx = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- If we get here, then t is of higher order kind or a type application, hopefully
+  -- If we get here, then t is of higher order kind or reduces, hopefully
   t -> do
     vs <- gets validationState
     case runSynth' vs ctx t of
       Right (K.Arrow _ k _) -> do
-        -- F : k => k'
-        let s = getSpan t
-        let a = first vs set t
-        let t' = case ctx Map.!? a of
-              Just k -> subs a (T.Void s k) t
-              Nothing -> t
-        let ctx' = Map.insert a k ctx
-        w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
-        let label = "λ" ++ show a ++ ":" ++ show k
-        getNonterminal $ Map.singleton label w
+        -- W-Abs, F : k => k'
+        let s = getSpan t -- The same span for all newly created vars & types?
+        let α = mkDefaultVar "α" s -- of kind k
+        let β = mkDefaultVar "β" s -- of kind k
+        wtα <- word set (Map.insert α k ctx) $ T.smartApp s t [T.fromVariable α]
+        wtβ <- word set (Map.insert β k ctx) $ T.smartApp s t [T.fromVariable β]
+        getNonterminal $ Map.fromList $
+          [ ('λ' : show α, wtα)
+          , ('λ' : show β, wtβ)
+          ]
+        -- let s = getSpan t
+        -- let a = first vs set t
+        -- let t' = case ctx Map.!? a of
+        --       Just k -> subs a (T.Void s k) t
+        --       Nothing -> t
+        -- let ctx' = Map.insert a k ctx
+        -- w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
+        -- let label = "λ" ++ show a ++ ":" ++ show k
+        -- getNonterminal $ Map.singleton label w
       Right _ -> do
-        -- t reduces
+        -- W-τ, t reduces
         td <- getTypeDecls
         word set ctx (reduce td t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ " with kinding context " ++ show ctx ++ " with errors " ++ show errors ++ ", at  " ++ show (getSpan t)
+      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ " with kinding context " ++ show ctx ++ " with errors " ++ show errors ++ ", at " ++ show (getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
 isFullyApplied ctx = \case
@@ -141,7 +150,7 @@ isFullyApplied ctx = \case
   T.AppQuant{} -> True
   T.AppTypeMsg{} -> True
   T.AppLinChoice{} -> True
-  T.SharedChoice{} -> True
+  T.UnChoice{} -> True
   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
   T.Var _ a -> K.depth (kindOf ctx a) ==  0
   T.AppVar _ a ts -> K.depth (kindOf ctx a) == length ts
@@ -152,8 +161,8 @@ kindOf ctx a = case ctx Map.!? a of
     Just k -> k
     Nothing -> internalError $ "Validation.TypeEquivalence.kindOf: variable " ++ show a ++ " not in context " ++ show ctx ++ ", at " ++ show (getSpan a)
 
-varTerminal :: Variable -> Terminal
-varTerminal α = "α" ++ show (internal α)
+-- varTerminal :: Variable -> Terminal
+-- varTerminal α = "α" ++ show (internal α)
 
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal

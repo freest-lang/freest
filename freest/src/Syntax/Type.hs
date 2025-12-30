@@ -16,7 +16,7 @@ module Syntax.Type
         , AppMessage
         , AppTypeMsg
         , AppLinChoice
-        , SharedChoice
+        , UnChoice
         , AppSemi
         , AppDual
         , AppTName
@@ -94,8 +94,8 @@ data Type
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
 pattern AppQuant :: Span -> Polarity -> [(Variable, K.Kind)] -> Type -> Type
 pattern AppQuant s p aks t <- App s (Quant _ p) [Abs _ aks t]
-  where AppQuant s p []  t = t
-        AppQuant s p aks t = App s (Quant s p) [Abs s aks t]
+  where AppQuant s p []  t  = t
+        AppQuant s p aks t  = App s (Quant s p) [Abs s aks t]
 
 pattern AppForall :: Span -> [(Variable, K.Kind)] -> Type -> Type
 pattern AppForall s aks t <- AppQuant s In aks t
@@ -119,12 +119,12 @@ pattern AppTypeMsg s p a k t <- App s (TypeMsg _ p) [Abs _ [(a, k)] t]
 
 pattern AppLinChoice :: Span -> Polarity -> [(Identifier, Type)] -> Type
 pattern AppLinChoice s p lts <- App s (Choice _ K.Lin p ls) (zip ls -> lts)
-  where AppLinChoice s p lts =  App s (Choice s K.Lin p ls) ts
+  where AppLinChoice s p lts  = App s (Choice s K.Lin p ls) ts
           where (ls, ts) = unzip $ sortBy (compare `on` fst) lts
 
-pattern SharedChoice :: Span -> Polarity -> [Identifier] -> Type
-pattern SharedChoice s p ls <- Choice s K.Un p ls
-  where SharedChoice s p ls = Choice s K.Un p (sort ls)
+pattern UnChoice :: Span -> Polarity -> [Identifier] -> Type
+pattern UnChoice s p ls <- Choice s K.Un p ls
+  where UnChoice s p ls  = Choice s K.Un p (sort ls)
 
 pattern AppSemi :: Span -> Type -> Type -> Type
 pattern AppSemi s t u <- App s (Semi _) [t,u]
@@ -139,34 +139,40 @@ pattern AppTName s i ts <- (\case TName s i            -> App s (TName s i) []
                                   App s (TName _ i) ts -> App s (TName s i) ts
                                   t                    -> t
                            -> App s (TName _ i) ts)
-  where AppTName _ i [] = TName (getSpan i) i
-        AppTName s i ts = App s (TName (getSpan i) i) ts
+  where AppTName _ i []  = TName (getSpan i) i
+        AppTName s i ts  = App s (TName (getSpan i) i) ts
 
 pattern Tuple :: Span -> [Type] -> Type
-pattern Tuple s ts <- AppDName s i@(isTupleId -> True) ts
-  where Tuple s = \case
+pattern Tuple s ts <- AppDName s (isTupleId -> True) ts
+  where Tuple s     = \case
           [_] -> internalError "cannot construct a 1-tuple type."
           ts  -> AppDName s (mkTupleId (length ts - 1) s) ts
 
 pattern List :: Span -> Type -> Type
-pattern List s t <- AppDName s i@((== mkListId s) -> True) [t]
-  where List s t =  AppDName s (mkListId s) [t]
+pattern List s t <- AppDName s ((== mkListId s) -> True) [t]
+  where List s t  = AppDName s (mkListId s) [t]
 
 pattern AppDName :: Span -> Identifier -> [Type] -> Type
 pattern AppDName s i ts <- (\case DName s i            -> App s (DName s i) []
                                   App s (DName _ i) ts -> App s (DName s i) ts
                                   t                    -> t
                            -> App s (DName _ i) ts)
-  where AppDName _ i [] = DName (getSpan i) i
-        AppDName s i ts = App s (DName (getSpan i) i) ts
+  where AppDName _ i []  = DName (getSpan i) i
+        AppDName s i ts  = App s (DName (getSpan i) i) ts
 
 pattern AppVar :: Span -> Variable -> [Type] -> Type
 pattern AppVar s a ts <- (\case Var s a            -> App s (Var s a) []
                                 App s (Var _ a) ts -> App s (Var s a) ts
                                 t                  -> t
                            -> App s (Var _ a) ts)
-  where AppVar _ a [] = Var (getSpan a) a
-        AppVar s a ts = App s (Var (getSpan a) a) ts
+  where AppVar _ a []  = Var (getSpan a) a
+        AppVar s a ts  = App s (Var (getSpan a) a) ts
+
+-- TODO: make smartApp a pattern
+-- pattern SmartApp :: Span -> Type -> [Type] -> Type
+-- pattern SmartApp s t us            <- if null us then s else App s t us
+--   where SmartApp s (App _ t ts) us  = App s t (ts ++ us)
+--         SmartApp s t            us  = App s t us
 
 smartApp :: Span -> Type -> [Type] -> Type
 smartApp s (App _ t ts) us = App s t (ts ++ us)
