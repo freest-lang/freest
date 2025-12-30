@@ -29,6 +29,7 @@ import Data.List.NonEmpty qualified as NE
 
 %name parseExp Exp
 %name parseType Type
+%name parseTypePrimaryListWS TypePrimaryListWS
 %name parseModuleDecl ModuleDecl
 %name parseModule Module
 %name parseEquivalenceTests EquivalenceTestCases
