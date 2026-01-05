@@ -137,7 +137,7 @@ instance Located Variable where
 
 -- | The first internal available for scoping.
 firstInternal :: Int
-firstInternal = 1
+firstInternal = 0
 
 -- | The default internal. Included in variables created by the parser. Scoping
 -- must eliminate all defaults.

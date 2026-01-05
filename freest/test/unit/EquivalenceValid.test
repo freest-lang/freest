@@ -713,8 +713,9 @@ case (\(n : (*T -> *T) -> *T -> *T) (s : *T -> *T) (z : *T) -> s (n s z))
 case \(a :1C -> 1S) (b : 1C) -> a b ==
      \(a :1C -> 1S) -> \(b : 1C) -> a b : (1C -> 1S) -> 1C -> 1S
 
-case \(a :1C -> 1S -> 1T) -> \(b : 1C) -> \(c : 1S) -> a b c ==
-     \(a :1C -> 1S -> 1T) (b : 1C) (c : 1S) -> a b c : (1C -> 1S -> 1T) -> 1C -> 1S -> 1T
+case \(a :1C -> 1S -> 1T) -> \(b : 1C) -> \(c : 1S) -> a b c
+  == \(a :1C -> 1S -> 1T)     (b : 1C)     (c : 1S) -> a b c
+   : (1C -> 1S -> 1T) -> 1C -> 1S -> 1T
 
 case (\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)) ==
      (\(n : (*T -> *T) -> *T -> *T)     (s : *T -> *T)     (z : *T) -> s (n s z)) :
