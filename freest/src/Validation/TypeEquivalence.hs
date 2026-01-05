@@ -156,13 +156,20 @@ bottom = 0
 
 -- An (should be *the*) integer associated to a kind
 toInt :: K.Kind -> Int
-toInt (K.Proper _ K.Lin K.Top) = 1
-toInt (K.Proper _ K.Un  K.Top) = 2
-toInt (K.Proper _ K.Lin K.Session) = 3
-toInt (K.Proper _ K.Un  K.Session) = 4
-toInt (K.Proper _ K.Lin K.Channel) = 5
-toInt (K.Proper _ K.Un  K.Channel) = 6
-toInt (K.Arrow _ k1 k2) = toInt k1 + 503 * toInt k2 -- TODO: Fix me!
+toInt (K.Proper _ K.Lin K.Top) = -1
+toInt (K.Proper _ K.Un  K.Top) = -2
+toInt (K.Proper _ K.Lin K.Session) = -3
+toInt (K.Proper _ K.Un  K.Session) = -4
+toInt (K.Proper _ K.Lin K.Channel) = -5
+toInt (K.Proper _ K.Un  K.Channel) = -6
+toInt (K.Arrow _ k1 k2) = toInt k1 - 503 * toInt k2-- toInt (K.Proper _ K.Lin toInt :: K.Kind -> Int
+-- toInt (K.Proper _ K.Lin K.Top) = 1
+-- toInt (K.Proper _ K.Un  K.Top) = 2
+-- toInt (K.Proper _ K.Lin K.Session) = 3
+-- toInt (K.Proper _ K.Un  K.Session) = 4
+-- toInt (K.Proper _ K.Lin K.Channel) = 5
+-- toInt (K.Proper _ K.Un  K.Channel) = 6
+-- toInt (K.Arrow _ k1 k2) = toInt k1 + 503 * toInt k2 -- TODO: Fix me!
 
 -- The state of the translation to grammar procedure
 
