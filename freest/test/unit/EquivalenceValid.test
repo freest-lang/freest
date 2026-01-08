@@ -720,3 +720,5 @@ case \(a :1C -> 1S -> 1T) -> \(b : 1C) -> \(c : 1S) -> a b c
 case (\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)) ==
      (\(n : (*T -> *T) -> *T -> *T)     (s : *T -> *T)     (z : *T) -> s (n s z)) :
      ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
+
+case Dual (!Int ; Close) == Dual !Int ; Close : 1S
