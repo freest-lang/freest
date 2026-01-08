@@ -721,4 +721,4 @@ case (\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)
      (\(n : (*T -> *T) -> *T -> *T)     (s : *T -> *T)     (z : *T) -> s (n s z)) :
      ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
 
-case Dual (!Int ; Close) == Dual !Int ; Close : 1S
+case Dual (!Int ; Close) == Dual !Int ; Wait : 1S
