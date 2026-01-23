@@ -43,7 +43,7 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
   let src = Map.fromList [ (programPath, lines programSrc)
                          , (preludePath, lines preludeSrc) ]
   case  -- Parse the source code of both the Prelude and the program
-        -- and join them in a single module (unless noImplicitPrelude).
+        -- and join them in a single module (unless n\oImplicitPrelude).
     do  programModule  <- runParseModule programPath programSrc
         preludeModule  <- runParseModule preludePath preludeSrc
         let finalModule = if noImplicitPrelude then programModule 

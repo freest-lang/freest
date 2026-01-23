@@ -81,11 +81,18 @@ type KindSigList = [([Identifier], K.Kind)]
 data Module x
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
-           , dataDecls   :: DataDeclList x
+           , dataDecls   :: XData x
            , typeDecls   :: TypeDeclList x
            , kindSigs    :: KindSigList
            , definitions :: [E.LetDecl x]
            }
+
+type instance XData Parsed = DataDeclList Parsed
+type instance XData Scoped = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Scoped])
+type instance XData Kinded = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Kinded])
+
+
+
 
 type Prog x = [Module x]
 

@@ -319,7 +319,7 @@ Type :: { T.ParsedType }
 
 TypeApp :: { T.ParsedType }
   : TypeApp TypePrimary { addArgType $2 $1 }
-  | 'Dual' TypePrimary  { T.AppDual (spanFromTo $1 $2) void void $2 }
+  | 'Dual' TypePrimary  { T.AppDual (spanFromTo $1 $2) void $2 }
   | TypePrimary { $1 }
 
 TypeListComma :: { [T.ParsedType] }

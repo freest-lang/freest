@@ -16,6 +16,7 @@ import Data.Bifunctor ( second )
 
 -- | Maps @type@ names to their declarations.
 type TypeDeclMap x = Map.Map Identifier (T.Type x)
+type KindedTypeDeclMap = TypeDeclMap Kinded
 
 -- | Maps @data@ names to their declarations.
 type DataDeclMap x = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclMap x)

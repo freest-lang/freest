@@ -27,11 +27,11 @@ import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Debug.Trace
 
-type Visited x = S.Set (T.Type x)
+-- type Visited x = S.Set (T.Type x)
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: Ord (T.XType x) => TypeDeclMap x -> T.Type x -> T.Type x
+normalise :: TypeDeclMap Kinded -> T.KindedType -> T.KindedType
 normalise td = norm S.empty
   where
 --    norm :: Visited x -> T.Type x -> T.Type x
@@ -45,16 +45,16 @@ normalise td = norm S.empty
         insert    = maybe visited (`S.insert` visited) u
 
 -- | Extract the applied @type@ name at the head of a type, if any.
-tNameRedex :: T.Type x -> Maybe (T.Type x)
+tNameRedex :: T.KindedType -> Maybe T.KindedType
 tNameRedex = \case 
   t@T.AppTName{}                               -> Just t -- µ∗U
   (T.AppSemi _ _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
-  (T.AppDual _ _ _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
-  (T.AppSemi _ _ (T.AppDual _ _ _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
+  (T.AppDual _ _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
+  (T.AppSemi _ _ (T.AppDual _ _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
 
 -- | Is a given type a weak head normal form?
-isWhnf :: T.Type x -> Bool
+isWhnf :: T.KindedType -> Bool
 isWhnf = \case
   -- W-Const0
   t | T.isConstant t -> True
@@ -70,11 +70,11 @@ isWhnf = \case
   -- W-Abs
   T.Abs{} -> True
   -- W-Dual
-  T.AppDual _ _ _ T.Var{} -> True
+  T.AppDual _ _ T.Var{} -> True
   _ -> False
 
 -- | One step type reduction (requires @not (isWhnf t)@?)
-reduce :: TypeDeclMap x -> T.Type x -> T.Type x
+reduce :: TypeDeclMap Kinded -> T.KindedType -> T.KindedType
 reduce td = \case
   -- 1. Semicolon
   -- R-Neut
@@ -87,26 +87,26 @@ reduce td = \case
   T.AppSemi s x t u -> T.AppSemi s  x(reduce td t) u
   -- 2. Duality
   -- R-DSkip
-  T.AppDual _ _ _ t@T.Skip{} -> t
+  T.AppDual _ _ t@T.Skip{} -> t
   -- R-DEnd
-  T.AppDual _ _ _ t@T.End{} -> T.dual t
+  T.AppDual _ _ t@T.End{} -> T.dual t
   -- R-DVoid
-  T.AppDual _ _ _ t@T.Void{} -> t
+  T.AppDual _ _ t@T.Void{} -> t
   -- R-DMsg
-  T.AppDual _ x _ (T.App s _ u@T.Message{} ts) -> T.App s x (T.dual u) ts
+  T.AppDual _ _ (T.App s x u@T.Message{} ts) -> T.App s x (T.dual u) ts
   -- R-DChoice
-  T.AppDual s _ _ u@T.Choice{} -> T.dual u -- for *& and *+
-  T.AppDual s x1 x2 (T.App _ x3 u@T.Choice{} ts) ->  T.App s x3 (T.dual u) (map (T.AppDual s x1 x2) ts)
+  T.AppDual s _ u@T.Choice{} -> T.dual u -- for *& and *+
+  T.AppDual s x1 (T.App _ x2 u@T.Choice{} ts) ->  T.App s x2 (T.dual u) (map (T.AppDual s x1) ts)
   -- R-DQuant
-  T.AppDual s1 x1 _ (T.AppQuant s2 x3 p aks t) -> T.AppQuant s1 x3 (T.dual p) aks (T.AppDual s2 x1 x3 t)
+  T.AppDual s1 x1 (T.AppQuant s2 x3 p aks t) -> T.AppQuant s1 x3 (T.dual p) aks (T.AppDual s2 x1 t)
   -- -- R-DDual
-  T.AppDual _ _ _ (T.AppDual _ _ _ t) -> t
+  T.AppDual _ _ (T.AppDual _ _ t) -> t
   -- R-DDVar - redundant in face of the above; alone seems not enough (normalisation diverges)
   -- T.AppDual s (T.AppDual _ t@T.AppVar{}) -> t
   -- R-DSemi
-  T.AppDual s1 x1 x2 (T.AppSemi s2 _ t1 t2) -> T.AppSemi s1 x1 (T.AppDual s1 x1 x2 t1) (T.AppDual s2 x1 x2 t2)
+  T.AppDual s1 x (T.AppSemi s2 _ t1 t2) -> T.AppSemi s1 x (T.AppDual s1 x t1) (T.AppDual s2 x t2)
   -- R-DCtx
-  T.AppDual s x1 x2 t -> T.AppDual s x1 x2 (reduce td t)
+  T.AppDual s x t -> T.AppDual s x (reduce td t)
   -- 3. R-μ + R-β + TAppL
   -- Q: What if as and ts are of different lengths?
   -- A: In that case, subsAll considers only the shortest between as and ts

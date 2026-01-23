@@ -43,7 +43,7 @@ allVars = \case
 
 -- | Type substitution. Substitutes ocurrences of a variable in a type for 
 -- another type (usually written @[a -> u] t@).
-subs :: Variable -> T.Type x -> T.Type x -> T.Type x
+subs :: Variable -> T.KindedType -> T.KindedType -> T.KindedType
 subs a u = \case 
   -- Variables
   t@(T.Var _ _ b)
@@ -55,11 +55,11 @@ subs a u = \case
       | b == a -> t
       | b `Set.member` fvu ->
         let b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
-            T.Abs _ _ bks' t'' = subs a u (subs b (T.Var (getSpan b') x b') (T.Abs s x bks t')) -- TODO: BA - check
-        in T.Abs s x ((b',k):bks') t''
+            T.Abs _ _ bks' t'' = subs a u (subs b (T.Var (getSpan b') k b') (T.Abs s x bks t'))
+        in T.Abs s k ((b',k):bks') t''
       | otherwise ->
-        let T.Abs _ _ bks' t'' = subs a u (T.Abs s x bks t')
-        in T.Abs s x ((b,k):bks') t''
+        let T.Abs _ x' bks' t'' = subs a u (T.Abs s x bks t')
+        in T.Abs s x' ((b,k):bks') t''
     where  fvu = freeVars u
   -- Applications
   T.App s x f ts -> T.App s x (subs a u f) (fmap (subs a u) ts)
@@ -67,5 +67,5 @@ subs a u = \case
 
 -- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
 -- between @as@ and @us@.
-subsAll :: [Variable] -> [T.Type x] -> T.Type x -> T.Type x
+subsAll :: [Variable] -> [T.KindedType] -> T.KindedType -> T.KindedType
 subsAll as us t = foldr (uncurry subs) t (zip as us)

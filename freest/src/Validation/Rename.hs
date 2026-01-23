@@ -9,8 +9,9 @@ Absorbing - non-normed types == types w/ infinite norm
 -}
 
 module Validation.Rename
-  ( rename
-  , isAbsorbing -- for testing purposes
+  ( --rename
+  -- ,
+    isAbsorbing -- for testing purposes
   )
 where
 
@@ -25,21 +26,21 @@ import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 
 -- | Rename a type.
-rename :: TypeDeclMap x -> T.Type x -> T.Type x
-rename td = \case
-  t | T.isConstant t -> t
-  t@T.Var{} -> t
-  t@T.TName{} -> t
-  T.App s x t us -> T.App s x (rename td t) (map (rename td) us)
-  T.Abs s x (unzip -> (as, ks)) t -> 
-    T.Abs s x (zip bs ks) (rename td (subsAll as (map (T.fromVariable x) bs) t))
-    where 
-      reach = reachable td t
-      bs = foldr (\a bs' -> if a `elem` reach then 
-                              firstVar a (S.fromList bs' `S.union` reach) : bs'
-                            else 
-                              nullVar a : bs') 
-                 [] as
+-- rename :: TypeDeclMap x -> T.Type x -> T.Type x
+-- rename td = \case
+--   t | T.isConstant t -> t
+--   t@T.Var{} -> t
+--   t@T.TName{} -> t
+--   T.App s x t us -> T.App s x (rename td t) (map (rename td) us)
+--   T.Abs s x (unzip -> (as, ks)) t -> 
+--     T.Abs s x (zip bs ks) (rename td (subsAll as (map (T.fromVariable x) bs) t))
+--     where 
+--       reach = reachable td t
+--       bs = foldr (\a bs' -> if a `elem` reach then 
+--                               firstVar a (S.fromList bs' `S.union` reach) : bs'
+--                             else 
+--                               nullVar a : bs') 
+--                  [] as
 
 -- | The set of free variables reachable in a type.
 reachable :: TypeDeclMap x -> T.Type x -> S.Set Variable
@@ -64,7 +65,7 @@ isAbsorbing td = absorb S.empty
       T.AppMessage _ _ _ K.Un _ _ -> True -- Unrestricted message
       T.AppSemi _ _ t u -> absorb v t || absorb v u
       T.App _ _ T.Choice{} ts -> all (absorb v) ts
-      T.AppDual _ _ _ t -> absorb v t
+      T.AppDual _ _ t -> absorb v t
       T.AppTName _ _ _ id ts -> id `S.member` v || case td M.!? id of
         Just (T.Abs _ _ _ u) -> absorb (S.insert id v) u
         Just u  -> absorb (S.insert id v) u

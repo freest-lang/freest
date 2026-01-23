@@ -1,8 +1,13 @@
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies, DataKinds, ConstraintKinds #-}
+{-# LANGUAGE GADTs, EmptyCase, StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators, PatternSynonyms #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {- |
 Module      :  Syntax.Type
 Copyright   :  © The FreeST Team
@@ -11,10 +16,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module defines the Type data type, which represents FreeST's higher-order
 polymorphic context-free session types.
 -}
-{-# LANGUAGE TypeFamilies, DataKinds, ConstraintKinds #-}
-{-# LANGUAGE GADTs, EmptyCase, StandaloneDeriving #-}
-{-# LANGUAGE TypeOperators, PatternSynonyms #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+
 module Syntax.Type
   ( Polarity(..)
   , Type( ..
@@ -47,10 +49,11 @@ module Syntax.Type
   , isMsg
   , fromVariable
   , getExt
+  , setExt
   , XType(..)
   , ParsedType
   , KindedType
-  , TypedType
+  -- , TypedType
   )
 where
 
@@ -69,13 +72,12 @@ import qualified Data.Void as V
 
 type ParsedType = Type Parsed
 type KindedType = Type Kinded
-type TypedType  = Type Typed
+-- type TypedType  = Type Typed
 
 type family XType x
 type instance XType Parsed = V.Void
-type instance XType Kinded = V.Void -- Testing
-type instance XType Typed = V.Void -- Testing
-
+type instance XType Kinded = K.Kind -- Testing
+-- type instance XType Typed = K.Kind  -- Testing
 
 data Polarity = In | Out
   deriving (Eq, Ord)
@@ -113,6 +115,7 @@ data Type x
   | App     Span (XType x) (Type x) [Type x]
 
 deriving instance Ord (XType x) => Ord (Type x)
+
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
@@ -155,9 +158,9 @@ pattern AppSemi :: Span -> XType x -> Type x -> Type x -> Type x
 pattern AppSemi s x t u <- App s x (Semi _ _) [t,u]
   where AppSemi s x t u  = App s x (Semi s x) [t,u]
 
-pattern AppDual :: Span -> XType x -> XType x -> Type x -> Type x
-pattern AppDual s x1 x2 t <- App s x1 (Dual _ x2) [t]
-  where AppDual s x1 x2 t  = App s x1 (Dual s x2) [t]
+pattern AppDual :: Span -> XType x -> Type x -> Type x
+pattern AppDual s x t <- App s x (Dual _ _) [t]
+  where AppDual s x t  = App s x (Dual s x) [t]
 
 -- Span (XType x) (Type x) [Type x]
 pattern AppTName :: Span -> XType x -> XType x -> Identifier -> [Type x] -> Type x
@@ -378,26 +381,51 @@ instance Located (Type x) where
 
 getExt :: Type x -> XType x
 getExt = \case
-    -- Functional types
-    Int _ s           -> s
-    Float  _ s        -> s
-    Char _ s         -> s
-    Arrow  _ s _      -> s
+  -- Functional types
+  Int _ x           -> x
+  Float _ x        -> x
+  Char _ x         -> x
+  Arrow _ x _       -> x
+  -- Session types
+  Message _ x _ _   -> x
+  Choice  _ x _ _ _ -> x
+  End _ x _         -> x
+  Skip _ x          -> x
+  Semi _ x          -> x
+  Dual _ x          -> x
+  -- Polymorphism
+  Quant _ x _       -> x
+  -- Higher-order
+  Var _ x _         -> x
+  Abs _ x _ _       -> x
+  App _ x _ _       -> x
+  -- Equations
+  TName _ x _       -> x
+  DName _ x _       -> x
+  --   The type of non-contractive types
+  Void _ x _        -> x
+    
+setExt :: XType x -> Type x -> Type x
+setExt x = \case
+     -- Functional types
+    Int s _            -> Int s x
+    Float s _          -> Float s x
+    Char s _          -> Char s x
+    Arrow s _ m        -> Arrow s x m
+    Quant s _ p       -> Quant s x p
     -- Session types
-    Message _ s _ _   -> s
-    Choice _ s _ _ _ -> s
-    End _ s _         -> s
-    Skip _ s          -> s
-    Semi _ s          -> s
-    Dual _ s          -> s
-    -- Polymorphism
-    Quant _ s _       -> s
+    Message s _ m p    -> Message s x m p
+    Choice  s _ m p ls -> Choice s x m p ls
+    End s _ p          -> End s x p
+    Skip s _           -> Skip s x
+    Semi s _           -> Semi s x
+    Dual s _           -> Dual s x
     -- Higher-order
-    Var _ s _         -> s
-    Abs _ s _ _       -> s
-    App _ s _ _       -> s
+    Var s _ a          -> Var s x a
+    Abs s _ aks t      -> Abs s x aks t
+    App s _ t1 t2      -> App s x t1 t2
     -- Equations
-    TName _ s _       -> s
-    DName _ s _       -> s
+    TName s _ n        -> TName s x n
+    DName s _ n        -> DName s x n
     --   The type of non-contractive types
-    Void _ s _        -> s
+    Void s _ k         -> Void s x k

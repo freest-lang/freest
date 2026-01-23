@@ -15,9 +15,6 @@ module Syntax.Kind
   , Subsort(..)
   , Join(..)
   , Meet(..)
-  , isStrictlyLin
-  , isStrictlySession
-  , isStrictlyChannel
   , image
   , depth
   )
@@ -129,17 +126,6 @@ uc s = Proper s Un  Channel
 -- | Abbreviation for the bottom proper kind
 bot :: Span -> Kind
 bot = us -- (ua later)
-
-isStrictlyLin, isStrictlyChannel, isStrictlySession :: Kind -> Bool
-
-isStrictlyLin (Proper _ Lin _) = True 
-isStrictlyLin _ = False
-
-isStrictlyChannel (Proper _ _ Channel) = True
-isStrictlyChannel _ = False
-
-isStrictlySession (Proper _ _ Session) = True
-isStrictlySession _ = False
 
 instance Show Multiplicity where
   show = \case 
