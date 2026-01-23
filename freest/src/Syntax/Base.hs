@@ -162,7 +162,7 @@ unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as)
 
 -- | Same as 'unusedVar', but for multiple variables.
 unusedVars :: [Int] -> [Variable] -> Set.Set Variable -> [Variable]
-unusedVars stock as bs  = zipWith (\a i -> a{internal=i}) as (b \\ map internal (Set.toList bs))
+unusedVars stock as bs  = zipWith (\a i -> a{internal=i}) as (stock \\ map internal (Set.toList bs))
 
 -- | The first variable not in a given set of variables, counting upwards. Used
 -- in substitution, for example.
