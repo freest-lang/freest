@@ -32,7 +32,8 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type qualified as T
 
-import           Data.List (intercalate)
+import Data.List (intercalate)
+import Data.Map qualified as Map
 
 type ParsedConsDeclList = ConsDeclList Parsed
 type KindedConsDeclList = ConsDeclList Kinded
@@ -81,18 +82,24 @@ type KindSigList = [([Identifier], K.Kind)]
 data Module x
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
-           , dataDecls   :: XData x
-           , typeDecls   :: TypeDeclList x
+           , dataDecls   :: XDataDecl x
+           , typeDecls   :: XTypeDecl x
            , kindSigs    :: KindSigList
            , definitions :: [E.LetDecl x]
            }
 
-type instance XData Parsed = DataDeclList Parsed
-type instance XData Scoped = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Scoped])
-type instance XData Kinded = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Kinded])
+type family XDataDecl x
+type family XTypeDecl x
 
+type instance XDataDecl Parsed = DataDeclList Parsed
+type instance XDataDecl Scoped = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Scoped)
+type instance XDataDecl Kinded = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Kinded)
+type instance XDataDecl Typed = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList (T.Type Typed))
 
-
+type instance XTypeDecl Parsed = TypeDeclList Parsed
+type instance XTypeDecl Scoped = Map.Map Identifier (T.Type Scoped)
+type instance XTypeDecl Kinded = Map.Map Identifier (T.Type Kinded)
+type instance XTypeDecl Typed = Map.Map Identifier (T.Type Typed)
 
 type Prog x = [Module x]
 
@@ -106,20 +113,20 @@ setName n m = m {name = Just n}
 insertImport :: [String] -> Module x -> Module x
 insertImport i m = m{imports = i : imports m}
 
-insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> ConsDeclList x -> Module x -> Module x
+insertDataDecl ::  Identifier -> [(Variable, K.Kind)] -> ConsDeclList Parsed -> Module Parsed -> Module Parsed
 insertDataDecl i aks b m = m{dataDecls = (i, aks, b) : dataDecls m}
 
-insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type x -> Module x -> Module x
+insertTypeDecl :: Identifier -> [(Variable, K.Kind)] -> T.Type Parsed -> Module Parsed -> Module Parsed
 insertTypeDecl i aks t m = m{typeDecls = (i, t') : typeDecls m}
   where t' = if null aks then t else T.Abs (getSpan t) (T.getExt t) aks t 
 
-insertKindSig :: [Identifier] -> K.Kind -> Module x -> Module x
+insertKindSig :: [Identifier] -> K.Kind -> Module Parsed -> Module Parsed
 insertKindSig is k m = m{kindSigs = (is, k) : kindSigs m}
 
-insertDef :: E.LetDecl x -> Module x -> Module x
+insertDef :: E.LetDecl Parsed -> Module Parsed -> Module Parsed
 insertDef d m = m{definitions = d : definitions m}
 
-empty :: Module x
+empty :: Module Parsed
 empty = Module{ name        = Nothing
               , imports     = []
               , dataDecls   = []
@@ -128,7 +135,7 @@ empty = Module{ name        = Nothing
               , definitions = []
               }
 
-instance Semigroup (Module x) where
+instance Semigroup (Module Parsed) where
   m1 <> m2 =
     Module{ name        = name m2
           , imports     = imports     m1 ++ imports     m2
@@ -138,10 +145,10 @@ instance Semigroup (Module x) where
           , definitions = definitions m1 ++ definitions m2
           }
 
-instance Monoid (Module x) where 
-  mempty = empty 
+-- instance Monoid (Module x) where 
+--   mempty = empty 
 
-instance Show (Module x) where
+instance Show (Module Parsed) where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
     intercalate "\n" $ filter (not . null)
       [case name of Nothing -> "" ; Just n -> "module "++intercalate "." n++" where"

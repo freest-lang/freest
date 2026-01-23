@@ -105,7 +105,7 @@ synth kctx tctx = \case
     (_,_,t) <- Kinding.checkProperK t
     pure (T.List s (K.ut s) t, tctx) -- TODO: Kind
   -- Cons, (::) @a e1 e2
-  E.Cons s e1 e2 -> do
+  E.Cons s e1 e2 -> do -- TODO: synth e2 first? 
     (t', tctx') <- synth kctx tctx e1
     let t = T.List s (K.ut s) t' -- TODO: Kind
     (t,) <$> check kctx tctx' e2 t

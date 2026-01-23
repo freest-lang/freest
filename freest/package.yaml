@@ -21,6 +21,8 @@ default-extensions:
   - BangPatterns
   - ScopedTypeVariables
   - ImportQualifiedPost
+  - TypeFamilies
+
 
 data-dir: data
 data-files:

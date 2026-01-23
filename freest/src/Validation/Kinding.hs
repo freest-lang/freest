@@ -157,7 +157,7 @@ checkProper ctx t = kindedTypeM >>= \kT -> case T.getExt kT of
 -- and prekind. Otherwise, throw an error.
 checkProperK :: T.KindedType -> Validation Kinded (Multiplicity, Prekind, T.KindedType)
 checkProperK t = case T.getExt t of  
-    Proper _ m pk ->  pure (m,pk,t)
+    Proper _ m pk -> pure (m,pk,t)
     k -> throwE (ProperKindMismatch (getSpan t) t k)     
   
 -- | Check if a type is a session type. If so, return its minimal multiplicity

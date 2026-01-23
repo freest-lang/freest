@@ -1,13 +1,5 @@
-{-# LANGUAGE RoleAnnotations #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies, DataKinds, ConstraintKinds #-}
-{-# LANGUAGE GADTs, EmptyCase, StandaloneDeriving #-}
-{-# LANGUAGE TypeOperators, PatternSynonyms #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {- |
 Module      :  Syntax.Type
 Copyright   :  © The FreeST Team
