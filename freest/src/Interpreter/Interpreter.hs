@@ -267,6 +267,7 @@ functionToClosure :: [Clause] -> Value
 functionToClosure clauses = do
   let arity = length $ fst $ head clauses
       -- generate list of fresh variables according to arity
+      -- mkFreshVar span (fvars from clauses)
       freshVars = undefined
       -- generate case expressions
       cases = clausesToCases freshVars clauses
