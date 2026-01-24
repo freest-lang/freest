@@ -26,9 +26,9 @@ type ConsDeclMap x = Map.Map Identifier [T.Type x]
 
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
-data FreeSTState x
+data FreeSTState
   = FreeSTState
-    { errors    :: [Error x]
+    { errors    :: [Error]
     , counter   :: Int
     -- , kindSigs  :: Map.Map Identifier K.Kind
     -- , typeDecls :: TypeDeclMap x
@@ -37,7 +37,7 @@ data FreeSTState x
     }
 
 -- | The empty validation state. No errors or declarations.
-emptyValidationState :: FreeSTState x
+emptyValidationState :: FreeSTState
 emptyValidationState = FreeSTState 
   { errors    = []
   , counter   = 0
@@ -50,13 +50,13 @@ emptyValidationState = FreeSTState
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
 -- type 'ValidationState'.
-type FreeST x = ExceptT (Error x) (State (FreeSTState x))
+type FreeST = ExceptT Error (State FreeSTState)
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 
 --     * a list of errors, if any was encountered;
 --     * the result of the validation procedure, otherwise.
-runValidation :: FreeSTState x -> FreeST x t -> Either [Error x] t
+runValidation :: FreeSTState -> FreeST t -> Either [Error] t
 runValidation s v =
   let (x, FreeSTState{errors}) = runState (runExceptT v) s
   in case x of
@@ -65,7 +65,7 @@ runValidation s v =
              | otherwise   -> Left errors
 
 -- | Look up the kind of a @type@ or @data@ name in the validation state.
-lookupKind :: Identifier -> FreeST x K.Kind
+lookupKind :: Identifier -> FreeST K.Kind
 lookupKind i = undefined -- do 
   -- ctx <- gets kindSigs
   -- case ctx Map.!? i of

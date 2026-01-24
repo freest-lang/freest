@@ -352,7 +352,7 @@ kindModule m = do
 -- 
 --     * a list of errors, if any was encountered;
 --     * the given module, otherwise.
-runKindModule :: M.ParsedModule -> Either [KindedError] M.KindedModule
+runKindModule :: M.ParsedModule -> Either [Error] M.KindedModule
 runKindModule m = undefined -- runValidation (buildValidationState m) (kindModule m)
 
 -- | Run synthesis on type, building the initial validation state from a given
@@ -360,7 +360,7 @@ runKindModule m = undefined -- runValidation (buildValidationState m) (kindModul
 -- 
 --     * a list of errors, if any was encountered;
 --     * a kind synthesized from the type, otherwise.
-runSynth :: M.ParsedModule -> T.ParsedType -> Either [KindedError] Kind
+runSynth :: M.ParsedModule -> T.ParsedType -> Either [Error] Kind
 runSynth m t = undefined -- runValidation (buildValidationState m) (synth Map.empty t)
 
 -- | Run checking on a type against a kind, building the initial validation 
@@ -368,7 +368,7 @@ runSynth m t = undefined -- runValidation (buildValidationState m) (synth Map.em
 -- 
 --     * a list of errors, if any was encountered;
 --     * unit, otherwise.
-runCheck :: M.ParsedModule -> T.ParsedType -> Kind -> Either [KindedError] ()
+runCheck :: M.ParsedModule -> T.ParsedType -> Kind -> Either [Error] ()
 runCheck m t k = undefined -- runValidation (buildValidationState m) (check Map.empty t k)
 
 isStrictlyLin, isStrictlyChannel, isStrictlySession :: T.KindedType -> Bool

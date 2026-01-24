@@ -10,10 +10,7 @@ scope (which, in turn, requires grouping function equations, detecting
 duplicate variable declarations, etc.).
 -}
 module Parser.Scoping
-  (Scoping
-  ,ScopingState(..)
-  ,emptyScopingState
-  ,ScopingCtx
+  (ScopingCtx
   ,emptyScopingCtx
   ,runScoping
   ,runScopeModule
@@ -31,8 +28,9 @@ import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 -- import Validation.Rename ( rename )
 import Validation.Substitution ( freeVars )
+import Validation.Base
 import Syntax.Type qualified as T
-import UI.Error ( Error(..), ParsedError)
+import UI.Error ( Error(..))
 
 import Control.Monad ( replicateM, forM, void, forM_, unless, foldM, when )
 import Control.Monad.Extra ( ifM )
@@ -45,6 +43,7 @@ import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+import Control.Monad.Except
 
 -- = Scoping context
 -- The scoping context keeps track of variable and indentifier names.
@@ -155,43 +154,32 @@ insertDId  i@(Identifier _ s) = first $ Map.insert (DId  s) i
 insertCId  i@(Identifier _ s) = first $ Map.insert (CId  s) i
 insertKSig i@(Identifier _ s) = first $ Map.insert (KSig s) i
 
--- = Scoping state
-
--- | The scoping state. Keeps track of:
---
---     * a counter to generate fresh variable names;
---     * a list of errors thrown during the scoping process.
-data ScopingState = ScopingState{counter :: Int, errors :: [ParsedError]}
-
-emptyScopingState :: ScopingState
-emptyScopingState = ScopingState firstInternal []
-
--- | The Scoping monad, a State monad carrying a ScopingState.
-type Scoping = State ScopingState
-
 -- | Run a scoping procedure on a given value, returning either:
 -- 
 --     * a list of errors, if any was encountered;
 --     * the result of the scoping procedure, otherwise.
-runScoping :: (ScopingCtx -> a -> Scoping b) -> a -> Either [ParsedError] b
-runScoping f x =
-  let (x', s) = runState (f emptyScopingCtx x) emptyScopingState
-  in if null (errors s) then Right x' else Left (errors s)
+runScoping :: FreeSTState -> (ScopingCtx -> a -> FreeST b) -> a -> Either [Error] b
+runScoping s f x =
+  let (x', FreeSTState{errors}) = runState (runExceptT $ f emptyScopingCtx x) s
+  in case x' of
+    Left e -> Left (errors ++ [e])
+    Right x'' | null errors -> Right x'' 
+              | otherwise   -> Left errors
 
 -- | Insert an error in the scoping state.
-insertError :: ParsedError -> Scoping ()
+insertError :: Error -> FreeST ()
 insertError e = modify (\s -> s{errors = e : errors s})
 
 -- | Increment the fresh internal variable name counter, returning the previous
 -- value.
-incCounter :: Scoping Int
+incCounter :: FreeST Int
 incCounter = do
   c <- gets counter
   modify (\s -> s{counter=succ (counter s)})
   return c
 
 -- | Update the internal name of a variable with a fresh name.
-freshInternal :: Variable -> Scoping Variable
+freshInternal :: Variable -> FreeST Variable
 freshInternal x = incCounter >>= \i -> return x{internal = i}
 
 -- = Scoping procedures
@@ -200,11 +188,11 @@ freshInternal x = incCounter >>= \i -> return x{internal = i}
 -- 
 --     * a list of errors, if any was encountered;
 --     * the scoped module, otherwise.
-runScopeModule :: M.ParsedModule -> Either [ParsedError] M.ParsedModule
-runScopeModule = runScoping scopeModule
+runScopeModule :: FreeSTState -> M.ParsedModule -> Either [Error] M.ParsedModule
+runScopeModule s = runScoping s scopeModule
 
 -- | Scope a module, returning also the resulting context.
-scopeModule' :: ScopingCtx -> M.ParsedModule -> Scoping (ScopingCtx, M.ParsedModule)
+scopeModule' :: ScopingCtx -> M.ParsedModule -> FreeST (ScopingCtx, M.ParsedModule)
 scopeModule' ctx m = do
   ctx <- checkDupKindSigs      ctx (M.kindSigs m)
   ctx <- checkDupDataTypeDecls ctx (M.dataDecls m) (M.typeDecls m)
@@ -218,12 +206,12 @@ scopeModule' ctx m = do
                 })
 
 -- | Scope a module.
-scopeModule :: ScopingCtx -> M.ParsedModule -> Scoping M.ParsedModule
+scopeModule :: ScopingCtx -> M.ParsedModule -> FreeST M.ParsedModule
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
-checkDupKindSigs :: ScopingCtx -> M.KindSigList -> Scoping ScopingCtx
+checkDupKindSigs :: ScopingCtx -> M.KindSigList -> FreeST ScopingCtx
 checkDupKindSigs ctx kindSigs = do
   let (es, ctx') = foldr checkDupKindSigs' (Map.empty, ctx) kindSigs
   forM_ es (\is -> when (length is > 1) $
@@ -235,7 +223,7 @@ checkDupKindSigs ctx kindSigs = do
             (err, ctx) ids
 
 -- | Check for duplicate data and type declarations.
-checkDupDataTypeDecls :: ScopingCtx -> M.ParsedDataDeclList -> M.ParsedTypeDeclList -> Scoping ScopingCtx
+checkDupDataTypeDecls :: ScopingCtx -> M.ParsedDataDeclList -> M.ParsedTypeDeclList -> FreeST ScopingCtx
 checkDupDataTypeDecls ctx dds tds = do
   let (es, ctx'  ) = foldr (\(ti, _, _) -> bimap (Map.insertWith (++) ti [ti]) 
                                                  (insertDId ti)) 
@@ -248,7 +236,7 @@ checkDupDataTypeDecls ctx dds tds = do
   return ctx''
 
 -- | Check for duplicate data constructor declarations
-checkDupConsDecls :: ScopingCtx -> M.ParsedDataDeclList -> Scoping ScopingCtx
+checkDupConsDecls :: ScopingCtx -> M.ParsedDataDeclList -> FreeST ScopingCtx
 checkDupConsDecls ctx dds = do -- insertCId ci ctx'
   let (es, ctx') = foldr collectConsDecls (Map.empty, ctx) dds
   forM_ es \is -> when (length is > 1) $
@@ -263,7 +251,7 @@ checkDupConsDecls ctx dds = do -- insertCId ci ctx'
 -- context.
 scopeDataDecls :: ScopingCtx 
                -> M.ParsedDataDeclList 
-               -> Scoping (ScopingCtx, M.ParsedDataDeclList)
+               -> FreeST (ScopingCtx, M.ParsedDataDeclList)
 scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
   where
     scopeDataDecl (ctx', dds') dd@(ti, unzip -> (as, ks), cds) = do
@@ -283,7 +271,7 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
 -- context.
 scopeTypeDecls :: ScopingCtx 
                -> M.ParsedTypeDeclList 
-               -> Scoping (ScopingCtx, M.ParsedTypeDeclList)
+               -> FreeST (ScopingCtx, M.ParsedTypeDeclList)
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
   where
     scopeTypeDecl (ctx', tds') (ti, t) = do
@@ -294,7 +282,7 @@ scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
 -- context. Besides scoping the variables, this procedure also groups function
 -- equations and detects signatures without accompanying definitions.
-scopeDefs :: ScopingCtx -> [E.ParsedLetDecl] -> Scoping (ScopingCtx, [E.ParsedLetDecl])
+scopeDefs :: ScopingCtx -> [E.ParsedLetDecl] -> FreeST (ScopingCtx, [E.ParsedLetDecl])
 scopeDefs ctx ds = do    
   (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx (groupEquations ds)
   forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
@@ -357,7 +345,7 @@ scopeDefs ctx ds = do
         second (E.Mutual ds'' :) <$> scopeDefs' True ctx' ictx ds
 
 -- | Scope a right-hand side.
-scopeRHS :: ScopingCtx -> E.ParsedRHS -> Scoping E.ParsedRHS
+scopeRHS :: ScopingCtx -> E.ParsedRHS -> FreeST E.ParsedRHS
 scopeRHS ctx = \case
   E.GuardedRHS ges Nothing   ->
     E.GuardedRHS <$> mapM (bimapM (scopeExp ctx) (scopeExp ctx)) ges 
@@ -373,7 +361,7 @@ scopeRHS ctx = \case
     E.UnguardedRHS <$> scopeExp ctx' e <*> pure (Just ds')
 
 -- | Scope an expression.
-scopeExp :: ScopingCtx -> E.ParsedExp -> Scoping E.ParsedExp
+scopeExp :: ScopingCtx -> E.ParsedExp -> FreeST E.ParsedExp
 scopeExp ctx = \case
   e@(E.Var s x) -> case lookupEVar x ctx of
     Nothing -> {- insertError (OutOfScope (getSpan x) x) -} -- leaving this for the typechecker
@@ -409,7 +397,7 @@ scopeExp ctx = \case
     e' <- scopeExp ctx e
     E.Case s e' <$> mapM scopePatRHS prhss
     where
-      scopePatRHS :: (E.ParsedPat, E.ParsedRHS) -> Scoping (E.ParsedPat, E.ParsedRHS)
+      scopePatRHS :: (E.ParsedPat, E.ParsedRHS) -> FreeST (E.ParsedPat, E.ParsedRHS)
       scopePatRHS (p,rhs) = do
         checkConflictingDefs [ExpLevel p]
         (_,p') <- scopePat ctx emptyScopingCtx p
@@ -429,7 +417,7 @@ scopeExp ctx = \case
 scopePat :: ScopingCtx -- main context
          -> ScopingCtx -- auxilliary context
          -> E.ParsedPat
-         -> Scoping (ScopingCtx, E.ParsedPat) -- returns the auxilliary context
+         -> FreeST (ScopingCtx, E.ParsedPat) -- returns the auxilliary context
 scopePat ctx ictx = \case
   E.WildPat s w -> (ictx,) . E.WildPat s <$> freshInternal w
   E.VarPat s x  -> case lookupEVar x ictx of
@@ -452,7 +440,7 @@ scopePat ctx ictx = \case
   p -> pure (ictx, p)
 
 -- | Check conflicting definitions for bindings.
-checkConflictingDefs :: [Level E.ParsedPat Variable] -> Scoping ()
+checkConflictingDefs :: [Level E.ParsedPat Variable] -> FreeST ()
 checkConflictingDefs (partitionLevels -> (ps, as)) = do
   let evos = Map.unionsWith (++) (map patVarOccurs ps)
       tvos = varOccurs as
@@ -480,13 +468,13 @@ patVars = \case
   _                 -> Set.empty
 
 -- | Generate a fresh kind inference variable.
-freshKVar :: Located a => a -> Scoping K.Kind
+freshKVar :: Located a => a -> FreeST K.Kind
 freshKVar (getSpan -> s) = do
   i <- incCounter
   return $ K.Var s (Variable s  ("τ"++show i) i)
 
 -- | Scope a type.
-scopeType :: ScopingCtx -> T.ParsedType -> Scoping T.ParsedType
+scopeType :: ScopingCtx -> T.ParsedType -> FreeST T.ParsedType
 scopeType ctx = \case
   T.Arrow s x m -> T.Arrow s x <$> scopeMultiplicity m
   T.Message s x m p -> T.Message s x <$> scopeMultiplicity m <*> pure p
@@ -514,7 +502,7 @@ scopeType ctx = \case
 
 -- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.
-scopeAndQuantifyType :: ScopingCtx -> T.ParsedType -> Scoping T.ParsedType
+scopeAndQuantifyType :: ScopingCtx -> T.ParsedType -> FreeST T.ParsedType
 scopeAndQuantifyType ctx t = do
   t' <- scopeType ctx t
   let fvt' = Set.toList (freeVars t' Set.\\ Set.fromList (toTVarList ctx))        
@@ -526,7 +514,7 @@ scopeAndQuantifyType ctx t = do
       scopeType ctx $ T.AppForall (getSpan t) (T.getExt t) aks t
 
 -- | Scope a kind.
-scopeKind :: K.Kind -> Scoping K.Kind
+scopeKind :: K.Kind -> FreeST K.Kind
 scopeKind = \case
     K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind k1 <*> scopeKind k2
     K.Proper s m pk -> K.Proper s <$> scopeMultiplicity m  <*> scopePrekind pk
@@ -541,7 +529,7 @@ scopeKind = \case
       return $ τ'{external = "τ" ++ show (internal τ')}
 
 -- | Scope a multiplicity.
-scopeMultiplicity :: K.Multiplicity -> Scoping K.Multiplicity
+scopeMultiplicity :: K.Multiplicity -> FreeST K.Multiplicity
 scopeMultiplicity = \case
   K.VarM φ -> do
     φ' <- freshInternal φ

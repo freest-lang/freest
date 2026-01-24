@@ -621,7 +621,7 @@ prefixTupleExpConsError :: Token -> Token -> Lexer a
 prefixTupleExpConsError tk1 tk2 = 
   throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported" "(Consider using a tuple expression)"] 
 
-runParseModule :: FilePath -> String -> Either [ParsedError] M.ParsedModule
+runParseModule :: FilePath -> String -> Either [Error] M.ParsedModule
 runParseModule = runLexer parseModule 
 
 }

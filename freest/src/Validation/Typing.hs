@@ -629,5 +629,5 @@ typeModule m = do
               foldrM (\t u -> return $ T.AppArrow (spanFromTo t u) (K.ut (spanFromTo t u)) (K.ut (spanFromTo t u))  K.Lin t u)
                      (T.DName (getSpan it) (K.ut (getSpan it)) it) -- TODO: kinds
 
-runValidate :: M.ParsedModule -> Either [KindedError] (M.KindedModule, TypeCtx)
+runValidate :: M.ParsedModule -> Either [Error] (M.KindedModule, TypeCtx)
 runValidate m = runValidation (buildValidationState m) (Kinding.kindModule m >>= typeModule)

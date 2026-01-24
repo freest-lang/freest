@@ -14,7 +14,6 @@ module UI.Error
   , toMessage
   , showErrors
   , printErrors
-  , ParsedError, KindedError, TypedError
   )
 where
 
@@ -31,57 +30,53 @@ import Data.Map.Strict qualified as Map
 import Data.List qualified as List
 import Data.Char qualified as Char
 
-type ParsedError = Error Parsed
-type KindedError = Error Kinded
-type TypedError = Error Typed
-
 -- | The errors that can be found in a FreeST program.
-data Error x
-  = ArrowMultMismatch Span (Either Variable (E.Exp x)) Int
+data Error
+  = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
     K.Multiplicity K.Multiplicity
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
-  | ExpectsTooManyArgs Span (Either Variable (E.Exp x)) (T.Type x) Int Int
+  | ExpectsTooManyArgs Span (Either Variable E.KindedExp) T.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span String (T.Type x)
-  | GivenTooManyArgs Span (E.Exp x) (T.Type x) Int Int
-  | GivenTooManyArgsK Span (T.Type x) K.Kind Int Int
-  | IllegalChoice Span Identifier (T.Type x)
-  | KindMismatch Span K.Kind (T.Type x) K.Kind
+  | ExposeError Span String T.KindedType
+  | GivenTooManyArgs Span E.KindedExp T.KindedType Int Int
+  | GivenTooManyArgsK Span T.KindedType K.Kind Int Int
+  | IllegalChoice Span Identifier T.KindedType
+  | KindMismatch Span K.Kind T.KindedType K.Kind
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) (T.Type x) (Either Variable (E.Exp x))
-  | LinNotConsumedEvenly Span (Either Variable Identifier) (T.Type x) 
-    (Either (Either Variable (E.Pat x)) (E.Exp x))
-  | LinVarAtEndOfScope Span (Either Variable Identifier) (T.Type x)
+  | LinConsumedInUnFun Span (Either Variable Identifier) T.KindedType (Either Variable E.KindedExp)
+  | LinNotConsumedEvenly Span (Either Variable Identifier) T.KindedType
+    (Either (Either Variable E.KindedPat) E.KindedExp)
+  | LinVarAtEndOfScope Span (Either Variable Identifier) T.KindedType
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
   | MultipleKindSigs Span [Identifier]
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
-  | NonLinPat Span (E.Pat x) (T.Type x)
+  | NonLinPat Span E.KindedPat T.KindedType
   | ParseError Span (Token, [String])
   | PartiallyAppliedSelect Span Identifier
-  | PrekindMismatch Span K.Prekind (T.Type x) K.Kind
-  | ProperKindMismatch Span (T.Type x) K.Kind
+  | PrekindMismatch Span K.Prekind T.KindedType K.Kind
+  | ProperKindMismatch Span T.KindedType K.Kind
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span (T.Type x) (T.Type x) (Either (E.Exp x) (E.Pat x))
-  | TypeMismatchList Span (T.Type x) (Either (E.Exp x) (E.Pat x))
-  | TypeMismatchChoice Span (T.Type x) Identifier (E.Pat x)
-  | TypeMismatchSelect Span (T.Type x) Identifier (E.Exp x)
-  | TypeMismatchTuple Span Int (T.Type x) (Either (E.Exp x) (E.Pat x))
+  | TypeMismatch Span T.KindedType T.KindedType (Either E.KindedExp E.KindedPat)
+  | TypeMismatchList Span T.KindedType (Either E.KindedExp E.KindedPat)
+  | TypeMismatchChoice Span T.KindedType Identifier E.KindedPat
+  | TypeMismatchSelect Span T.KindedType Identifier E.KindedExp
+  | TypeMismatchTuple Span Int T.KindedType (Either E.KindedExp E.KindedPat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe (T.Type x)) K.Kind) (Level (E.Exp x) (T.Type x))
-  | UnexpectedParam Span Int (Either Variable (E.Exp x)) (Level (T.Type x) K.Kind)
-    (Level (E.Pat x) Variable) 
+  | UnexpectedArg Span Int (Level (Maybe T.KindedType) K.Kind) (Level E.KindedExp T.KindedType)
+  | UnexpectedParam Span Int (Either Variable E.KindedExp) (Level T.KindedType K.Kind)
+    (Level E.KindedPat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
 
 -- | Errors can be tracked to the source code.
-instance Located (Error x) where
+instance Located Error where
   -- | Returns the span of an 'Error', i.e., where the error occurs in the
   -- source code.
   getSpan = \case
@@ -196,7 +191,7 @@ prettyKind = \case
       K.Channel -> " channel"
       K.VarPK ψ -> " prekind variable " ++ external ψ
 
-toMessage :: Source -> (Error x) -> String
+toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m m' -> makeError src s
     ("Expected " ++ showMult m ++ " function, but got " ++ showMult m'
@@ -392,8 +387,8 @@ toMessage src = \case
       K.Channel -> "channel type"
       K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
 
-showErrors :: Source -> [Error x] -> String
+showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)
 
-printErrors :: Source -> [Error x] -> IO ()
+printErrors :: Source -> [Error] -> IO ()
 printErrors src es = putStrLn $ showErrors src es
