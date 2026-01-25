@@ -20,10 +20,11 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , empty
+  , emptyKindedModule
   , ParsedConsDeclList, ParsedDataDeclList, ParsedTypeDeclList
   , KindedConsDeclList, KindedDataDeclList, KindedTypeDeclList
   , TypedConsDeclList, TypedDataDeclList, TypedTypeDeclList
-  , ParsedModule, KindedModule, TypedModule
+  , ParsedModule, ScopedModule, KindedModule, TypedModule
   )
 where
 
@@ -48,6 +49,7 @@ type KindedTypeDeclList = TypeDeclList Kinded
 type TypedTypeDeclList = TypeDeclList Typed
 
 type ParsedModule = Module Parsed
+type ScopedModule = Module Scoped
 type KindedModule = Module Kinded
 type TypedModule = Module Typed
 
@@ -72,24 +74,20 @@ type DataDeclList x = [(Identifier, [(Variable, K.Kind)], ConsDeclList x)]
 -- represented as
 --   [(Stream, ([a], (!a ; Stream a))
 type TypeDeclList x = [(Identifier, T.Type x)]
--- Kind signature list, e.g.
---   type Tree : *T -> *T
---   type Stream : 1T -> 1S
--- represented as
---   [(Tree, *T -> *T), (Stream, 1T -> 1S)]
-type KindSigList = [([Identifier], K.Kind)]
+
 
 data Module x
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
            , dataDecls   :: XDataDecl x
            , typeDecls   :: XTypeDecl x
-           , kindSigs    :: KindSigList
+           , kindSigs    :: XKindSig x
            , definitions :: [E.LetDecl x]
            }
 
 type family XDataDecl x
 type family XTypeDecl x
+type family XKindSig x
 
 type instance XDataDecl Parsed = DataDeclList Parsed
 type instance XDataDecl Scoped = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclList Scoped)
@@ -100,6 +98,20 @@ type instance XTypeDecl Parsed = TypeDeclList Parsed
 type instance XTypeDecl Scoped = Map.Map Identifier (T.Type Scoped)
 type instance XTypeDecl Kinded = Map.Map Identifier (T.Type Kinded)
 type instance XTypeDecl Typed = Map.Map Identifier (T.Type Typed)
+
+-- Kind signature list, e.g.
+--   type Tree : *T -> *T
+--   type Stream : 1T -> 1S
+-- represented as
+--   [(Tree, *T -> *T), (Stream, 1T -> 1S)]
+type KindSigList = [([Identifier], K.Kind)]
+type KindSigMap = Map.Map Identifier K.Kind
+
+type instance XKindSig Parsed = KindSigList
+type instance XKindSig Scoped = KindSigMap
+type instance XKindSig Kinded = KindSigMap
+type instance XKindSig Typed = KindSigMap
+
 
 type Prog x = [Module x]
 
@@ -134,6 +146,17 @@ empty = Module{ name        = Nothing
               , kindSigs    = []
               , definitions = []
               }
+        
+emptyKindedModule :: Module x -> Module Kinded
+emptyKindedModule m =
+        Module{ name        = name m
+              , imports     = imports m
+              , dataDecls   = Map.empty
+              , typeDecls   = Map.empty
+              , kindSigs    = Map.empty
+              , definitions = []
+              }
+
 
 instance Semigroup (Module Parsed) where
   m1 <> m2 =

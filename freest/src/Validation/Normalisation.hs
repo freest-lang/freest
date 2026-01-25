@@ -25,7 +25,6 @@ import Utils ( internalError )
 
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
-import Debug.Trace
 
 -- type Visited x = S.Set (T.Type x)
 

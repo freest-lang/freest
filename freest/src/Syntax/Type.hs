@@ -44,6 +44,7 @@ module Syntax.Type
   , setExt
   , XType(..)
   , ParsedType
+  , ScopedType
   , KindedType
   -- , TypedType
   )
@@ -63,11 +64,13 @@ import qualified Data.Void as V
 
 
 type ParsedType = Type Parsed
+type ScopedType = Type Scoped
 type KindedType = Type Kinded
 -- type TypedType  = Type Typed
 
 type family XType x
 type instance XType Parsed = V.Void
+type instance XType Scoped = V.Void
 type instance XType Kinded = K.Kind -- Testing
 -- type instance XType Typed = K.Kind  -- Testing
 

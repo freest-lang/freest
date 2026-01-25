@@ -65,10 +65,9 @@ runValidation s v =
              | otherwise   -> Left errors
 
 -- | Look up the kind of a @type@ or @data@ name in the validation state.
-lookupKind :: Identifier -> FreeST K.Kind
-lookupKind i = undefined -- do 
-  -- ctx <- gets kindSigs
-  -- case ctx Map.!? i of
-  --   Just k  -> return k
-  --   Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
+lookupKind :: M.ScopedModule -> Identifier -> FreeST K.Kind
+lookupKind m i = case M.kindSigs m Map.!? i of
+    Just k  -> return k
+    Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
+
 
