@@ -215,7 +215,6 @@ kindModule mod = do
   tds <- Map.traverseWithKey kindTypeDecl (M.typeDecls mod)
   dds <- Map.traverseWithKey kindDataDecl (M.dataDecls mod) 
   lds <- mapM kindLetDecl (M.definitions mod)
---  return (M.emptyKindedModule mod){M.typeDecls = tds, M.dataDecls = dds, M.definitions = lds}
   return mod{M.typeDecls = tds, M.dataDecls = dds, M.definitions = lds, M.kindSigs = M.kindSigs mod}
   where 
     kindTypeDecl :: Identifier -> T.ScopedType -> FreeST T.KindedType
