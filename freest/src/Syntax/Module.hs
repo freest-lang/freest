@@ -20,7 +20,6 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , empty
-  , emptyKindedModule
   , ParsedConsDeclList, ParsedDataDeclList, ParsedTypeDeclList
   , KindedConsDeclList, KindedDataDeclList, KindedTypeDeclList
   , TypedConsDeclList, TypedDataDeclList, TypedTypeDeclList
@@ -146,17 +145,6 @@ empty = Module{ name        = Nothing
               , kindSigs    = []
               , definitions = []
               }
-        
-emptyKindedModule :: Module x -> Module Kinded
-emptyKindedModule m =
-        Module{ name        = name m
-              , imports     = imports m
-              , dataDecls   = Map.empty
-              , typeDecls   = Map.empty
-              , kindSigs    = Map.empty
-              , definitions = []
-              }
-
 
 instance Semigroup (Module Parsed) where
   m1 <> m2 =
