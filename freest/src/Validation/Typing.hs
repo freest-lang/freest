@@ -603,34 +603,35 @@ checkEquivTypeCtxsUnFun tctx1 tctx2 fe =
       throwE (LinConsumedInUnFun (getSpan xa) xa t fe)
 
 typeModule :: M.KindedModule -> FreeST (M.KindedModule, TypeCtx)
-typeModule m = undefined -- do
-  -- tctx <- buildDConsCtx
-  -- (tctxds,tctx') <- checkDecls Map.empty tctx (M.definitions m)
-  -- tctx'' <- typeCtxDifference Map.empty tctxds tctx'
-  -- return (m, tctxds)
-  -- where
-  --   buildDConsCtx :: FreeST TypeCtx
-  --   buildDConsCtx = do
-  --     cds <- gets (Map.assocs . consDecls)
-  --     Map.fromList <$> mapM buildDConsType cds
-  --     where
-  --       buildDConsType (ic, (it, map fst -> as, ts)) = do
-  --         ksigs <- gets kindSigs
-  --         case ksigs Map.!? it of
-  --           Just (Expose.kindArrow -> (ks,k)) -> do
-  --             let aks = zip as ks
-  --             (Right ic,) . T.AppForall (getSpan ic) (K.ut (getSpan ic)) aks <$> -- TODO: kinds
-  --               buildArrow (Map.fromList aks) ts
-  --           _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
-  --         where
-  --           buildArrow kctx [] = return $ T.DName (getSpan it) (K.ut (getSpan it)) it -- TODO: kinds
-  --           buildArrow kctx (t:ts) = do
-  --             -- k <- Kinding.synth kctx t
-  --             u <- (if Kinding.isStrictlyLin t then buildLinArrow else buildArrow) kctx ts
-  --             return $ T.AppArrow (spanFromTo t u) (K.ut (spanFromTo t u)) (K.ut (spanFromTo t u))  K.Un t u --TODO: first kind
-  --           buildLinArrow kctx =
-  --             foldrM (\t u -> return $ T.AppArrow (spanFromTo t u) (K.ut (spanFromTo t u)) (K.ut (spanFromTo t u))  K.Lin t u)
-  --                    (T.DName (getSpan it) (K.ut (getSpan it)) it) -- TODO: kinds
+typeModule m = do
+  tctx <- buildDConsCtx
+  (tctxds,tctx') <- checkDecls Map.empty tctx m (M.definitions m)
+  tctx'' <- typeCtxDifference Map.empty tctxds tctx'
+  return (m, tctxds)
+  where
+    buildDConsCtx :: FreeST TypeCtx
+    buildDConsCtx = do
+--      cds <- gets (Map.assocs . consDecls)
+      let cds = Map.assocs (M.consDecls m)
+      Map.fromList <$> mapM buildDConsType cds
+      where
+        buildDConsType (ic, (it, ts)) = do
+          case (M.kindSigs m) Map.!? it of
+            Just (Expose.kindArrow -> (ks,k)) -> do
+              let (map fst -> as,_) = M.dataDecls m Map.! it
+                  aks = zip as ks
+              (Right ic,) . T.AppForall (getSpan ic) (K.ut (getSpan ic)) aks <$> -- TODO: kinds
+                buildArrow (Map.fromList aks) ts
+            _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
+          where
+            buildArrow kctx [] = return $ T.DName (getSpan it) (K.ut (getSpan it)) it -- TODO: kinds
+            buildArrow kctx (t:ts) = do
+              -- k <- Kinding.synth kctx t
+              u <- (if Kinding.isStrictlyLin t then buildLinArrow else buildArrow) kctx ts
+              return $ T.AppArrow (spanFromTo t u) (K.ut (spanFromTo t u)) (K.ut (spanFromTo t u))  K.Un t u --TODO: first kind
+            buildLinArrow kctx =
+              foldrM (\t u -> return $ T.AppArrow (spanFromTo t u) (K.ut (spanFromTo t u)) (K.ut (spanFromTo t u))  K.Lin t u)
+                     (T.DName (getSpan it) (K.ut (getSpan it)) it) -- TODO: kinds
 
-runValidate :: M.ParsedModule -> Either [Error] (M.KindedModule, TypeCtx)
-runValidate m = undefined -- runValidation (buildValidationState m) (Kinding.kindModule m >>= typeModule)
+runValidate :: M.ScopedModule -> Either [Error] (M.KindedModule, TypeCtx)
+runValidate m = runValidation emptyValidationState (Kinding.kindModule m >>= typeModule)

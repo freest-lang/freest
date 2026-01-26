@@ -16,7 +16,6 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , empty
-  , emptyKindedModule
   , ParsedModule, ScopedModule, KindedModule, TypedModule
   )
 where
@@ -140,18 +139,6 @@ empty = Module{ name        = Nothing
               , definitions = []
               }
 
-emptyKindedModule :: Module x -> Module Kinded
-emptyKindedModule m =
-        Module{ name        = name m
-              , imports     = imports m
-              , kindSigs    = Map.empty
-              , typeDecls   = Map.empty
-              , dataDecls   = Map.empty
-              , consDecls   = Map.empty
-              , definitions = []
-              }
-
-
 instance Semigroup (Module Parsed) where
   m1 <> m2 =
     Module{ name        = name m2
@@ -163,8 +150,8 @@ instance Semigroup (Module Parsed) where
           , definitions = definitions m1 ++ definitions m2
           }
 
--- instance Monoid (Module x) where 
---   mempty = empty 
+instance Monoid (Module Parsed) where 
+  mempty = empty 
 
 instance Show (Module Parsed) where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,consDecls,definitions} =
