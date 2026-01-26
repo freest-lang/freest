@@ -244,7 +244,7 @@ scopeConsDecls :: ScopingCtx
 scopeConsDecls ctx dds cds = do
   let (es , ctx') = foldr (\(ci, _) -> bimap (Map.insertWith (++) ci [ci]) 
                                               (insertCId ci)) 
-                          (es, ctx) cds;
+                          (Map.empty, ctx) cds
   forM_ es \is -> when (length is > 1) $
     throwE (MultipleConsDecls (getSpan (head is)) is)
   (ctx',) <$> foldM (scopeConsDecl ctx') Map.empty cds
