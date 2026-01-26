@@ -44,6 +44,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Control.Monad.Except
+import Control.Monad.Trans.Except (throwE)
 
 -- = Scoping context
 -- The scoping context keeps track of variable and indentifier names.
@@ -166,10 +167,6 @@ runScoping s f x =
     Right x'' | null errors -> Right x'' 
               | otherwise   -> Left errors
 
--- | Insert an error in the scoping state.
-insertError :: Error -> FreeST ()
-insertError e = modify (\s -> s{errors = e : errors s})
-
 -- | Increment the fresh internal variable name counter, returning the previous
 -- value.
 incCounter :: FreeST Int
@@ -188,104 +185,114 @@ freshInternal x = incCounter >>= \i -> return x{internal = i}
 -- 
 --     * a list of errors, if any was encountered;
 --     * the scoped module, otherwise.
-runScopeModule :: FreeSTState -> M.ParsedModule -> Either [Error] M.ParsedModule
+runScopeModule :: FreeSTState -> M.ParsedModule -> Either [Error] M.ScopedModule
 runScopeModule s = runScoping s scopeModule
 
 -- | Scope a module, returning also the resulting context.
-scopeModule' :: ScopingCtx -> M.ParsedModule -> FreeST (ScopingCtx, M.ParsedModule)
+scopeModule' :: ScopingCtx -> M.ParsedModule -> FreeST (ScopingCtx, M.ScopedModule)
 scopeModule' ctx m = do
-  ctx <- checkDupKindSigs      ctx (M.kindSigs m)
-  ctx <- checkDupDataTypeDecls ctx (M.dataDecls m) (M.typeDecls m)
-  ctx <- checkDupConsDecls     ctx (M.dataDecls m)
-  (ctx, dataDecls'  ) <- scopeDataDecls ctx (M.dataDecls   m)
-  (ctx, typeDecls'  ) <- scopeTypeDecls ctx (M.typeDecls   m)
-  (ctx, definitions') <- scopeDefs      ctx (M.definitions m)
-  return (ctx, m{ M.dataDecls   = dataDecls'
-                , M.typeDecls   = typeDecls'
-                , M.definitions = definitions'
+  (ctx, kss') <- scopeKindSigs ctx (M.kindSigs m)
+  (ctx, tds', dds') <- scopeTypeDataDecls ctx (M.typeDecls m) (M.dataDecls m)
+  (ctx, cds') <- scopeConsDecls ctx dds' (M.consDecls m)
+  (ctx, ds' ) <- scopeDefs      ctx (M.definitions m)
+  return (ctx, m{ M.kindSigs    = kss'
+                , M.typeDecls   = tds'
+                , M.dataDecls   = dds'
+                , M.consDecls   = cds'
+                , M.definitions = ds'
                 })
 
 -- | Scope a module.
-scopeModule :: ScopingCtx -> M.ParsedModule -> FreeST M.ParsedModule
+scopeModule :: ScopingCtx -> M.ParsedModule -> FreeST M.ScopedModule
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
-checkDupKindSigs :: ScopingCtx -> M.KindSigList -> FreeST ScopingCtx
-checkDupKindSigs ctx kindSigs = do
-  let (es, ctx') = foldr checkDupKindSigs' (Map.empty, ctx) kindSigs
+scopeKindSigs :: ScopingCtx -> M.KindSigs Parsed -> FreeST (ScopingCtx, M.KindSigs Scoped)
+scopeKindSigs ctx kss = do
+  let (es, ctx') = foldr scopeKindSigs' (Map.empty, ctx) kss
   forM_ es (\is -> when (length is > 1) $
-    insertError (MultipleKindSigs (getSpan (head is)) is))
-  return ctx'
+    throwE (MultipleKindSigs (getSpan (head is)) is))
+  return (ctx', Map.fromList kss)
   where
-   checkDupKindSigs' (ids, k) (err, ctx) = 
-      foldr (\i -> bimap (Map.insertWith (++) i [i]) (insertKSig i))
-            (err, ctx) ids
+   scopeKindSigs' (i, k) (es, ctx) = (Map.insertWith (++) i [i] es, insertKSig i ctx)
 
--- | Check for duplicate data and type declarations.
-checkDupDataTypeDecls :: ScopingCtx -> M.ParsedDataDeclList -> M.ParsedTypeDeclList -> FreeST ScopingCtx
-checkDupDataTypeDecls ctx dds tds = do
-  let (es, ctx'  ) = foldr (\(ti, _, _) -> bimap (Map.insertWith (++) ti [ti]) 
-                                                 (insertDId ti)) 
-                           (Map.empty, ctx) dds
-      (es', ctx'') = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
+-- | Insert @data@ and @type@ names in the scoping context, checking for
+-- duplicate declarations in the process.
+scopeTypeDataDecls :: ScopingCtx 
+                   -> M.TypeDecls Parsed
+                   -> M.DataDecls Parsed
+                   -> FreeST (ScopingCtx, M.TypeDecls Scoped, M.DataDecls Scoped)
+scopeTypeDataDecls ctx tds dds = do
+  let (es , ctx' ) = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
                                               (insertTId ti)) 
-                           (es, ctx') tds
+                           (es, ctx) tds
+      (es', ctx'') = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
+                                              (insertDId ti)) 
+                           (Map.empty, ctx') dds
   forM_ es' \is -> when (length is > 1) $
-    insertError (MultipleTypeDecls (getSpan (head is)) is)
-  return ctx''
+    throwE (MultipleTypeDecls (getSpan (head is)) is)
+  (ctx''' , tds') <- scopeTypeDecls ctx''  tds
+  (ctx'''', dds') <- scopeDataDecls ctx''' dds
+  return (ctx'''', tds', dds')
 
 -- | Check for duplicate data constructor declarations
-checkDupConsDecls :: ScopingCtx -> M.ParsedDataDeclList -> FreeST ScopingCtx
-checkDupConsDecls ctx dds = do -- insertCId ci ctx'
-  let (es, ctx') = foldr collectConsDecls (Map.empty, ctx) dds
+scopeConsDecls :: ScopingCtx
+               -> M.DataDecls Scoped
+               -> M.ConsDecls Parsed 
+               -> FreeST (ScopingCtx, M.ConsDecls Scoped)
+scopeConsDecls ctx dds cds = do
+  let (es , ctx') = foldr (\(ci, _) -> bimap (Map.insertWith (++) ci [ci]) 
+                                              (insertCId ci)) 
+                          (es, ctx) cds;
   forM_ es \is -> when (length is > 1) $
-    insertError (MultipleConsDecls (getSpan (head is)) is)
-  return ctx'
+    throwE (MultipleConsDecls (getSpan (head is)) is)
+  (ctx',) <$> foldM (scopeConsDecl ctx') Map.empty cds
   where
-    collectConsDecls (_, _, cdsi) = flip (foldr collectConsDecls') cdsi
-    collectConsDecls' (ci, _) = bimap (Map.insertWith (++) ci [ci]) 
-                                      (insertCId ci)
+    scopeConsDecl :: ScopingCtx -> M.ConsDecls Scoped -> (Identifier, (Identifier, [T.Type Parsed])) -> FreeST (M.ConsDecls Scoped)
+    scopeConsDecl ctx' cds' (ci, (di, ts)) = do
+      let as = map fst (fst (dds Map.! di))
+      ts' <- mapM (scopeType (fromTVarList as `union` ctx')) ts
+      return (Map.insert ci (di, ts') cds')
 
 -- | Scope a list of @data@ declarations, returning also the updated scoping
 -- context.
 scopeDataDecls :: ScopingCtx 
-               -> M.ParsedDataDeclList 
-               -> FreeST (ScopingCtx, M.ParsedDataDeclList)
-scopeDataDecls ctx = foldM scopeDataDecl (ctx, [])
+               -> M.DataDecls Parsed
+               -> FreeST (ScopingCtx, M.DataDecls Scoped)
+scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
   where
-    scopeDataDecl (ctx', dds') dd@(ti, unzip -> (as, ks), cds) = do
+    scopeDataDecl (ctx', dds') dd@(ti, (unzip -> (as, ks), cis)) = do
         unless (ti `memberKSig` ctx) do
-          insertError (LacksKindSig (getSpan ti) ti)
+          throwE (LacksKindSig (getSpan ti) ti)
         as'  <- mapM freshInternal as 
         ks'  <- mapM scopeKind ks
-        cds' <- scopeConsDecls (fromTVarList as' `union` ctx') cds
-        return (ctx', (ti, zip as' ks', cds') : dds')
-    scopeConsDecls ctx = foldM (scopeConsDecl ctx) []
+        return (ctx', Map.insert ti (zip as' ks', cis) dds')
+    scopeConsDecls ctx = foldM (scopeConsDecl ctx) Map.empty
       where
         scopeConsDecl ctx cds' (ci, ts) = do
           ts' <- mapM (scopeType ctx) ts 
-          return ((ci, ts') : cds')
+          return (Map.insert ci ts' cds')
 
 -- | Scope a list of @type@ declarations, returning also the updated scoping 
 -- context.
 scopeTypeDecls :: ScopingCtx 
-               -> M.ParsedTypeDeclList 
-               -> FreeST (ScopingCtx, M.ParsedTypeDeclList)
-scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, [])
+               -> M.TypeDecls Parsed
+               -> FreeST (ScopingCtx, M.TypeDecls Scoped)
+scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
   where
     scopeTypeDecl (ctx', tds') (ti, t) = do
-      unless (memberKSig ti ctx') (insertError (LacksKindSig (getSpan ti) ti))
+      unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
       t'  <- scopeType ctx' t
-      return (ctx', (ti, t') : tds')
+      return (ctx', Map.insert ti t' tds')
     
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
 -- context. Besides scoping the variables, this procedure also groups function
 -- equations and detects signatures without accompanying definitions.
-scopeDefs :: ScopingCtx -> [E.ParsedLetDecl] -> FreeST (ScopingCtx, [E.ParsedLetDecl])
+scopeDefs :: ScopingCtx -> [E.ParsedLetDecl] -> FreeST (ScopingCtx, [E.ScopedLetDecl])
 scopeDefs ctx ds = do    
   (ictx, ctx, ds) <- scopeDefs' False ctx emptyScopingCtx (groupEquations ds)
-  forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
+  forM_ (toEVarList ictx) (\x -> throwE (SigLacksDef (getSpan x) x))
   return (ctx, ds)
   where
     groupEquations = \case 
@@ -341,11 +348,11 @@ scopeDefs ctx ds = do
         let (sigs, fndefs) = 
               List.partition (\case E.TypeSig{} -> True ; _ -> False) ds'
         (ictx', ctx', ds'') <- scopeDefs' True ctx emptyScopingCtx(sigs ++ fndefs)
-        forM_ (toEVarList ictx') (\x -> insertError (SigLacksDef (getSpan x) x))
+        forM_ (toEVarList ictx') (\x -> throwE (SigLacksDef (getSpan x) x))
         second (E.Mutual ds'' :) <$> scopeDefs' True ctx' ictx ds
 
 -- | Scope a right-hand side.
-scopeRHS :: ScopingCtx -> E.ParsedRHS -> FreeST E.ParsedRHS
+scopeRHS :: ScopingCtx -> E.ParsedRHS -> FreeST E.ScopedRHS
 scopeRHS ctx = \case
   E.GuardedRHS ges Nothing   ->
     E.GuardedRHS <$> mapM (bimapM (scopeExp ctx) (scopeExp ctx)) ges 
@@ -361,11 +368,11 @@ scopeRHS ctx = \case
     E.UnguardedRHS <$> scopeExp ctx' e <*> pure (Just ds')
 
 -- | Scope an expression.
-scopeExp :: ScopingCtx -> E.ParsedExp -> FreeST E.ParsedExp
+scopeExp :: ScopingCtx -> E.ParsedExp -> FreeST E.ScopedExp
 scopeExp ctx = \case
-  e@(E.Var s x) -> case lookupEVar x ctx of
-    Nothing -> {- insertError (OutOfScope (getSpan x) x) -} -- leaving this for the typechecker
-      pure e
+  E.Var s x -> case lookupEVar x ctx of
+    Nothing -> {- throwE (OutOfScope (getSpan x) x) -} -- leaving this for the typechecker
+      pure $ E.Var s x
     Just x' -> pure $ E.Var s x{internal = internal x'}
   E.App s e args ->
     E.App s <$> scopeExp ctx e
@@ -397,10 +404,10 @@ scopeExp ctx = \case
     e' <- scopeExp ctx e
     E.Case s e' <$> mapM scopePatRHS prhss
     where
-      scopePatRHS :: (E.ParsedPat, E.ParsedRHS) -> FreeST (E.ParsedPat, E.ParsedRHS)
+      scopePatRHS :: (E.ParsedPat, E.ParsedRHS) -> FreeST (E.ScopedPat, E.ScopedRHS)
       scopePatRHS (p,rhs) = do
         checkConflictingDefs [ExpLevel p]
-        (_,p') <- scopePat ctx emptyScopingCtx p
+        (_, p') <- scopePat ctx emptyScopingCtx p
         let pvs = Set.toList $ patVars p'
         let ctx' = fromEVarList pvs `union` ctx
         (p',) <$> scopeRHS ctx' rhs
@@ -408,7 +415,12 @@ scopeExp ctx = \case
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
   E.Channel s t ->
     E.Channel s <$> scopeType ctx t
-  e -> pure e
+  -- TODO: organize these
+  E.Int s x -> pure $ E.Int s x
+  E.Float s x -> pure $ E.Float s x
+  E.Char s x -> pure $ E.Char s x
+  E.DCons s i -> pure $ E.DCons s i
+  E.Select s i -> pure $ E.Select s i
 
 -- | Scope a pattern. This function takes two contexts: the first being the main
 -- lexical context, and the second being an auxilliary context for 'let' definitions,
@@ -417,7 +429,7 @@ scopeExp ctx = \case
 scopePat :: ScopingCtx -- main context
          -> ScopingCtx -- auxilliary context
          -> E.ParsedPat
-         -> FreeST (ScopingCtx, E.ParsedPat) -- returns the auxilliary context
+         -> FreeST (ScopingCtx, E.ScopedPat) -- returns the auxilliary context
 scopePat ctx ictx = \case
   E.WildPat s w -> (ictx,) . E.WildPat s <$> freshInternal w
   E.VarPat s x  -> case lookupEVar x ictx of
@@ -437,7 +449,10 @@ scopePat ctx ictx = \case
       second (E.AsPat s x') <$> scopePat ctx ictx p
     Just x' -> second (E.AsPat s x{internal = internal x'}) 
       <$> scopePat ctx (deleteEVar x ictx) p
-  p -> pure (ictx, p)
+  -- TODO: organize these
+  E.IntPat s x -> pure (ictx, E.IntPat s x)
+  E.FloatPat s x -> pure (ictx, E.FloatPat s x)
+  E.CharPat s x -> pure (ictx, E.CharPat s x)
 
 -- | Check conflicting definitions for bindings.
 checkConflictingDefs :: [Level E.ParsedPat Variable] -> FreeST ()
@@ -445,7 +460,7 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
   let evos = Map.unionsWith (++) (map patVarOccurs ps)
       tvos = varOccurs as
   forM_ (Map.assocs $ Map.union evos tvos) \(xa, ss) -> 
-    when (length ss > 1) $ insertError (ConflictingDefs (ss !! 1) xa ss)
+    when (length ss > 1) $ throwE (ConflictingDefs (ss !! 1) xa ss)
   where
     varOccurs = foldr (\a occs -> 
         Map.insertWith (++) (TypeLevel $ external a) [getSpan a] occs) 
@@ -459,7 +474,7 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
       _                 -> Map.empty
 
 -- | The set of variables in a pattern.
-patVars :: E.ParsedPat -> Set.Set Variable
+patVars :: E.Pat x -> Set.Set Variable
 patVars = \case
   E.VarPat _ x      -> Set.singleton x
   E.DConsPat s _ ps -> Set.unions (map patVars ps)
@@ -474,7 +489,7 @@ freshKVar (getSpan -> s) = do
   return $ K.Var s (Variable s  ("τ"++show i) i)
 
 -- | Scope a type.
-scopeType :: ScopingCtx -> T.ParsedType -> FreeST T.ParsedType
+scopeType :: ScopingCtx -> T.ParsedType -> FreeST T.ScopedType
 scopeType ctx = \case
   T.Arrow s x m -> T.Arrow s x <$> scopeMultiplicity m
   T.Message s x m p -> T.Message s x <$> scopeMultiplicity m <*> pure p
@@ -482,7 +497,7 @@ scopeType ctx = \case
     m' <- scopeMultiplicity m
     let ds = foldr (\i -> Map.insertWith (++) i [i]) Map.empty ls
     forM_ ds \ids -> when (length ids > 1) $
-      insertError (MultipleFieldDecls (getSpan (head ids)) ids)
+      throwE (MultipleFieldDecls (getSpan (head ids)) ids)
     return $ T.Choice s x m' p ls
   T.Abs s x (unzip -> (as, ks)) t -> do
     as' <- mapM freshInternal as
@@ -498,11 +513,19 @@ scopeType ctx = \case
     | memberDId i ctx -> return (T.DName s x i)
     | otherwise       -> return (T.TName s x i)
   T.DName s x i -> return (T.DName s x i)
-  t -> pure t
+  -- TODO: organize these
+  T.Skip s x -> pure $ T.Skip s x
+  T.End s x p -> pure $ T.End s x p
+  T.Quant s x p -> pure $ T.Quant s x p
+  T.Int s x -> pure $ T.Int s x
+  T.Float s x -> pure $ T.Float s x
+  T.Char s x -> pure $ T.Char s x
+  T.Semi s x -> pure $ T.Semi s x
+  T.Dual s x -> pure $ T.Dual s x
 
 -- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.
-scopeAndQuantifyType :: ScopingCtx -> T.ParsedType -> FreeST T.ParsedType
+scopeAndQuantifyType :: ScopingCtx -> T.ParsedType -> FreeST T.ScopedType
 scopeAndQuantifyType ctx t = do
   t' <- scopeType ctx t
   let fvt' = Set.toList (freeVars t' Set.\\ Set.fromList (toTVarList ctx))        

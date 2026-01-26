@@ -25,6 +25,7 @@ module Syntax.Expression
        )
   , listExp
   , ParsedPat, ParsedLetDecl, ParsedRHS, ParsedExp
+  , ScopedPat, ScopedLetDecl, ScopedRHS, ScopedExp
   , KindedPat, KindedLetDecl, KindedRHS, KindedExp
   , TypedPat, TypedLetDecl, TypedRHS, TypedExp
   )
@@ -38,18 +39,22 @@ import Syntax.Type ( Type )
 import Data.List ( intercalate )
 
 type ParsedPat = Pat Parsed
+type ScopedPat = Pat Scoped
 type KindedPat = Pat Kinded
 type TypedPat  = Pat Typed
 
 type ParsedLetDecl = LetDecl Parsed
+type ScopedLetDecl = LetDecl Scoped
 type KindedLetDecl = LetDecl Kinded
 type TypedLetDecl  = LetDecl Typed
 
 type ParsedRHS = RHS Parsed
+type ScopedRHS = RHS Scoped
 type KindedRHS = RHS Kinded
 type TypedRHS  = RHS Typed
 
 type ParsedExp = Exp Parsed
+type ScopedExp = Exp Scoped
 type KindedExp = Exp Kinded
 type TypedExp  = Exp Typed
 

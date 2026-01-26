@@ -213,9 +213,14 @@ synthCheck ctx mod t k = do
 kindModule :: M.ScopedModule -> FreeST M.KindedModule
 kindModule mod = do
   tds <- Map.traverseWithKey kindTypeDecl (M.typeDecls mod)
-  dds <- Map.traverseWithKey kindDataDecl (M.dataDecls mod) 
+  cds <- foldM kindDataConsDecls Map.empty $ Map.toList $ M.dataDecls mod -- TODO: foldrWithKeyM
   lds <- mapM kindLetDecl (M.definitions mod)
-  return mod{M.typeDecls = tds, M.dataDecls = dds, M.definitions = lds, M.kindSigs = M.kindSigs mod}
+  return mod{ M.kindSigs   = M.kindSigs mod
+            , M.typeDecls   = tds
+            , M.dataDecls   = M.dataDecls mod
+            , M.consDecls   = cds
+            , M.definitions = lds
+            }
   where 
     kindTypeDecl :: Identifier -> T.ScopedType -> FreeST T.KindedType
     kindTypeDecl i t = do
@@ -237,14 +242,21 @@ kindModule mod = do
         t' -> synth Map.empty mod t' -- TODO: Map.empty? 
       checkK t' k
       return t'
-
-    kindDataDecl :: Identifier -> ([(Variable, Kind)], M.ConsDeclList Scoped)
-      -> FreeST ([(Variable, Kind)], M.ConsDeclList Kinded)
-    kindDataDecl i (aks, cds) = do
-      k <- lookupKind mod i
-      kcdl <- checkDataDecl k id Map.empty aks k
-      return (aks, kcdl)
+    
+    kindDataConsDecls :: M.ConsDecls Kinded
+                      -> (Identifier, ([(Variable, Kind)], [Identifier]))
+                      -> FreeST (M.ConsDecls Kinded)
+    kindDataConsDecls cds' (i, (aks, cis)) = do
+      k  <- lookupKind mod i
+      cd <- checkDataDecl k id Map.empty aks k
+      return (Map.union cd cds')
       where
+        checkDataDecl :: Kind 
+                      -> (Kind -> Kind) 
+                      -> KindCtx 
+                      -> [(Variable, Kind)] 
+                      -> Kind 
+                      -> FreeST (M.ConsDecls Kinded)
         checkDataDecl k f ctx [] _ = checkConsDecls k f ctx
         checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
           checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) aks' k2
@@ -254,15 +266,27 @@ kindModule mod = do
         checkDataDecl k f ctx aks Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
 
+        checkConsDecls :: Kind
+                       -> (Kind -> Kind)
+                       -> KindCtx
+                       -> FreeST (M.ConsDecls Kinded)
         checkConsDecls k f ctx = do
-          (m, t) <- synthDataMult ctx cds
+          (m, cds') <- synthDataMult ctx cis
           let k' = f (Proper (getSpan i) m Top)
           unless (k' <: k)
             (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) k' i) k'))
-          return t
+          return cds'
 
-        synthDataMult ctx = foldM (\(m, acc) (id, t) -> foldCheckProperJoin ctx mod m t
-                                    >>= \(m, t) -> pure (m, (id, t) : acc)) (Un, [])
+        synthDataMult :: KindCtx
+                      -> [Identifier]
+                      -> FreeST (Multiplicity, M.ConsDecls Kinded)
+        synthDataMult ctx = foldM (\(m, acc) ci ->
+          case M.consDecls mod Map.!? ci of
+            Just (snd -> ts) -> do             
+              (m, ts') <- foldCheckProperJoin ctx mod m ts
+              return (m, Map.insert ci (i, ts') acc)
+            Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
+          (Un, Map.empty) 
 
     kindLetDecl :: E.LetDecl Scoped -> FreeST (E.LetDecl Kinded)
     kindLetDecl = \case
