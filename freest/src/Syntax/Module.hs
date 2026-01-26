@@ -153,6 +153,8 @@ instance Semigroup (Module Parsed) where
 instance Monoid (Module Parsed) where 
   mempty = empty 
 
+-- For debugging purposes
+
 instance Show (Module Parsed) where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,consDecls,definitions} =
     intercalate "\n" $ filter (not . null)
@@ -170,4 +172,23 @@ instance Show (Module Parsed) where
           showConsDecl (i, (i', aks, ts)) =
             "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
           showTypeDecl (i, T.Abs _ _ aks t) = "type "++show i++" "++unwords (map show aks)++" = "++show t
+          showTypeDecl (i, t) = "type "++show i++" = "++show t
+
+instance Show (Module Scoped) where
+  show Module{name,imports,kindSigs,dataDecls,typeDecls,consDecls,definitions} =
+    intercalate "\n" $ filter (not . null)
+      [case name of Nothing -> "" ; Just n -> "module "++intercalate "." n++" where"
+      ,intercalate "\n" (map showImport imports)
+      ,intercalate "\n" (map showKindSig $ Map.toList kindSigs)
+      ,intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
+      ,intercalate "\n" (map showDataDecl $ Map.toList dataDecls)
+      ,intercalate "\n" (map show definitions)
+      ]
+    where showImport ss = "import "++intercalate "." ss
+          showKindSig (i, k) = "type "++show i++" : "++show k
+          showDataDecl (i, (aks, is)) =
+            "data "++show i++" "++unwords (map show aks)++" = "++intercalate " | " (map ((++ " ...") . show) is)
+          showConsDecl (i, (i', aks, ts)) =
+            "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
+          -- showTypeDecl (i, T.Abs _ _ aks t) = "type "++show i++" "++unwords (map show aks)++" = "++show t
           showTypeDecl (i, t) = "type "++show i++" = "++show t

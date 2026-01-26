@@ -522,6 +522,7 @@ scopeType ctx = \case
   T.Char s x -> pure $ T.Char s x
   T.Semi s x -> pure $ T.Semi s x
   T.Dual s x -> pure $ T.Dual s x
+  T.Void s x k -> T.Void s x <$> scopeKind k
 
 -- | Scope a type, universally quantifying any free variables it might have
 -- with a fresh kind inference variable.

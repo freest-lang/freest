@@ -223,7 +223,7 @@ kindModule mod = do
       t' <- case t of
         T.Abs s _ aks u -> do
           aks' <- kindParams aks k
-          u' <- synth Map.empty mod u -- TODO: Map.empty'
+          u' <- synth (Map.fromList aks') mod u -- TODO: Map.empty'
           return $ T.Abs s k aks' u'
           where
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
