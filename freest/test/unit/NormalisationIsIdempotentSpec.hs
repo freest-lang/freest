@@ -20,11 +20,9 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "normalise t == normalise (normalise t)" 
   errorsAreFailures
-  \_ (t, _, m) -> normalisationIsIdempotent (buildDataDecls m) t `shouldBe` True
-
-normalisationIsIdempotent :: TypeDeclMap -> T.Type -> Bool
-normalisationIsIdempotent td t = normalise td t == normalise td (normalise td t)
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+  \_ (t, mk, m) -> case (,) <$> runKindModule m <*> runSynthOrCheck m t mk of
+    Left _   -> expectationFailure "Kinding error"
+    Right (m', t') -> normalisationIsIdempotent `shouldBe` True
+      where
+        td = M.typeDecls m'
+        normalisationIsIdempotent = normalise td t' == normalise td (normalise td t')

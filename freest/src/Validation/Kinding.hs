@@ -79,16 +79,16 @@ synth ctx mod = \case
   T.AppLinChoice s _ _ p lts -> do
     (m, pk, lts) <- foldM (\(m,pk,lts) (l,t) -> trimap (join m) (meet pk) ((: lts) . (l,)) -- TODO: order?
                             <$> checkSession ctx mod t) (Un, Session, []) lts
-    pure $ T.AppLinChoice s (Proper s Lin pk) (Proper s m pk) p lts 
+    pure $ T.AppLinChoice s (Proper s Lin pk) (Proper s m pk) p lts
   T.End s _ p -> pure $ T.End s (lc s) p
   T.Skip s _ -> pure $ T.Skip s (us s)
   T.Void s _ k -> pure $ T.Void s k k
   T.AppSemi s _ t u -> do
     (m1, pk1, t) <- checkSession ctx mod t
     (m2, pk2, u) <- checkSession ctx mod u
-    let k = Proper s (if pk1 == Channel then m1 else join m1 m2) (meet pk1 pk2) 
+    let k = Proper s (if pk1 == Channel then m1 else join m1 m2) (meet pk1 pk2)
     return $ T.AppSemi s k t u
-  T.AppDual s _ t -> synthCheck ctx mod t (ls s)
+  T.AppDual s _ t -> check ctx mod t (ls s)
   -- Polymorphism
   T.AppQuant s _ p aks t -> do
     checkProper (Map.fromList aks `Map.union` ctx) mod t
@@ -102,7 +102,7 @@ synth ctx mod = \case
     return $ T.Tuple s (Proper s m Top) ts
   T.List s _ t -> do
     (m, _, t) <- checkProper ctx mod t
-    pure $ T.List s (Proper s m Top) t    
+    pure $ T.List s (Proper s m Top) t
   T.DName s _ i -> flip (T.DName s) i <$> lookupKind mod i
   -- Higher-order
   T.Var s _ a -> case ctx Map.!? a of
@@ -118,19 +118,22 @@ synth ctx mod = \case
                 -> [T.ScopedType] -> [Kind] -> Kind
                 -> FreeST (Kind,[T.KindedType])
       checkArgs _ _ _ _ _ [] ks' kn = pure
-        (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks',[])         
-      checkArgs s t k nargs npars ts [] kn = do 
+        (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks',[])
+      checkArgs s t k nargs npars ts [] kn = do
         throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) (T.setExt k t) kn npars nargs)
-      checkArgs s t k nargs npars (t' : ts') (k' : ks') kn = 
-        check ctx mod t' k' >> checkArgs s t k nargs npars ts' ks' kn                
+      checkArgs s t k nargs npars (t' : ts') (k' : ks') kn =
+        check ctx mod t' k' >> checkArgs s t k nargs npars ts' ks' kn
   T.Abs s _ aks t -> do
     t' <- synth (Map.fromList aks `Map.union` ctx) mod t
     let k = foldr (\(_, ki) k -> Arrow (spanFromTo ki k) ki k) k aks
     return $ T.Abs s k aks t'
 
 -- | Check a type against a given kind.
-check :: KindCtx -> M.ScopedModule -> T.ScopedType -> Kind -> FreeST ()
-check ctx mod t k = Control.Monad.State.void (synthCheck ctx mod t k)
+check :: KindCtx -> M.ScopedModule -> T.ScopedType -> Kind -> FreeST T.KindedType
+check ctx mod t k = do
+  kt <- synth ctx mod t
+  checkSubkindOf kt (T.getExt kt) k
+  return kt
 
 checkK :: T.KindedType -> Kind -> FreeST ()
 checkK t = checkSubkindOf t (T.getExt t)
@@ -146,17 +149,17 @@ foldCheckProperJoin ctx m mult = foldM checkProperJoin (mult,[])
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and prekind. Otherwise, throw an error.
 checkProper :: KindCtx -> M.ScopedModule -> T.ScopedType -> FreeST (Multiplicity, Prekind, T.KindedType)
-checkProper ctx m t = synth ctx m t >>= \kT -> case T.getExt kT of  
+checkProper ctx m t = synth ctx m t >>= \kT -> case T.getExt kT of
     Proper _ mult pk ->  pure (mult,pk,kT)
     k -> throwE (ProperKindMismatch (getSpan t) kT k)
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and prekind. Otherwise, throw an error.
 checkProperK :: T.KindedType -> FreeST (Multiplicity, Prekind, T.KindedType)
-checkProperK t = case T.getExt t of  
+checkProperK t = case T.getExt t of
     Proper _ m pk -> pure (m,pk,t)
-    k -> throwE (ProperKindMismatch (getSpan t) t k)     
-  
+    k -> throwE (ProperKindMismatch (getSpan t) t k)
+
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
 checkSession :: KindCtx -> M.ScopedModule -> T.ScopedType -> FreeST (Multiplicity, Prekind, T.KindedType)
@@ -194,20 +197,12 @@ checkSubkindOf' :: T.KindedType -> Kind -> Kind -> FreeST ()
 checkSubkindOf' t k' k = unless (k' <: k) $
      throwE (KindMismatch (getSpan t) k' t k)
 
-     
+
 checkSubkindOfP' :: M.ScopedModule -> T.ScopedType -> Kind -> Kind -> FreeST ()
 checkSubkindOfP' mod t k' k = do
   t' <- synth Map.empty mod t -- TODO: map empty
   unless (k' <: k) $
      throwE (KindMismatch (getSpan t) k' t' k)
-
--- | Synthesize the kind of a type and check if it is a subkind of another
--- kind.
-synthCheck :: KindCtx -> M.ScopedModule -> T.ScopedType -> Kind -> FreeST T.KindedType
-synthCheck ctx mod t k = do
-  kt <- synth ctx mod t
-  checkSubkindOf kt (T.getExt kt) k
-  return kt
 
 -- | Check a module for type formation.
 kindModule :: M.ScopedModule -> FreeST M.KindedModule
@@ -221,7 +216,7 @@ kindModule mod = do
             , M.consDecls   = cds
             , M.definitions = lds
             }
-  where 
+  where
     kindTypeDecl :: Identifier -> T.ScopedType -> FreeST T.KindedType
     kindTypeDecl i t = do
       k <- lookupKind mod i
@@ -242,7 +237,7 @@ kindModule mod = do
         t' -> synth Map.empty mod t' -- TODO: Map.empty? 
       checkK t' k
       return t'
-    
+
     kindDataConsDecls :: M.ConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))
                       -> FreeST (M.ConsDecls Kinded)
@@ -251,11 +246,11 @@ kindModule mod = do
       cd <- checkDataDecl k id Map.empty aks k
       return (Map.union cd cds')
       where
-        checkDataDecl :: Kind 
-                      -> (Kind -> Kind) 
-                      -> KindCtx 
-                      -> [(Variable, Kind)] 
-                      -> Kind 
+        checkDataDecl :: Kind
+                      -> (Kind -> Kind)
+                      -> KindCtx
+                      -> [(Variable, Kind)]
+                      -> Kind
                       -> FreeST (M.ConsDecls Kinded)
         checkDataDecl k f ctx [] _ = checkConsDecls k f ctx
         checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
@@ -282,11 +277,11 @@ kindModule mod = do
                       -> FreeST (Multiplicity, M.ConsDecls Kinded)
         synthDataMult ctx = foldM (\(m, acc) ci ->
           case M.consDecls mod Map.!? ci of
-            Just (snd -> ts) -> do             
+            Just (snd -> ts) -> do
               (m, ts') <- foldCheckProperJoin ctx mod m ts
               return (m, Map.insert ci (i, ts') acc)
             Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
-          (Un, Map.empty) 
+          (Un, Map.empty)
 
     kindLetDecl :: E.LetDecl Scoped -> FreeST (E.LetDecl Kinded)
     kindLetDecl = \case
@@ -295,7 +290,7 @@ kindModule mod = do
         rhss <- forM psrhss \(psj, rhsj) -> do
             pjs' <- forM psj (\case
                       ExpLevel p -> ExpLevel <$> kindPat p
-                      TypeLevel t -> pure $ TypeLevel t)    
+                      TypeLevel t -> pure $ TypeLevel t)
             rhs <- kindRHS rhsj
             return (pjs', rhs)
         return $ E.FnDef x rhss
@@ -310,7 +305,7 @@ kindModule mod = do
           Nothing -> pure Nothing
           Just ldcl -> Just <$> forM ldcl kindLetDecl
         return $ E.GuardedRHS es' ldcls'
-      E.UnguardedRHS e ldcls -> do             
+      E.UnguardedRHS e ldcls -> do
         e' <- kindExp e
         ldcls' <- case ldcls of
           Nothing -> pure Nothing
@@ -318,14 +313,14 @@ kindModule mod = do
         return $ E.UnguardedRHS e' ldcls'
 
     kindPat = \case
-      E.IntPat s i -> pure $ E.IntPat s i 
+      E.IntPat s i -> pure $ E.IntPat s i
       E.FloatPat s d -> pure $ E.FloatPat s d
       E.CharPat s c -> pure $ E.CharPat s c
       E.WildPat s a -> pure $ E.WildPat s a
       E.VarPat s a -> pure $ E.VarPat s a
       E.DConsPat s i pats -> E.DConsPat s i <$> forM pats kindPat
       E.ChoicePat s i p -> E.ChoicePat s i <$> kindPat p
-      E.AsPat s a p -> E.AsPat s a <$> kindPat p 
+      E.AsPat s a p -> E.AsPat s a <$> kindPat p
 
     kindExp = \case
       E.Int s i -> pure $ E.Int s i
@@ -337,7 +332,7 @@ kindModule mod = do
         e' <- kindExp e
         lvls <- forM lvl (\case
                       ExpLevel e -> ExpLevel <$> kindExp e
-                      TypeLevel t -> TypeLevel <$> synth Map.empty mod t)    
+                      TypeLevel t -> TypeLevel <$> synth Map.empty mod t)
         pure $ E.App s e' lvls
       E.Abs s lvls mult e -> do -- [Level (Pat x, Type x) (Variable,Kind)] Multiplicity (Exp x)
         lvls' <- forM lvls (\case
@@ -352,7 +347,7 @@ kindModule mod = do
       E.If s e1 e2 e3 -> E.If s <$> kindExp e1 <*> kindExp e2 <*> kindExp e3
       E.Channel s t -> E.Channel s <$> synth Map.empty mod t
       E.Select s i -> pure $ E.Select s i
-    
+
 
 -- | Run kinding on a module, building the initial validation state from it.
 -- This returns either:
@@ -367,21 +362,21 @@ runKindModule m = runValidation emptyValidationState (kindModule m)
 -- 
 --     * a list of errors, if any was encountered;
 --     * a kind synthesized from the type, otherwise.
-runSynth :: M.ScopedModule -> T.ScopedType -> Either [Error] Kind
-runSynth m t = runValidation emptyValidationState (T.getExt <$> synth Map.empty m t)
+runSynth :: M.ScopedModule -> T.ScopedType -> Either [Error] T.KindedType
+runSynth m t = runValidation emptyValidationState (synth Map.empty m t)
 
 -- | Run checking on a type against a kind, building the initial validation 
 -- state from a given module. This returns either:
 -- 
 --     * a list of errors, if any was encountered;
---     * unit, otherwise.
-runCheck :: M.ScopedModule -> T.ScopedType -> Kind -> Either [Error] ()
+--     * the same type, now annotated with kinds.
+runCheck :: M.ScopedModule -> T.ScopedType -> Kind -> Either [Error] T.KindedType
 runCheck m t k = runValidation emptyValidationState (check Map.empty m t k)
 
 isStrictlyLin, isStrictlyChannel, isStrictlySession :: T.KindedType -> Bool
 
 isStrictlyLin t = case T.getExt t of
-  (Proper _ Lin _) -> True 
+  (Proper _ Lin _) -> True
   _ -> False
 
 isStrictlyChannel t = case T.getExt t of

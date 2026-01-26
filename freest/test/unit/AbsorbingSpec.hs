@@ -1,8 +1,9 @@
 module AbsorbingSpec (spec) where
 
+import Validation.Kinding ( runKindModule, runCheck )
+import Validation.Rename ( isAbsorbing )
+import Syntax.Base
 import Syntax.Kind qualified as K
-import Validation.Rename qualified as R
-import Validation.Base ( TypeDeclMap )
 import Syntax.Module qualified as M
 import UnitSpecUtils
 
@@ -22,9 +23,7 @@ spec = mkTypeSpec
   "Channel types (kind C) are absorbing types"
   errorsAreFailures
   \_ -> \case
-    (t, Just k, m) -> not (K.isStrictlyChannel k) || R.isAbsorbing (buildDataDecls m) t `shouldBe` True
+    (t, Just k, m) -> case (,) <$> runKindModule m <*> runCheck m t k of 
+      Left es -> expectationFailure "Kinding error"
+      Right (m', t') -> not (k K.<: K.lc nullSpan) || isAbsorbing (M.typeDecls m') t' `shouldBe` True
     _ -> expectationFailure "Ill formed test case: missing kind annotation"
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls

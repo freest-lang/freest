@@ -4,7 +4,7 @@ import UnitSpecUtils
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Kinding ( runKindModule )
 import Validation.Rename
 
 import Data.Map.Strict qualified as Map
@@ -20,11 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "rename t == t"
   errorsAreFailures
-  \_ (t, _, m) -> renameYieldsEq (buildDataDecls m) t `shouldBe` True
-
-renameYieldsEq :: TypeDeclMap -> T.Type -> Bool
-renameYieldsEq td t = rename td t == t
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+  \_ (t, mk, m) -> case (,) <$> runKindModule m <*> runSynthOrCheck m t mk of
+    Left _ -> expectationFailure "Kinding error"
+    Right (m', t') -> renameYieldsEq `shouldBe` True
+      where renameYieldsEq = rename (M.typeDecls m') t' == t'

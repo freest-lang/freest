@@ -2,7 +2,7 @@ module RenamePreservesWhnfSpec (spec) where
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Kinding ( runKindModule )
 import Validation.Rename
 import Validation.Normalisation ( isWhnf )
 import UnitSpecUtils
@@ -20,11 +20,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "T is a whnf iff rename T is a whnf"
   errorsAreFailures
-  \_ (t, _, m) -> renamePreservesWhnf (buildDataDecls m) t `shouldBe` True
+  \_ (t, mk, m) -> case (,) <$> runKindModule m <*> runSynthOrCheck m t mk of
+    Left _ -> expectationFailure "Kinding error"
+    Right (m', t') -> isWhnf t' == isWhnf (rename (M.typeDecls m') t') `shouldBe` True
 
-renamePreservesWhnf :: TypeDeclMap -> T.Type -> Bool
-renamePreservesWhnf td t = isWhnf t == isWhnf (rename td t)
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls

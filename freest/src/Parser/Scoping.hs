@@ -159,9 +159,9 @@ insertKSig i@(Identifier _ s) = first $ Map.insert (KSig s) i
 -- 
 --     * a list of errors, if any was encountered;
 --     * the result of the scoping procedure, otherwise.
-runScoping :: FreeSTState -> (ScopingCtx -> a -> FreeST b) -> a -> Either [Error] b
-runScoping s f x =
-  let (x', FreeSTState{errors}) = runState (runExceptT $ f emptyScopingCtx x) s
+runScoping :: (ScopingCtx -> a -> FreeST b) -> a -> Either [Error] b
+runScoping f x =
+  let (x', FreeSTState{errors}) = runState (runExceptT $ f emptyScopingCtx x) emptyValidationState
   in case x' of
     Left e -> Left (errors ++ [e])
     Right x'' | null errors -> Right x'' 
@@ -185,8 +185,8 @@ freshInternal x = incCounter >>= \i -> return x{internal = i}
 -- 
 --     * a list of errors, if any was encountered;
 --     * the scoped module, otherwise.
-runScopeModule :: FreeSTState -> M.ParsedModule -> Either [Error] M.ScopedModule
-runScopeModule s = runScoping s scopeModule
+runScopeModule :: M.ParsedModule -> Either [Error] M.ScopedModule
+runScopeModule = runScoping scopeModule
 
 -- | Scope a module, returning also the resulting context.
 scopeModule' :: ScopingCtx -> M.ParsedModule -> FreeST (ScopingCtx, M.ScopedModule)

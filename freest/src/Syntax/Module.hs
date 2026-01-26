@@ -1,4 +1,3 @@
-{-# LANGUAGE NamedFieldPuns #-}
 {- |
 Module      :  Syntax.Module
 Copyright   :  © The FreeST Team
@@ -13,7 +12,7 @@ module Syntax.Module
   , setName
   , insertImport
   , insertKindSig
-  -- , insertDataDecl
+  , insertDataDecl
   , insertTypeDecl
   , insertDef
   , empty

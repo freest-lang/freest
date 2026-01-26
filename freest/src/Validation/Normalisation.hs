@@ -18,12 +18,13 @@ where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
 import Syntax.Type qualified as T
 import Validation.Base ( TypeDeclMap )
 import Validation.Substitution ( subsAll )
 import Utils ( internalError )
 
-import Data.Map.Strict qualified as M
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as S
 
 -- type Visited x = S.Set (T.Type x)
@@ -73,7 +74,7 @@ isWhnf = \case
   _ -> False
 
 -- | One step type reduction (requires @not (isWhnf t)@?)
-reduce :: TypeDeclMap Kinded -> T.KindedType -> T.KindedType
+reduce :: M.TypeDecls Kinded -> T.KindedType -> T.KindedType
 reduce td = \case
   -- 1. Semicolon
   -- R-Neut
@@ -109,7 +110,7 @@ reduce td = \case
   -- 3. R-μ + R-β + TAppL
   -- Q: What if as and ts are of different lengths?
   -- A: In that case, subsAll considers only the shortest between as and ts
-  T.AppTName s _ _ name ts -> case td M.!? name of
+  T.AppTName s _ _ name ts -> case td Map.!? name of
     Just (T.Abs _ _ (map fst -> as) u) -> subsAll as ts u
     Just u -> u
     Nothing -> internalError $ "reduce: " ++ show name ++ " type name not in type declaration map, when applied to " ++ show ts

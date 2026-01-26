@@ -16,9 +16,9 @@ spec = mkTypeSpec
   "Invalid kinding tests" 
   errorsAreSuccesses
   \_ -> \case
-    (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of
+    (t, Just k, m) -> case runCheck m t k of
       Left _ -> return ()
       Right _ -> expectationFailure "An error was expected but none was thrown."
-    (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 
+    (t, Nothing, m) -> case runSynth m t of 
       Left _ -> return ()
       Right _ -> expectationFailure "An error was expected but none was thrown."

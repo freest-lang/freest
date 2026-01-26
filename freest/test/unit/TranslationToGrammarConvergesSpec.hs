@@ -4,7 +4,7 @@ import UnitSpecUtils
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Kinding ( runKindModule )
 import Validation.TypeEquivalence ( fromType )
 import Language.Simple.Grammar
 
@@ -24,12 +24,9 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges"
   errorsAreFailures
-  \_ (t, _, m) -> translateToGrammar (buildDataDecls m) t `shouldBe` True
-
-translateToGrammar :: TypeDeclMap -> T.Type -> Bool
-translateToGrammar td t = trace ("\n" ++ show (fromType td [t])) True
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+  \_ (t, mk, m) -> case (,) <$> runKindModule m <*> runSynthOrCheck m t mk of
+    Left _ -> expectationFailure "Kinding error"
+    Right (m', t') -> translateToGrammar `shouldBe` True
+      where
+        translateToGrammar = trace ("\n" ++ show (fromType (M.typeDecls m') [t'])) True
 

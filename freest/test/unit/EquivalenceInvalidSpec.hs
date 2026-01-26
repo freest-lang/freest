@@ -18,10 +18,4 @@ spec :: Spec
 spec = mkEquivalenceSpec
   ["test/unit/EquivalenceInvalid.test"]
   "Invalid equivalence tests" 
-  \src (t,u,k,m) -> case runCheck m t k >> runCheck m u k of
-    Left es -> expectationFailure (showErrors src es)
-    _       -> equivalent (buildDataDecls m) t u `shouldBe` False
-
--- Warning: code also in from Validation.Base
-buildDataDecls :: M.Module -> TypeDeclMap
-buildDataDecls = Map.fromList . M.typeDecls
+  \src (t, u, k, m) -> equivalent (M.typeDecls m) t u `shouldBe` False
