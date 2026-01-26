@@ -109,20 +109,21 @@ synth ctx mod = \case
     Just k -> pure $ T.Var s k a
     Nothing -> throwE (TypeVarOutOfScope s a)
   T.App s _ t ts -> do
-    t <- synth ctx mod t
-    let (ks,kn) = Expose.kindArrow (T.getExt t)
-    (k,ts) <- checkArgs s t (T.getExt t) (length ts) (length ks) ts ks kn
-    pure $ T.App s k t ts
+    t' <- synth ctx mod t
+    let (ks, kn) = Expose.kindArrow (T.getExt t')
+    (k, ts') <- checkArgs t' (length ts) (length ks) ts ks kn
+    pure $ T.App s k t' ts'
     where
-      checkArgs :: Span -> T.KindedType -> Kind -> Int -> Int -- error info
+      checkArgs :: T.KindedType -> Int -> Int -- error info
                 -> [T.ScopedType] -> [Kind] -> Kind
-                -> FreeST (Kind,[T.KindedType])
-      checkArgs _ _ _ _ _ [] ks' kn = pure
-        (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks',[])
-      checkArgs s t k nargs npars ts [] kn = do
-        throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) (T.setExt k t) kn npars nargs)
-      checkArgs s t k nargs npars (t' : ts') (k' : ks') kn =
-        check ctx mod t' k' >> checkArgs s t k nargs npars ts' ks' kn
+                -> FreeST (Kind, [T.KindedType])
+      checkArgs _ _ _ [] ks kn = pure
+        (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks, [])
+      checkArgs t' nargs npars ts [] kn = do
+        throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) t' kn npars nargs)
+      checkArgs t' nargs npars (ti : ts) (ki : ks) kn = do
+        ti' <- check ctx mod ti ki
+        second (ti' :) <$> checkArgs t' nargs npars ts ks kn
   T.Abs s _ aks t -> do
     t' <- synth (Map.fromList aks `Map.union` ctx) mod t
     let k = foldr (\(_, ki) k -> Arrow (spanFromTo ki k) ki k) k aks
