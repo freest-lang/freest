@@ -26,7 +26,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
--- import Validation.Rename ( rename )
+import Validation.Rename ( renameS )
 import Validation.Substitution ( freeVars )
 import Validation.Base
 import Syntax.Type qualified as T
@@ -276,15 +276,31 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
 
 -- | Scope a list of @type@ declarations, returning also the updated scoping 
 -- context.
+-- scopeTypeDecls :: ScopingCtx 
+--                -> M.TypeDecls Parsed
+--                -> FreeST (ScopingCtx, M.TypeDecls Scoped)
+-- scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
+--   where
+--     scopeTypeDecl (ctx', tds') (ti, t) = do
+--       unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
+--       t'  <- scopeType ctx' t
+--       return (ctx', Map.insert ti t' tds')
+
+-- | TODO: this is temporary due to rename
 scopeTypeDecls :: ScopingCtx 
                -> M.TypeDecls Parsed
                -> FreeST (ScopingCtx, M.TypeDecls Scoped)
-scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
+scopeTypeDecls ctx tds = do
+  (ctx', tds') <- foldM scopeTypeDecl (ctx, Map.empty) tds
+  let tds'' = Map.map (renameS tds') tds'
+  return (ctx', tds'')
   where
     scopeTypeDecl (ctx', tds') (ti, t) = do
       unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
       t'  <- scopeType ctx' t
       return (ctx', Map.insert ti t' tds')
+    -- tdm = Map.fromList tds
+      
     
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
 -- context. Besides scoping the variables, this procedure also groups function

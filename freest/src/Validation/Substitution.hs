@@ -10,7 +10,9 @@ To be replaced by a more efficient alternative.
 -}
 module Validation.Substitution
   ( subs
+  , subsScoped
   , subsAll
+  , subsAllS
   , freeVars
   )
 where
@@ -64,6 +66,38 @@ subs a u = \case
   -- Applications
   T.App s x f ts -> T.App s x (subs a u f) (fmap (subs a u) ts)
   t -> t
+
+-- TODO: delete the next two functions after merge
+
+-- | Type substitution. Substitutes ocurrences of a variable in a type for 
+-- another type (usually written @[a -> u] t@).
+subsScoped :: Variable -> T.ScopedType -> T.ScopedType -> T.ScopedType
+subsScoped a u = \case 
+  -- Variables
+  t@(T.Var _ _ b)
+    | b == a    -> u
+    | otherwise -> t
+  -- Abstractions (can we do this more elegantly?)
+  (T.Abs s x [] t') -> T.Abs s x [] (subsScoped a u t')
+  t@(T.Abs s x ((b,k):bks) t')
+      | b == a -> t
+      | b `Set.member` fvu ->
+        let b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
+            T.Abs _ _ bks' t'' = subsScoped a u (subsScoped b (T.Var (getSpan b') x b') (T.Abs s x bks t'))
+        in T.Abs s x ((b',k):bks') t''
+      | otherwise ->
+        let T.Abs _ x' bks' t'' = subsScoped a u (T.Abs s x bks t')
+        in T.Abs s x' ((b,k):bks') t''
+    where  fvu = freeVars u
+  -- Applications
+  T.App s x f ts -> T.App s x (subsScoped a u f) (fmap (subsScoped a u) ts)
+  t -> t
+
+-- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
+-- between @as@ and @us@.
+subsAllS :: [Variable] -> [T.ScopedType] -> T.ScopedType -> T.ScopedType
+subsAllS as us t = foldr (uncurry subsScoped) t (zip as us)
+  
 
 -- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
 -- between @as@ and @us@.

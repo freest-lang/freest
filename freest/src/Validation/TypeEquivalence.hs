@@ -18,7 +18,7 @@ import Syntax.Kind
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
 import Validation.Normalisation ( normalise, isWhnf )
--- import Validation.Rename ( rename )
+import Validation.Rename ( rename )
 import Utils ( internalError )
 
 import Language.Simple.Grammar
@@ -32,16 +32,18 @@ import Data.Coerce
 
 equivalent :: M.TypeDecls Kinded -> T.KindedType -> T.KindedType -> Bool
 equivalent td t u =
+  trace (show [t,u]) $
   t == u ||
   bisimilar (fromType td [t, u])
 
 fromType :: M.TypeDecls Kinded -> [T.KindedType] -> Grammar
 fromType td ts =
-  -- trace ("\n\nTypes:   " ++ show ts ++
-  --        "\nRenamed: " ++ show (map (rename td) ts) ++ 
-  --        "\n"++show (Grammar w (productions s))) $
+  trace ("\n\nTypes:   " ++ show ts ++
+         "\nRenamed: " ++ show (map (rename td) ts) ++ 
+         "\n"++show (Grammar w (productions s))) $
   Grammar w (productions s)
-  where (w, s) = runState (mapM word ts) (initial td)
+--  where (w, s) = runState (mapM word ts) (initial td)
+  where (w, s) = runState (mapM (word . rename td) ts) (initial td)
 
 word :: T.KindedType -> TransState Word
 word t | isWhnf t || T.isAppSemi t = wordWhnf t
