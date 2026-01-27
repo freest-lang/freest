@@ -1,6 +1,7 @@
 module KindInvalidSpec (spec) where
 
-import Validation.Kinding ( runSynth, runCheck, runKindModule )
+import Syntax.Module qualified as M
+import Validation.Kinding ( runSynth', runCheck', runKindModule )
 
 import Data.Either ( isRight )
 import Data.Map qualified as Map
@@ -16,9 +17,9 @@ spec = mkTypeSpec
   "Invalid kinding tests" 
   errorsAreSuccesses
   \_ -> \case
-    (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of
+    (t, Just k, m) -> case runKindModule m >>= \m -> runCheck' (M.asScoped m) t k of
       Left _ -> return ()
       Right _ -> expectationFailure "An error was expected but none was thrown."
-    (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 
+    (t, Nothing, m) -> case runKindModule m >>= (`runSynth'` t) of 
       Left _ -> return ()
       Right _ -> expectationFailure "An error was expected but none was thrown."

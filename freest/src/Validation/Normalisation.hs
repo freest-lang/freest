@@ -20,8 +20,9 @@ where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, getType, unfold, typeDecls, getKind )
+import Validation.Base ( TypeDeclMap, ValidationState, unfold, getKind )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
@@ -50,8 +51,8 @@ isWhnf = \case
   _ -> False
 
 -- | One step type reduction. Requires 'not (isWnhf t)'.
-reduce :: TypeDeclMap -> T.Type -> T.Type
-reduce td = \case
+reduce :: M.KindedModule -> T.Type -> T.Type
+reduce mod = \case
   -- 1. Sequential composition
     -- R-Neut
   T.AppSemi _ T.Skip{} t -> t
@@ -67,7 +68,7 @@ reduce td = \case
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
           k = kindOfLambdaVar f
     -- R-SemiL
-  T.AppSemi s t u -> T.AppSemi s (reduce td t) u
+  T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
 
   -- 2. Dual
     -- R-DSkip
@@ -96,17 +97,17 @@ reduce td = \case
     -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
     -- R-DCtx
-  T.AppDual s t -> T.AppDual s (reduce td t)
+  T.AppDual s t -> T.AppDual s (reduce mod t)
 
   -- 3. β, μ, Void, AppL
     -- R-β
   T.App _ t@T.Abs{} us -> betaRule t us
     -- R-μ
-  T.TName _ name -> unfold td name
+  T.TName _ name -> unfold mod name
     -- R-VoidApp
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
     -- R-TAppL
-  T.App s t ts -> T.App s (reduce td t) ts
+  T.App s t ts -> T.App s (reduce mod t) ts
 
   -- 4. Should not happen
   t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
@@ -132,8 +133,8 @@ betaRule (T.Abs s aks t) us
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: ValidationState -> T.Type -> T.Type
-normalise vs = norm Set.empty
+normalise :: M.KindedModule -> T.Type -> T.Type
+normalise mod = norm Set.empty
   where
     norm :: Set.Set T.Type -> T.Type -> T.Type
     norm visited t
@@ -142,13 +143,13 @@ normalise vs = norm Set.empty
       -- N-Visited
       | reappears = T.Void (getSpan t) (K.image k)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = norm visited' (reduce (typeDecls vs) t)
+      | otherwise = norm visited' (reduce mod t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u
         visited'  = maybe visited (`Set.insert` visited) u
         k = case u of
-          Just (T.AppTName _ name _) -> getKind vs name
+          Just (T.AppTName _ name _) -> getKind mod name
           _ -> internalError $ "Validation.Normalisation.normalise: " ++ show u
 
 -- | This is not exactly redexµ(T) = µκF. We must look at applied TNames, for

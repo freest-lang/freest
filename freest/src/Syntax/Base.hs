@@ -8,8 +8,9 @@ represent FreeST's external syntax.
 -}
 
 module Syntax.Base
-  ( -- Span
-    Span (..)
+  ( Parsed, Scoped, Kinded, Typed 
+  -- Span
+  , Span (..)
   , Located (..)
   -- Identifier
   , Identifier (..)
@@ -30,6 +31,17 @@ where
 import Data.Bifunctor ( Bifunctor(..) )
 import Data.List ( (\\) )
 import Data.Set qualified as Set
+import Data.Void ( Void )
+
+-- The different phases of annotated AST's
+
+data Parsed
+data Scoped
+data Kinded
+data Typed
+
+void :: Void
+void = error "Attempt to evaluate void"
 
 -- 1 _ Positions in the source code
 

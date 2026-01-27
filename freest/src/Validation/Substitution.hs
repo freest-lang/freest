@@ -70,13 +70,3 @@ subs a u = \case
 -- between @as@ and @us@.
 subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
 subsAll as us t = foldr (uncurry subs) t (zip as us)
-
--- | Replace a given name by a type in a type. Usually written @[a -> u] t@. A
--- substitution, only that @a@ is an identifier rather than a variable.
--- unfold :: Identifier -> T.Type -> T.Type -> T.Type
--- unfold name t = \case
---   T.Abs s aks u -> T.Abs s aks (unfold name t u)
---   T.App s u vs -> T.App s (unfold name t u) (map (unfold name t) vs)
---   T.TName _ name' | name == name' -> t
---   u -> u
-

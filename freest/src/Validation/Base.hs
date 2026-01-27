@@ -34,37 +34,28 @@ type ConsDeclMap = Map.Map Identifier [T.Type]
 -- for easy lookup, but these are not supposed to change.
 data ValidationState
   = ValidationState
-    { errors    :: [Error]
-    , kindSigs  :: KindSigMap
-    , typeDecls :: TypeDeclMap
-    , dataDecls :: DataDeclMap
-    , consDecls :: Map.Map Identifier (Identifier, [(Variable, K.Kind)], [T.Type])
+    { errors  :: [Error]
+    , counter :: Int
     }
 
 -- | The empty validation state. No errors or declarations.
 emptyValidationState :: ValidationState
 emptyValidationState = ValidationState 
-  { errors    = []
-  , kindSigs  = Map.empty
-  , typeDecls = Map.empty
-  , dataDecls = Map.empty
-  , consDecls = Map.empty
-  }
-
--- | Build an initial validation state from a module, storing its declarations
--- for easy lookup. The resulting state contains no errors.
-buildValidationState :: M.Module -> ValidationState
-buildValidationState m = ValidationState -- TODO: traverse module once.
-  { errors    = []
-  , kindSigs  = Map.fromList (concatMap (\(is, k) -> map (, k) is) $ M.kindSigs m)
-  , typeDecls = Map.fromList (M.typeDecls m)
-  , dataDecls = Map.fromList (map (\(i, aks, cds) -> (i, (aks, Map.fromList cds))) $ M.dataDecls m)
-  , consDecls = Map.fromList (concatMap (\(i, aks, cds) -> map (second (i, aks, )) cds) $ M.dataDecls m)
+  { errors  = []
+  , counter = 0
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
 -- type 'ValidationState'.
 type Validation = ExceptT Error (State ValidationState)
+
+-- | Increment the fresh internal variable name counter, returning the previous
+-- value.
+incCounter :: Validation Int
+incCounter = do
+  c <- gets counter
+  modify (\s -> s{counter=succ (counter s)})
+  return c
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 
@@ -79,25 +70,21 @@ runValidation s v =
              | otherwise   -> Left errors
 
 -- | Look up the kind of a @type@ or @data@ name in the validation state.
-lookupKind :: Identifier -> Validation K.Kind
-lookupKind i = do 
-  ctx <- gets kindSigs
-  case ctx Map.!? i of
+lookupKind :: M.ScopedModule -> Identifier -> Validation K.Kind
+lookupKind mod i = do 
+  case M.kindSigs mod Map.!? i of
     Just k  -> return k
     Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
 
-getType :: ValidationState -> Identifier -> T.Type
-getType vs = unfold $ typeDecls vs
-
-unfold :: TypeDeclMap -> Identifier -> T.Type
-unfold td name =
-  case td Map.!? name of
+unfold :: M.KindedModule -> Identifier -> T.Type
+unfold mod i =
+  case M.typeDecls mod Map.!? i of
     Just u  -> u
-    Nothing -> internalError $ "Validation.Base.unfold: name " ++ show name ++ " not in type declaration map"
+    Nothing -> internalError $ "Validation.Base.unfold: name " ++ show i ++ " not in type declaration map"
 
-getKind :: ValidationState -> Identifier -> K.Kind
-getKind vs name =
-  case kindSigs vs Map.!? name of
+getKind :: M.KindedModule -> Identifier -> K.Kind
+getKind mod i =
+  case M.kindSigs mod Map.!? i of
     Just k  -> k
-    Nothing -> internalError $ "RenameValidation.Base..getKind: name " ++ show name ++ " not in kind signature map"
+    Nothing -> internalError $ "RenameValidation.Base..getKind: name " ++ show i ++ " not in kind signature map"
   

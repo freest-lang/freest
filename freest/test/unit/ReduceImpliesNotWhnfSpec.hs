@@ -2,8 +2,9 @@ module ReduceImpliesNotWhnfSpec (spec) where
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap )
+import Validation.Kinding ( runKindModule )
 import Validation.Normalisation ( isWhnf, reduce )
+import UI.Error (showErrors)
 import UnitSpecUtils
 
 import Data.Map.Strict qualified as Map
@@ -23,9 +24,11 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T reduces then T is not a whnf"
   errorsAreFailures
-  \_ (t, _, m) -> reducesImpliesNotWhnf (buildTypeDecls m) t >>= (`shouldBe` True)
+  \src (t, _, m) -> case runKindModule m of
+    Left es -> expectationFailure (showErrors src es)
+    Right m' -> reducesImpliesNotWhnf m' t >>= (`shouldBe` True)
 
-reducesImpliesNotWhnf :: TypeDeclMap -> T.Type -> IO Bool
+reducesImpliesNotWhnf :: M.KindedModule -> T.Type -> IO Bool
 reducesImpliesNotWhnf m t =
   catch
     (trace ("\n" ++ show t ++ showWhnf whnf ++ "reduces to " ++ show u)
@@ -35,10 +38,6 @@ reducesImpliesNotWhnf m t =
   where
     u = reduce m t
     whnf = isWhnf t
-
--- Warning: code also in from Validation.Base
-buildTypeDecls :: M.Module -> TypeDeclMap
-buildTypeDecls = Map.fromList . M.typeDecls
 
 showWhnf :: Bool -> String
 showWhnf True  = " (a whnf) "

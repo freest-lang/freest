@@ -4,8 +4,10 @@ import UnitSpecUtils
 
 import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( ValidationState, buildValidationState )
+import UI.Error (showErrors)
+import Validation.Kinding (runKindModule)
 import Validation.TypeEquivalence ( fromTypes, showGrammar )
+
 import Language.Simple.Grammar
 
 import Test.Hspec
@@ -23,10 +25,12 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges"
   errorsAreFailures
-  \_ (t, _, m) -> translateToGrammar (buildValidationState m) t `shouldBe` True
+  \src (t, _, m) -> case runKindModule m of 
+    Left es  -> expectationFailure (showErrors src es) 
+    Right m' -> translateToGrammar m' t `shouldBe` True
 
-translateToGrammar :: ValidationState -> T.Type -> Bool
-translateToGrammar vs t =
+translateToGrammar :: M.KindedModule -> T.Type -> Bool
+translateToGrammar m t =
   -- trace (" " ++ show (length productions) ++ " productions") True
   trace ("\n" ++ showGrammar g) True
-  where g@(productions, _) = fromTypes vs [t]
+  where g@(productions, _) = fromTypes m [t]

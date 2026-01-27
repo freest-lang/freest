@@ -3,8 +3,7 @@ module EquivalenceInvalidSpec (spec) where
 
 import Syntax.Module qualified as M
 import UI.Error ( showErrors )
-import Validation.Base ( buildValidationState )
-import Validation.Kinding ( runCheck )
+import Validation.Kinding ( runCheck' )
 import Validation.TypeEquivalence ( equivalent )
 import UnitSpecUtils ( mkEquivalenceSpec )
 
@@ -18,6 +17,7 @@ spec :: Spec
 spec = mkEquivalenceSpec
   ["test/unit/EquivalenceInvalid.test"]
   "Invalid equivalence tests" 
-  \src (t,u,k,m) -> case runCheck m t k >> runCheck m u k of
+  \src (t,u,k,m) -> case runCheck' (M.asScoped m) t k 
+                      >> runCheck' (M.asScoped m) u k of
     Left es -> expectationFailure (showErrors src es)
-    _       -> equivalent (buildValidationState m) t u `shouldBe` False
+    _       -> equivalent m t u `shouldBe` False

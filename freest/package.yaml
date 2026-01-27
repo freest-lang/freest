@@ -20,6 +20,7 @@ default-extensions:
   - PatternSynonyms
   - ScopedTypeVariables
   - TupleSections
+  - TypeFamilies
   - ViewPatterns
 
 data-dir: data

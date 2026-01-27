@@ -157,45 +157,45 @@ import Data.List.NonEmpty qualified as NE
 
 %%
 
-Module :: { M.Module }
+Module :: { M.ParsedModule }
   : 'module' ModuleName 'where' ImportModuleDeclBlock { M.setName (split '.' $ getText $2) $4 }
   -- TODO: no module declaration. See notes in Lexer.
   -- | ImportModuleDeclBlock { $1 }
 
 ModuleName :: { Token } : UPPER_ID { $1 } | QUALIFIED_UPPER_ID { $1 }
 
-ImportModuleDeclBlock :: { M.Module }
+ImportModuleDeclBlock :: { M.ParsedModule }
   : OPEN ImportModuleDeclListPIPE Close { $2 }
 
-ImportModuleDeclListPIPE :: { M.Module }
+ImportModuleDeclListPIPE :: { M.ParsedModule }
   : ImportDecl PIPE ImportModuleDeclListPIPE { $1 $3 }
   | ModuleDecl PIPE ModuleDeclListPIPE       { $1 $3 }
-  | ImportDecl { $1 M.empty }
-  | ModuleDecl { $1 M.empty }
-  | {- empty -} { M.empty }
+  | ImportDecl { $1 M.emptyParsedModule }
+  | ModuleDecl { $1 M.emptyParsedModule }
+  | {- empty -} { M.emptyParsedModule }
 
-ImportDecl :: { M.Module -> M.Module }
+ImportDecl :: { M.ParsedModule -> M.ParsedModule }
   : 'import' QUALIFIED_UPPER_ID { M.insertImport (split '.' $ getText $2) }
   | 'import' UPPER_ID           { M.insertImport [getText $2] }
 
-ModuleDeclListPIPE :: { M.Module }
+ModuleDeclListPIPE :: { M.ParsedModule }
   : ModuleDecl PIPE ModuleDeclListPIPE { $1 $3 }
-  | ModuleDecl                         { $1 M.empty }
-  | {- empty -}                        { M.empty }
+  | ModuleDecl                         { $1 M.emptyParsedModule }
+  | {- empty -}                        { M.emptyParsedModule }
 
-ModuleDecl :: { M.Module -> M.Module }
+ModuleDecl :: { M.ParsedModule -> M.ParsedModule }
   : LetDecl  { M.insertDef $1 }
   | DataDecl { $1 }
   | TypeDecl { $1 }
   | KindSig  { $1 }
 
-DataDecl :: { M.Module -> M.Module }
+DataDecl :: { M.ParsedModule -> M.ParsedModule }
   : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
 
-TypeDecl :: { M.Module -> M.Module }
+TypeDecl :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
 
-KindSig :: { M.Module -> M.Module }
+KindSig :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
 
 LetDecl
@@ -591,12 +591,12 @@ TypeTestCases(t)
 
 TypeTestCase(t)
   : 'case' t 'where' TypeTestBlock { ($2, $4) }
-  | 'case' t { ($2, M.empty) }
+  | 'case' t { ($2, M.emptyParsedModule) }
 
-EquivalenceTestCases :: { [((T.Type, T.Type, K.Kind), M.Module)] }
+EquivalenceTestCases :: { [((T.Type, T.Type, K.Kind), M.ParsedModule)] }
   : TypeTestCases(EquivalenceTest) { $1 }
 
-KindingTestCases :: {[((T.Type, Maybe K.Kind), M.Module)]}
+KindingTestCases :: {[((T.Type, Maybe K.Kind), M.ParsedModule)]}
   : TypeTestCases(KindingTest) {$1}
 
 EquivalenceTest :: { (T.Type, T.Type, K.Kind) }
@@ -606,14 +606,14 @@ KindingTest :: { (T.Type, Maybe K.Kind) }
   : Type ':' Kind { ($1, Just $3) }
   | Type { ($1, Nothing) }
 
-TypeTestBlock :: { M.Module }
+TypeTestBlock :: { M.ParsedModule }
   : OPEN TypeTestDeclListPIPE Close { $2 }
 
-TypeTestDeclListPIPE :: { M.Module }
+TypeTestDeclListPIPE :: { M.ParsedModule }
   : TypeTestDecl PIPE TypeTestDeclListPIPE { $1 $3 }
-  | TypeTestDecl { $1 M.empty }
+  | TypeTestDecl { $1 M.emptyParsedModule }
 
-TypeTestDecl :: { M.Module -> M.Module }
+TypeTestDecl :: { M.ParsedModule -> M.ParsedModule }
   : KindSig  { $1 }
   | TypeDecl { $1 }
   | DataDecl { $1 }
@@ -649,7 +649,7 @@ prefixTupleExpConsError :: Token -> Token -> Lexer a
 prefixTupleExpConsError tk1 tk2 = 
   throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported" "(Consider using a tuple expression)"] 
 
-runParseModule :: FilePath -> String -> Either [Error] M.Module
+runParseModule :: FilePath -> String -> Either [Error] M.ParsedModule
 runParseModule = runLexer parseModule 
 
 }

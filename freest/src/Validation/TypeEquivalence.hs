@@ -16,10 +16,11 @@ where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
 import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
+import Validation.Base ( TypeDeclMap, ValidationState )
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
-import Validation.Kinding ( runSynth', KindCtx )
+import Validation.Kinding ( runSynth, KindCtx )
 import Utils ( internalError )
 import Parser.Unparser
 
@@ -33,17 +34,17 @@ import Data.Map.Strict qualified as Map
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
-equivalent :: ValidationState -> T.Type -> T.Type -> Bool
-equivalent vs t u = t == u || bisimilar ps xs ys
-  where (ps, [xs, ys]) = fromTypes vs [t, u]
+equivalent :: M.KindedModule -> T.Type -> T.Type -> Bool
+equivalent mod t u = t == u || bisimilar ps xs ys
+  where (ps, [xs, ys]) = fromTypes mod [t, u]
 
-fromTypes :: ValidationState -> [T.Type] -> (Productions, [Word])
-fromTypes vs ts =
+fromTypes :: M.KindedModule -> [T.Type] -> (Productions, [Word])
+fromTypes mod ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
   (productions s, xss)
-  where 
-    (xss, s) = runState (mapM (word Map.empty) ts) (initial vs)
+  where
+    (xss, s) = runState (mapM (word Map.empty) ts) (initial mod)
 
 word :: KindCtx -> T.Type -> TransState Word
 word ctx t = wasVisited t >>= \case
@@ -72,7 +73,6 @@ word' ctx = \case
       ]
   -- W-Seq, T ; U
   T.AppSemi _ t u -> do
-    vs <- gets validationState
     liftM2 (++) (word ctx t) (word ctx u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
   T.AppDual s (T.AppVar _ a ts) -> do
@@ -98,8 +98,8 @@ word' ctx = \case
   t | isJust (tNameRedex t) -> do
     y <- nextNonterminal
     addVisited t y
-    vs <- gets validationState
-    let u = normalise vs t
+    modl <- gets modl
+    let u = normalise modl t
     case u of
       -- W-μSkip, t normalises to Skip
       T.Skip{} -> pure []
@@ -111,8 +111,8 @@ word' ctx = \case
         pure [y]
   -- If we get here, then t is of higher order kind or reduces, hopefully
   t -> do
-    vs <- gets validationState
-    case runSynth' vs ctx t of
+    modl <- gets modl
+    case runSynth modl ctx t of
       Right (K.Arrow _ k _) -> do
         -- W-Abs, F : k => k'
         let s = getSpan t -- The same span for all newly created vars & types?
@@ -121,14 +121,13 @@ word' ctx = \case
         let βk = Variable s ('β' : show k) (1009 * internal)
         wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk]
         wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk]
-        getNonterminal $ Map.fromList $
+        getNonterminal $ Map.fromList
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)
           ]
       Right _ -> do
         -- W-τ, t reduces
-        td <- getTypeDecls
-        word ctx (reduce td t)
+        word ctx (reduce modl t)
       Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for\n\tType: " ++ show t ++ "\n\tKinding context: " ++ show ctx ++ "\n\tErrors: " ++ show errors ++ ", at " ++ show (getSpan t)
 
 isFullyApplied :: KindCtx -> T.Type -> Bool
@@ -179,15 +178,15 @@ data TState = TState
   { productions :: Productions
   , nextIndex :: Int
   , visited :: Visited
-  , validationState :: ValidationState
+  , modl :: M.KindedModule
   }
 
-initial :: ValidationState -> TState
-initial vs = TState
+initial :: M.KindedModule -> TState
+initial modl = TState
   { productions = Map.empty
   , nextIndex = succ bottom -- 0 is for bottom
   , visited = Map.empty
-  , validationState = vs
+  , modl = modl
   }
 
 type TransState = State TState
@@ -210,9 +209,7 @@ addVisited t y = do
   modify $ \s -> s { visited = Map.insert t y (visited s) }
 
 getTypeDecls :: TransState TypeDeclMap
-getTypeDecls = do
-  vs <- gets validationState
-  pure (typeDecls vs)
+getTypeDecls = gets (M.typeDecls . modl)
 
 -- TODO: Add only if needed
 addProduction :: Nonterminal -> Terminal -> Word -> TransState ()

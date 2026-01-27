@@ -19,8 +19,8 @@ import Test.Hspec
 
 mkTypeSpec :: [FilePath] 
               -> String 
-              -> (Source -> [Error]                          -> Expectation) 
-              -> (Source -> (T.Type, Maybe K.Kind, M.Module) -> Expectation) 
+              -> (Source -> [Error]                                -> Expectation) 
+              -> (Source -> (T.Type, Maybe K.Kind, M.ScopedModule) -> Expectation) 
               -> Spec
 mkTypeSpec testPaths testDesc failHandler testHandler = do
   src <- zip testPaths <$> runIO (mapM readFile testPaths)
@@ -30,7 +30,7 @@ mkTypeSpec testPaths testDesc failHandler testHandler = do
     Right ts -> describe testDesc $ 
       forM_ ts \((t, k), m) -> it
         (show (getSpan t))
-        case runScoping scopeKindingTest (t, k, m) >>= kindKindingTest of
+        case runScoping scopeKindingTest (t, k, m) of
           Left es          -> failHandler src' es
           Right (t, k, m)  -> testHandler src' (t, k, m) 
   where
@@ -39,7 +39,6 @@ mkTypeSpec testPaths testDesc failHandler testHandler = do
       t' <- scopeType ctx t
       k' <- mapM scopeKind k
       return (t', k', m')
-    kindKindingTest (t, k, m) = (t, k,) <$> runKindModule m
 
 errorsAreFailures, errorsAreSuccesses :: Source -> [Error] -> Expectation
 errorsAreFailures  src es = expectationFailure (showErrors src es)
@@ -47,7 +46,7 @@ errorsAreSuccesses _   _  = return ()
 
 mkEquivalenceSpec :: [FilePath] 
                   -> String 
-                  -> (Source -> (T.Type, T.Type, K.Kind, M.Module) -> Expectation) 
+                  -> (Source -> (T.Type, T.Type, K.Kind, M.KindedModule) -> Expectation) 
                   -> Spec
 mkEquivalenceSpec testPaths testDesc testFun = do
   src <- zip testPaths <$> runIO (mapM readFile testPaths)
