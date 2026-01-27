@@ -66,15 +66,6 @@ lookupFunType tctx x = case tctx Map.!? Left x of
   Just t -> return t
   Nothing -> throwE (LacksTypeSig (getSpan x) x)
 
--- | Looks up the declaration of a data constructor, throwing an error if it
--- has not been declared.
-lookupDConsDecl :: Identifier -> FreeST (Identifier, [(Variable, K.Kind)], [T.KindedType])
-lookupDConsDecl i = undefined -- do
-    -- dds <- gets consDecls
-    -- case dds Map.!? i of
-    --     Just ias -> return ias
-    --     Nothing  -> throwE (ConsOutOfScope (getSpan i) i)
-
 -- | The context difference operation. Removes the variables in the second type 
 -- context from the first type context, throwing an error for any strictly
 -- linear variable it encounters. To be used at the end of a scope.
@@ -467,11 +458,11 @@ checkFun kctx tctx mod fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           return tctxi''
         -- anomalous cases
         (TypeLevel (a, k) : as, T.AppArrow s' _ _ m u v) -> 
-          throwE (UnexpectedParam (getSpan a) i fe (ExpLevel u) (TypeLevel a))
+          throwE (UnexpectedParam (getSpan a) i (ExpLevel u) (TypeLevel a))
         (ExpLevel  (p, t) : as, T.AppForall s' _ ((a, k) : aks) u) -> 
-          throwE (UnexpectedParam (getSpan p) i fe (TypeLevel k) (ExpLevel p))
+          throwE (UnexpectedParam (getSpan p) i (TypeLevel k) (ExpLevel p))
         (as, t') -> do
-          throwE (ExpectsTooManyArgs (getSpan fe) fe t (i + length as) i)
+          throwE (ExpectsTooManyArgs (getSpan fe) t (i + length as) i)
     fpe = case fe of 
       Left f -> Left (Left f)
       Right e -> Right e
@@ -513,14 +504,19 @@ checkPat kctx mod p t = let tds = M.typeDecls mod in case p of
         return (Map.union tctx tctx')
       t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
   -- (p1 ... , pn)
-  E.TuplePat s ps   ->
+  E.TuplePat s ps   -> do
     case normalise tds t of
       t'@(T.Tuple s _ ts) -> do
         foldM (\tctx (p', u) -> Map.union tctx <$> checkPat kctx mod p' u) Map.empty (zip ps ts)
       t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
   -- (C p1 ... pn)
   E.DConsPat s i ps -> do
-    (i', map fst -> as, ts) <- lookupDConsDecl i
+    (i', ts) <- case M.consDecls mod Map.!? i of
+      Just ias -> return ias
+      Nothing  -> throwE (ConsOutOfScope (getSpan i) i)
+    as <- case M.dataDecls mod Map.!? i' of
+      Just (aks, _) -> return $ map fst aks
+      Nothing -> internalError ("Constructor " ++ show i ++ " has no associated data declaration")
     case normalise tds t of
       T.AppDName _ x y i'' us | i' == i'' -> do
         let ts' = map (subsAll as us) ts
