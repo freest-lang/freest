@@ -5,7 +5,7 @@ module Parser.Unparser
 
 import Syntax.Base
 import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
+import Syntax.Type.Internal qualified as T
 
 import Data.List qualified as List
 

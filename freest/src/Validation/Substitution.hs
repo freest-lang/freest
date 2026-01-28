@@ -17,7 +17,7 @@ module Validation.Substitution
 where
 
 import Syntax.Base
-import Syntax.Type qualified as T
+import Syntax.Type.Internal qualified as T
 import Syntax.Kind qualified as K
 
 import Data.Bifunctor ( first, second )

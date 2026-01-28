@@ -16,7 +16,7 @@ import Syntax.Base
 import Syntax.Names
 import Syntax.Expression qualified as E 
 import Syntax.Kind qualified as K 
-import Syntax.Type qualified as T 
+import Syntax.Type.Parsed qualified as T 
 import Syntax.Module qualified as M
 import UI.Error
 

@@ -24,6 +24,7 @@ module Syntax.Base
   -- Level
   , Level (..)
   , partitionLevels
+  , void
   )
 where
 

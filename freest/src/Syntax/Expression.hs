@@ -29,7 +29,7 @@ where
 import Syntax.Base
 import Syntax.Kind ( Multiplicity, Kind )
 import Syntax.Names
-import Syntax.Type ( Type )
+import Syntax.Type.Internal ( Type )
 
 import Data.List ( intercalate )
 
