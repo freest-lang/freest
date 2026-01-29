@@ -8,7 +8,6 @@ modules.
 -}
 module Syntax.Module
   ( ParsedModule, ScopedModule, KindedModule, TypedModule
-  , asScoped
   , Module(..)
   , KindSigs, TypeDecls, DataDecls, ConsDecls
   , setName
@@ -24,7 +23,8 @@ where
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
+import Syntax.Type.Internal qualified as T
+import Syntax.Type.Unkinded qualified as TU
 
 import Data.Bifunctor (second)
 import Data.List qualified as List
@@ -36,12 +36,6 @@ type ScopedModule = Module Scoped
 type KindedModule = Module Kinded
 type TypedModule  = Module Typed
 
-asScoped :: KindedModule -> ScopedModule
-asScoped mod = mod'
-  where
-    Module{name, typeDecls, consDecls, dataDecls, kindSigs} = mod
-    mod' = mod{name, typeDecls, consDecls, dataDecls, kindSigs}
-
 data Module p
   = Module { name        :: Maybe [String]
            , imports     :: [[String]]
@@ -49,7 +43,7 @@ data Module p
            , typeDecls   :: TypeDecls p
            , dataDecls   :: DataDecls p
            , consDecls   :: ConsDecls p
-           , definitions :: [E.LetDecl]
+           , definitions :: [E.LetDecl p]
            }
 
 -- | Phased association data structure. After parsing it is an association
@@ -81,7 +75,7 @@ type KindSigs p = ModuleAssoc p Identifier K.Kind
 -- are represented as
 --
 --   > fromList [(Age, ([], Int)), (Stream, ([a], (!a ; Stream a))]
-type TypeDecls p = ModuleAssoc p Identifier T.Type
+type TypeDecls p = ModuleAssoc p Identifier (T.Type p)
 
 -- | Datatype constructor declarations, e.g.,
 --
@@ -106,7 +100,7 @@ type DataDecls p =
 --
 --   > fromList [(Leaf, (Tree, [])), (Node, (Tree [Tree a, a, Tree a]))]
 type ConsDecls p = 
-  ModuleAssoc p Identifier (Identifier, [T.Type])
+  ModuleAssoc p Identifier (Identifier, [T.Type p])
 
 setName :: [String] -> Module p -> Module p
 setName n m = m {name = Just n}
@@ -116,7 +110,7 @@ insertImport i m = m{imports = i : imports m}
 
 insertDataDecl ::  Identifier
                -> [(Variable, K.Kind)]
-               -> [(Identifier, [T.Type])]
+               -> [(Identifier, [TU.ParsedType])]
                -> ParsedModule
                -> ParsedModule
 insertDataDecl i aks cds m = 
@@ -126,16 +120,16 @@ insertDataDecl i aks cds m =
 
 insertTypeDecl :: Identifier
                -> [(Variable, K.Kind)]
-               -> T.Type
+               -> TU.ParsedType
                -> ParsedModule
                -> ParsedModule
 insertTypeDecl i aks t m = m{typeDecls = (i, t') : typeDecls m}
-  where t' = if null aks then t else T.Abs (getSpan t) aks t 
+  where t' = if null aks then t else TU.Abs (getSpan t) aks t 
 
 insertKindSig :: [Identifier] -> K.Kind -> ParsedModule -> ParsedModule
 insertKindSig is k m = m{kindSigs = kindSigs m ++ map (, k) is}
 
-insertDef :: E.LetDecl -> Module p -> Module p
+insertDef :: E.LetDecl p -> Module p -> Module p
 insertDef d m = m{definitions = d : definitions m}
 
 emptyParsedModule :: ParsedModule
@@ -183,6 +177,6 @@ instance Show ParsedModule where
         ++ List.intercalate " | " (map ((++ " ...") . show) is)
       showConsDecl (i, (i', aks, ts)) =
         "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
-      showTypeDecl (i, T.Abs _ aks t) = 
+      showTypeDecl (i, T.Abs _ _ aks t) = 
         "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
       showTypeDecl (i, t) = "type " ++ show i ++ " = " ++ show t

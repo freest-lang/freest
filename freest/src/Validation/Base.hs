@@ -6,7 +6,8 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
+import Syntax.Type.Internal qualified as T
+import Syntax.Type.Kinded qualified as TK
 import UI.Error
 import Validation.Substitution ( subs )
 import Utils ( internalError )
@@ -17,18 +18,6 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
-
--- | Mapsg @type@ names to their declarations.
-type TypeDeclMap = Map.Map Identifier T.Type
-
--- | Maps @type@ names to their kinds.
-type KindSigMap = Map.Map Identifier K.Kind
-
--- | Maps @data@ names to their declarations.
-type DataDeclMap = Map.Map Identifier ([(Variable, K.Kind)], ConsDeclMap)
-
--- | Maps @data@ constructor names to their declarations.
-type ConsDeclMap = Map.Map Identifier [T.Type]
 
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
@@ -76,7 +65,7 @@ lookupKind mod i = do
     Just k  -> return k
     Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
 
-unfold :: M.KindedModule -> Identifier -> T.Type
+unfold :: M.KindedModule -> Identifier -> TK.KindedType
 unfold mod i =
   case M.typeDecls mod Map.!? i of
     Just u  -> u

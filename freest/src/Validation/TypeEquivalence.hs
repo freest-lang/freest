@@ -17,8 +17,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState )
+import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Kinding ( runSynth, KindCtx )
 import Utils ( internalError )
@@ -34,11 +33,11 @@ import Data.Map.Strict qualified as Map
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
-equivalent :: M.KindedModule -> T.Type -> T.Type -> Bool
+equivalent :: M.KindedModule -> T.KindedType -> T.KindedType -> Bool
 equivalent mod t u = t == u || bisimilar ps xs ys
   where (ps, [xs, ys]) = fromTypes mod [t, u]
 
-fromTypes :: M.KindedModule -> [T.Type] -> (Productions, [Word])
+fromTypes :: M.KindedModule -> [T.KindedType] -> (Productions, [Word])
 fromTypes mod ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
@@ -46,12 +45,12 @@ fromTypes mod ts =
   where
     (xss, s) = runState (mapM (word Map.empty) ts) (initial mod)
 
-word :: KindCtx -> T.Type -> TransState Word
+word :: KindCtx -> T.KindedType -> TransState Word
 word ctx t = wasVisited t >>= \case
   Just y -> pure [y]
   Nothing -> word' ctx t
 
-word' :: KindCtx -> T.Type -> TransState Word
+word' :: KindCtx -> T.KindedType -> TransState Word
 word' ctx = \case
   -- W-Skip
   T.Skip{} -> pure []
@@ -112,25 +111,24 @@ word' ctx = \case
   -- If we get here, then t is of higher order kind or reduces, hopefully
   t -> do
     modl <- gets modl
-    case runSynth modl ctx t of
-      Right (K.Arrow _ k _) -> do
+    case T.kindOf t of
+      K.Arrow _ k _ -> do
         -- W-Abs, F : k => k'
         let s = getSpan t -- The same span for all newly created vars & types?
         let internal = toInt k
         let αk = Variable s ('α' : show k) internal
         let βk = Variable s ('β' : show k) (1009 * internal)
-        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk]
-        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk]
+        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk k]
+        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk k]
         getNonterminal $ Map.fromList
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)
           ]
-      Right _ -> do
+      _ -> do
         -- W-τ, t reduces
         word ctx (reduce modl t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for\n\tType: " ++ show t ++ "\n\tKinding context: " ++ show ctx ++ "\n\tErrors: " ++ show errors ++ ", at " ++ show (getSpan t)
 
-isFullyApplied :: KindCtx -> T.Type -> Bool
+isFullyApplied :: KindCtx -> T.KindedType -> Bool
 isFullyApplied ctx = \case
   T.Int{} -> True
   T.Float{} -> True
@@ -140,7 +138,7 @@ isFullyApplied ctx = \case
   T.AppLinChoice{} -> True
   T.UnChoice{} -> True
   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
-  T.Var _ a -> K.depth (kindOf ctx a) ==  0
+  T.Var _ _ a -> K.depth (kindOf ctx a) ==  0
   T.AppVar _ a ts -> K.depth (kindOf ctx a) == length ts
   _ -> False
 
@@ -172,7 +170,7 @@ toInt (K.Arrow _ k1 k2) = toInt k1 - 503 * toInt k2-- toInt (K.Proper _ K.Lin to
 
 -- The state of the translation to grammar procedure
 
-type Visited = Map.Map T.Type Nonterminal
+type Visited = Map.Map T.KindedType Nonterminal
 
 data TState = TState
   { productions :: Productions
@@ -197,18 +195,18 @@ nextNonterminal = do
   modify $ \s -> s { nextIndex = n + 1 }
   pure n
 
-wasVisited :: T.Type -> TransState (Maybe Nonterminal)
+wasVisited :: T.KindedType -> TransState (Maybe Nonterminal)
 wasVisited t = do
   v <- gets visited
   pure $ v Map.!? t
 
-addVisited :: T.Type -> Nonterminal -> TransState ()
+addVisited :: T.KindedType -> Nonterminal -> TransState ()
 addVisited t y = do
   v <- gets visited
   -- trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
   modify $ \s -> s { visited = Map.insert t y (visited s) }
 
-getTypeDecls :: TransState TypeDeclMap
+getTypeDecls :: TransState (M.TypeDecls Kinded)
 getTypeDecls = gets (M.typeDecls . modl)
 
 -- TODO: Add only if needed
@@ -245,7 +243,7 @@ getNonterminal ts = do
       Map.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
 
 -- | Fat terminal types can be compared for syntactic equality.
-fatTerminal :: T.Type -> Maybe T.Type
+fatTerminal :: T.KindedType -> Maybe T.KindedType
 fatTerminal = \case
   -- Functional Types
   t@T.Int{}   -> Just t

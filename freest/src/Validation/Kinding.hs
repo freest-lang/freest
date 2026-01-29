@@ -24,10 +24,10 @@ module Validation.Kinding
 where
 
 import UI.Error
-import Syntax.Base
+import Syntax.Base hiding (void)
 import Syntax.Kind
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
+import Syntax.Type.Unkinded qualified as T
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
@@ -51,7 +51,7 @@ emptyKindCtx :: KindCtx
 emptyKindCtx = Map.empty
 
 -- | Synthesize the (minimal?) kind of a type.
-synth :: M.ScopedModule -> KindCtx -> T.Type -> Validation Kind
+synth :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation Kind
 synth mod ctx = \case
   -- Functional types
   T.Int s    -> pure (ut s)
@@ -95,8 +95,8 @@ synth mod ctx = \case
     let (ks,kn) = Expose.kindArrow k
     checkArgs s t k (length ts) (length ks) ts ks kn
     where
-      checkArgs :: Span -> T.Type -> Kind -> Int -> Int -- error info
-                -> [T.Type] -> [Kind] -> Kind -> Validation Kind
+      checkArgs :: Span -> T.ScopedType -> Kind -> Int -> Int -- error info
+                -> [T.ScopedType] -> [Kind] -> Kind -> Validation Kind
       checkArgs _ _ _ _ _ [] ks' kn =
             pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
       checkArgs s t k nargs npars ts [] kn =
@@ -108,21 +108,21 @@ synth mod ctx = \case
       <$> synth mod (Map.fromList aks `Map.union` ctx) t
 
 -- | Check a type against a given kind.
-check :: M.ScopedModule -> KindCtx -> T.Type -> Kind -> Validation ()
+check :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Validation ()
 check mod ctx t k = void (synthCheck mod ctx t k)
 
 -- | Calculate the join of the multiplicities of a list of types, starting
 -- from a given multiplicity. Throws an error if a non-proper type is
 -- encountered.
-foldCheckProperJoin :: M.ScopedModule -> KindCtx -> Multiplicity -> [T.Type] 
-                    -> Validation (Multiplicity, [T.Type])
+foldCheckProperJoin :: M.ScopedModule -> KindCtx -> Multiplicity -> [T.ScopedType] 
+                    -> Validation (Multiplicity, [T.ScopedType])
 foldCheckProperJoin mod ctx m = foldM checkProperJoin (m, [])
   where checkProperJoin (m', ts) t =
           checkProper mod ctx t  >>= \(m'',_ ,t) -> pure (join m' m'', ts ++ [t])
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and prekind. Otherwise, throw an error.
-checkProper :: M.ScopedModule -> KindCtx -> T.Type -> Validation (Multiplicity, Prekind, T.Type)
+checkProper :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, T.ScopedType)
 checkProper mod ctx t =
   synth mod ctx t >>= \case
     Proper _ m pk -> pure (m, pk, t)
@@ -130,18 +130,18 @@ checkProper mod ctx t =
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
-checkSession :: M.ScopedModule -> KindCtx -> T.Type -> Validation (Multiplicity, Prekind, T.Type)
+checkSession :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, T.ScopedType)
 checkSession mod ctx t = checkPrekind mod ctx t Session
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
-checkChannel :: M.ScopedModule -> KindCtx -> T.Type -> Validation (Multiplicity, Prekind, T.Type)
+checkChannel :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, T.ScopedType)
 checkChannel mod ctx t = checkPrekind mod ctx t Channel
 
 -- | Check if a type is a proper type of the given prekind. If so, return its 
 -- minimal multiplicity and prekind. Otherwise, throw an error.
-checkPrekind :: M.ScopedModule -> KindCtx -> T.Type -> Prekind 
-             -> Validation (Multiplicity, Prekind, T.Type)
+checkPrekind :: M.ScopedModule -> KindCtx -> T.ScopedType -> Prekind 
+             -> Validation (Multiplicity, Prekind, T.ScopedType)
 checkPrekind mod ctx t pk = do
   (m, pk', t') <- checkProper mod ctx t
   unless (pk' <: pk) $
@@ -150,19 +150,19 @@ checkPrekind mod ctx t pk = do
 
 -- | Check if the kind of a type is a subkind of another. If not, throw an 
 -- error located at the type.
-checkSubkindOf :: T.Type -> Kind -> Kind -> Validation ()
+checkSubkindOf :: T.ScopedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k = 
   unless (k' <: k) $
     throwE (KindMismatch (getSpan t) k t k')
 
 -- | Check if the kind of a type is a subkind of another in a contravariant 
 -- position. If not, throw an error located at the type.
-checkSubkindOf' :: T.Type -> Kind -> Kind -> Validation ()
+checkSubkindOf' :: T.ScopedType -> Kind -> Kind -> Validation ()
 checkSubkindOf' t k' k =
   unless (k' <: k) $
     throwE (KindMismatch (getSpan t) k' t k)
 
-checkSubkindOfP' :: M.ScopedModule -> T.Type -> Kind -> Kind -> Validation ()
+checkSubkindOfP' :: M.ScopedModule -> T.ScopedType -> Kind -> Kind -> Validation ()
 checkSubkindOfP' mod t k' k = do
   _ <- synth mod Map.empty t -- TODO: map empty
   unless (k' <: k) $
@@ -170,7 +170,7 @@ checkSubkindOfP' mod t k' k = do
 
 -- | Synthesize the kind of a type and check if it is a subkind of another
 -- kind.
-synthCheck :: M.ScopedModule -> KindCtx -> T.Type -> Kind -> Validation Kind
+synthCheck :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Validation Kind
 synthCheck mod ctx t k = do
   k' <- synth mod ctx t
   checkSubkindOf t k' k
@@ -188,7 +188,7 @@ kindModule mod = do
             , M.definitions = M.definitions mod
             }
   where 
-    kindTypeDecl :: Identifier -> T.Type -> Validation T.Type
+    kindTypeDecl :: Identifier -> T.ScopedType -> Validation T.ScopedType
     kindTypeDecl i t = do
       k <- lookupKind mod i
       t' <- case t of
@@ -267,10 +267,10 @@ runKindModule m = runValidation emptyValidationState (kindModule m)
 -- 
 --     * a list of errors, if any was encountered;
 --     * a kind synthesized from the type, otherwise.
-runSynth :: M.KindedModule -> KindCtx -> T.Type -> Either [Error] Kind -- TODO: this function will be deprecated
+runSynth :: M.KindedModule -> KindCtx -> T.ScopedType -> Either [Error] Kind -- TODO: this function will be deprecated
 runSynth mod ctx t = runValidation emptyValidationState (synth (M.asScoped mod) ctx t)
 
-runSynth' :: M.KindedModule -> T.Type -> Either [Error] Kind -- TODO: this function will be deprecated
+runSynth' :: M.KindedModule -> T.ScopedType -> Either [Error] Kind -- TODO: this function will be deprecated
 runSynth' mod t = runValidation emptyValidationState (synth (M.asScoped mod) Map.empty t)
 
 -- | Run checking on a type against a kind, building the initial validation 
@@ -278,8 +278,8 @@ runSynth' mod t = runValidation emptyValidationState (synth (M.asScoped mod) Map
 -- 
 --     * a list of errors, if any was encountered;
 --     * unit, otherwise.
-runCheck :: M.ScopedModule -> KindCtx -> T.Type -> Kind -> Either [Error] ()
+runCheck :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Either [Error] ()
 runCheck mod ctx t k = runValidation emptyValidationState (check mod ctx t k)
 
-runCheck' :: M.ScopedModule -> T.Type -> Kind -> Either [Error] ()
+runCheck' :: M.ScopedModule -> T.ScopedType -> Kind -> Either [Error] ()
 runCheck' mod t k = runValidation emptyValidationState (check mod Map.empty t k)

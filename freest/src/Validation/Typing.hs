@@ -12,7 +12,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Names
-import Syntax.Type qualified as T
+import Syntax.Type.Kinded qualified as T
 import UI.Error
 import Utils
 import Validation.Base
@@ -38,7 +38,7 @@ import Data.Map.Strict qualified as Map
 
 -- The type context. It keeps track of the variables and constructors in scope
 -- and their types.
-type TypeCtx = Map.Map (Either Variable Identifier) T.Type
+type TypeCtx = Map.Map (Either Variable Identifier) T.KindedType
 
 emptyTypeCtx :: TypeCtx
 emptyTypeCtx = Map.empty
@@ -48,7 +48,7 @@ emptyTypeCtx = Map.empty
 -- linear, then the variable or identifier will not be present in the updated 
 -- type context. If the variable or identifier is not present in the type 
 -- context, an error is thrown.
-lookupType :: M.ScopedModule -> KindCtx -> TypeCtx -> Either Variable Identifier -> Validation (T.Type, TypeCtx)
+lookupType :: M.ScopedModule -> KindCtx -> TypeCtx -> Either Variable Identifier -> Validation (T.KindedType, TypeCtx)
 lookupType mod kctx tctx xi = case tctx Map.!? xi of
   Just t -> do
     k <- Kinding.synth mod kctx t
@@ -59,7 +59,7 @@ lookupType mod kctx tctx xi = case tctx Map.!? xi of
 
 -- | Looks up the type of a variable in a type context without changing
 -- said context, even if the type of the variable is linear. Use with caution.
-lookupFunType :: TypeCtx -> Variable -> Validation T.Type
+lookupFunType :: TypeCtx -> Variable -> Validation T.KindedType
 lookupFunType tctx x = case tctx Map.!? Left x of
   Just t -> return t
   Nothing -> throwE (LacksTypeSig (getSpan x) x)
@@ -80,7 +80,7 @@ typeCtxDifference mod kctx tctx1 tctx2 = do
 -- | Synthesis for expressions. Given kind and type contexts, it synthesizes 
 -- the type of an expression, returning its type and the updated type context 
 -- without the linear variables consumed in it.
-synth :: M.KindedModule -> KindCtx -> TypeCtx -> E.Exp -> Validation (T.Type, TypeCtx)
+synth :: M.KindedModule -> KindCtx -> TypeCtx -> E.KindedExp -> Validation (T.KindedType, TypeCtx)
 synth mod kctx tctx = \case
   E.Int s _       -> pure (T.Int s   , tctx)
   E.Float s _     -> pure (T.Float s , tctx)
@@ -220,9 +220,9 @@ synth mod kctx tctx = \case
 synthRHS :: M.KindedModule
          -> KindCtx
          -> TypeCtx
-         -> Either (Either Variable E.Pat) E.Exp
-         -> E.RHS
-         -> Validation (T.Type, TypeCtx)
+         -> Either (Either Variable E.Pat) E.KindedExp
+         -> E.RHS Kinded
+         -> Validation (T.KindedType, TypeCtx)
 synthRHS mod kctx tctx fep = \case
   E.GuardedRHS ((g1, e1) : ges) ds -> do
     (tctxds, kctx', tctx') <- maybe 
@@ -244,7 +244,7 @@ synthRHS mod kctx tctx fep = \case
 -- whether an expression has a given type, throwing an error if it does not.
 -- Returns the updated type context without the linear variables consumed in 
 -- the expression.
-check :: M.KindedModule -> KindCtx -> TypeCtx -> E.Exp -> T.Type -> Validation TypeCtx
+check :: M.KindedModule -> KindCtx -> TypeCtx -> E.KindedExp -> T.KindedType -> Validation TypeCtx
 check mod kctx tctx e t = case e of
   E.Int s _   -> checkEquivTypes mod (Left e) t (T.Int s)   >> pure tctx
   E.Float s _ -> checkEquivTypes mod (Left e) t (T.Float s) >> pure tctx
@@ -424,7 +424,7 @@ check mod kctx tctx e t = case e of
 -- are in scope in subsequent declarations. It returns two contexts: one
 -- containing only the bindings introduced by the declarations, and the
 -- type context given initially, updated with the new bindings.
-checkDecls :: M.KindedModule -> KindCtx -> TypeCtx -> [E.LetDecl] -> Validation (TypeCtx, KindCtx, TypeCtx)
+checkDecls :: M.KindedModule -> KindCtx -> TypeCtx -> [E.LetDecl Kinded] -> Validation (TypeCtx, KindCtx, TypeCtx)
 checkDecls mod kctx tctx = foldM checkDecl (Map.empty, kctx, tctx)
   where
     checkDecl (tctxds, kctxi, tctxi) = \case
@@ -466,12 +466,12 @@ checkDecls mod kctx tctx = foldM checkDecl (Map.empty, kctx, tctx)
 -- the updated type context without the linear variables consumed by the arguments.
 -- An expression is provided to locate the errors that may result.
 checkArgs :: M.KindedModule
-          -> E.Exp
+          -> E.Exp Kinded
           -> KindCtx
           -> TypeCtx
-          -> T.Type
-          -> [Level E.Exp T.Type]
-          -> Validation (T.Type, TypeCtx)
+          -> T.KindedType
+          -> [Level (E.Exp Kinded) T.KindedType]
+          -> Validation (T.KindedType, TypeCtx)
 checkArgs mod = checkArgs' 0
   where
     checkArgs' n f kctx tctx t as = case (as, t) of
@@ -503,11 +503,11 @@ checkArgs mod = checkArgs' 0
 checkFun :: M.KindedModule
          -> KindCtx 
          -> TypeCtx 
-         -> Either Variable E.Exp
-         -> [Level (E.Pat, Maybe T.Type) (Variable, Maybe K.Kind)] 
+         -> Either Variable (E.Exp Kinded)
+         -> [Level (E.Pat, Maybe T.KindedType) (Variable, Maybe K.Kind)] 
          -> Maybe K.Multiplicity 
-         -> E.RHS 
-         -> T.Type 
+         -> E.RHS Kinded
+         -> T.KindedType 
          -> Validation TypeCtx
 checkFun mod kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
   where
@@ -555,10 +555,10 @@ checkFun mod kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
 checkPack :: M.KindedModule
           -> KindCtx
           -> TypeCtx
-          -> E.Exp
-          -> [T.Type]
+          -> E.Exp Kinded
+          -> [T.KindedType]
           -> [(Variable, K.Kind)]
-          -> T.Type
+          -> T.KindedType
           -> Validation TypeCtx
 checkPack mod kctx tctx e =  \cases
   [] [] u -> 
@@ -573,7 +573,7 @@ checkPack mod kctx tctx e =  \cases
 -- | Check-against for patterns. Given a kind context, it checks whether a 
 -- pattern can match a given type, throwing an error if it cannot. It returns a 
 -- type context containing exclusively the variables introduced in the pattern.
-checkPat :: M.KindedModule -> KindCtx -> E.Pat -> T.Type -> Validation (KindCtx, TypeCtx) -- ????
+checkPat :: M.KindedModule -> KindCtx -> E.Pat -> T.KindedType -> Validation (KindCtx, TypeCtx) -- ????
 checkPat mod kctx p t = case p of
   -- 0
   E.IntPat    s _   -> do
@@ -639,7 +639,7 @@ checkPat mod kctx p t = case p of
       Just (aks, _) -> return $ map fst aks
       Nothing -> internalError ("Constructor " ++ show i ++ " has no associated data declaration") 
     case normalise mod t of
-      T.AppDName _ i'' us | i' == i'' -> do
+      T.AppDName _ _ i'' us | i' == i'' -> do
         let ts' = map (subsAll as us) ts
         let (lts', lps) = (length ts', length ps)
         when (lts' /= lps) (throwE (DConsPatArgMismatch (getSpan p) i lts' lps))
@@ -662,7 +662,7 @@ checkPat mod kctx p t = case p of
   -- ?@a. p
   E.TypeInPat s a p' -> do
     (b, k, t') <- Expose.typeInput mod (Left p) t
-    checkPat mod (Map.insert a k kctx) p' (subs b (T.fromVariable a) t')
+    checkPat mod (Map.insert a k kctx) p' (subs b (T.fromVariable a k) t')
   -- (&C p)
   E.ChoicePat s i p' -> do
     ti <- Expose.externalChoice mod p t i
@@ -670,7 +670,7 @@ checkPat mod kctx p t = case p of
   -- x@p
   E.AsPat s x p'     -> do
     k <- Kinding.synth (M.asScoped mod) kctx t
-    when (K.isStrictlyLin k) (throwE (NonLinPat s p t))
+    when ( k) (throwE (NonLinPat s p t))
     second (Map.insert (Left x) t) <$> checkPat mod kctx p' t
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
@@ -680,9 +680,9 @@ checkPat mod kctx p t = case p of
 checkRHS :: M.KindedModule
          -> KindCtx
          -> TypeCtx
-         -> Either (Either Variable E.Pat) E.Exp
-         -> E.RHS
-         -> T.Type
+         -> Either (Either Variable E.Pat) E.KindedExp
+         -> E.RHS Kinded
+         -> T.KindedType
          -> Validation TypeCtx
 checkRHS mod kctx tctx ep rhs t = case rhs of
   E.GuardedRHS ges ds -> do
@@ -701,7 +701,7 @@ checkRHS mod kctx tctx ep rhs t = case rhs of
 
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
 -- if they are not. An expression or pattern is provided to locate the error.
-checkEquivTypes :: M.KindedModule -> Either E.Exp E.Pat -> T.Type -> T.Type -> Validation ()
+checkEquivTypes :: M.KindedModule -> Either E.KindedExp E.Pat -> T.KindedType -> T.KindedType -> Validation ()
 checkEquivTypes mod eop t1 t2 =
   unless (equivalent mod t1 t2) $
     throwE (TypeMismatch (getSpan eop) t1 t2 eop)
@@ -709,7 +709,7 @@ checkEquivTypes mod eop t1 t2 =
 -- | Type context equivalence. Checks if two type contexts contain the same
 -- variables and constructors, throwing an error if they do not. An expression
 -- is provided to locate the error. To be used at the end of a scope.
-checkEquivTypeCtxs :: Either (Either Variable E.Pat) E.Exp 
+checkEquivTypeCtxs :: Either (Either Variable E.Pat) E.KindedExp 
                    -> [TypeCtx]
                    -> Validation ()
 checkEquivTypeCtxs fpe = \case 
@@ -725,7 +725,7 @@ checkEquivTypeCtxs fpe = \case
       where go z = \case [] -> z
                          (x : xs) -> z `seq` go (f z x) xs
       
-checkEquivTypeCtxsUnFun :: TypeCtx -> TypeCtx -> Either Variable E.Exp -> Validation ()
+checkEquivTypeCtxsUnFun :: TypeCtx -> TypeCtx -> Either Variable E.KindedExp -> Validation ()
 checkEquivTypeCtxsUnFun tctx1 tctx2 fe =
    forM_ (Map.assocs (tctx2 `Map.difference` tctx1)) \(xa, t) -> do
       throwE (LinConsumedInUnFun (getSpan xa) xa t fe)

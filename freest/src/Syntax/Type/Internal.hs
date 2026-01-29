@@ -10,6 +10,7 @@ polymorphic context-free session types.
 -}
 module Syntax.Type.Internal
   ( Polarity(..)
+  , XType
   , Type( ..
         , AppQuant
         , AppForall

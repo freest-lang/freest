@@ -1,54 +1,55 @@
-module Syntax.Type.Parsed (
-  -- pattern Int
-  -- , pattern Float
-  -- , pattern Char
-  -- , pattern Arrow
+module Syntax.Type.Kinded
+  ( KindedType
+  , pattern Int
+  , pattern Float
+  , pattern Char
+  , pattern Arrow
   -- , pattern Quant
-  -- , pattern Void
-  -- , pattern Skip
-  -- , pattern End
-  -- , pattern Message
-  -- , pattern TypeMsg
-  -- , pattern Choice
-  -- , pattern Semi
-  -- , pattern Dual
-  -- , pattern TName
-  -- , pattern DName
-  -- , pattern Var
-  -- , pattern Abs
-  -- , pattern App 
-  -- , pattern AppQuant
-  -- , pattern AppForall
-  -- , pattern AppExists
-  -- , pattern AppArrow
-  -- , pattern AppMessage
-  -- , pattern AppTypeMsg
-  -- , pattern AppLinChoice
-  -- , pattern UnChoice
-  -- , pattern AppSemi
-  -- , pattern AppDual
-  -- , pattern AppTName
-  -- , pattern Tuple
-  -- , pattern List
-  -- , pattern AppDName
-  -- , pattern AppVar
-  -- , T.Polarity(..)
-  -- , T.smartApp
-  -- , T.bool
-  -- , T.Dual(..)
-  -- , T.isConstant
-  -- , T.isSkip
-  -- , T.isVoid
-  -- , T.isSemi
-  -- , T.isAppSemi
-  -- , T.isAppLinChoice
-  -- , T.isDual
-  -- , T.isTName
-  -- , T.isDName
-  -- , T.isMsg
-  -- , T.isAppTypeMsg
-  -- , T.fromVariable
-  -- , ParsedType  
+  , pattern Void
+  , pattern Skip
+  , pattern End
+  , pattern Message
+  , pattern TypeMsg
+  , pattern Choice
+  , pattern Semi
+  , pattern Dual
+  , pattern TName
+  , pattern DName
+  , pattern Var
+  , pattern Abs
+  , pattern App 
+  , pattern AppQuant
+  , pattern AppForall
+  , pattern AppExists
+  , pattern AppArrow
+  , pattern AppMessage
+  , pattern AppTypeMsg
+  , pattern AppLinChoice
+  , pattern UnChoice
+  , pattern AppSemi
+  , pattern AppDual
+  , pattern AppTName
+  , pattern Tuple
+  , pattern List
+  , pattern AppDName
+  , pattern AppVar
+  , T.Polarity(..)
+  , T.bool
+  , T.Dual(..)
+  , T.isConstant
+  , T.isSkip
+  , T.isVoid
+  , T.isSemi
+  , T.isAppSemi
+  , T.isAppLinChoice
+  , T.isDual
+  , T.isTName
+  , T.isDName
+  , T.isMsg
+  , T.isAppTypeMsg
+  , T.fromVariable
+  , kindOf
+  , smartApp
   )
 where
 
@@ -220,3 +221,7 @@ pattern List s t <- T.List s _ _ t
 
 kindOf :: KindedType -> K.Kind
 kindOf _ = undefined
+
+smartApp :: Span -> KindedType -> [KindedType] -> KindedType
+smartApp s (App x t ts) us = App s t (ts ++ us)
+smartApp s t            us = App s t us

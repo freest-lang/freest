@@ -22,7 +22,8 @@ import Parser.Unparser
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
+import Syntax.Type.Kinded qualified as TK
+import Syntax.Type.Unkinded qualified as TU
 import Utils
 
 import Data.List (intercalate,nub)
@@ -33,55 +34,55 @@ import Data.Char qualified as Char
 
 -- | The errors that can be found in a FreeST program.
 data Error
-  = ArrowMultMismatch Span (Either Variable E.Exp) Int
+  = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
     K.Multiplicity K.Multiplicity
-  | CannotSynthesisePack Span E.Exp
+  | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
   | CannotSynthesiseSendType Span
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
-  | ExpectsTooManyArgs Span (Either Variable E.Exp) T.Type Int Int
+  | ExpectsTooManyArgs Span (Either Variable E.KindedExp) TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span (Either E.Pat E.Exp) String T.Type
-  | GivenTooManyArgs Span E.Exp T.Type Int Int
-  | GivenTooManyArgsK Span T.Type K.Kind Int Int
-  | IllegalChoice Span Identifier T.Type
-  | KindMismatch Span K.Kind T.Type K.Kind
+  | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
+  | GivenTooManyArgs Span E.KindedExp TK.KindedType Int Int
+  | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
+  | IllegalChoice Span Identifier TK.KindedType
+  | KindMismatch Span K.Kind TK.KindedType K.Kind
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) T.Type (Either Variable E.Exp)
-  | LinNotConsumedEvenly Span (Either Variable Identifier) T.Type 
-    (Either (Either Variable E.Pat) E.Exp)
-  | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
+  | LinConsumedInUnFun Span (Either Variable Identifier) TK.KindedType (Either Variable E.KindedExp)
+  | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
+    (Either (Either Variable E.Pat) E.KindedExp)
+  | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
   | MultipleKindSigs Span [Identifier]
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
-  | NonLinPat Span E.Pat T.Type
+  | NonLinPat Span E.Pat TK.KindedType
   | ParseError Span (Token, [String])
-  | PrekindMismatch Span K.Prekind T.Type K.Kind
-  | ProperKindMismatch Span T.Type K.Kind
+  | PartiallyAppliedSelect Span Identifier
+  | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
+  | ProperKindMismatch Span TK.KindedType K.Kind
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
-  | TypeMismatchExists Span T.Type (Either E.Pat E.Exp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
-  | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
-  | TypeMismatchChoice Span T.Type Identifier E.Pat
-  | TypeMismatchReceiveType Span T.Type
-  | TypeMismatchSelect Span T.Type Identifier E.Exp
-  | TypeMismatchSendType Span T.Type
-  | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
+  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.Pat)
+  | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.Pat)
+  | TypeMismatchChoice Span TK.KindedType Identifier E.Pat
+  | TypeMismatchExists Span TK.KindedType (Either E.Pat E.KindedExp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
+  | TypeMismatchReceiveType Span TK.KindedType
+  | TypeMismatchSelect Span TK.KindedType Identifier E.KindedExp
+  | TypeMismatchSendType Span TK.KindedType
+  | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type)
-  | UnexpectedParam Span Int (Either Variable E.Exp) (Level T.Type K.Kind)
+  | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind) (Level E.KindedExp TK.KindedType)
+  | UnexpectedParam Span Int (Either Variable E.KindedExp) (Level TK.KindedType K.Kind)
     (Level E.Pat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  deriving Show -- for debugging
 
 -- | Errors can be tracked to the source code.
 instance Located Error where

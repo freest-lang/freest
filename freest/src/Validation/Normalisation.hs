@@ -21,8 +21,8 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, unfold, getKind )
+import Syntax.Type.Kinded qualified as T
+import Validation.Base ( unfold, getKind )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
@@ -31,7 +31,7 @@ import Data.Set qualified as Set
 import Debug.Trace ( trace )
 
 -- | Is a given type a weak head normal form?
-isWhnf :: T.Type -> Bool
+isWhnf :: T.KindedType -> Bool
 isWhnf = \case
   -- W-Const0
   t | T.isConstant t -> True
@@ -51,7 +51,7 @@ isWhnf = \case
   _ -> False
 
 -- | One step type reduction. Requires 'not (isWnhf t)'.
-reduce :: M.KindedModule -> T.Type -> T.Type
+reduce :: M.KindedModule -> T.KindedType -> T.KindedType
 reduce mod = \case
   -- 1. Sequential composition
     -- R-Neut
@@ -64,7 +64,7 @@ reduce mod = \case
     -- where the quantifier is followed by a lambda. This should be enforced by
     -- the parser and kept as an invariant. Reading the kind from the lambda.
   T.AppSemi s1 (T.App s2 (T.TypeMsg s3 p) [f]) u ->
-    T.AppTypeMsg s1 p a k (T.AppSemi s2 (T.App s3 f [T.fromVariable a]) u)
+    T.AppTypeMsg s1 p a k (T.AppSemi s2 (T.App s3 f [T.fromVariable a k]) u)
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
           k = kindOfLambdaVar f
     -- R-SemiL
@@ -88,7 +88,7 @@ reduce mod = \case
     -- be enforced by the parser and kept as an invariant. Reading the kind from
     -- the lambda.
   T.AppDual s1 (T.App s2 (T.TypeMsg s3 p) [f]) ->
-    T.AppTypeMsg s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable a]))
+    T.AppTypeMsg s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable a k]))
     where a = mkFreshVar s1 (freeVars f)
           k = kindOfLambdaVar f
     -- R-DSemi
@@ -103,7 +103,7 @@ reduce mod = \case
     -- R-β
   T.App _ t@T.Abs{} us -> betaRule t us
     -- R-μ
-  T.TName _ name -> unfold mod name
+  T.TName _ _ name -> unfold mod name
     -- R-VoidApp
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
     -- R-TAppL
@@ -113,7 +113,7 @@ reduce mod = \case
   t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
 
 -- | requires: t is an abstraction with a single binder
-kindOfLambdaVar :: T.Type -> K.Kind
+kindOfLambdaVar :: T.KindedType -> K.Kind
 kindOfLambdaVar (T.Abs _ [(_, k)] _) = k
 kindOfLambdaVar t = internalError $ "Validation.Normalisation.kindOfLambdaVar: " ++ show t
 
@@ -122,7 +122,7 @@ kindOfLambdaVar t = internalError $ "Validation.Normalisation.kindOfLambdaVar: "
 --     T[U1/α1]...[Un/αn]                  if n = m
 --     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
 --     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
-betaRule :: T.Type -> [T.Type] -> T.Type
+betaRule :: T.KindedType -> [T.KindedType] -> T.KindedType
 betaRule (T.Abs s aks t) us
   | n == m    = v
   | m > n     = T.App s v (drop n us)
@@ -133,10 +133,10 @@ betaRule (T.Abs s aks t) us
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: M.KindedModule -> T.Type -> T.Type
+normalise :: M.KindedModule -> T.KindedType -> T.KindedType
 normalise mod = norm Set.empty
   where
-    norm :: Set.Set T.Type -> T.Type -> T.Type
+    norm :: Set.Set T.KindedType -> T.KindedType -> T.KindedType
     norm visited t
       -- N-Whnf
       | isWhnf t = t
@@ -154,7 +154,7 @@ normalise mod = norm Set.empty
 
 -- | This is not exactly redexµ(T) = µκF. We must look at applied TNames, for
 -- these are the types that reappear.
-tNameRedex :: T.Type -> Maybe T.Type
+tNameRedex :: T.KindedType -> Maybe T.KindedType
 tNameRedex = \case
   t@T.AppTName{}                               -> Just t -- µ∗U
   (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
