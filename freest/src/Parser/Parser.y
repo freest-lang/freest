@@ -16,7 +16,7 @@ import Syntax.Base
 import Syntax.Names
 import Syntax.Expression qualified as E 
 import Syntax.Kind qualified as K 
-import Syntax.Type.Parsed qualified as T 
+import Syntax.Type.Unkinded qualified as T 
 import Syntax.Module qualified as M
 import UI.Error
 
@@ -204,18 +204,18 @@ LetDecl
   | TypeSig { $1 }
   | 'mutual' OPEN MutualDecls Close { E.Mutual $3 }
 
-MutualDecls :: { [E.LetDecl] }
+MutualDecls :: { [E.ParsedLetDecl] }
   : MutualDecl                  { [$1]    }
   | MutualDecl PIPE MutualDecls { $1 : $3 }
 
-MutualDecl :: { E.LetDecl }
+MutualDecl :: { E.ParsedLetDecl }
   : FnDef { $1 }
   | TypeSig { $1 }
 
-TypeSig :: { E.LetDecl }
+TypeSig :: { E.ParsedLetDecl }
   : ExpVarListComma ':' Type { E.TypeSig $1 $3 }
 
-FnDef :: { E.LetDecl }
+FnDef :: { E.ParsedLetDecl }
   : ExpVar PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $1 [($2, $3)] }
   | PatPrimary OpOrMinus PatPrimaryOrAtVarListWS RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
 
@@ -230,16 +230,16 @@ TypeVarNEListWS :: { [Variable] }
   : TypeVar { [$1] }
   | TypeVar TypeVarNEListWS { $1 : $2 }
 
-RHS(sep) :: { E.RHS }
+RHS(sep) :: { E.ParsedRHS }
   : sep Exp Where          { E.UnguardedRHS $2 $3 }
   | GuardedExps(sep) Where { E.GuardedRHS $1 $2   }
 
-GuardedExps(sep) :: { [(E.Exp, E.Exp)] }
+GuardedExps(sep) :: { [(E.ParsedExp, E.ParsedExp)] }
   : '|' Exp sep Exp GuardedExps(sep) { ($2,$4) : $5 }
   | '|' Exp sep Exp                  { [($2,$4)]    }
   -- otherwise is simply a variable defined as True
 
-Where :: { Maybe [E.LetDecl] }
+Where :: { Maybe [E.ParsedLetDecl] }
   : 'where' LetDeclBlock { Just $2 }
   | {- empty -}          { Nothing }
 
@@ -251,14 +251,14 @@ UpperIdListComma :: { [Identifier] }
   : UPPER_ID ',' UpperIdListComma { mkIdTk $1 : $3 }
   | UPPER_ID                      { [mkIdTk $1] }
 
-DataConsListPipe :: { [(Identifier, [T.Type])] }
+DataConsListPipe :: { [(Identifier, [T.ParsedType])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }
   | DataCons                      { [$1]    }
 
-DataCons :: { (Identifier, [T.Type]) }
+DataCons :: { (Identifier, [T.ParsedType]) }
   : UPPER_ID TypePrimaryListWS { (mkIdTk $1, $2) }
 
-TypePrimaryListWS :: { [T.Type] }
+TypePrimaryListWS :: { [T.ParsedType] }
   : TypePrimary TypePrimaryListWS { $1 : $2 }
   | {- empty -}                   { []      }
 
@@ -278,7 +278,7 @@ ProperKind :: { K.Kind }
   | '1C' { K.lc (getSpan $1) }
   | '*C' { K.uc (getSpan $1) }
 
-TypePrimary :: { T.Type }
+TypePrimary :: { T.ParsedType }
   -- Builtins (necessary?)
   : 'Int'    { T.Int   (getSpan $1)       }
   | 'Float'  { T.Float (getSpan $1)       }
@@ -316,7 +316,7 @@ TypePrimary :: { T.Type }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 
-Type :: { T.Type }
+Type :: { T.ParsedType }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
   | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
@@ -324,16 +324,16 @@ Type :: { T.Type }
   | '\\' KindedVars '->' Type   { T.Abs (spanFromTo $1 $4) $2 $4 }
   | TypeApp                     { $1 }
 
-TypeApp :: { T.Type }
+TypeApp :: { T.ParsedType }
   : TypeApp TypePrimary { addArgType $2 $1 }
   | 'Dual' TypePrimary  { T.AppDual (spanFromTo $1 $2) $2 }
   | TypePrimary { $1 }
 
-TypeListComma :: { [T.Type] }
+TypeListComma :: { [T.ParsedType] }
   : Type ',' TypeListComma { $1 : $3 }
   | Type                   { [$1] }
 
-AtTypeListExpComma :: { ([T.Type], E.Exp) }
+AtTypeListExpComma :: { ([T.ParsedType], E.ParsedExp) }
   : Exp                             { ([], $1) }
   | '@' TypePrimary ',' AtTypeListExpComma { first ($2 :) $4 }
 
@@ -357,7 +357,7 @@ View :: { (Span, T.Polarity) }
   : '+' { (getSpan $1, T.Out) }
   | '&' { (getSpan $1, T.In) }
 
-LabelTypeListComma :: { [(Identifier, T.Type)] }
+LabelTypeListComma :: { [(Identifier, T.ParsedType)] }
   : UPPER_ID ':' Type ',' LabelTypeListComma { (mkIdTk $1, $3) : $5 }
   | UPPER_ID ':' Type { [(mkIdTk $1, $3)] }
 
@@ -379,7 +379,7 @@ KindedVar :: { (Variable, K.Kind) }
   : TypeVar { ($1, dummyKindVar $1) }
   | '(' TypeVar ':' Kind ')' { ($2, $4) }
 
-ExpPrimary :: { E.Exp }
+ExpPrimary :: { E.ParsedExp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
@@ -407,7 +407,7 @@ ExpPrimary :: { E.Exp }
   | '[' ']' {% listMissingTypeAppError $1 $2 }
   | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
 
-Exp :: { E.Exp }
+Exp :: { E.ParsedExp }
   -- Keyword expressions
   : 'let' LetDeclBlock 'in' Exp { E.Let (spanFromTo $1 $4) $2 $4 }
   | '\\' PatTypeOrKindedVarListArrow Exp   { E.Abs (spanFromTo $1 $3) (fst $2) (snd $2) $3 }
@@ -449,7 +449,7 @@ Exp :: { E.Exp }
   -- Application etc.  
   | ExpApp               { $1 }
 
-ExpApp :: { E.Exp }
+ExpApp :: { E.ParsedExp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
   | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
   | 'sendType' '@' TypePrimary { E.SendType (spanFromTo $1 $3) $3 }
@@ -486,7 +486,7 @@ OpOrMinus :: { Variable }
 ConsOp :: { Identifier }
   : '::' { mkConsId $1 }
 
-ExpListComma :: { [E.Exp] }
+ExpListComma :: { [E.ParsedExp] }
   : Exp ',' ExpListComma { $1 : $3 }
   | Exp                  { [$1] }
 
@@ -501,24 +501,24 @@ Arrow :: { (Span, K.Multiplicity) }
   : UnArrow  { $1 }
   | LinArrow { $1 }
 
-TypedPat :: { (E.Pat, T.Type) }
+TypedPat :: { (E.Pat, T.ParsedType) }
   : '(' Pat ':' Type ')' { ($2, $4) }
   -- | PatPrimary { ($1, ?) } -- TODO: type inference var?
 
-PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.Type) (Variable, K.Kind)], K.Multiplicity) } 
+PatTypeOrKindedVarListArrow :: { ([Level (E.Pat, T.ParsedType) (Variable, K.Kind)], K.Multiplicity) } 
   : TypedPat PatTypeOrKindedVarListArrow { first (ExpLevel $1 :) $2 }
   | '@' KindedVar PatTypeOrKindedVarListArrow { first (TypeLevel $2 :) $3 }
   | TypedPat Arrow { ([ExpLevel $1], snd $2) }
   | '@' KindedVar UnArrow { ([TypeLevel $2], snd $3) }
 
-CaseBlock :: { [(E.Pat, E.RHS)] }
+CaseBlock :: { [(E.Pat, E.ParsedRHS)] }
   : OPEN CaseListPIPE Close { $2 }
 
-CaseListPIPE :: { [(E.Pat, E.RHS)] }
+CaseListPIPE :: { [(E.Pat, E.ParsedRHS)] }
   : Case PIPE CaseListPIPE { $1 : $3 }
   | Case                   { [$1] }
 
-Case :: { (E.Pat, E.RHS) }
+Case :: { (E.Pat, E.ParsedRHS) }
   : Pat RHS('->') { ($1, $2) }
 
 PatPrimary :: { E.Pat }
@@ -573,10 +573,10 @@ AtVarListCommaPat :: { ([Variable], E.Pat) }
   : '@' TypeVar ',' AtVarListCommaPat { first ($2 :) $4 }
   | Pat { ([], $1) }
 
-LetDeclBlock :: { [E.LetDecl] }
+LetDeclBlock :: { [E.ParsedLetDecl] }
   : OPEN LetDeclListPIPE Close { $2 }
 
-LetDeclListPIPE :: { [E.LetDecl] }
+LetDeclListPIPE :: { [E.ParsedLetDecl] }
   : LetDecl PIPE LetDeclListPIPE { $1 : $3 }
   | LetDecl                      { [$1] }
   | {- empty -}                  { [] }
@@ -593,16 +593,16 @@ TypeTestCase(t)
   : 'case' t 'where' TypeTestBlock { ($2, $4) }
   | 'case' t { ($2, M.emptyParsedModule) }
 
-EquivalenceTestCases :: { [((T.Type, T.Type, K.Kind), M.ParsedModule)] }
+EquivalenceTestCases :: { [((T.ParsedType, T.ParsedType, K.Kind), M.ParsedModule)] }
   : TypeTestCases(EquivalenceTest) { $1 }
 
-KindingTestCases :: {[((T.Type, Maybe K.Kind), M.ParsedModule)]}
+KindingTestCases :: {[((T.ParsedType, Maybe K.Kind), M.ParsedModule)]}
   : TypeTestCases(KindingTest) {$1}
 
-EquivalenceTest :: { (T.Type, T.Type, K.Kind) }
+EquivalenceTest :: { (T.ParsedType, T.ParsedType, K.Kind) }
   : Type CMP Type ':' Kind { ($1, $3, $5) }
 
-KindingTest :: { (T.Type, Maybe K.Kind) }
+KindingTest :: { (T.ParsedType, Maybe K.Kind) }
   : Type ':' Kind { ($1, Just $3) }
   | Type { ($1, Nothing) }
 

@@ -18,6 +18,8 @@ module Syntax.Expression
   , RHS(..)
   , LetDecl(..)
   , ParsedExp, ScopedExp, KindedExp
+  , ParsedLetDecl, ScopedLetDecl, KindedLetDecl
+  , ParsedRHS, ScopedRHS, KindedRHS
   , Exp( ..
        , Tuple
        , Nil
@@ -33,6 +35,13 @@ import Syntax.Names
 import Syntax.Type.Internal ( Type )
 
 import Data.List ( intercalate )
+
+type ParsedLetDecl = LetDecl Parsed
+type ScopedLetDecl = LetDecl Scoped
+type KindedLetDecl = LetDecl Kinded
+type ParsedRHS = RHS Parsed
+type ScopedRHS = RHS Scoped
+type KindedRHS = RHS Kinded
 
 data Pat
   = IntPat Span Int
