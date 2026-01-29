@@ -49,7 +49,7 @@ data Error
   | GivenTooManyArgs Span E.KindedExp TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
-  | KindMismatch Span K.Kind TK.KindedType K.Kind
+  | KindMismatch Span K.Kind TK.KindedType
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
@@ -103,7 +103,7 @@ instance Located Error where
     GivenTooManyArgs s _ _ _ _ -> s
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
-    KindMismatch s _ _ _ -> s
+    KindMismatch s _ _ -> s
     LacksKindSig s _ -> s
     LacksTypeSig s _ -> s
     LexicalError s _ -> s
@@ -264,7 +264,7 @@ toMessage src = \case
     ++ thirdPerson (m - n) ++ ")"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
-  KindMismatch s k1 t k2 -> makeError src s 
+  KindMismatch s k1 t -> makeError src s 
     -- TODO: this would give us weird errors, like "Expected 1 less argument to
     -- type `Int`" with `type T : *T -> *T` and `type T = Int`
     -- if | K.depth k1 < K.depth k2 ->
@@ -273,7 +273,7 @@ toMessage src = \case
     --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
     --    | otherwise ->
       ("Couldn't match expected kind " ++ bt (unparse k1)
-        ++ " with actual kind " ++ bt (unparse k2))
+        ++ " with actual kind " ++ bt (unparse $ TK.kindOf t))
     -- where
     --   diff = (K.depth k2 - K.depth k1)
   LacksKindSig s i -> makeError src s

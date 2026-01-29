@@ -15,8 +15,6 @@ module Syntax.Kind
   , Subsort(..)
   , Join(..)
   , Meet(..)
-  , isStrictlyLin
-  , isStrictlySession
   , isSession
   , isChannel
   , image
@@ -128,13 +126,7 @@ us s = Proper s Un  Session
 lc s = Proper s Lin Channel
 uc s = Proper s Un  Channel
 
-isStrictlyLin, isStrictlySession, isChannel, isSession :: Kind -> Bool
-
-isStrictlyLin (Proper _ Lin _) = True 
-isStrictlyLin _ = False
-
-isStrictlySession (Proper _ _ Session) = True
-isStrictlySession _ = False
+isChannel, isSession :: Kind -> Bool
 
 isChannel (Proper _ _ Channel) = True
 isChannel _ = False

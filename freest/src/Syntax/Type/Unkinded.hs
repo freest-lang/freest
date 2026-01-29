@@ -33,11 +33,11 @@ module Syntax.Type.Unkinded
   , pattern AppTName
   , pattern Tuple
   , pattern List
+  , pattern Bool
   , pattern AppDName
   , pattern AppVar
   , T.Polarity(..)
   , T.smartApp
-  , T.bool
   , T.Dual(..)
   , T.isConstant
   , T.isSkip
@@ -195,3 +195,7 @@ pattern Tuple s ts <- T.Tuple s _ _ ts
 pattern List :: Unkinded x => Span -> T.Type x -> T.Type x
 pattern List s t <- T.List s _ _ t
   where List s t  = T.List s void void t
+
+pattern Bool :: Unkinded x => Span -> T.Type x
+pattern Bool s <- T.Bool s _
+  where Bool s = T.Bool s void

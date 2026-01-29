@@ -25,11 +25,11 @@ module Syntax.Type.Internal
         , AppTName
         , Tuple
         , List
+        , Bool
         , AppDName
         , AppVar
         )
   , smartApp
-  , bool
   , Dual(..)
   , isConstant
   , isSkip
@@ -185,13 +185,14 @@ pattern List :: Span -> XType x -> XType x -> Type x -> Type x
 pattern List s x1 x2 t <- AppDName s x1 x2 ((== mkListId s) -> True) [t]
   where List s x1 x2 t  = AppDName s x1 x2 (mkListId s) [t]
 
+pattern Bool :: Span -> XType x -> Type x
+pattern Bool s x <- DName s x ((== mkBoolId s) -> True)
+  where Bool s x =  DName s x (mkBoolId s)
+
 -- TODO: make smartApp a pattern
 smartApp :: Span -> XType x -> Type x -> [Type x] -> Type x
 smartApp s _ (App _ x t ts) us = App s x t (ts ++ us)
 smartApp s x t              us = App s x t us
-
-bool :: Span -> XType x -> Type x
-bool s x = DName (getSpan s) x (mkBoolId s)
 
 -- | Is this type a type constant? An iota an in Cai et alia.
 isConstant :: Type x -> Bool

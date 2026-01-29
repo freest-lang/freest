@@ -31,10 +31,10 @@ module Syntax.Type.Kinded
   , pattern AppTName
   , pattern Tuple
   , pattern List
+  , pattern Bool
   , pattern AppDName
   , pattern AppVar
   , T.Polarity(..)
-  , T.bool
   , T.Dual(..)
   , T.isConstant
   , T.isSkip
@@ -218,6 +218,10 @@ pattern List :: Span -> KindedType -> KindedType
 pattern List s t <- T.List s _ _ t
   where List s t  = AppDName s (K.Arrow s (K.lt s) (K.Proper s m K.Top)) (mkListId s) [t]
           where (K.Proper _ m _) = kindOf t 
+
+pattern Bool :: Span -> KindedType
+pattern Bool s <- T.Bool s _
+  where Bool s = DName s (K.ut s) (mkBoolId s)
 
 kindOf :: KindedType -> K.Kind
 kindOf _ = undefined
