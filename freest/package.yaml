@@ -59,7 +59,9 @@ library:
     - Syntax.Kind
     - Syntax.Module
     - Syntax.Names
-    - Syntax.Type
+    - Syntax.Type.Internal
+    - Syntax.Type.Unkinded
+    - Syntax.Type.Kinded
     - UI.CLI
     - UI.Error
     - Utils
