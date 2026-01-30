@@ -23,11 +23,13 @@ module Validation.Kinding
   )
 where
 
-import UI.Error
 import Syntax.Base hiding (void)
+import Syntax.Expression qualified as E
 import Syntax.Kind
 import Syntax.Module qualified as M
+import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as T
+import UI.Error
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
@@ -38,110 +40,125 @@ import Control.Monad.Identity ( Identity(..) )
 import Control.Monad.Extra ( unlessM, (&&^) )
 import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, gets, modify )
 import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
-import Data.Bifunctor ( first )
+import Data.Bifunctor ( first, second, bimap )
+import Data.Bitraversable (bitraverse) -- bimapM 
 import Data.Foldable.Extra ( allM )
 import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
+import Data.List qualified as List
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map Variable Kind
+
+-- | Function signature context.
+type TypeCtx = Map.Map Variable TK.KindedType
 
 emptyKindCtx :: KindCtx
 emptyKindCtx = Map.empty
 
 -- | Synthesize the (minimal?) kind of a type.
-synth :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation Kind
-synth mod ctx = \case
+synth :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation TK.KindedType
+synth modl ctx = \case
   -- Functional types
-  T.Int s    -> pure (ut s)
-  T.Float s  -> pure (ut s)
-  T.Char s   -> pure (ut s)
-  T.Arrow s m -> pure (Arrow s (lt s) (Arrow s (lt s) (Proper s m Top)))
+  T.Int s    -> pure $ TK.Int s
+  T.Float s  -> pure $ TK.Float s
+  T.Char s   -> pure $ TK.Char s
+  T.Arrow s m -> pure $ TK.Arrow s m
   -- Session types
-  T.Message s m _ -> pure (Arrow s (lt s) (if m == Lin then ls s else uc s))
-  T.AppTypeMsg s _ a k t -> do
-    (_, pk, _) <- checkSession mod (Map.insert a k ctx) t
-    return (Proper s Lin pk)
-  T.UnChoice s p ls -> pure (uc s)
+  T.Message s m p -> pure $ TK.Message s m p
+  T.AppTypeMsg s p a k t -> do
+    (_, pk, u) <- checkSession modl (Map.insert a k ctx) t
+    return $ TK.AppTypeMsg s p a k u
+  T.UnChoice s p ls -> pure $ TK.UnChoice s p ls
   T.AppLinChoice s p lts -> do
-    pk <- foldM (\pk (_,t) -> meet pk . (\(_, pk', _) -> pk') <$> checkSession mod ctx t) Session lts
-    pure (Proper s Lin pk)
-  T.End s _ -> pure (lc s)
-  T.Skip s -> pure (us s)
-  T.Void s k -> pure k
+--    pk <- foldM (\pk (_,t) -> meet pk . (\(_, pk', _) -> pk') <$> checkSession mod ctx t) Session lts
+    (pk, lts') <- foldM (\(pk, ts) (i,t) -> do
+                    (_,pk',u) <- checkSession modl ctx t
+                    pure (meet pk pk', ts ++ [(i,u)])) (Session,[]) lts
+    pure $ TK.AppLinChoice s p lts'
+  T.End s p -> pure $ TK.End s p
+  T.Skip s -> pure $ TK.Skip s
+  T.Void s k -> pure $ TK.Void s k
   T.AppSemi s t u -> do
-    (m1, pk1, _) <- checkSession mod ctx t
-    (m2, pk2, _) <- checkSession mod ctx u
-    return $ Proper s (if pk1 == Channel then m1 else join m1 m2) (meet pk1 pk2) 
-  T.AppDual s t -> do
-    synthCheck mod ctx t (ls s)
+    (m1, pk1, t') <- checkSession modl ctx t
+    (m2, pk2, u') <- checkSession modl ctx u
+    return $ TK.AppSemi s t' u'
+  T.AppDual s t -> synthCheck modl ctx t (ls s)
   -- Polymorphism
   T.AppQuant s p aks t -> do
-    (m, _, _) <- checkProper mod (Map.fromList aks `Map.union` ctx) t 
-    return (Proper s m Top)
+    (_,_,kt) <- checkProper modl (Map.fromList aks `Map.union` ctx) t 
+    return $ TK.AppQuant s p aks kt
   -- Equations (including built-ins)
-  T.TName s i -> lookupKind mod i
-  T.Tuple s ts -> Proper s . fst <$> foldCheckProperJoin mod ctx Un ts <*> pure Top
-  T.List s t -> (Proper s . (\(m, _, _) -> m) <$> checkProper mod ctx t) <*> pure Top
-  T.DName s i -> lookupKind mod i
+  T.TName s i -> flip (TK.TName s) i <$> lookupKind modl i
+  T.Tuple s ts -> do
+    (_,ts') <- foldCheckProperJoin modl ctx Un ts
+    return $ TK.Tuple s ts'
+  T.List s t -> do
+    (_,_,t') <- checkProper modl ctx t
+    return $ TK.List s t'
+  T.DName s i -> flip (TK.DName s) i <$> lookupKind modl i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
-    Just k -> pure k
+    Just k -> pure $ TK.Var s k a
     Nothing -> do
       throwE (TypeVarOutOfScope s a)
   T.App s t ts -> do
-    k <- synth mod ctx t
+    t' <- synth modl ctx t
+    let k = TK.kindOf t'
     let (ks,kn) = Expose.kindArrow k
-    checkArgs s t k (length ts) (length ks) ts ks kn
+    (_,ts') <- checkArgs t' (length ts) (length ks) ts ks kn
+    return $ TK.App s t' ts'
     where
-      checkArgs :: Span -> T.ScopedType -> Kind -> Int -> Int -- error info
-                -> [T.ScopedType] -> [Kind] -> Kind -> Validation Kind
-      checkArgs _ _ _ _ _ [] ks' kn =
-            pure (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks')
-      checkArgs s t k nargs npars ts [] kn =
-        throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) t kn npars nargs)
-      checkArgs s t k nargs npars (t' : ts') (k' : ks') kn =
-        check mod ctx t' k' >> checkArgs s t k nargs npars ts' ks' kn
+      checkArgs :: TK.KindedType -> Int -> Int -- error info
+                -> [T.ScopedType] -> [Kind] -> Kind
+                -> Validation (Kind, [TK.KindedType])
+      checkArgs _ _ _ [] ks kn = pure
+        (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks, [])
+      checkArgs t' nargs npars ts [] kn = do
+        throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) t' kn npars nargs)
+      checkArgs t' nargs npars (ti : ts) (ki : ks) kn = do
+        ti' <- check modl ctx ti ki
+        second (ti' :) <$> checkArgs t' nargs npars ts ks kn
   T.Abs s aks t -> do
-    flip (foldr (\(_, ki) k -> Arrow (spanFromTo ki k) ki k)) aks 
-      <$> synth mod (Map.fromList aks `Map.union` ctx) t
+    TK.Abs s aks <$> synth modl (Map.fromList aks `Map.union` ctx) t
 
 -- | Check a type against a given kind.
-check :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Validation ()
-check mod ctx t k = void (synthCheck mod ctx t k)
+check :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Validation TK.KindedType
+check mod ctx t k = undefined -- void (synthCheck mod ctx t k)
 
 -- | Calculate the join of the multiplicities of a list of types, starting
 -- from a given multiplicity. Throws an error if a non-proper type is
 -- encountered.
 foldCheckProperJoin :: M.ScopedModule -> KindCtx -> Multiplicity -> [T.ScopedType] 
-                    -> Validation (Multiplicity, [T.ScopedType])
-foldCheckProperJoin mod ctx m = foldM checkProperJoin (m, [])
+                    -> Validation (Multiplicity, [TK.KindedType])
+foldCheckProperJoin modl ctx m =  foldM checkProperJoin (m, [])
   where checkProperJoin (m', ts) t =
-          checkProper mod ctx t  >>= \(m'',_ ,t) -> pure (join m' m'', ts ++ [t])
+          checkProper modl ctx t  >>= \(m'',_ ,t) -> pure (join m' m'', ts ++ [t])
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and prekind. Otherwise, throw an error.
-checkProper :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, T.ScopedType)
-checkProper mod ctx t =
-  synth mod ctx t >>= \case
-    Proper _ m pk -> pure (m, pk, t)
-    k -> throwE (ProperKindMismatch (getSpan t) t k)
+checkProper :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+checkProper modl ctx t = do
+  t' <- synth modl ctx t
+  case TK.kindOf t' of
+    Proper _ m pk -> pure (m, pk, t')
+    k -> throwE (ProperKindMismatch (getSpan t) t' k)
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
-checkSession :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, T.ScopedType)
-checkSession mod ctx t = checkPrekind mod ctx t Session
+checkSession :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+checkSession mod ctx t = undefined -- checkPrekind mod ctx t Session
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and prekind. Otherwise, throw an error.
-checkChannel :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, T.ScopedType)
-checkChannel mod ctx t = checkPrekind mod ctx t Channel
+checkChannel :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+checkChannel mod ctx t = undefined -- checkPrekind mod ctx t Channel
 
 -- | Check if a type is a proper type of the given prekind. If so, return its 
 -- minimal multiplicity and prekind. Otherwise, throw an error.
 checkPrekind :: M.ScopedModule -> KindCtx -> T.ScopedType -> Prekind 
-             -> Validation (Multiplicity, Prekind, T.ScopedType)
+             -> Validation (Multiplicity, Prekind, TK.KindedType)
 checkPrekind mod ctx t pk = do
   (m, pk', t') <- checkProper mod ctx t
   unless (pk' <: pk) $
@@ -153,60 +170,68 @@ checkPrekind mod ctx t pk = do
 checkSubkindOf :: T.ScopedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k = 
   unless (k' <: k) $
-    throwE (KindMismatch (getSpan t) k t k')
+    throwE (KindMismatchK (getSpan t) k k' t)
+
+-- | Check if the kind of a type is a subkind of another. If not, throw an 
+-- error located at the type.
+checkSubkindOfK :: TK.KindedType -> Kind -> Validation ()
+checkSubkindOfK t k = let k' = TK.kindOf t in
+  unless (k' <: k) $
+    throwE (KindMismatch (getSpan t) k t)
 
 -- | Check if the kind of a type is a subkind of another in a contravariant 
 -- position. If not, throw an error located at the type.
 checkSubkindOf' :: T.ScopedType -> Kind -> Kind -> Validation ()
-checkSubkindOf' t k' k =
+checkSubkindOf' t k' k = 
   unless (k' <: k) $
-    throwE (KindMismatch (getSpan t) k' t k)
+    throwE (KindMismatchK (getSpan t) k' k t)
 
 checkSubkindOfP' :: M.ScopedModule -> T.ScopedType -> Kind -> Kind -> Validation ()
 checkSubkindOfP' mod t k' k = do
-  _ <- synth mod Map.empty t -- TODO: map empty
+  t' <- synth mod Map.empty t -- TODO: map empty
   unless (k' <: k) $
-     throwE (KindMismatch (getSpan t) k' t {- TODO: t' -} k)
+     throwE (KindMismatchK (getSpan t) k' k t)
 
 -- | Synthesize the kind of a type and check if it is a subkind of another
 -- kind.
-synthCheck :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Validation Kind
-synthCheck mod ctx t k = do
-  k' <- synth mod ctx t
-  checkSubkindOf t k' k
-  return k'
+synthCheck :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Validation TK.KindedType
+synthCheck modl ctx t k = do
+  t' <- synth modl ctx t
+  checkSubkindOfK t' k
+  return t'
 
 -- | Check a module for type formation.
 kindModule :: M.ScopedModule -> Validation M.KindedModule
 kindModule mod = do
   tds <- Map.traverseWithKey kindTypeDecl (M.typeDecls mod)
-  _ <- foldM kindDataConsDecls Map.empty $ Map.toList $ M.dataDecls mod -- TODO: foldrWithKeyM
-  return mod{ M.kindSigs    = M.kindSigs mod
+  cds <- foldM kindDataConsDecls Map.empty $ Map.toList $ M.dataDecls mod -- TODO: foldrWithKeyM
+  (_, lds) <- kindLetDecls tds Map.empty (M.definitions mod)
+  return mod{ M.kindSigs   = M.kindSigs mod
             , M.typeDecls   = tds
             , M.dataDecls   = M.dataDecls mod
-            , M.consDecls   = M.consDecls mod
-            , M.definitions = M.definitions mod
+            , M.consDecls   = cds
+            , M.definitions = lds
             }
-  where 
-    kindTypeDecl :: Identifier -> T.ScopedType -> Validation T.ScopedType
+  where
+    kindTypeDecl :: Identifier -> T.ScopedType -> Validation TK.KindedType
     kindTypeDecl i t = do
       k <- lookupKind mod i
       t' <- case t of
-      -- TODO: I think synth is enough...
-        T.Abs s aks u -> do
+        TK.Abs s aks u -> do
           aks' <- kindParams aks k
-          return $ T.Abs s aks' u
+          u' <- synth (Map.fromList aks') mod u -- TODO: Map.empty'
+          return $ TK.Abs s k aks' u'
           where
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
               ((a, k1) :) <$> kindParams aks' k2
             kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
-              checkSubkindOf' (T.Var (getSpan a) a) k1 k
+              checkSubkindOfP' mod (T.Var (getSpan a) a) k1 k
               ((a, k) :) <$> kindParams aks' k2
             kindParams []  _ = pure []
-            kindParams aks _ = 
-              throwE (ExpectsTooManyArgsK (getSpan i) i k)
-        t' -> return t'
-      check mod Map.empty t' k
+            kindParams aks _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
+
+        t' -> synth Map.empty mod t' -- TODO: Map.empty? 
+      checkK t' k
       return t'
 
     kindDataConsDecls :: M.ConsDecls Kinded
@@ -227,7 +252,7 @@ kindModule mod = do
         checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
           checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) aks' k2
         checkDataDecl k f ctx ((a, k') : aks') (Arrow s k1 k2) = do
-          checkSubkindOf (T.fromVariable a) k1 k'
+          checkSubkindOfP' mod (T.Var (getSpan a) a) k1 k'
           checkDataDecl k (f . Arrow s k') (Map.insert a k' ctx) aks' k2
         checkDataDecl k f ctx aks Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
@@ -240,7 +265,7 @@ kindModule mod = do
           (m, cds') <- synthDataMult ctx cis
           let k' = f (Proper (getSpan i) m Top)
           unless (k' <: k)
-            (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) i) k'))
+            (throwE (KindMismatch (getSpan i) k (T.TName (getSpan i) k' i) k'))
           return cds'
 
         synthDataMult :: KindCtx
@@ -249,10 +274,168 @@ kindModule mod = do
         synthDataMult ctx = foldM (\(m, acc) ci ->
           case M.consDecls mod Map.!? ci of
             Just (snd -> ts) -> do
-              (m, ts') <- foldCheckProperJoin mod ctx m ts
+              (m, ts') <- foldCheckProperJoin ctx mod m ts
               return (m, Map.insert ci (i, ts') acc)
             Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
           (Un, Map.empty)
+
+    kindLetDecls :: M.TypeDecls Kinded 
+                 -> KindCtx
+                 -> [E.LetDecl Scoped]
+                 -> Validation (KindCtx, [E.LetDecl Kinded])
+    kindLetDecls tds kctx lds = do
+      (kctx, _, lds) <- foldM kindLetDecl (kctx, Map.empty, []) lds
+      return (kctx, lds)
+      where
+        kindLetDecl :: (KindCtx, TypeCtx, [E.LetDecl Kinded]) 
+                    -> E.LetDecl Scoped 
+                    -> Validation (KindCtx, TypeCtx, [E.LetDecl Kinded])
+        kindLetDecl (kctx, tctxds, lds) = \case
+          E.ValDef p rhs -> do
+            rhs' <- kindRHS tds kctx rhs
+            (kctx', p') <- kindPat kctx p
+            return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
+          E.FnDef x psrhss -> do
+            case tctxds Map.!? x of
+              Just t -> do 
+                psrhss' <- forM psrhss \(psi, rhsi) ->
+                  unwrap <$> kindFun x kctx tctxds (wrap psi) rhsi t
+                return (kctx, tctxds, lds ++ [E.FnDef x psrhss'])
+                where
+                  wrap   = map (bimap (, Nothing) (, Nothing))
+                  unwrap = first (map (bimap fst fst))
+              Nothing -> throwE (LacksTypeSig (getSpan x) x)
+          E.TypeSig xs t -> do 
+            t' <- synth kctx mod t
+            let tctxds' = Map.fromList (map (, t') xs) `Map.union` tctxds
+            return (kctx, tctxds', lds ++ [E.TypeSig xs t'])
+          E.Mutual lds' -> do
+            let (sigs, fndefs) = List.partition (\case E.TypeSig{} -> True; _ -> False) lds'
+            (kctx',lds'') <- kindLetDecls tds kctx (sigs ++ fndefs)
+            return (kctx', tctxds, lds ++ [E.Mutual lds''])
+
+        kindFun :: Located a => a
+                -> KindCtx 
+                -> TypeCtx
+                -> [Level (E.Pat, Maybe T.ScopedType) (Variable, Maybe Kind)] 
+                -> E.ScopedRHS
+                -> TK.KindedType
+                -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind)], E.RHS Kinded)
+        kindFun e = kindFun' 0
+          where
+            kindFun' i kctx tctxds ps rhs t = case (ps, normalise tds t) of
+              ([], _) -> ([],) <$> kindRHS tds kctx rhs
+              (TypeLevel (ai, mki) : ps', TK.AppForall s' ((a, k) : aks) u) -> do
+                k' <- case mki of
+                  Just ki -> checkSubkindOf (T.fromVariable ki ai) ki k >> return ki
+                  Nothing -> return k
+                first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) (Map.insert ai k' kctx) tctxds ps' 
+                  rhs (TK.AppForall s' aks $ subs a (TK.Var (getSpan ai) k' ai) u)
+              (ExpLevel  (p, mtp) : ps', t''@(TK.AppArrow s' m u v)) -> do
+                tp' <- case mtp of
+                  Just tp -> do
+                    (_, _, tp') <- checkProper kctx mod tp
+                    return tp'
+                  Nothing -> pure u
+                (kctxi', p') <- kindPat kctx p
+                first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) kctxi' tctxds ps' rhs v
+              (TypeLevel (a, k) : as, TK.AppArrow s' m u v) -> 
+                throwE (UnexpectedParam (getSpan a) i (ExpLevel u) (TypeLevel a))
+              (ExpLevel  (p, t) : as, TK.AppForall s' ((a, k) : aks) u) -> do
+                (_, p') <- kindPat kctx p
+                throwE (UnexpectedParam (getSpan p) i (TypeLevel k) (ExpLevel p'))
+              (as, t') -> do
+                throwE (ExpectsTooManyArgs (getSpan e) t (i + length as) i)
+
+        kindRHS :: M.TypeDecls Kinded 
+                -> KindCtx 
+                -> E.RHS Scoped 
+                -> Validation (E.RHS Kinded)
+        kindRHS tds kctx = \case
+          E.GuardedRHS es mlds -> do
+            (kctx', mlds') <- case mlds of
+              Just lds -> second Just <$> kindLetDecls tds kctx lds
+              Nothing -> pure (kctx, Nothing)
+            es' <- mapM (bitraverse (kindExp kctx') (kindExp kctx')) es
+            return $ E.GuardedRHS es' mlds'
+          E.UnguardedRHS e mlds -> do
+            (kctx', mlds') <- case mlds of
+              Just lds -> second Just <$> kindLetDecls tds kctx lds
+              Nothing -> pure (kctx, Nothing)
+            e' <- kindExp kctx' e
+            return $ E.UnguardedRHS e' mlds'
+
+        kindPat :: KindCtx -> E.Pat -> Validation (KindCtx, E.Pat)
+        kindPat kctx = \case
+          E.IntPat   s i -> pure (kctx, E.IntPat   s i)
+          E.FloatPat s f -> pure (kctx, E.FloatPat s f)
+          E.CharPat  s c -> pure (kctx, E.CharPat  s c)
+          E.VarPat   s x -> pure (kctx, E.VarPat   s x)
+          E.WildPat  s x -> pure (kctx, E.WildPat  s x)
+          E.NilPat   s   -> pure (kctx, E.NilPat   s  )
+          E.ConsPat s p1 p2 -> do
+            (kctx' , p1') <- kindPat kctx p1 
+            (kctx'', p2') <- kindPat kctx p2
+            return (kctx'', E.ConsPat s p1' p2') 
+          E.TuplePat s ps -> do 
+            (kctx', ps') <- foldM (\(kctxi, psi) pi -> do
+                (kctxi', pi') <- kindPat kctxi pi
+                return (kctxi', psi ++ [pi'])) 
+              (kctx, []) ps
+            return (kctx', E.TuplePat s ps')
+          -- (C p1 ... pn)
+          E.DConsPat s i ps -> do
+            (kctx', ps') <- foldM (\(kctxi, psi) pi -> do
+                (kctxi', pi') <- kindPat kctxi pi
+                return (kctxi', psi ++ [pi'])) 
+              (kctx, []) ps
+            return (kctx', E.DConsPat s i ps')
+          E.ChoicePat s i p -> second (E.ChoicePat s i) <$> kindPat kctx p
+          E.AsPat s x p     -> second (E.AsPat     s x) <$> kindPat kctx p
+
+        kindExp :: KindCtx -> E.ScopedExp -> Validation E.KindedExp
+        kindExp kctx = \case
+          E.Int   s i -> pure $ E.Int   s i
+          E.Float s d -> pure $ E.Float s d
+          E.Char  s c -> pure $ E.Char  s c
+          E.DCons s i -> pure $ E.DCons s i
+          E.Var   s a -> pure $ E.Var   s a
+          E.App s e args -> do
+            e' <- kindExp kctx e
+            args' <- forM args \case
+              ExpLevel  e -> ExpLevel  <$> kindExp kctx e
+              TypeLevel t -> TypeLevel <$> synth kctx mod t
+            return $ E.App s e' args'
+          E.Abs s pars m e -> do
+            (kctx', pars') <- foldM (\(kctxi, parsi) -> \case 
+                ExpLevel  (p, t) -> do
+                  (kctxi', p') <- kindPat kctxi p
+                  t' <- synth kctxi' mod t
+                  return (kctxi', parsi ++ [ExpLevel (p', t')])
+                TypeLevel (a, k) -> do
+                  let kctxi' = Map.insert a k kctxi 
+                  return (kctxi', parsi ++ [TypeLevel (a, k)])) 
+              (kctx, []) pars
+            e' <- kindExp kctx' e
+            pure $ E.Abs s pars' m e'
+          E.Let s lds e -> do 
+            (kctx', lds') <- kindLetDecls tds kctx lds
+            e' <- kindExp kctx' e
+            return (E.Let s lds' e')
+          E.Semi s e1 e2 -> E.Semi s <$> kindExp kctx e1 <*> kindExp kctx e2
+          E.Case s e prhss -> do
+            e' <- kindExp kctx e 
+            prhss' <- forM prhss \(pi, rhsi) -> do
+              (kctxi, pi') <- kindPat kctx pi
+              rhsi' <- kindRHS tds kctxi rhsi
+              return (pi', rhsi')
+            return $ E.Case s e' prhss'
+          E.If s e1 e2 e3 -> 
+            E.If s <$> kindExp kctx e1 <*> kindExp kctx e2 <*> kindExp kctx e3
+          E.Channel s t -> E.Channel s <$> synth kctx mod t
+          E.Select s i -> pure $ E.Select s i
+
+
 
 -- | Run kinding on a module, building the initial validation state from it.
 -- This returns either:
@@ -260,7 +443,7 @@ kindModule mod = do
 --     * a list of errors, if any was encountered;
 --     * the given module, otherwise.
 runKindModule :: M.ScopedModule -> Either [Error] M.KindedModule
-runKindModule m = runValidation emptyValidationState (kindModule m)
+runKindModule m = undefined -- runValidation emptyValidationState (kindModule m)
 
 -- | Run synthesis on type, building the initial validation state from a given
 -- module. This returns either:
@@ -268,10 +451,10 @@ runKindModule m = runValidation emptyValidationState (kindModule m)
 --     * a list of errors, if any was encountered;
 --     * a kind synthesized from the type, otherwise.
 runSynth :: M.KindedModule -> KindCtx -> T.ScopedType -> Either [Error] Kind -- TODO: this function will be deprecated
-runSynth mod ctx t = runValidation emptyValidationState (synth (M.asScoped mod) ctx t)
+runSynth mod ctx t = undefined -- runValidation emptyValidationState (synth (M.asScoped mod) ctx t)
 
 runSynth' :: M.KindedModule -> T.ScopedType -> Either [Error] Kind -- TODO: this function will be deprecated
-runSynth' mod t = runValidation emptyValidationState (synth (M.asScoped mod) Map.empty t)
+runSynth' mod t = undefined -- runValidation emptyValidationState (synth (M.asScoped mod) Map.empty t)
 
 -- | Run checking on a type against a kind, building the initial validation 
 -- state from a given module. This returns either:
@@ -279,7 +462,7 @@ runSynth' mod t = runValidation emptyValidationState (synth (M.asScoped mod) Map
 --     * a list of errors, if any was encountered;
 --     * unit, otherwise.
 runCheck :: M.ScopedModule -> KindCtx -> T.ScopedType -> Kind -> Either [Error] ()
-runCheck mod ctx t k = runValidation emptyValidationState (check mod ctx t k)
+runCheck mod ctx t k = undefined -- runValidation emptyValidationState (check mod ctx t k)
 
 runCheck' :: M.ScopedModule -> T.ScopedType -> Kind -> Either [Error] ()
-runCheck' mod t k = runValidation emptyValidationState (check mod Map.empty t k)
+runCheck' mod t k = undefined -- runValidation emptyValidationState (check mod Map.empty t k)

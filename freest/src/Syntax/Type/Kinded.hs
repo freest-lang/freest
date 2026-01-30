@@ -97,7 +97,7 @@ pattern End s p <- T.End s _ p
 pattern Message :: Span -> K.Multiplicity -> T.Polarity -> KindedType
 pattern Message s m p <- T.Message s _ m p
   where Message s m p = T.Message s k m p
-          where k = K.Arrow s (K.lt s) (K.ls s)
+          where k = K.Arrow s (K.lt s) (if m == K.Lin then K.ls s else K.uc s)
 
 pattern TypeMsg :: Span -> T.Polarity -> KindedType
 pattern TypeMsg s p <- T.TypeMsg s _ p
@@ -167,8 +167,8 @@ pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
      
 pattern AppTypeMsg :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
 pattern AppTypeMsg s p a k t <- T.AppTypeMsg s _ _ _ p a k t
-  where AppTypeMsg s p a k t  = T.AppTypeMsg s k' quant abs p a k t
-          where k'@(K.Proper _ m pk) = kindOf t
+  where AppTypeMsg s p a k t  = T.AppTypeMsg s (K.Proper s' K.Lin pk) quant abs p a k t
+          where k'@(K.Proper s' m pk) = kindOf t
                 quant = K.Arrow s abs k
                 abs = K.Arrow s k k'
 

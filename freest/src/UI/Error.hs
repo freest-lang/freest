@@ -50,6 +50,7 @@ data Error
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
   | KindMismatch Span K.Kind TK.KindedType
+  | KindMismatchK Span K.Kind K.Kind TU.ScopedType
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
@@ -104,6 +105,7 @@ instance Located Error where
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
     KindMismatch s _ _ -> s
+    KindMismatchK s _ _ _ -> s
     LacksKindSig s _ -> s
     LacksTypeSig s _ -> s
     LexicalError s _ -> s
@@ -274,6 +276,11 @@ toMessage src = \case
     --    | otherwise ->
       ("Couldn't match expected kind " ++ bt (unparse k1)
         ++ " with actual kind " ++ bt (unparse $ TK.kindOf t))
+    -- where
+    --   diff = (K.depth k2 - K.depth k1)
+  KindMismatchK s k1 k2 t -> makeError src s 
+      ("Couldn't match expected kind " ++ bt (unparse k1)
+        ++ " with actual kind " ++ bt (unparse k2))
     -- where
     --   diff = (K.depth k2 - K.depth k1)
   LacksKindSig s i -> makeError src s
