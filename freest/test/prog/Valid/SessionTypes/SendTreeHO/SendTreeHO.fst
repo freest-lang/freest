@@ -53,9 +53,9 @@ sendCh @a x c =
   sendAndWait @Int x w;
   c
 
-write : Tree -> TreeC ; a -> a
-write Leaf c = select LeafC c
-write (Node l x r) c = 
+write : forall (a : 1S). Tree -> TreeC ; a -> a
+write @a Leaf c = select LeafC c
+write @a (Node l x r) c = 
   c |> select NodeC
     |> write @(!(?Int; Close); TreeC; a) l
     |> sendCh @(TreeC; a) x
