@@ -3,8 +3,7 @@ module NoDefaultVariablesSpec (spec) where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, DataDeclMap )
+import Syntax.Type.Unkinded qualified as T
 
 import Data.Map.Strict qualified as Map
 import Test.Hspec
@@ -28,18 +27,18 @@ class NoDefaultVariables a where
 instance NoDefaultVariables Variable where
   noDefault a = internal a /= defaultInternal
 
-instance NoDefaultVariables T.Type where
+instance NoDefaultVariables T.ScopedType where
   noDefault = \case
     T.Abs _ aks t -> all (noDefault . fst) aks && noDefault t
     T.Var _ a -> noDefault a
     T.App _ t us -> all noDefault (t:us)
     _ -> True
 
-instance NoDefaultVariables (Map.Map a T.Type) where
+instance NoDefaultVariables (Map.Map a T.ScopedType) where
   noDefault = Map.foldr (\t b -> b && noDefault t) True
 
 instance NoDefaultVariables (Map.Map a ([(Variable, K.Kind)], [Identifier])) where
   noDefault = Map.foldr (\(fst . unzip -> as, _) b -> foldr (\a b' -> noDefault a && b') b as) True
 
-instance NoDefaultVariables (Map.Map a (Identifier, [T.Type])) where
+instance NoDefaultVariables (Map.Map a (Identifier, [T.ScopedType])) where
   noDefault = Map.foldr (\(_, ts) b -> foldr (\t b' -> noDefault t && b') b ts) True

@@ -1385,3 +1385,5 @@ case (\(n : (*T -> *T) -> *T -> *T)     (s : *T -> *T)     (z : *T) -> s (n s z)
      ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
 
 case Dual (!Int ; Close) : 1S
+
+case +{A: Skip, C: Close} ; Close : 1C

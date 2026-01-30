@@ -543,11 +543,11 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           return tctxi''
         -- anomalous cases
         (TypeLevel (a, k) : as, T.AppArrow s' m u v) -> 
-          throwE (UnexpectedParam (getSpan a) i fe (ExpLevel u) (TypeLevel a))
+          throwE (UnexpectedParam (getSpan a) i (ExpLevel u) (TypeLevel a))
         (ExpLevel  (p, t) : as, T.AppForall s' ((a, k) : aks) u) -> 
-          throwE (UnexpectedParam (getSpan p) i fe (TypeLevel k) (ExpLevel p))
+          throwE (UnexpectedParam (getSpan p) i (TypeLevel k) (ExpLevel p))
         (as, t') -> do
-          throwE (ExpectsTooManyArgs (getSpan fe) fe t (i + length as) i)
+          throwE (ExpectsTooManyArgs (getSpan fe) t (i + length as) i)
     fpe = case fe of 
       Left f -> Left (Left f)
       Right e -> Right e

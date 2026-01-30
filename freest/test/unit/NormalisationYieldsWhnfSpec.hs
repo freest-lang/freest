@@ -1,7 +1,6 @@
 module NormalisationYieldsWhnfSpec (spec) where
 
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
 import Validation.Kinding (runKindModule)
 import Validation.Normalisation ( normalise, isWhnf )
 import UI.Error (showErrors)
@@ -24,9 +23,10 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then U is a whnf" 
   errorsAreFailures
-  \src (t, _, m) -> case runKindModule m of 
-    Left es -> expectationFailure (showErrors src es)
-    Right m' -> normYieldsWhnf m' t `shouldBe` True
-
-normYieldsWhnf :: M.KindedModule -> T.Type -> Bool
-normYieldsWhnf m t = isWhnf {-$ trace (show $ normalise vs t)-} (normalise m t)
+  \src (t, mk, m) -> 
+    case do m' <- runKindModule m 
+            t' <- runSynthOrCheck m t mk
+            return (m', t')
+    of Left es  -> expectationFailure (showErrors src es)
+       Right (m', t') -> normYieldsWhnf `shouldBe` True
+        where normYieldsWhnf = isWhnf (normalise m' t')

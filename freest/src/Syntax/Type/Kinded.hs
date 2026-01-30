@@ -57,6 +57,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Names
 import Syntax.Type.Internal qualified as T
+import Data.List (intercalate)
 
 type KindedType = T.Type Kinded
 
@@ -92,7 +93,7 @@ pattern Skip s <- T.Skip s _
 
 pattern End :: Span -> T.Polarity -> KindedType
 pattern End s p <- T.End s _ p
-  where End s p = T.End s (K.ls s) p
+  where End s p = T.End s (K.lc s) p
 
 pattern Message :: Span -> K.Multiplicity -> T.Polarity -> KindedType
 pattern Message s m p <- T.Message s _ m p
@@ -175,7 +176,7 @@ pattern AppTypeMsg s p a k t <- T.AppTypeMsg s _ _ _ p a k t
 pattern AppLinChoice :: Span -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
 pattern AppLinChoice s p lts <- T.AppLinChoice s _ _ p lts
   where AppLinChoice s p lts  = T.AppLinChoice s (K.Proper s K.Lin pk) app p lts
-          where pk = foldr (\(_, kindOf -> K.Proper _ _ pk) -> K.join pk) K.Session lts
+          where pk = foldr (\(_, kindOf -> K.Proper _ _ pk) -> K.join pk) K.Channel lts
                 app = foldr (const $ K.Arrow s (K.ls s)) (K.Proper s K.Lin pk) lts
 
 pattern UnChoice :: Span -> T.Polarity -> [Identifier] -> KindedType
@@ -192,7 +193,7 @@ pattern AppSemi s t u <- T.AppSemi s _ _ t u
             
 pattern AppDual :: Span -> KindedType -> KindedType
 pattern AppDual s t <- T.AppDual s _ _ t
-  where AppDual s t  = T.AppDual s (K.Arrow s k k) k t
+  where AppDual s t  = T.AppDual s k (K.Arrow s k k) t
           where k = kindOf t
 
 pattern AppTName :: Span -> Identifier -> [KindedType] -> KindedType
@@ -200,8 +201,8 @@ pattern AppTName s i ts <- T.AppTName s _ _ i ts
 --  where AppTName s i ts  = T.AppTName s void void i ts
 
 pattern AppDName :: Span -> K.Kind -> Identifier -> [KindedType] -> KindedType
-pattern AppDName s k i ts <- T.AppDName s k _ i ts
-  where AppDName s k i ts  = T.AppDName s k k' i ts
+pattern AppDName s k i ts <- T.AppDName s _ k i ts
+  where AppDName s k i ts  = T.AppDName s k' k i ts
           where k' = foldr (\_ (K.Arrow _ _ k) -> k) k ts
           
 pattern AppVar :: Span -> Variable -> [KindedType] -> KindedType
@@ -224,8 +225,60 @@ pattern Bool s <- T.Bool s _
   where Bool s = DName s (K.ut s) (mkBoolId s)
 
 kindOf :: KindedType -> K.Kind
-kindOf _ = undefined
+kindOf = \case 
+  T.Int _ k -> k
+  T.Float _ k -> k
+  T.Char _ k -> k
+  T.Arrow _ k _ -> k
+  T.Quant _ k _ -> k
+  T.Skip _ k -> k
+  T.Semi _ k -> k
+  T.Dual _ k -> k
+  T.End _ k _ -> k
+  T.Message _ k _ _ -> k
+  T.TypeMsg _ k _ -> k
+  T.Choice _ k _ _ _ -> k
+  T.Var _ k _ -> k
+  T.Abs _ k _ _ -> k
+  T.App _ k _ _ -> k
+  T.TName _ k _ -> k
+  T.DName _ k _ -> k
+  T.Void _ k _ -> k
 
 smartApp :: Span -> KindedType -> [KindedType] -> KindedType
 smartApp s (App x t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
+instance {-# OVERLAPS #-} Show KindedType where
+  show = \case
+   -- Functional types
+    T.Int _ k     -> "(Int : " ++ show k ++ ")"
+    T.Float _ k   -> "(Float : " ++ show k ++ ")"
+    T.Char _ k    -> "(Char : " ++ show k ++ ")"
+    T.Arrow _ k m -> "(("++show m++"->) : " ++ show k ++ ")"
+    T.Quant _ k p -> "(("++showQuant p++") : " ++ show k ++ ")"
+    -- Session types
+    T.Skip _ k          -> "(Skip : " ++ show k ++ ")"
+    T.Semi _ k          -> "((;) : " ++ show k ++ ")"
+    T.Dual _ k          -> "(Dual : " ++ show k ++ ")"
+    T.End _ k T.In          -> "(Wait : " ++ show k ++ ")"
+    T.End _ k T.Out         -> "(Wait : " ++ show k ++ ")"
+    T.Message _ k m p  -> "((" ++ showMsgMult m ++ show p ++ ") : " ++ show k ++ ")"
+    T.TypeMsg _ k p       -> "((" ++ show p ++ show p ++ ") : " ++ show k ++ ")"
+    T.Choice _ k m p ls   ->
+      "(" ++ (if m == K.Un then "*" else "")
+      ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "} : " ++ show k ++ ")"
+    -- Polymorphism
+    T.Var _ k a    -> "(" ++ show a ++ " : " ++ show k ++ ")"
+    T.Abs _ k aks t -> "(\\" ++ showAbs aks " -> " t ++ " : " ++ show k ++ ")"
+    T.App _ k t ts -> "(" ++ foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts ++ " : " ++ show k ++ ")"
+    -- Equations
+    T.TName _ k i -> "(" ++ show i ++ "#type : " ++ show k ++ ")"
+    T.DName _ k i -> "(" ++ show i ++ "#data : " ++ show k ++ ")"
+    -- The type of non-contractive types
+    T.Void _ k' k -> "(Void @" ++ show k ++ " : " ++ show k' ++ ")"
+    where
+      showMsgMult = \case K.Lin -> ""; m -> show m
+      showView = \case T.In -> "&"; T.Out -> "+"
+      showQuant = \case T.In -> "forall"; T.Out -> "exists"
+      showAbs aks sep t =
+        unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t

@@ -1,7 +1,7 @@
 module KindCheckValidSpec (spec) where
 
 import Syntax.Module qualified as M
-import Validation.Kinding (runKindModule, runCheck')
+import Validation.Kinding (runKindModule, runCheck)
 import UI.Error (showErrors)
 import UnitSpecUtils
 
@@ -17,6 +17,6 @@ spec = mkTypeSpec
   errorsAreFailures
   \src -> \case 
     (t, Nothing, m) -> expectationFailure "Ill formed test case: missing kind annotation"
-    (t, Just k , m) -> case runKindModule m >>= \m -> runCheck' (M.asScoped m) t k of
+    (t, Just k , m) -> case runKindModule m >> runCheck m t k of
       Left es -> expectationFailure (showErrors src es)
       _       -> return ()

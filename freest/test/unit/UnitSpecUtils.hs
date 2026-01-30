@@ -6,9 +6,10 @@ import Parser.Scoping
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
+import Syntax.Type.Kinded qualified as TK
+import Syntax.Type.Unkinded qualified as TU
 import UI.Error (Error, Source, showErrors, printErrors)
-import Validation.Kinding ( runKindModule )
+import Validation.Kinding ( runKindModule, runSynth, runCheck )
 
 import Control.Monad ( forM, forM_ )
 import Control.Monad.Extra ( concatMapM )
@@ -19,8 +20,8 @@ import Test.Hspec
 
 mkTypeSpec :: [FilePath] 
               -> String 
-              -> (Source -> [Error]                                -> Expectation) 
-              -> (Source -> (T.Type, Maybe K.Kind, M.ScopedModule) -> Expectation) 
+              -> (Source -> [Error]                                       -> Expectation) 
+              -> (Source -> (TU.ScopedType, Maybe K.Kind, M.ScopedModule) -> Expectation) 
               -> Spec
 mkTypeSpec testPaths testDesc failHandler testHandler = do
   src <- zip testPaths <$> runIO (mapM readFile testPaths)
@@ -46,7 +47,7 @@ errorsAreSuccesses _   _  = return ()
 
 mkEquivalenceSpec :: [FilePath] 
                   -> String 
-                  -> (Source -> (T.Type, T.Type, K.Kind, M.KindedModule) -> Expectation) 
+                  -> (Source -> (TK.KindedType, TK.KindedType, K.Kind, M.KindedModule) -> Expectation) 
                   -> Spec
 mkEquivalenceSpec testPaths testDesc testFun = do
   src <- zip testPaths <$> runIO (mapM readFile testPaths)
@@ -56,7 +57,9 @@ mkEquivalenceSpec testPaths testDesc testFun = do
     Right ts -> describe testDesc $ 
       forM_ ts \((t, u, k), m) -> it (show (spanFromTo t u))
         case do (t', u', k', m') <- runScoping scopeEquivalenceTest (t, u, k, m)
-                (t', u', k',) <$> runKindModule m' of
+                t'' <- runCheck m' t' k'
+                u'' <- runCheck m' u' k'
+                (t'', u'', k',) <$> runKindModule m' of
           Left es      -> expectationFailure (showErrors src' es)
           Right (t', u', k', m'') -> testFun src' (t', u', k', m'')
   where
@@ -66,3 +69,8 @@ mkEquivalenceSpec testPaths testDesc testFun = do
       u' <- scopeType ctx' u
       k' <- scopeKind k
       return (t', u', k', m')
+
+runSynthOrCheck :: M.ScopedModule -> TU.ScopedType -> Maybe K.Kind -> Either [Error] TK.KindedType
+runSynthOrCheck m t = \case
+  Nothing -> runSynth m t
+  Just k  -> runCheck m t k

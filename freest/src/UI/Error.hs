@@ -43,7 +43,7 @@ data Error
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
-  | ExpectsTooManyArgs Span (Either Variable E.KindedExp) TK.KindedType Int Int
+  | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
   | GivenTooManyArgs Span E.KindedExp TK.KindedType Int Int
@@ -80,7 +80,7 @@ data Error
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
   | TypeVarOutOfScope Span Variable
   | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind) (Level E.KindedExp TK.KindedType)
-  | UnexpectedParam Span Int (Either Variable E.KindedExp) (Level TK.KindedType K.Kind)
+  | UnexpectedParam Span Int (Level TK.KindedType K.Kind)
     (Level E.Pat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
@@ -98,7 +98,7 @@ instance Located Error where
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
     DConsPatArgMismatch s _ _ _ -> s
-    ExpectsTooManyArgs s _ _ _ _ -> s
+    ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     ExposeError s _ _ _ -> s
     GivenTooManyArgs s _ _ _ _ -> s
@@ -133,7 +133,7 @@ instance Located Error where
     TypeMismatchTuple s _ _ _ -> s
     TypeVarOutOfScope s _ -> s
     UnexpectedArg s _ _ _ -> s
-    UnexpectedParam s _ _ _ _ -> s
+    UnexpectedParam s _ _ _ -> s
     UnsupportedError s _ _ -> s
     VarOutOfScope s _ -> s
 
@@ -242,7 +242,7 @@ toMessage src = \case
   DConsPatArgMismatch s i n m -> makeError src s
     ("Constructor " ++ bt (show i) ++ " takes " ++ show n
       ++ " arguments, but it was given " ++ show m)
-  ExpectsTooManyArgs s _ t n m -> makeError src s
+  ExpectsTooManyArgs s t n m -> makeError src s
      ("This function expects " ++ prettyArgs n
        ++ ", but its type " ++ bt (unparse t) ++ " takes"
        ++ case m of 
@@ -391,7 +391,7 @@ toMessage src = \case
         "Expected a value argument "
         ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t 
         ++ ", but got type argument")
-  UnexpectedParam s n f p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
+  UnexpectedParam s n p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
     (case (p1, p2) of 
       (TypeLevel k, ExpLevel p ) ->
         "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
