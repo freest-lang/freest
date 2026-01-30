@@ -74,7 +74,7 @@ word' ctx = \case
   T.AppSemi _ t u -> do
     liftM2 (++) (word ctx t) (word ctx u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
-  T.AppDual s (T.AppVar _ a ts) -> do
+  T.AppDual s (T.AppVar _ a _ ts) -> do
     words <- mapM (word ctx) ts
     getNonterminal $ Map.fromList $
       ("dual " ++ show a, []) :
@@ -88,7 +88,7 @@ word' ctx = \case
       (show u, [bottom]) :
       zip (map show [1..]) words
   -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
+  t@(T.AppVar _ a _ us) | isFullyApplied ctx t -> do
     words <- mapM (word ctx) us
     getNonterminal $ Map.fromList $
       (show a, []) :
@@ -138,14 +138,9 @@ isFullyApplied ctx = \case
   T.AppLinChoice{} -> True
   T.UnChoice{} -> True
   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
-  T.Var _ _ a -> K.depth (kindOf ctx a) ==  0
-  T.AppVar _ a ts -> K.depth (kindOf ctx a) == length ts
+  T.Var _ k a -> K.depth k ==  0
+  T.AppVar _ a k ts -> K.depth k == length ts
   _ -> False
-
-kindOf :: KindCtx -> Variable -> K.Kind
-kindOf ctx a = case ctx Map.!? a of
-    Just k -> k
-    Nothing -> internalError $ "Validation.TypeEquivalence.kindOf: variable " ++ show a ++ " not in context " ++ show ctx ++ ", at " ++ show (getSpan a)
 
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal

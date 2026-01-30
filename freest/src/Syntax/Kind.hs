@@ -139,11 +139,13 @@ image :: Kind -> Kind
 image = \case
   k@Proper{} -> k
   Arrow _ _ k -> image k
+  k -> internalError ("image of kind " ++ show k)
 
 depth :: Kind -> Int
 depth = \case
   k@Proper{} -> 0
   Arrow _ _ k -> 1 + depth k
+  k -> internalError ("depth of kind " ++ show k)
 
 instance Show Multiplicity where
   show = \case 

@@ -14,10 +14,12 @@ module Utils
   , rpad
   )
 where
+  
+import GHC.Stack (HasCallStack)
 
 -- | Throw an 'error' with standard formatting.
-internalError :: String -> a
-internalError s = error $ "(Internal error) "++s
+internalError :: forall a. HasCallStack => String -> a
+internalError s = error $ "(Internal error) " ++ s
 
 -- | The ordinal 'String' of an 'Integral'.
 ordinal :: (Integral a, Show a) => a -> String

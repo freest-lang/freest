@@ -50,7 +50,7 @@ module Syntax.Type.Unkinded
   , T.isDName
   , T.isMsg
   , T.isAppTypeMsg
-  , fromVariable
+  , T.fromVariable
   )
 where
 

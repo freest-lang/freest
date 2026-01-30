@@ -169,8 +169,8 @@ pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
 pattern AppTypeMsg :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
 pattern AppTypeMsg s p a k t <- T.AppTypeMsg s _ _ _ p a k t
   where AppTypeMsg s p a k t  = T.AppTypeMsg s (K.Proper s' K.Lin pk) quant abs p a k t
-          where k'@(K.Proper s' m pk) = kindOf t
-                quant = K.Arrow s abs k
+          where k'@(K.Proper s' _ pk) = kindOf t
+                quant = K.Arrow s abs k'
                 abs = K.Arrow s k k'
 
 pattern AppLinChoice :: Span -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
@@ -205,8 +205,8 @@ pattern AppDName s k i ts <- T.AppDName s _ k i ts
   where AppDName s k i ts  = T.AppDName s k' k i ts
           where k' = foldr (\_ (K.Arrow _ _ k) -> k) k ts
           
-pattern AppVar :: Span -> Variable -> [KindedType] -> KindedType
-pattern AppVar s a ts <- T.AppVar s _ _ a ts
+pattern AppVar :: Span -> Variable -> K.Kind -> [KindedType] -> KindedType
+pattern AppVar s a k ts <- T.AppVar s _ k a ts
 --  where AppVar s a ts  = T.AppVar s void void a ts
 
 pattern Tuple :: Span -> [KindedType] -> KindedType
@@ -248,37 +248,38 @@ kindOf = \case
 smartApp :: Span -> KindedType -> [KindedType] -> KindedType
 smartApp s (App x t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
-instance {-# OVERLAPS #-} Show KindedType where
-  show = \case
-   -- Functional types
-    T.Int _ k     -> "(Int : " ++ show k ++ ")"
-    T.Float _ k   -> "(Float : " ++ show k ++ ")"
-    T.Char _ k    -> "(Char : " ++ show k ++ ")"
-    T.Arrow _ k m -> "(("++show m++"->) : " ++ show k ++ ")"
-    T.Quant _ k p -> "(("++showQuant p++") : " ++ show k ++ ")"
-    -- Session types
-    T.Skip _ k          -> "(Skip : " ++ show k ++ ")"
-    T.Semi _ k          -> "((;) : " ++ show k ++ ")"
-    T.Dual _ k          -> "(Dual : " ++ show k ++ ")"
-    T.End _ k T.In          -> "(Wait : " ++ show k ++ ")"
-    T.End _ k T.Out         -> "(Wait : " ++ show k ++ ")"
-    T.Message _ k m p  -> "((" ++ showMsgMult m ++ show p ++ ") : " ++ show k ++ ")"
-    T.TypeMsg _ k p       -> "((" ++ show p ++ show p ++ ") : " ++ show k ++ ")"
-    T.Choice _ k m p ls   ->
-      "(" ++ (if m == K.Un then "*" else "")
-      ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "} : " ++ show k ++ ")"
-    -- Polymorphism
-    T.Var _ k a    -> "(" ++ show a ++ " : " ++ show k ++ ")"
-    T.Abs _ k aks t -> "(\\" ++ showAbs aks " -> " t ++ " : " ++ show k ++ ")"
-    T.App _ k t ts -> "(" ++ foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts ++ " : " ++ show k ++ ")"
-    -- Equations
-    T.TName _ k i -> "(" ++ show i ++ "#type : " ++ show k ++ ")"
-    T.DName _ k i -> "(" ++ show i ++ "#data : " ++ show k ++ ")"
-    -- The type of non-contractive types
-    T.Void _ k' k -> "(Void @" ++ show k ++ " : " ++ show k' ++ ")"
-    where
-      showMsgMult = \case K.Lin -> ""; m -> show m
-      showView = \case T.In -> "&"; T.Out -> "+"
-      showQuant = \case T.In -> "forall"; T.Out -> "exists"
-      showAbs aks sep t =
-        unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t
+
+-- instance {-# OVERLAPS #-} Show KindedType where
+--   show = \case
+--    -- Functional types
+--     T.Int _ k     -> "(Int : " ++ show k ++ ")"
+--     T.Float _ k   -> "(Float : " ++ show k ++ ")"
+--     T.Char _ k    -> "(Char : " ++ show k ++ ")"
+--     T.Arrow _ k m -> "(("++show m++"->) : " ++ show k ++ ")"
+--     T.Quant _ k p -> "(("++showQuant p++") : " ++ show k ++ ")"
+--     -- Session types
+--     T.Skip _ k          -> "(Skip : " ++ show k ++ ")"
+--     T.Semi _ k          -> "((;) : " ++ show k ++ ")"
+--     T.Dual _ k          -> "(Dual : " ++ show k ++ ")"
+--     T.End _ k T.In          -> "(Wait : " ++ show k ++ ")"
+--     T.End _ k T.Out         -> "(Close : " ++ show k ++ ")"
+--     T.Message _ k m p  -> "((" ++ showMsgMult m ++ show p ++ ") : " ++ show k ++ ")"
+--     T.TypeMsg _ k p       -> "((" ++ show p ++ show p ++ ") : " ++ show k ++ ")"
+--     T.Choice _ k m p ls   ->
+--       "(" ++ (if m == K.Un then "*" else "")
+--       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "} : " ++ show k ++ ")"
+--     -- Polymorphism
+--     T.Var _ k a    -> "(" ++ show a ++ " : " ++ show k ++ ")"
+--     T.Abs _ k aks t -> "(\\" ++ showAbs aks " -> " t ++ " : " ++ show k ++ ")"
+--     T.App _ k t ts -> "(" ++ foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts ++ " : " ++ show k ++ ")"
+--     -- Equations
+--     T.TName _ k i -> "(" ++ show i ++ "#type : " ++ show k ++ ")"
+--     T.DName _ k i -> "(" ++ show i ++ "#data : " ++ show k ++ ")"
+--     -- The type of non-contractive types
+--     T.Void _ k' k -> "(Void @" ++ show k ++ " : " ++ show k' ++ ")"
+--     where
+--       showMsgMult = \case K.Lin -> ""; m -> show m
+--       showView = \case T.In -> "&"; T.Out -> "+"
+--       showQuant = \case T.In -> "forall"; T.Out -> "exists"
+--       showAbs aks sep t =
+--         unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t

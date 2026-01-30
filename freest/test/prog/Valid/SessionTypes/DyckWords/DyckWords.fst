@@ -132,7 +132,7 @@ main =
   let (out2, in2) = channel @(D; Close) in
   let (out3, in3) = channel @(D; Close) in
   fork @() (\(_ : ()) 1-> out1 |> writeLtLtGtGtLtGt |> close);
-  fork @() (\(_ : ()) 1-> out1 |> writeLtLtGtLtGtGt |> close);
+  fork @() (\(_ : ()) 1-> out2 |> writeLtLtGtLtGtGt |> close);
   fork @() (\(_ : ()) 1-> 
       let (c1, c2, c3) = concatD @Wait @Wait @Close in1 in2 out3 in
       wait c1; 

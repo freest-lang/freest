@@ -20,4 +20,4 @@ spec = mkEquivalenceSpec
   "Valid type equivalence tests" 
   \src (t, u, k, m) -> 
     let g@(ps, [xs, ys]) = fromTypes m [t, u] 
-    in bisimilar ps xs ys `shouldBe` True
+    in if bisimilar ps xs ys then return () else expectationFailure (show t ++ "\n/=\n" ++ show u ++ "\n\n" ++ showGrammar g)

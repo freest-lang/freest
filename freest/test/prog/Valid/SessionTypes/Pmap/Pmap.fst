@@ -14,4 +14,4 @@ pmap @a @b f xs =
 
 main : ()
 main =
-    print @[Int] (pmap @Int @Int (2*) [1, 2, 3, 4, 5] @ Int)
+    print @[Int] (pmap @Int @Int (2*) ([1, 2, 3, 4, 5] @Int))

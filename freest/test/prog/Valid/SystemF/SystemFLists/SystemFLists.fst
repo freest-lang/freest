@@ -89,7 +89,7 @@ mainTail = head' @Char $ tail'  @Char twoChars
 
 -- The length of a list, given as a primitive Int
 length' : forall (a : *T). List a -> Int
-length' l = l  @Int (\(_ : a) -> succ) 0
+length' @a l = l  @Int (\(_ : a) -> succ) 0
 
 mainLength : Int
 mainLength = length' @Char twoChars
@@ -100,11 +100,11 @@ type Nat = forall (a : *T). (a -> a) -> a -> a
 
 -- Some nats
 zero, one, four : Nat
-zero _ z = z
+zero @a _ z = z 
 
-one s z = s z
+one @a s z = s z
 
-four s z = s $ s $ s $ s z
+four @a s z = s $ s $ s $ s z
 
 -- replicate n x is a list of length n with x the value of every element
 replicate' : forall (a : *T). Nat -> a -> List a
@@ -114,14 +114,14 @@ main : Int
 main = length' @Char $ replicate' @Char four 'a'
 
 -- sorting
-insert : forall (a:*T) . a -> List a -> List a
-insert @a x xs = xs @(List a)
-                    (\(hd:a) (tl:List a) ->
-                      if x > hd then cons @a hd tl else cons @a x (cons @a hd (tail' @a tl)))
-                    (cons @a x (nil @a))
+insert : Int -> List Int -> List Int
+insert x xs = xs @(List Int)
+  (\(hd:Int) (tl:List Int) ->
+    if x > hd then cons @Int hd tl else cons @Int x (cons @Int hd (tail' @Int tl)))
+  (cons @Int x (nil @Int))
 
-sort : forall (a:*T) . List a -> List a
-sort @a xs = xs @(List a) (insert @a) (nil @a)
+sort : List Int -> List Int
+sort xs = xs @(List Int) insert (nil @Int)
 
 mainSort : String
-mainSort = toString @Int (sort @Int) anIntlist
+mainSort = toString @Int (sort anIntlist)

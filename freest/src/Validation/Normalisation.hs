@@ -26,6 +26,7 @@ import Validation.Base ( unfold, getKind )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
+import Data.Bifunctor (second)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Debug.Trace ( trace )
@@ -59,14 +60,14 @@ reduce mod = \case
     -- R-Assoc (must come before R.SemiL)
   T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
     -- R-ChoiceDist (must come before R.SemiL)
-  T.AppSemi _ (T.App s t@T.Choice{} us) v -> T.App s t (map (\u -> T.AppSemi (getSpan u) u v) us)
+  T.AppSemi _ (T.AppLinChoice s p lts) u -> T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
     -- R-QuantDist - Requires the kind of f. Implementing the particular case
     -- where the quantifier is followed by a lambda. This should be enforced by
     -- the parser and kept as an invariant. Reading the kind from the lambda.
   T.AppSemi s1 (T.App s2 (T.TypeMsg s3 p) [f]) u ->
     T.AppTypeMsg s1 p a k (T.AppSemi s2 (T.App s3 f [T.fromVariable a k]) u)
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
-          k = kindOfLambdaVar f
+          (K.Arrow _ k _) = T.kindOf f
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
 
@@ -80,17 +81,16 @@ reduce mod = \case
     -- R-DMsg
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
     -- R-DChoice, un
-  T.AppDual s u@T.Choice{} -> T.dual u -- for *& and *+
+  T.AppDual s u@T.UnChoice{} -> T.dual u -- for *& and *+
     -- R-DChoice, lin
-  T.AppDual s (T.App _ u@T.Choice{} ts) -> T.App s (T.dual u) (map (T.AppDual s) ts)
+  T.AppDual s (T.AppLinChoice _ p lts) -> T.AppLinChoice s (T.dual p) (map (second $ T.AppDual s) lts)
     -- R-DQuant - Requires the kind of the quantifier. Implementing the
     -- particular case where the quantifier is followed by a lambda. This should
     -- be enforced by the parser and kept as an invariant. Reading the kind from
     -- the lambda.
-  T.AppDual s1 (T.App s2 (T.TypeMsg s3 p) [f]) ->
-    T.AppTypeMsg s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable a k]))
-    where a = mkFreshVar s1 (freeVars f)
-          k = kindOfLambdaVar f
+  T.AppDual s1 t@(T.AppTypeMsg s2 p a k t') ->
+    T.AppTypeMsg s1 (T.dual p) b k (T.AppDual s2 (subs a (T.fromVariable b k) t'))
+    where b = mkFreshVar s1 (freeVars t)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
     T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
@@ -111,11 +111,6 @@ reduce mod = \case
 
   -- 4. Should not happen
   t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
-
--- | requires: t is an abstraction with a single binder
-kindOfLambdaVar :: T.KindedType -> K.Kind
-kindOfLambdaVar (T.Abs _ [(_, k)] _) = k
-kindOfLambdaVar t = internalError $ "Validation.Normalisation.kindOfLambdaVar: " ++ show t
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β

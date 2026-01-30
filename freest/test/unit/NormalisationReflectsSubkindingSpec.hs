@@ -29,6 +29,8 @@ spec = mkTypeSpec
             t' <- runSynthOrCheck m t mk
             return (m', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> normalisationReflectsKinding `shouldBe` True
+       Right (m', t') -> if normalisationReflectsKinding 
+          then  return ()
+          else expectationFailure ("T = " ++ show t' ++ "\nU = " ++ show (normalise m' t'))
         where normalisationReflectsKinding = 
                 TK.kindOf (normalise m' t') <: TK.kindOf t'
