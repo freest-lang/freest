@@ -20,6 +20,7 @@ TODO:
 -}
 
 import Data.List (find, groupBy)
+import Data.Set qualified as Set
 import Data.Char (chr, ord)
 import Data.Function (on)
 import Data.Functor (($>), (<&>), void)
@@ -266,13 +267,16 @@ extractFromRHS (global, local) rhs = do
 functionToClosure :: [Clause] -> Value
 functionToClosure clauses = do
   let arity = length $ fst $ head clauses
-      -- generate list of fresh variables according to arity
-      -- mkFreshVar span (fvars from clauses)
-      freshVars = undefined
+      -- generate list of new variables, to be made "fresh"
+      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [0..arity]]
+      -- TODO collect free variables from clauses
+      freeVars = []
+      -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
+      freshVars = [B.freshVar newVar (Set.fromList freshVars) | newVar <- newVars]
       -- generate case expressions
       cases = clausesToCases freshVars clauses
       -- attach closures
-  VClosure [E.VarPat B.nullSpan fVar | fVar <- freshVars] cases []
+  VClosure [E.VarPat B.nullSpan freshVar | freshVar <- freshVars] cases []
   where
     -- group clauses by the leading parameter pattern
     groupClausesByPatterns :: [Clause] -> [(E.Pat, [Clause])]
@@ -284,12 +288,13 @@ functionToClosure clauses = do
       -- place clauses that share a leading pattern in the same group
       in map (\x -> (fst $ head x, map snd x)) groups
     -- convert clauses to cases
-    clausesToCases :: [E.Exp] -> [Clause] -> E.Exp
-    clausesToCases (freshVar:freshVars) clauses = E.Case B.nullSpan freshVar $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
+    clausesToCases :: [B.Variable] -> [Clause] -> E.Exp
+    clausesToCases (freshVar:freshVars) clauses = 
+      E.Case B.nullSpan (E.Var B.nullSpan freshVar) $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
       where
         groupedClauses = groupClausesByPatterns clauses
         -- control recursion, stopping when there's no more patterns to extract
-        convertToRHS :: [E.Exp] -> [Clause] -> E.RHS
+        convertToRHS :: [B.Variable] -> [Clause] -> E.RHS
         convertToRHS freshVars clauses =
           -- if no more patterns, just return first clause RHS
           -- Warning: if length clauses >= 1, this means there's redundant patterns
