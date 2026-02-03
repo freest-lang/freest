@@ -268,7 +268,7 @@ functionToClosure :: [Clause] -> Value
 functionToClosure clauses = do
   let arity = length $ fst $ head clauses
       -- generate list of new variables, to be made "fresh"
-      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [0..arity]]
+      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [1..arity]]
       -- TODO collect free variables from clauses
       freeVars = []
       -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
