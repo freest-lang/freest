@@ -54,7 +54,6 @@ instance Eq Pat where
   DConsPat _ id1 pat1 == DConsPat _ id2 pat2 = id1 == id2 && pat1 == pat2
   ChoicePat _ id1 pat1 == ChoicePat _ id2 pat2 = id1 == id2 && pat1 == pat2
   AsPat _ var1 pat1 == AsPat _ var2 pat2 = var1 == var2 && pat1 == pat2
-  _ == _ = False
 
 pattern NilPat :: Span -> Pat
 pattern NilPat s <- DConsPat s ((== mkNilId s) -> True) []

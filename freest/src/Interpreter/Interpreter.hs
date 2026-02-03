@@ -263,6 +263,17 @@ extractFromRHS (global, local) rhs = do
       exp <- chooseGuard (global, local) guards
       return (exp, whereDecls)
 
+-- | Checks if two patterns are compatible, if in the context of a function, both could be matched against the expression
+-- TODO lacking remaining patterns
+compatibleByPM :: E.Pat -> E.Pat -> Bool
+compatibleByPM E.WildPat{} _ = True
+compatibleByPM _ E.WildPat{} = True
+compatibleByPM E.VarPat{} _ = True
+compatibleByPM _ E.VarPat{} = True
+compatibleByPM (E.DConsPat _ id1 pats1) (E.DConsPat _ id2 pats2) = id1 == id2 && and (zipWith compatibleByPM pats1 pats2)
+compatibleByPM (E.AsPat _ var1 pat1) (E.AsPat _ var2 pat2) = compatibleByPM pat1 pat2
+compatibleByPM p1 p2 = p1 == p2
+
 -- | Convert functions into a closure with cases
 functionToClosure :: [Clause] -> Value
 functionToClosure clauses = do
@@ -284,8 +295,9 @@ functionToClosure clauses = do
       -- extract leading pattern
       let leadingPat = map (\(pats, rhs) -> (head pats, (tail pats, rhs))) clauses
       -- group by leading pattern
-          groups = groupBy ((==) `on` fst) leadingPat
+          groups = groupBy (compatibleByPM `on` fst) leadingPat
       -- place clauses that share a leading pattern in the same group
+      -- (TODO: handle compatible patterns)
       in map (\x -> (fst $ head x, map snd x)) groups
     -- convert clauses to cases
     clausesToCases :: [B.Variable] -> [Clause] -> E.Exp
