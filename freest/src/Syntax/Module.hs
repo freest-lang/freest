@@ -180,3 +180,27 @@ instance Show ParsedModule where
       showTypeDecl (i, T.Abs _ _ aks t) = 
         "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
       showTypeDecl (i, t) = "type " ++ show i ++ " = " ++ show t
+
+instance Show ScopedModule where
+  show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
+    List.intercalate "\n" $ filter (not . null)
+      [ case name of 
+          Nothing -> ""
+          Just n -> "module "++ List.intercalate "." n++" where"
+      , List.intercalate "\n" (map showImport imports)
+      , List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
+      , List.intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
+      , List.intercalate "\n" (map showDataDecl $ Map.toList dataDecls)
+      , List.intercalate "\n" (map show definitions)
+      ]
+    where 
+      showImport ss = "import " ++ List.intercalate "." ss
+      showKindSig (i, k) = "type " ++ show i ++ " : " ++ show k
+      showDataDecl (i, (aks, is)) =
+        "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = " 
+        ++ List.intercalate " | " (map ((++ " ...") . show) is)
+      showConsDecl (i, (i', aks, ts)) =
+        "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
+      showTypeDecl (i, T.Abs _ _ aks t) = 
+        "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
+      showTypeDecl (i, t) = "type " ++ show i ++ " = " ++ show t

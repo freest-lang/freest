@@ -292,14 +292,14 @@ scopeDefs ctx ds = do
   forM_ (toEVarList ictx) (\x -> insertError (SigLacksDef (getSpan x) x))
   return (ctx, ds)
   where
-    groupEquations = \case 
-      []  -> []
-      [d] -> [d]
+    groupEquations = \case
       (E.FnDef f1 psrhss1 : E.FnDef f2 psrhss2 : ds) 
         | external f1 == external f2 -> 
           groupEquations (E.FnDef f1 (psrhss1 ++ psrhss2) : ds)
       (E.Mutual ds' : ds) -> E.Mutual (groupEquations ds') : groupEquations ds
       (d1:d2:ds) -> d1 : groupEquations (d2:ds)
+      [d] -> [d]
+      []  -> []
 
     scopeDefs' isMutual ctx ictx = \case 
       [] -> return (ictx, ctx, [])
