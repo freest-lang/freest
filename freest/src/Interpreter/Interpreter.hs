@@ -38,8 +38,6 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 
 import Syntax.Expression ( LetDecl )
-import qualified Syntax.Expression as B
-import qualified Syntax.Base as E
 
 -- | A clause in a function definition
 type Clause = ([E.Pat], E.RHS)
