@@ -60,8 +60,6 @@ data Value
   | VChar Char
   | VString String
   | VCons String [Value]
-  -- TODO: delete
-  | VFun [Clause]
   | VClosure [E.Pat] E.Exp Env
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
@@ -78,7 +76,6 @@ instance Show Value where
   show (VChar c) = show c
   show (VString str) = show str
   show (VCons str vals) = str ++ " " ++ unwords (map show vals)
-  show (VFun _) = "<fun>"
   show (VClosure {}) = "<closure>"
   show (VBuiltin _) = "<builtin>"
   show (VIO io) = "<IO>"
