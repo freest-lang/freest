@@ -38,6 +38,8 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 
 import Syntax.Expression ( LetDecl )
+import qualified Syntax.Expression as B
+import qualified Syntax.Base as E
 
 -- | A clause in a function definition
 type Clause = ([E.Pat], E.RHS)
@@ -274,6 +276,32 @@ compatibleByPM (E.DConsPat _ id1 pats1) (E.DConsPat _ id2 pats2) = id1 == id2 &&
 compatibleByPM (E.AsPat _ var1 pat1) (E.AsPat _ var2 pat2) = compatibleByPM pat1 pat2
 compatibleByPM p1 p2 = p1 == p2
 
+-- | Compile function definitions with pattern matching into a closure with case-expressions
+compileFunctionToClosure :: [Clause] -> Value
+compileFunctionToClosure = compileFunctionToClosureNaive
+
+compileFunctionToClosureNaive ::  [Clause] -> Value
+compileFunctionToClosureNaive clauses = do
+  let arity = length $ fst $ head clauses
+      -- generate list of new variables, to be made "fresh"
+      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [1..arity]]
+      -- TODO collect free variables from clauses
+      freeVars = []
+      -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
+      freshVars = [B.freshVar newVar (Set.fromList freshVars) | newVar <- newVars]
+      -- generate case expressions
+      cases = clausesToCases freshVars clauses
+      -- attach closures
+  VClosure [E.VarPat B.nullSpan freshVar | freshVar <- freshVars] cases []
+  where
+    clausesToCases :: [B.Variable] -> [Clause] -> E.Exp
+    clausesToCases (freshVar:freshVars) clauses =
+      E.Case B.nullSpan target alternatives
+      where 
+        target = E.Tuple B.nullSpan (map (E.Var B.nullSpan) (freshVar:freshVars))
+        alternatives = map (\(lhs, rhs) -> (E.TuplePat B.nullSpan lhs, rhs)) clauses
+
+
 -- | Convert functions into a closure with cases
 functionToClosure :: [Clause] -> Value
 functionToClosure clauses = do
@@ -384,7 +412,7 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   -- remove type arguments from clauses
   let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
   -- create binding for function
-  let binding = (B.external var, functionToClosure clauses')
+  let binding = (B.external var, compileFunctionToClosure clauses')
   remainingBindings <- collectLetDecls (global, binding : local) letdecls
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
