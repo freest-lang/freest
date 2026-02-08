@@ -11,6 +11,11 @@ module Interpreter.PatternMatching
     resolvePatternMatching
   ) where
 
+{-
+TODO:
+- Implement more efficient compilation of function with pattern matching to closure with cases (check The Implementation of Functional Programming Languages, by Simon Peyton Jones)
+-}
+
 import Control.Monad (zipWithM)
 import Data.Function (on)
 import Data.List (groupBy)
@@ -20,8 +25,8 @@ import Interpreter.Values (Value(VInt, VFloat, VChar, VCons, VClosure), Binding)
 import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 
--- | A clause in a function definition
-type Clause = ([E.Pat], E.RHS)
+
+-- HANDLING PATTERN MATCHING
 
 -- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
 resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [Binding]
@@ -69,7 +74,38 @@ resolvePatternMatching (E.AsPat s var pat) val = do
     Left _ -> Left (E.AsPat s var pat, val)
     Right bindings -> Right $ (B.external var, val) : bindings
 
--- | Checks if two patterns are compatible, if in the context of a function, both could be matched against the expression
+-- COMPILATION OF FUNCTIONS WITH PATTERN MATCHING
+
+-- | A clause in a function definition
+type Clause = ([E.Pat], E.RHS)
+
+-- | Compile function definitions with pattern matching into a closure with case-expressions
+compileFunctionToClosure :: [Clause] -> Value
+compileFunctionToClosure clauses = do
+  let arity = length $ fst $ head clauses
+      -- TODO collect free variables from clauses
+      freeVars = []
+      -- generate list of new variables, to be made "fresh"
+      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [1..arity]]
+      -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
+      freshVars = [B.freshVar newVar (Set.fromList freshVars) | newVar <- newVars]
+      -- generate case expressions to serve as body of the closure
+      body = flatNaiveClauseCompilation freshVars clauses
+  -- attach closures
+  VClosure [E.VarPat B.nullSpan freshVar | freshVar <- freshVars] body []
+
+-- simple, naive compilation of clauses into cases by adding a single case expression that checks pattern matching for all parameters
+flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.Exp
+flatNaiveClauseCompilation parameters clauses = 
+  -- simple case expression
+  E.Case B.nullSpan target alternatives
+  where
+    -- target is the tuple of all parameters
+    target = E.Tuple B.nullSpan (map (E.Var B.nullSpan) parameters)
+    -- choosing the correct alternative is done via case expression, that attempts pattern matching target against all tuple of all patterns in each clause
+    alternatives = map (\(lhs, rhs) -> (E.TuplePat B.nullSpan lhs, rhs)) clauses
+
+{- -- | Checks if two patterns are compatible, if in the context of a function, both could be matched against the expression
 -- TODO lacking remaining patterns
 compatibleByPM :: E.Pat -> E.Pat -> Bool
 compatibleByPM E.WildPat{} _ = True
@@ -80,47 +116,21 @@ compatibleByPM (E.DConsPat _ id1 pats1) (E.DConsPat _ id2 pats2) = id1 == id2 &&
 compatibleByPM (E.AsPat _ var1 pat1) (E.AsPat _ var2 pat2) = compatibleByPM pat1 pat2
 compatibleByPM p1 p2 = p1 == p2
 
--- | Compile function definitions with pattern matching into a closure with case-expressions
-compileFunctionToClosure :: [Clause] -> Value
-compileFunctionToClosure = compileFunctionToClosureNaive
 
-compileFunctionToClosureNaive ::  [Clause] -> Value
-compileFunctionToClosureNaive clauses = do
-  let arity = length $ fst $ head clauses
-      -- generate list of new variables, to be made "fresh"
-      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [1..arity]]
-      -- TODO collect free variables from clauses
-      freeVars = []
-      -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
-      freshVars = [B.freshVar newVar (Set.fromList freshVars) | newVar <- newVars]
-      -- generate case expressions
-      cases = clausesToCases freshVars clauses
-      -- attach closures
-  VClosure [E.VarPat B.nullSpan freshVar | freshVar <- freshVars] cases []
+-- convert clauses to cases
+decisionTreeClauseCompilation :: [B.Variable] -> [Clause] -> E.Exp
+decisionTreeClauseCompilation (freshVar:freshVars) clauses = 
+  E.Case B.nullSpan (E.Var B.nullSpan freshVar) $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
   where
-    clausesToCases :: [B.Variable] -> [Clause] -> E.Exp
-    clausesToCases (freshVar:freshVars) clauses =
-      E.Case B.nullSpan target alternatives
-      where 
-        target = E.Tuple B.nullSpan (map (E.Var B.nullSpan) (freshVar:freshVars))
-        alternatives = map (\(lhs, rhs) -> (E.TuplePat B.nullSpan lhs, rhs)) clauses
-
-
--- | Convert functions into a closure with cases
-functionToClosure :: [Clause] -> Value
-functionToClosure clauses = do
-  let arity = length $ fst $ head clauses
-      -- generate list of new variables, to be made "fresh"
-      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [1..arity]]
-      -- TODO collect free variables from clauses
-      freeVars = []
-      -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
-      freshVars = [B.freshVar newVar (Set.fromList freshVars) | newVar <- newVars]
-      -- generate case expressions
-      cases = clausesToCases freshVars clauses
-      -- attach closures
-  VClosure [E.VarPat B.nullSpan freshVar | freshVar <- freshVars] cases []
-  where
+    groupedClauses = groupClausesByPatterns clauses
+    -- control recursion, stopping when there's no more patterns to extract
+    convertToRHS :: [B.Variable] -> [Clause] -> E.RHS
+    convertToRHS freshVars clauses =
+      -- if no more patterns, just return first clause RHS
+      -- Warning: if length clauses >= 1, this means there's redundant patterns
+      if null $ fst $ head clauses then snd $ head clauses
+      -- otherwise, recursively call clausesToCases and wrap resulting case in a unguarged rhs
+      else E.UnguardedRHS (decisionTreeClauseCompilation freshVars clauses) Nothing
     -- group clauses by the leading parameter pattern
     groupClausesByPatterns :: [Clause] -> [(E.Pat, [Clause])]
     groupClausesByPatterns clauses =
@@ -130,18 +140,4 @@ functionToClosure clauses = do
           groups = groupBy (compatibleByPM `on` fst) leadingPat
       -- place clauses that share a leading pattern in the same group
       -- (TODO: handle compatible patterns)
-      in map (\x -> (fst $ head x, map snd x)) groups
-    -- convert clauses to cases
-    clausesToCases :: [B.Variable] -> [Clause] -> E.Exp
-    clausesToCases (freshVar:freshVars) clauses = 
-      E.Case B.nullSpan (E.Var B.nullSpan freshVar) $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
-      where
-        groupedClauses = groupClausesByPatterns clauses
-        -- control recursion, stopping when there's no more patterns to extract
-        convertToRHS :: [B.Variable] -> [Clause] -> E.RHS
-        convertToRHS freshVars clauses =
-          -- if no more patterns, just return first clause RHS
-          -- Warning: if length clauses >= 1, this means there's redundant patterns
-          if null $ fst $ head clauses then snd $ head clauses
-          -- otherwise, recursively call clausesToCases and wrap resulting case in a unguarged rhs
-          else E.UnguardedRHS (clausesToCases freshVars clauses) Nothing
+      in map (\x -> (fst $ head x, map snd x)) groups -}
