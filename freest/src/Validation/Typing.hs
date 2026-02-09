@@ -181,7 +181,7 @@ synth modl kctx tctx = \case
   e@(E.Semi s e1 e2) -> do 
     (t, tctx') <- synth modl kctx tctx e1
     when (Kinding.isStrictlyLin t) do
-      throwE (KindMismatch se1 (K.Proper se1 K.Un K.Top) t)
+      throwE (KindMismatch s (K.ut se1) t)
     synth modl kctx tctx' e2
     where se1 = getSpan e1
   E.Case s e cs@((p1, rhs1) : cs')   -> do
@@ -290,7 +290,8 @@ check modl kctx tctx e t = case e of
   -- receive e
   E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
     (u, tctx') <- synth modl kctx tctx e
-    checkEquivTypes modl (Left e) t u
+    (t1, t2) <- Expose.input modl (Right e) u
+    checkEquivTypes modl (Left e) t (T.Tuple s [t1,t2])
     return tctx'
   -- fork e
   E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
