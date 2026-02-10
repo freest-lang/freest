@@ -117,4 +117,5 @@ wait :: M.KindedModule -> E.Pat -> T.KindedType -> Validation ()
 wait mod p t = do
   case normalise mod t of
     T.End _ T.In -> return ()
+    T.AppSemi _ (T.End _ T.In) _ -> return ()
     _ -> throwE (ExposeError (getSpan p) (Left p) "a `Wait` channel" t)

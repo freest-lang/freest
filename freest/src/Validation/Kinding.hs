@@ -397,8 +397,9 @@ kindModule mod = do
           E.IntPat   s i -> pure (kctx, E.IntPat   s i)
           E.FloatPat s f -> pure (kctx, E.FloatPat s f)
           E.CharPat  s c -> pure (kctx, E.CharPat  s c)
-          E.VarPat   s x -> pure (kctx, E.VarPat   s x)
           E.WildPat  s x -> pure (kctx, E.WildPat  s x)
+          E.VarPat   s x -> pure (kctx, E.VarPat   s x)
+          E.PackPat s aks p -> second (E.PackPat s aks) <$> kindPat (Map.fromList aks `Map.union` kctx) p
           E.NilPat   s   -> pure (kctx, E.NilPat   s  )
           E.ConsPat s p1 p2 -> do
             (kctx' , p1') <- kindPat kctx p1 
@@ -417,7 +418,13 @@ kindModule mod = do
                 return (kctxi', psi ++ [pi'])) 
               (kctx, []) ps
             return (kctx', E.DConsPat s i ps')
+          E.WaitPat s       -> pure (kctx, E.WaitPat s)
+          E.InPat s p1 p2 -> do
+            (kctx', p1') <- kindPat kctx p1
+            (kctx'', p2') <- kindPat kctx p2
+            return (kctx'', E.InPat s p1' p2')
           E.ChoicePat s i p -> second (E.ChoicePat s i) <$> kindPat kctx p
+          E.TypeInPat s (a, k) p -> second (E.TypeInPat s (a, k)) <$> kindPat (Map.insert a k kctx) p
           E.AsPat s x p     -> second (E.AsPat     s x) <$> kindPat kctx p
 
         kindExp :: KindCtx -> E.ScopedExp -> Validation E.KindedExp
@@ -445,6 +452,8 @@ kindModule mod = do
               (kctx, []) pars
             e' <- kindExp kctx' e
             pure $ E.Abs s pars' m e'
+          E.Pack s' ts e -> E.Pack s' <$> mapM (synth smodl kctx) ts <*> kindExp kctx e
+          E.Asc s e t -> E.Asc s <$> kindExp kctx e <*> synth smodl kctx t
           E.Let s lds e -> do 
             (kctx', lds') <- kindLetDecls smodl kmodl kctx lds
             e' <- kindExp kctx' e
@@ -461,6 +470,8 @@ kindModule mod = do
             E.If s <$> kindExp kctx e1 <*> kindExp kctx e2 <*> kindExp kctx e3
           E.Channel s t -> E.Channel s <$> synth smodl kctx t
           E.Select s i -> pure $ E.Select s i
+          E.SendType s t -> E.SendType s <$> synth smodl kctx t
+          E.ReceiveType s -> pure $ E.ReceiveType s
 
 -- | Run kinding on a module, building the initial validation state from it.
 -- This returns either:

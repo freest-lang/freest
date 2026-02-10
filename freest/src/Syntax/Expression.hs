@@ -49,12 +49,12 @@ data Pat
   | CharPat Span Char
   | WildPat Span Variable
   | VarPat Span Variable
-  | PackPat Span [Variable] Pat
+  | PackPat Span [(Variable, Kind)] Pat
   | DConsPat Span Identifier [Pat]
   | WaitPat Span
   | InPat Span Pat Pat
   | ChoicePat Span Identifier Pat
-  | TypeInPat Span Variable Pat
+  | TypeInPat Span (Variable, Kind) Pat
   | AsPat Span Variable Pat
 
 pattern NilPat :: Span -> Pat
@@ -219,12 +219,12 @@ instance Show Pat where
     CharPat _ c     -> show c
     WildPat _ x     -> show x
     VarPat _ x      -> show x
-    PackPat _ as p  -> "(" ++intercalate ", " (map (('@' :) . show) as) ++ ", " ++ show p ++ ")"
+    PackPat _ aks p  -> "(" ++intercalate ", " (map (\(a, k) -> "@("++ show a ++ " : " ++ show k ++ ")") aks) ++ ", " ++ show p ++ ")"
     DConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
     WaitPat _       -> "Wait"
     InPat _ p1 p2   -> "(?" ++ show p1 ++ "; " ++ show p2 ++ ")"
     ChoicePat _ l p -> "(&"++show l++" "++show p++")"
-    TypeInPat _ a p -> "(?@" ++ show a ++ ". " ++ show p ++ ")"
+    TypeInPat _ (a, k) p -> "(??(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
     AsPat _ x p     -> show x++"@"++show p
 
 instance Show (LetDecl x) where
