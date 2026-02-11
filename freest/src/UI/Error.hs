@@ -22,7 +22,8 @@ import Parser.Unparser
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
+import Syntax.Type.Kinded qualified as TK
+import Syntax.Type.Unkinded qualified as TU
 import Utils
 
 import Data.List (intercalate,nub)
@@ -33,47 +34,53 @@ import Data.Char qualified as Char
 
 -- | The errors that can be found in a FreeST program.
 data Error
-  = ArrowMultMismatch Span (Either Variable E.Exp) Int
+  = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
     K.Multiplicity K.Multiplicity
-  | CannotSynthesisePack Span E.Exp
+  | CannotSynthesisePack Span E.KindedExp
+  | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
+  | CannotSynthesiseSendType Span
   | ConflictingDefs Span (Level String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
-  | ExpectsTooManyArgs Span (Either Variable E.Exp) T.Type Int Int
+  | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span String T.Type
-  | GivenTooManyArgs Span E.Exp T.Type Int Int
-  | GivenTooManyArgsK Span T.Type K.Kind Int Int
-  | IllegalChoice Span Identifier T.Type
-  | KindMismatch Span K.Kind T.Type K.Kind
+  | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
+  | GivenTooManyArgs Span E.KindedExp TK.KindedType Int Int
+  | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
+  | IllegalChoice Span Identifier TK.KindedType
+  | KindMismatch Span K.Kind TK.KindedType
+  | KindMismatchK Span K.Kind K.Kind TU.ScopedType
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) T.Type (Either Variable E.Exp)
-  | LinNotConsumedEvenly Span (Either Variable Identifier) T.Type 
-    (Either (Either Variable E.Pat) E.Exp)
-  | LinVarAtEndOfScope Span (Either Variable Identifier) T.Type
+  | LinConsumedInUnFun Span (Either Variable Identifier) TK.KindedType (Either Variable E.KindedExp)
+  | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
+    (Either (Either Variable E.Pat) E.KindedExp)
+  | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
   | MultipleKindSigs Span [Identifier]
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
-  | NonLinPat Span E.Pat T.Type
+  | NonLinPat Span E.Pat TK.KindedType
   | ParseError Span (Token, [String])
-  | PrekindMismatch Span K.Prekind T.Type K.Kind
-  | ProperKindMismatch Span T.Type K.Kind
+  | PartiallyAppliedSelect Span Identifier
+  | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
+  | ProperKindMismatch Span TK.KindedType K.Kind
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span T.Type T.Type (Either E.Exp E.Pat)
-  | TypeMismatchExists Span T.Type (Either E.Pat E.Exp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
-  | TypeMismatchList Span T.Type (Either E.Exp E.Pat)
-  | TypeMismatchChoice Span T.Type Identifier E.Pat
-  | TypeMismatchSelect Span T.Type Identifier E.Exp
-  | TypeMismatchTuple Span Int T.Type (Either E.Exp E.Pat)
+  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.Pat)
+  | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.Pat)
+  | TypeMismatchChoice Span TK.KindedType Identifier E.Pat
+  | TypeMismatchExists Span TK.KindedType (Either E.Pat E.KindedExp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
+  | TypeMismatchReceiveType Span TK.KindedType
+  | TypeMismatchSelect Span TK.KindedType Identifier E.KindedExp
+  | TypeMismatchSendType Span TK.KindedType
+  | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe T.Type) K.Kind) (Level E.Exp T.Type)
-  | UnexpectedParam Span Int (Either Variable E.Exp) (Level T.Type K.Kind)
+  | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind) (Level E.KindedExp TK.KindedType)
+  | UnexpectedParam Span Int (Level TK.KindedType K.Kind)
     (Level E.Pat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
@@ -85,17 +92,20 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
+    CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
+    CannotSynthesiseSendType s -> s
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
     DConsPatArgMismatch s _ _ _ -> s
-    ExpectsTooManyArgs s _ _ _ _ -> s
+    ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
-    ExposeError s _ _ -> s
+    ExposeError s _ _ _ -> s
     GivenTooManyArgs s _ _ _ _ -> s
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
-    KindMismatch s _ _ _ -> s
+    KindMismatch s _ _ -> s
+    KindMismatchK s _ _ _ -> s
     LacksKindSig s _ -> s
     LacksTypeSig s _ -> s
     LexicalError s _ -> s
@@ -117,11 +127,13 @@ instance Located Error where
     TypeMismatchExists s _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchChoice s _ _ _ -> s
+    TypeMismatchReceiveType s _ -> s
     TypeMismatchSelect s _ _ _ -> s
+    TypeMismatchSendType s _ -> s
     TypeMismatchTuple s _ _ _ -> s
     TypeVarOutOfScope s _ -> s
     UnexpectedArg s _ _ _ -> s
-    UnexpectedParam s _ _ _ _ -> s
+    UnexpectedParam s _ _ _ -> s
     UnsupportedError s _ _ -> s
     VarOutOfScope s _ -> s
 
@@ -214,8 +226,12 @@ toMessage src = \case
         K.VarM x -> "a multiplicity" ++ external x
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
+  CannotSynthesiseReceiveType s -> makeError src s
+    "Could not infer a type for this `receiveType` expression"
   CannotSynthesiseSelect s id -> makeError src s
     "Could not infer a type for this `select` expression"
+  CannotSynthesiseSendType s -> makeError src s
+    "Could not infer a type for this `sendType` expression"
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
       ExpLevel x -> "variable " ++ x
@@ -226,7 +242,7 @@ toMessage src = \case
   DConsPatArgMismatch s i n m -> makeError src s
     ("Constructor " ++ bt (show i) ++ " takes " ++ show n
       ++ " arguments, but it was given " ++ show m)
-  ExpectsTooManyArgs s _ t n m -> makeError src s
+  ExpectsTooManyArgs s t n m -> makeError src s
      ("This function expects " ++ prettyArgs n
        ++ ", but its type " ++ bt (unparse t) ++ " takes"
        ++ case m of 
@@ -235,8 +251,11 @@ toMessage src = \case
   ExpectsTooManyArgsK s i k -> makeError src s
     ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
       ++ bt (unparse k) ++ " takes only " ++ show (K.depth k))
-  ExposeError s expected t -> makeError src s
-    ("Expected " ++ expected ++ ", but got type " ++ bt (unparse t))
+  ExposeError s pe msg t -> makeError src s
+    case pe of
+      Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
+      Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
+    ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
   GivenTooManyArgs s e t n m -> makeError src s
     ("Got " ++ prettyQArgs "unexpected" (m - n))
     ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to " 
@@ -247,7 +266,7 @@ toMessage src = \case
     ++ thirdPerson (m - n) ++ ")"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
-  KindMismatch s k1 t k2 -> makeError src s 
+  KindMismatch s k1 t -> makeError src s 
     -- TODO: this would give us weird errors, like "Expected 1 less argument to
     -- type `Int`" with `type T : *T -> *T` and `type T = Int`
     -- if | K.depth k1 < K.depth k2 ->
@@ -256,9 +275,14 @@ toMessage src = \case
     --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
     --    | otherwise ->
       ("Couldn't match expected kind " ++ bt (unparse k1)
+        ++ " with actual kind " ++ bt (unparse $ TK.kindOf t))
+    -- where
+    --   diff = (K.depth k2 - K.depth k1)
+  KindMismatchK s k1 k2 t -> makeError src s 
+      ("Couldn't match expected kind " ++ bt (unparse k1)
         ++ " with actual kind " ++ bt (unparse k2))
-    where
-      diff = (K.depth k2 - K.depth k1)
+    -- where
+    --   diff = (K.depth k2 - K.depth k1)
   LacksKindSig s i -> makeError src s
     ("Type " ++ bt (show i) ++ " lacks a kind signature")
   LacksTypeSig s x -> makeError src s
@@ -342,9 +366,15 @@ toMessage src = \case
   TypeMismatchChoice s t i p -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with choice pattern " ++ bt (getFromSpan src i))
+  TypeMismatchReceiveType s t -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with a `receiveType` expression")
   TypeMismatchSelect s t i _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with selection " ++ bt (show i))
+      ++ " with a `select` expression")
+  TypeMismatchSendType s t -> makeError src s
+    ("Couldn't match expected type " ++ bt (unparse t)
+      ++ " with a `sendType` expression")
   TypeMismatchTuple s n t _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
       ++ (case n of 0 -> "()"
@@ -361,7 +391,7 @@ toMessage src = \case
         "Expected a value argument "
         ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t 
         ++ ", but got type argument")
-  UnexpectedParam s n f p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
+  UnexpectedParam s n p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
     (case (p1, p2) of 
       (TypeLevel k, ExpLevel p ) ->
         "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"

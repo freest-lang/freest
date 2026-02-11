@@ -16,13 +16,12 @@ where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
-import Validation.Base ( TypeDeclMap, ValidationState, typeDecls, unfold )
+import Syntax.Module qualified as M
+import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
-import Validation.Rename ( first, reachable )
-import Validation.Kinding ( runSynth', KindCtx )
-import Validation.Substitution ( freeVars, subs )
+import Validation.Kinding ( runSynth, KindCtx )
 import Utils ( internalError )
+import Parser.Unparser
 
 import Language.Simple.Grammar
 import Language.Simple.Bisimulation ( bisimilar )
@@ -31,36 +30,31 @@ import Data.List qualified as List
 import Data.Maybe
 import Control.Monad.State
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
-equivalent :: ValidationState -> T.Type -> T.Type -> Bool
-equivalent vs t u = t == u || bisimilar ps xs ys
-  where ([xs, ys], ps) = fromTypes vs [t, u]
+equivalent :: M.KindedModule -> T.KindedType -> T.KindedType -> Bool
+equivalent mod t u = t == u || bisimilar ps xs ys
+  where (ps, [xs, ys]) = fromTypes mod [t, u]
 
-fromTypes :: ValidationState -> [T.Type] -> ([Word], Productions)
-fromTypes vs ts =
+fromTypes :: M.KindedModule -> [T.KindedType] -> (Productions, [Word])
+fromTypes mod ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
-  (xss, productions s)
-  where 
-    (xss, s) = runState (mapM (word Set.empty Map.empty) ts) (initial vs)
+  (productions s, xss)
+  where
+    (xss, s) = runState (mapM (word Map.empty) ts) (initial mod)
 
--- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
-bottom :: Nonterminal
-bottom = 0
-
-word :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
-word set ctx t = wasVisited t >>= \case
+word :: KindCtx -> T.KindedType -> TransState Word
+word ctx t = wasVisited t >>= \case
   Just y -> pure [y]
-  Nothing -> word' set ctx t
+  Nothing -> word' ctx t
 
-word' :: Set.Set Variable -> KindCtx -> T.Type -> TransState Word
-word' set ctx = \case
-  -- Skip
+word' :: KindCtx -> T.KindedType -> TransState Word
+word' ctx = \case
+  -- W-Skip
   T.Skip{} -> pure []
-  -- End
+  -- W-End
   t@T.End{} -> getNonterminal $ Map.singleton (show t) [bottom]
   -- Void
   t@T.Void{} -> getNonterminal $ Map.singleton (show t) [bottom]
@@ -69,115 +63,120 @@ word' set ctx = \case
   t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
-  -- #T
+  -- W-Msg
   T.AppMessage _ m p u -> do
-    w <- word set ctx u
-    getNonterminal $ Map.fromList [
-      (show m ++ show p ++ "_1", w ++ [bottom]),
-      (show m ++ show p ++ "_2", [bottom | m /= K.Lin])]
-  -- T ; U
+    w <- word ctx u
+    getNonterminal $ Map.fromList
+      [ (show m ++ show p, w ++ [bottom])
+      , ("1", [bottom | m == K.Un])
+      ]
+  -- W-Seq, T ; U
   T.AppSemi _ t u -> do
-    vs <- gets validationState
-    let set' = set `Set.union` reachable vs u
-    liftM2 (++) (word set' ctx t) (word set ctx u)
-  -- Dual α
-  T.AppDual s T.Var{} -> do
-    let label = show $ T.Dual s
-    getNonterminal $ Map.singleton (label ++ "_2") []
-  -- Dual (α T1 ··· Tm) , m >= 1
-  T.AppDual s t@(T.App _ (T.Var{}) _) -> do
-    w <- word set ctx t
-    let label = show $ T.Dual s
-    getNonterminal $ Map.fromList [
-      (label ++ "_1", w),
-      (label ++ "_2", [])]
+    liftM2 (++) (word ctx t) (word ctx u)
+  -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
+  T.AppDual s (T.AppVar _ a _ ts) -> do
+    words <- mapM (word ctx) ts
+    getNonterminal $ Map.fromList $
+      ("dual " ++ show a, []) :
+      zip (map show [1..]) (map (++ [bottom]) words)
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
-  -- ι T1···Tm with ι being ->, ∀, ∃, variants and choices
-  t@(T.App s u vs) | isFullyApplied ctx t -> do
-    words <- mapM (word set ctx) vs
-    let terminals = map (\n -> show u ++ "_" ++ show n) [1..]
-    getNonterminal $ Map.fromList (zip terminals words)
-  -- α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.AppVar _ a us) | isFullyApplied ctx t -> do
-    ws <- mapM (word set ctx) us
-    let words = [] : ws
-    let terminals = map (\n -> varTerminal a ++ "_" ++ show n) [0..]
-    getNonterminal $ Map.fromList (zip terminals words)
-  -- μ-redex
+  -- W_Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
+  t@(T.App _ u vs) | isFullyApplied ctx t -> do
+    words <- mapM (word ctx) vs
+    getNonterminal $ Map.fromList $
+      (show u, [bottom]) :
+      zip (map show [1..]) words
+  -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
+  t@(T.AppVar _ a _ us) | isFullyApplied ctx t -> do
+    words <- mapM (word ctx) us
+    getNonterminal $ Map.fromList $
+      (show a, []) :
+      zip (map show [1..]) (map (++ [bottom]) words)
+  -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
     y <- nextNonterminal
     addVisited t y
-    vs <- gets validationState
-    let u = normalise vs t
+    modl <- gets modl
+    let u = normalise modl t
     case u of
-      -- t normalises to Skip
+      -- W-μSkip, t normalises to Skip
       T.Skip{} -> pure []
-      -- t normalises to a type other than Skip
+      -- W-μNSkip, t normalises to a type other than Skip
       _ -> do
-        ~(z:δ) <- word set ctx u
+        ~(z:δ) <- word ctx u
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- If we get here, then t is of higher order kind or a type application, hopefully
+  -- If we get here, then t is of higher order kind or reduces, hopefully
   t -> do
-    vs <- gets validationState
-    case runSynth' vs ctx t of
-      Right (K.Arrow _ k _) -> do
-        -- F : k => k'
-        let s = getSpan t
-        let a = first vs set t
-        let t' = case ctx Map.!? a of
-              Just k -> subs a (T.Void s k) t
-              Nothing -> t
-        let ctx' = Map.insert a k ctx
-        w <- word set ctx' (T.smartApp s t' [T.fromVariable a])
-        let label = "λ" ++ show a ++ ":" ++ show k
-        getNonterminal $ Map.singleton label w
-      Right _ -> do
-        -- t reduces
-        td <- getTypeDecls
-        word set ctx (reduce td t)
-      Left errors -> internalError $ "Validation.TypeEquivalence.word': kinding (runSynth') failed for type " ++ show t ++ " with kinding context " ++ show ctx ++ ", at  " ++ show (getSpan t)
+    modl <- gets modl
+    case T.kindOf t of
+      K.Arrow _ k _ -> do
+        -- W-Abs, F : k => k'
+        let s = getSpan t -- The same span for all newly created vars & types?
+        let (internalα, internalβ) = toInt k
+        let αk = Variable s ('α' : show k) internalα
+        let βk = Variable s ('β' : show k) internalβ
+        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk k]
+        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk k]
+        getNonterminal $ Map.fromList
+          [ ('λ' : unparse αk, wtα)
+          , ('λ' : unparse βk, wtβ)
+          ]
+      _ -> do
+        -- W-τ, t reduces
+        word ctx (reduce modl t)
 
-isFullyApplied :: KindCtx -> T.Type -> Bool
+isFullyApplied :: KindCtx -> T.KindedType -> Bool
 isFullyApplied ctx = \case
   T.Int{} -> True
   T.Float{} -> True
   T.AppArrow{} -> True
   T.AppQuant{} -> True
+  T.AppTypeMsg{} -> True
   T.AppLinChoice{} -> True
-  T.SharedChoice{} -> True
+  T.UnChoice{} -> True
   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
-  T.Var _ a -> K.depth (kindOf ctx a) ==  0
-  T.AppVar _ a ts -> K.depth (kindOf ctx a) == length ts
+  T.Var _ k a -> K.depth k ==  0
+  T.AppVar _ a k ts -> K.depth k == length ts
   _ -> False
 
-kindOf :: KindCtx -> Variable -> K.Kind
-kindOf ctx a = case ctx Map.!? a of
-    Just k -> k
-    Nothing -> internalError $ "Validation.TypeEquivalence.kindOf: variable " ++ show a ++ " not in context " ++ show ctx ++ ", at " ++ show (getSpan a)
+-- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
+bottom :: Nonterminal
+bottom = 0
 
-varTerminal :: Variable -> Terminal
-varTerminal α = "α" ++ show (internal α)
+-- The negative integer associated to a kind
+toInt :: K.Kind -> (Int, Int)
+toInt k = (-n * 2, -n * 2 - 1)
+  where
+    n = toInt' k
+    toInt' (K.Proper _ K.Lin K.Top)     = 1
+    toInt' (K.Proper _ K.Un  K.Top)     = 2
+    toInt' (K.Proper _ K.Lin K.Session) = 3
+    toInt' (K.Proper _ K.Un  K.Session) = 4
+    toInt' (K.Proper _ K.Lin K.Channel) = 5
+    toInt' (K.Proper _ K.Un  K.Channel) = 6
+    toInt' (K.Arrow _ k1 k2) = pair (toInt' k1) (toInt' k2)
+    pair x y = (x + y) * (x + y + 1) `div` 2 + y
 
 -- The state of the translation to grammar procedure
 
-type Visited = Map.Map T.Type Nonterminal
+type Visited = Map.Map T.KindedType Nonterminal
 
 data TState = TState
   { productions :: Productions
   , nextIndex :: Int
   , visited :: Visited
-  , validationState :: ValidationState
+  , modl :: M.KindedModule
   }
 
-initial :: ValidationState -> TState
-initial vs = TState
+initial :: M.KindedModule -> TState
+initial modl = TState
   { productions = Map.empty
   , nextIndex = succ bottom -- 0 is for bottom
   , visited = Map.empty
-  , validationState = vs
+  , modl = modl
   }
 
 type TransState = State TState
@@ -188,21 +187,19 @@ nextNonterminal = do
   modify $ \s -> s { nextIndex = n + 1 }
   pure n
 
-wasVisited :: T.Type -> TransState (Maybe Nonterminal)
+wasVisited :: T.KindedType -> TransState (Maybe Nonterminal)
 wasVisited t = do
   v <- gets visited
   pure $ v Map.!? t
 
-addVisited :: T.Type -> Nonterminal -> TransState ()
+addVisited :: T.KindedType -> Nonterminal -> TransState ()
 addVisited t y = do
   v <- gets visited
   -- trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
   modify $ \s -> s { visited = Map.insert t y (visited s) }
 
-getTypeDecls :: TransState TypeDeclMap
-getTypeDecls = do
-  vs <- gets validationState
-  pure (typeDecls vs)
+getTypeDecls :: TransState (M.TypeDecls Kinded)
+getTypeDecls = gets (M.typeDecls . modl)
 
 -- TODO: Add only if needed
 addProduction :: Nonterminal -> Terminal -> Word -> TransState ()
@@ -238,7 +235,7 @@ getNonterminal ts = do
       Map.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
 
 -- | Fat terminal types can be compared for syntactic equality.
-fatTerminal :: T.Type -> Maybe T.Type
+fatTerminal :: T.KindedType -> Maybe T.KindedType
 fatTerminal = \case
   -- Functional Types
   t@T.Int{}   -> Just t
@@ -255,8 +252,8 @@ fatTerminal = \case
   -- Otherwise
   _ -> Nothing
 
-showGrammar :: ([Word], Productions) -> String
-showGrammar (xss, ps) =
+showGrammar :: (Productions, [Word]) -> String
+showGrammar (ps, xss) =
   "Start words: (" ++ List.intercalate ", " (map showWord xss) ++")\n" ++
   "Productions (" ++ show nProds ++ " in total): " ++ showProductions ps
     where

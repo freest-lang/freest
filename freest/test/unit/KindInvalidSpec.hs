@@ -1,11 +1,12 @@
 module KindInvalidSpec (spec) where
 
+import Syntax.Module qualified as M
 import Validation.Kinding ( runSynth, runCheck, runKindModule )
 
 import Data.Either ( isRight )
 import Data.Map qualified as Map
 import Test.Hspec
-import UnitSpecUtils ( mkTypeSpec, errorsAreSuccesses )
+import UnitSpecUtils ( mkTypeSpec, errorsAreSuccesses, runSynthOrCheck )
 
 main :: IO ()
 main = hspec spec
@@ -16,9 +17,6 @@ spec = mkTypeSpec
   "Invalid kinding tests" 
   errorsAreSuccesses
   \_ -> \case
-    (t, Just k, m) -> case runKindModule m >>= \m -> runCheck m t k of
+    (t, mk, m) -> case runKindModule m >> runSynthOrCheck m t mk of
       Left _ -> return ()
-      Right _ -> expectationFailure "An error was expected but none was thrown."
-    (t, Nothing, m) -> case runKindModule m >>= (`runSynth` t) of 
-      Left _ -> return ()
-      Right _ -> expectationFailure "An error was expected but none was thrown."
+      Right t' -> expectationFailure $ "An error was expected but none was thrown.\n" ++ show t'

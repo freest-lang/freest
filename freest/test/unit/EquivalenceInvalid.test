@@ -7,9 +7,9 @@ where
   type Void' : *S
   type Void' = Void'
 
-case forall (a : 1S). (Void @*S) ; Wait ; a == forall (b : 1S). Wait : 1S
+case !!(a : 1S). (Void @*S) ; Wait ; a == !!(b : 1S). Wait : 1S
 
-case forall (a : 1S). Void' ; Wait ; a == forall (b : 1S). Wait : 1S
+case !!(a : 1S). Void' ; Wait ; a == !!(b : 1S). Wait : 1S
 where
   type Void' : *S
   type Void' = Void'

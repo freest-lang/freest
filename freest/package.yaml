@@ -20,6 +20,7 @@ default-extensions:
   - PatternSynonyms
   - ScopedTypeVariables
   - TupleSections
+  - TypeFamilies
   - ViewPatterns
 
 data-dir: data
@@ -58,7 +59,9 @@ library:
     - Syntax.Kind
     - Syntax.Module
     - Syntax.Names
-    - Syntax.Type
+    - Syntax.Type.Internal
+    - Syntax.Type.Unkinded
+    - Syntax.Type.Kinded
     - UI.CLI
     - UI.Error
     - Utils
@@ -66,7 +69,6 @@ library:
     - Validation.Expose
     - Validation.Kinding
     - Validation.Normalisation
-    - Validation.Rename
     - Validation.Substitution
     - Validation.TypeEquivalence
     - Validation.Typing

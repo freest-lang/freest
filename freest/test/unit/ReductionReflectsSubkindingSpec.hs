@@ -1,12 +1,11 @@
 module ReductionReflectsSubkindingSpec (spec) where
 
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
+import Syntax.Type.Kinded qualified as TK
 import Syntax.Kind
-import Validation.Base ( TypeDeclMap )
 import Validation.Normalisation ( isWhnf, reduce )
-import Validation.Kinding ( runSynth )
-import UI.Error ( Error )
+import Validation.Kinding ( runKindModule, runSynth )
+import UI.Error ( Error, showErrors )
 import UnitSpecUtils
 
 import Data.Map.Strict qualified as Map
@@ -25,20 +24,13 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If ∆ ⊢ T : κ and T -> U, then ∆ ⊢ U : κ' and k' <: k"
   errorsAreFailures
-  \_ (t, _, m) -> reductionReflectsKinding m t `shouldBe` True
+  \src (t, mk, m) -> 
+    case do m' <- runKindModule m 
+            t' <- runSynthOrCheck m t mk
+            return (m', t')
+    of Left es  -> expectationFailure (showErrors src es)
+       Right (m', t') -> reductionReflectsKinding `shouldBe` True
+        where
+          reductionReflectsKinding = 
+            isWhnf t' || TK.kindOf (reduce m' t') <: TK.kindOf t'
 
-reductionReflectsKinding :: M.Module -> T.Type -> Bool
-reductionReflectsKinding m t =
-  isWhnf t ||
-  -- (trace
-  --   ("\n" ++ show (runSynth m t) ++ " :>? " ++ show (runSynth m (reduce (buildTypeDecls m) t))) $
-    runSynth m (reduce (buildTypeDecls m) t) <: runSynth m t
-  
-instance Subsort (Either [Error] Kind) where
-  Left _ <: Left _ = True
-  Right k <: Right k' = k <: k'
-  _ <: _ = False
-
--- Warning: code also in from Validation.Base
-buildTypeDecls :: M.Module -> TypeDeclMap
-buildTypeDecls = Map.fromList . M.typeDecls

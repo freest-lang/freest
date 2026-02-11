@@ -1,13 +1,12 @@
 module NormalisationReflectsSubkindingSpec (spec) where
 
 import Syntax.Module qualified as M
-import Syntax.Type qualified as T
+import Syntax.Type.Kinded qualified as TK
 import Syntax.Kind
-import Validation.Base ( ValidationState, buildValidationState )
 import Validation.Normalisation ( normalise )
-import Validation.Kinding ( runSynth' )
+import Validation.Kinding ( runKindModule, runSynth )
 import UnitSpecUtils
-import UI.Error ( Error )
+import UI.Error ( Error, showErrors )
 
 import Data.Map.Strict qualified as Map
 import Test.Hspec
@@ -25,17 +24,13 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If ∆ ⊢ T : κ and T normalises to U, then ∆ ⊢ U : κ' and k' <: k"
   errorsAreFailures
-  \_ (t, _, m) -> normalisationReflectsKinding (buildValidationState m) t `shouldBe` True
-
-normalisationReflectsKinding :: ValidationState -> T.Type -> Bool
-normalisationReflectsKinding vs t =
-  -- trace ("\n" ++ show t ++ " : " ++ show k1 ++ " :>? " ++ show u ++ " : " ++ show k2) $
-  k2 <: k1
-  where k1 = runSynth' vs Map.empty t
-        u  = normalise vs t
-        k2 = runSynth' vs Map.empty u
-  
-instance Subsort (Either [Error] Kind) where
-  Left _ <: Left _ = True
-  Right k <: Right k' = k <: k'
-  _ <: _ = False
+  \src (t, mk, m) -> 
+    case do m' <- runKindModule m 
+            t' <- runSynthOrCheck m t mk
+            return (m', t')
+    of Left es  -> expectationFailure (showErrors src es)
+       Right (m', t') -> if normalisationReflectsKinding 
+          then  return ()
+          else expectationFailure ("T = " ++ show t' ++ "\nU = " ++ show (normalise m' t'))
+        where normalisationReflectsKinding = 
+                TK.kindOf (normalise m' t') <: TK.kindOf t'

@@ -7,6 +7,7 @@ This module contains helper functions to generate variables with standard names.
 -}
 {-# LANGUAGE ViewPatterns #-}
 module Syntax.Names where
+  -- TODO: explicit export list
 
 import Syntax.Base
 

@@ -1,7 +1,8 @@
 module KindSynthValidSpec (spec) where
 
-import Validation.Kinding
-import UI.Error
+import Syntax.Module qualified as M
+import Validation.Kinding (runKindModule, runSynth)
+import UI.Error (showErrors)
 import UnitSpecUtils
 
 import Test.Hspec
@@ -15,6 +16,6 @@ spec = mkTypeSpec
   "Valid kind synthesis tests" 
   errorsAreSuccesses
   \src -> \case
-    (t, _, m) -> case runKindModule m >>= (`runSynth` t) of 
+    (t, _, m) -> case runKindModule m >> runSynth m t of 
       Left es -> expectationFailure (showErrors src es)
       _       -> return ()

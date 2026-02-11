@@ -15,7 +15,7 @@ import Syntax.Base
 import Syntax.Names
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Type qualified as T
+import Syntax.Type.Unkinded qualified as T
 
 import Data.List.NonEmpty qualified as NE
 
@@ -35,20 +35,20 @@ mkVarTk t = mkDefaultVar (getText t) t
 mkIdTk :: Token -> Identifier
 mkIdTk t = mkId (getText t) t
 
-infixApp :: T.Type -> T.Type -> T.Type -> T.Type
+infixApp :: T.ParsedType -> T.ParsedType -> T.ParsedType -> T.ParsedType
 infixApp t1 op t2 = T.App (spanFromTo t1 t2) op [t1, t2]
 
-binOp :: E.Exp -> E.Exp -> E.Exp -> E.Exp
+binOp :: E.ParsedExp -> E.ParsedExp -> E.ParsedExp -> E.ParsedExp
 binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 
-unOp :: E.Exp -> E.Exp -> E.Exp
+unOp :: E.ParsedExp -> E.ParsedExp -> E.ParsedExp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
-addArgExp :: Level E.Exp T.Type -> E.Exp -> E.Exp
+addArgExp :: Level E.ParsedExp T.ParsedType -> E.ParsedExp -> E.ParsedExp
 addArgExp a (E.App s e as) = E.App (spanFromTo s a) e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 
-addArgType :: T.Type -> T.Type -> T.Type
+addArgType :: T.ParsedType -> T.ParsedType -> T.ParsedType
 addArgType t u@T.AppLinChoice{} = T.App (spanFromTo u t) u [t]
 addArgType t u@T.AppSemi{}      = T.App (spanFromTo u t) u [t]
 addArgType t u@T.AppDual{}      = T.App (spanFromTo u t) u [t]

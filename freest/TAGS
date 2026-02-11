@@ -6,13 +6,6 @@ spec spec18,19
 whnfOrReduces whnfOrReduces24,25
 buildDataDecls buildDataDecls28,29
 
-./test/unit/RenamePreservesNormalisationSpec.hs,214
-module RenamePreservesNormalisationSpec RenamePreservesNormalisationSpec0,1
-main main14,15
-spec spec17,18
-renamePreservesNormalisation renamePreservesNormalisation23,24
-buildDataDecls buildDataDecls29,30
-
 ./test/unit/BoundedValidSpec.hs,144
 module BoundedValidSpec BoundedValidSpec0,1
 main main17,18

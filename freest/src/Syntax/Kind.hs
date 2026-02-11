@@ -15,8 +15,6 @@ module Syntax.Kind
   , Subsort(..)
   , Join(..)
   , Meet(..)
-  , isStrictlyLin
-  , isStrictlySession
   , isSession
   , isChannel
   , image
@@ -128,13 +126,7 @@ us s = Proper s Un  Session
 lc s = Proper s Lin Channel
 uc s = Proper s Un  Channel
 
-isStrictlyLin, isStrictlySession, isChannel, isSession :: Kind -> Bool
-
-isStrictlyLin (Proper _ Lin _) = True 
-isStrictlyLin _ = False
-
-isStrictlySession (Proper _ _ Session) = True
-isStrictlySession _ = False
+isChannel, isSession :: Kind -> Bool
 
 isChannel (Proper _ _ Channel) = True
 isChannel _ = False
@@ -147,11 +139,13 @@ image :: Kind -> Kind
 image = \case
   k@Proper{} -> k
   Arrow _ _ k -> image k
+  k -> internalError ("image of kind " ++ show k)
 
 depth :: Kind -> Int
 depth = \case
   k@Proper{} -> 0
   Arrow _ _ k -> 1 + depth k
+  k -> internalError ("depth of kind " ++ show k)
 
 instance Show Multiplicity where
   show = \case 

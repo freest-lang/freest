@@ -2,7 +2,6 @@ module BisimulationValidSpec (spec) where
 
 import Syntax.Module qualified as M
 import UI.Error ( showErrors )
-import Validation.Base ( buildValidationState )
 import Validation.Kinding ( runCheck )
 import Validation.TypeEquivalence ( fromTypes, showGrammar )
 import UnitSpecUtils ( mkEquivalenceSpec )
@@ -19,10 +18,6 @@ spec :: Spec
 spec = mkEquivalenceSpec
   ["test/unit/EquivalenceValid.test"]
   "Valid type equivalence tests" 
-  \src (t, u, k, m) -> case runCheck m t k >> runCheck m u k of
-    Left es -> expectationFailure (showErrors src es)
-    _       ->
-      trace ("\n" ++ showGrammar g)
-      -- trace ("\n" ++ show t ++ " vs. " ++ show u)
-      bisimilar ps xs ys `shouldBe` True
-      where g@([xs, ys], ps) = fromTypes (buildValidationState m) [t, u]
+  \src (t, u, k, m) -> 
+    let g@(ps, [xs, ys]) = fromTypes m [t, u] 
+    in if bisimilar ps xs ys then return () else expectationFailure (show t ++ "\n/=\n" ++ show u ++ "\n\n" ++ showGrammar g)

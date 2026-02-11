@@ -17,7 +17,8 @@ module Validation.Substitution
 where
 
 import Syntax.Base
-import Syntax.Type qualified as T
+import Syntax.Type.Internal qualified as T
+import Syntax.Type.Kinded qualified as TK
 import Syntax.Kind qualified as K
 
 import Data.Bifunctor ( first, second )
@@ -27,56 +28,46 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 
 -- | The set of free variables ocurring in a type.
-freeVars :: T.Type -> Set.Set Variable
+freeVars :: T.Type x -> Set.Set Variable
 freeVars = \case
-    T.Abs _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
-    T.Var _ a     -> Set.singleton a
-    T.App _ t ts  -> Set.unions (freeVars t : map freeVars ts)
-    _             -> Set.empty
+    T.Abs _ _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
+    T.Var _ _ a     -> Set.singleton a
+    T.App _ _ t ts  -> Set.unions (freeVars t : map freeVars ts)
+    _               -> Set.empty
 
 -- | The set of all variables ocurring in a type.
-allVars :: T.Type -> Set.Set Variable
+allVars :: T.Type x -> Set.Set Variable
 allVars = \case 
-    T.Abs _ aks t -> allVars t
-    T.Var _ a     -> Set.singleton a
-    T.App _ t ts  -> Set.unions (allVars t : map allVars ts)
-    _             -> Set.empty
+    T.Abs _ _ aks t -> allVars t
+    T.Var _ _ a     -> Set.singleton a
+    T.App _ _ t ts  -> Set.unions (allVars t : map allVars ts)
+    _               -> Set.empty
 
 -- | Type substitution. Substitutes ocurrences of a variable in a type for 
 -- another type (usually written @[a -> u] t@).
-subs :: Variable -> T.Type -> T.Type -> T.Type
+subs :: Variable -> TK.KindedType -> TK.KindedType -> TK.KindedType
 subs a u = \case 
   -- Variables
-  t@(T.Var _ b)
+  t@(TK.Var _ _ b)
     | b == a    -> u
     | otherwise -> t
   -- Abstractions (can we do this more elegantly?)
-  (T.Abs s [] t') -> T.Abs s [] (subs a u t')
-  t@(T.Abs s ((b,k):bks) t')
+  (TK.Abs s [] t') -> TK.Abs s [] (subs a u t')
+  t@(TK.Abs s ((b,k):bks) t')
       | b == a -> t
       | b `Set.member` fvu ->
-        let b' = freshVar b (Set.insert a fvu `Set.union` allVars t')
-            T.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') b') (T.Abs s bks t'))
-        in T.Abs s ((b',k):bks') t''
+        let b' = mkFreshVar (getSpan b) (Set.insert a fvu `Set.union` allVars t')
+            TK.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') k b') (TK.Abs s bks t'))
+        in TK.Abs s ((b',k):bks') t''
       | otherwise ->
-        let T.Abs _ bks' t'' = subs a u (T.Abs s bks t')
-        in T.Abs s ((b,k):bks') t''
+        let TK.Abs _ bks' t'' = subs a u (TK.Abs s bks t')
+        in TK.Abs s ((b,k):bks') t''
     where  fvu = freeVars u
   -- Applications
-  T.App s f ts -> T.smartApp s (subs a u f) (fmap (subs a u) ts)
+  TK.App s f ts -> TK.smartApp s (subs a u f) (fmap (subs a u) ts)
   t -> t
 
 -- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
 -- between @as@ and @us@.
-subsAll :: [Variable] -> [T.Type] -> T.Type -> T.Type
+subsAll :: [Variable] -> [TK.KindedType] -> TK.KindedType -> TK.KindedType
 subsAll as us t = foldr (uncurry subs) t (zip as us)
-
--- | Replace a given name by a type in a type. Usually written @[a -> u] t@. A
--- substitution, only that @a@ is an identifier rather than a variable.
--- unfold :: Identifier -> T.Type -> T.Type -> T.Type
--- unfold name t = \case
---   T.Abs s aks u -> T.Abs s aks (unfold name t u)
---   T.App s u vs -> T.App s (unfold name t u) (map (unfold name t) vs)
---   T.TName _ name' | name == name' -> t
---   u -> u
-
