@@ -33,18 +33,18 @@ import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
 
-import Syntax.Expression ( LetDecl )
+import Syntax.Expression ( KindedLetDecl )
 
 type GlobalEnv = Env
 type LocalEnv = Env
 
 -- | An alternative of a case expression
-type Alternative = (E.Pat, E.RHS)
+type Alternative = (E.Pat, E.KindedRHS)
 
 -- AUXILIARY FUNCTIONS
 
 -- | Choose the correct guard via evaluation
-chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.Exp, E.Exp)] -> IO E.Exp
+chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.KindedExp, E.KindedExp)] -> IO E.KindedExp
 chooseGuard _ [] = error "Non-exaustive guards!"
 chooseGuard env ((guard, exp):guards) = do
   val <- eval env guard
@@ -60,7 +60,7 @@ chooseCase ((pat, rhs) : alternatives) val =
     Right bindings -> Just ((pat, rhs), bindings)
 
 -- | Extract an expression and let declarations from case alternatives
-extractFromRHS :: (GlobalEnv, LocalEnv) -> E.RHS -> IO (E.Exp, Maybe [LetDecl])
+extractFromRHS :: (GlobalEnv, LocalEnv) -> E.KindedRHS -> IO (E.KindedExp, Maybe [KindedLetDecl])
 extractFromRHS (global, local) rhs = do
   -- extract expression and where declarations from either guarded or unguarded rhs
   case rhs of
@@ -70,7 +70,7 @@ extractFromRHS (global, local) rhs = do
       return (exp, whereDecls)
 
 -- | Collect bindings from variables to values from declarations
-collectLetDecls :: (GlobalEnv, LocalEnv) -> [LetDecl] -> IO [Binding]
+collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO [Binding]
 collectLetDecls _ [] = return []
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
   -- extract expression and where declarations from either guarded or unguarded rhs
@@ -93,17 +93,21 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   -- remove type arguments from clauses
   let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
   -- create binding for function
-  let binding = (B.external var, compileFunctionToClosure clauses')
+  -- remove
+  binding' <- compileFunctionToClosure clauses'
+  let binding = (var, binding')
+  -- uncomment
+  -- let binding = (B.external var, compileFunctionToClosure clauses')
   remainingBindings <- collectLetDecls (global, binding : local) letdecls
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
-getMainFunction :: M.Module -> Maybe LetDecl
+getMainFunction :: M.KindedModule -> Maybe KindedLetDecl
 getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
 
 -- | Collect declarations from the module, and bind these to variables in an environment
-buildEnv :: M.Module -> IO Env
+buildEnv :: M.KindedModule -> IO Env
 buildEnv m = collectLetDecls (builtins,[]) letDecls
   -- obtain all let declarations from the module except the main function
   where letDecls = filter (\case
@@ -125,11 +129,11 @@ envLookup (global, local) var =
                        " This should not happen. This is a bug in the compiler")
   where
     envLookup' :: Env -> B.Variable -> Maybe Binding
-    envLookup' ctx var = find (\(variable, value) -> B.external var == variable) ctx
+    envLookup' ctx var = find (\(variable, value) -> var == variable) ctx
 
 -- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
-handleApplication (global, local) (VCons cons vals) args =
+handleApplication (global, local) (VCons cons vals) args = do
   return $ VCons cons $ vals ++ args
 -- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
@@ -183,7 +187,7 @@ handleApplication _ (VSelect label) args =
 -- MAIN FUNCTIONS
 
 -- | Evaluate expressions, encoded as Syntax.Expression.Exp
-eval :: (GlobalEnv, LocalEnv) -> E.Exp -> IO Value
+eval :: (GlobalEnv, LocalEnv) -> E.KindedExp -> IO Value
 eval _ (E.Int _ i) = return $ VInt i
 eval _ (E.Float _ f) = return $ VFloat f
 eval _ (E.Char _ c) = return $ VChar c
@@ -242,7 +246,7 @@ eval _ (E.Channel _ _) = do
 eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
 
 -- | Interprets a module and returns the result
-interpret :: M.Module -> IO Value
+interpret :: M.KindedModule -> IO Value
 interpret m = do
   -- collect module declarations, forming the initial environment
   initial_env <- buildEnv m

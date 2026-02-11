@@ -24,6 +24,7 @@ import qualified Data.Set as Set
 import Interpreter.Values (Value(VInt, VFloat, VChar, VCons, VClosure), Binding)
 import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
+import Syntax.Base (nullSpan)
 
 
 -- HANDLING PATTERN MATCHING
@@ -43,7 +44,7 @@ resolvePatternMatching (E.CharPat s c) val =
     VChar c' -> if c == c' then Right [] else Left (E.CharPat s c, val)
     otherVal -> Left (E.CharPat s c, otherVal)
 resolvePatternMatching (E.WildPat _ _) _ = Right []
-resolvePatternMatching (E.VarPat _ var) val = Right [(B.external var, val)]
+resolvePatternMatching (E.VarPat _ var) val = Right [(var, val)]
 resolvePatternMatching (E.PackPat _ vars pat) val = undefined
 resolvePatternMatching (E.DConsPat s iden pats) val = do
   let (B.Identifier s' patIden) = iden
@@ -72,30 +73,31 @@ resolvePatternMatching (E.AsPat s var pat) val = do
   let binding = resolvePatternMatching pat val
   case binding of
     Left _ -> Left (E.AsPat s var pat, val)
-    Right bindings -> Right $ (B.external var, val) : bindings
+    Right bindings -> Right $ (var, val) : bindings
 
 -- COMPILATION OF FUNCTIONS WITH PATTERN MATCHING
 
 -- | A clause in a function definition
-type Clause = ([E.Pat], E.RHS)
+type Clause = ([E.Pat], E.KindedRHS)
 
 -- | Compile function definitions with pattern matching into a closure with case-expressions
-compileFunctionToClosure :: [Clause] -> Value
+compileFunctionToClosure :: [Clause] -> IO Value
 compileFunctionToClosure clauses = do
   let arity = length $ fst $ head clauses
       -- TODO collect free variables from clauses
       freeVars = []
-      -- generate list of new variables, to be made "fresh"
-      newVars = [B.Variable B.nullSpan ("carg" ++ show i) 0 | i <- [1..arity]]
-      -- TODO generate fresh variables (taking into account free variables inside clauses as well as generated new ones)
-      freshVars = [B.freshVar newVar (Set.fromList freshVars) | newVar <- newVars]
+      -- generate list of fresh variables to be used as parameters to the closure (take into account previously generated vars with foldr and accumulator)
+      params = snd $ foldl
+        (\(freeVars', acc) _ -> (freeVars' ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')], acc ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')]))
+        (freeVars, [])
+        [1..arity]
       -- generate case expressions to serve as body of the closure
-      body = flatNaiveClauseCompilation freshVars clauses
+      body = flatNaiveClauseCompilation params clauses
   -- attach closures
-  VClosure [E.VarPat B.nullSpan freshVar | freshVar <- freshVars] body []
+  return $ VClosure [E.VarPat B.nullSpan param | param <- params] body []
 
 -- simple, naive compilation of clauses into cases by adding a single case expression that checks pattern matching for all parameters
-flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.Exp
+flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.KindedExp
 flatNaiveClauseCompilation parameters clauses = 
   -- simple case expression
   E.Case B.nullSpan target alternatives
