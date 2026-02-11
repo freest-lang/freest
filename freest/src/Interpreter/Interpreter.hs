@@ -93,11 +93,7 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   -- remove type arguments from clauses
   let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
   -- create binding for function
-  -- remove
-  binding' <- compileFunctionToClosure clauses'
-  let binding = (var, binding')
-  -- uncomment
-  -- let binding = (B.external var, compileFunctionToClosure clauses')
+  let binding = (var, compileFunctionToClosure clauses')
   remainingBindings <- collectLetDecls (global, binding : local) letdecls
   return $ binding : remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"

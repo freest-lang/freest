@@ -81,7 +81,7 @@ resolvePatternMatching (E.AsPat s var pat) val = do
 type Clause = ([E.Pat], E.KindedRHS)
 
 -- | Compile function definitions with pattern matching into a closure with case-expressions
-compileFunctionToClosure :: [Clause] -> IO Value
+compileFunctionToClosure :: [Clause] -> Value
 compileFunctionToClosure clauses = do
   let arity = length $ fst $ head clauses
       -- TODO collect free variables from clauses
@@ -94,7 +94,7 @@ compileFunctionToClosure clauses = do
       -- generate case expressions to serve as body of the closure
       body = flatNaiveClauseCompilation params clauses
   -- attach closures
-  return $ VClosure [E.VarPat B.nullSpan param | param <- params] body []
+  VClosure [E.VarPat B.nullSpan param | param <- params] body []
 
 -- simple, naive compilation of clauses into cases by adding a single case expression that checks pattern matching for all parameters
 flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.KindedExp
