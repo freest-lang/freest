@@ -12,10 +12,10 @@ module Interpreter.Interpreter
 
 {-
 TODO:
-- Improve treatment of functions: generate fresh variables for the closures
+- Improve treatment of functions: generate fresh variables for the closures taking into account free variables in subterms
 - Change the environment from an association list to a map
 - How to handle Prelude definitions that come as undefined? Do I need to filter them, or attach builtins to each declaration from the Prelude?
-- Missing evaluation for E.Pack, E.Case (what about labels?)
+- Missing evaluation for E.Pack, E.Case (what about labels?), SendType, ReceiveType
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -184,13 +184,18 @@ handleApplication _ (VSelect label) args =
 
 -- | Evaluate expressions, encoded as Syntax.Expression.Exp
 eval :: (GlobalEnv, LocalEnv) -> E.KindedExp -> IO Value
-eval _ (E.Int _ i) = return $ VInt i
-eval _ (E.Float _ f) = return $ VFloat f
-eval _ (E.Char _ c) = return $ VChar c
-eval _ (E.DCons _ (B.Identifier _ str)) = return $ VCons str []
-eval (global, local) (E.Var _ var) = case envLookup (global, local) var of
-  VIO io -> io
-  val -> return val
+eval _ (E.Int _ i) =
+  return $ VInt i
+eval _ (E.Float _ f) =
+  return $ VFloat f
+eval _ (E.Char _ c) =
+  return $ VChar c
+eval _ (E.DCons _ (B.Identifier _ str)) =
+  return $ VCons str []
+eval (global, local) (E.Var _ var) =
+  case envLookup (global, local) var of
+    VIO io -> io
+    val -> return val
 eval (global, local) (E.App _ exp args) = do
   -- evaluate left expression
   func <- eval (global, local) exp
@@ -204,14 +209,17 @@ eval (_, local) (E.Abs _ params _ body) =
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
   -- convert to a closure, capturing the local environment, so we don't lose bindings
   in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) body local
-eval (global, local) (E.Pack span types exp) = error "Evaluation of E.Pack not implemented"
-eval (global, local) (E.Asc span exp typ) = eval (global, local) exp
+eval (global, local) (E.Pack span types exp) = 
+  error "Evaluation of E.Pack not implemented"
+eval (global, local) (E.Asc span exp typ) =
+  eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
   -- remove type signature declarations
   let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
   letBindings <- collectLetDecls (global, local) expDecls
   eval (global, letBindings ++ local) exp
-eval (global, local) (E.Semi span exp1 exp2) = eval (global, local) exp1 >> eval (global, local) exp2
+eval (global, local) (E.Semi span exp1 exp2) =
+  eval (global, local) exp1 >> eval (global, local) exp2
 eval (global, local) (E.Case _ exp alternatives) = do
   val <- eval (global, local) exp
   case chooseCase alternatives val of
@@ -239,7 +247,12 @@ eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
-eval ctx (E.Select _ (B.Identifier _ iden)) = return $ VSelect iden
+eval ctx (E.Select _ (B.Identifier _ iden)) =
+  return $ VSelect iden
+eval (global, local) (E.SendType span typ) = 
+  error "Evaluation of E.SendType not implemented"
+eval (global, local) (E.ReceiveType span) = 
+  error "Evaluation of E.ReceiveType not implemented"
 
 -- | Interprets a module and returns the result
 interpret :: M.KindedModule -> IO Value
