@@ -1387,3 +1387,25 @@ case (\(n : (*T -> *T) -> *T -> *T)     (s : *T -> *T)     (z : *T) -> s (n s z)
 case Dual (!Int ; Close) : 1S
 
 case +{A: Skip, C: Close} ; Close : 1C
+
+case
+  IFRepeat : 1S -> 1C
+where
+  type IRepeat : 1S -> 1S
+  type IRepeat a = a ; IRepeat a
+  type IFRepeat : 1S -> 1C
+  type IFRepeat a = IRepeat (&{More: a ; IFRepeat a, Done: Wait})
+
+case -- As above, but with 2 parameters
+  IFRepeat : 1S -> 1S -> 1C
+where
+  type IRepeat : 1S -> 1S
+  type IRepeat a = a ; IRepeat a
+  type IFRepeat : 1S -> 1S -> 1C
+  type IFRepeat a b = IRepeat (&{More: a ; IFRepeat a b, Done: b ; Wait})
+
+case
+  IFRepeatExpanded : 1S -> 1S -> 1C
+where
+  type IFRepeatExpanded : 1S -> 1S -> 1C
+  type IFRepeatExpanded a b = &{More: a ; IFRepeatExpanded a b, Done: b ; Wait}
