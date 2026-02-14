@@ -1389,6 +1389,12 @@ case Dual (!Int ; Close) : 1S
 case +{A: Skip, C: Close} ; Close : 1C
 
 case
+  Id Wait : 1C
+where
+  type Id : 1T -> 1T
+  type Id a = a
+
+case
   IFRepeat : 1S -> 1C
 where
   type IRepeat : 1S -> 1S
