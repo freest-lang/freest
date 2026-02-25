@@ -22,7 +22,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
-import Validation.Base ( unfold, getKind )
+import Validation.Base ( unfold )
 import Validation.Substitution ( freeVars, subs, subsAll )
 import Utils ( internalError )
 
@@ -136,16 +136,13 @@ normalise mod = norm Set.empty
       -- N-Whnf
       | isWhnf t = t
       -- N-Visited
-      | reappears = T.Void (getSpan t) (K.image k)
+      | reappears = T.Void (getSpan t) (T.kindOf t) -- (K.image k)
       -- N-NotVisited + N-NoMuRedex
       | otherwise = norm visited' (reduce mod t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u
         visited'  = maybe visited (`Set.insert` visited) u
-        k = case u of
-          Just (T.AppTName _ name _) -> getKind mod name
-          _ -> internalError $ "Validation.Normalisation.normalise: " ++ show u
 
 -- | This is not exactly redexµ(T) = µκF. We must look at applied TNames, for
 -- these are the types that reappear.

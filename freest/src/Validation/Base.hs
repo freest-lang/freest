@@ -71,9 +71,9 @@ unfold mod i =
     Just u  -> u
     Nothing -> internalError $ "Validation.Base.unfold: name " ++ show i ++ " not in type declaration map"
 
-getKind :: M.KindedModule -> Identifier -> K.Kind
-getKind mod i =
-  case M.kindSigs mod Map.!? i of
-    Just k  -> k
-    Nothing -> internalError $ "RenameValidation.Base..getKind: name " ++ show i ++ " not in kind signature map"
+-- getKind :: M.KindedModule -> Identifier -> K.Kind
+-- getKind mod i =
+--   case M.kindSigs mod Map.!? i of
+--     Just k  -> k
+--     Nothing -> internalError $ "RenameValidation.Base..getKind: name " ++ show i ++ " not in kind signature map"
   
