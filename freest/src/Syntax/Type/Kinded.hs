@@ -159,7 +159,7 @@ pattern AppArrow :: Span -> K.Multiplicity -> KindedType -> KindedType -> Kinded
 pattern AppArrow s m t u <- T.AppArrow s _ _ m t u
   where AppArrow s m t u  = T.AppArrow s (K.Proper s m K.Top) arrow m t u
           -- kind of t -> u -> 1T?
-          where arrow = K.Arrow s (K.lt s) (K.Arrow s (K.lt s) (K.lt s)) 
+          where arrow = K.Arrow s (K.lt s) (K.Arrow s (K.lt s) (K.Proper s m K.Top)) 
 
 pattern AppMessage :: Span -> K.Multiplicity -> T.Polarity -> KindedType -> KindedType
 pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
