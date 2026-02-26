@@ -57,14 +57,14 @@ toInt n = n  @Int (\(x : Int) -> x + 1) 0
 
 zero', one, two, three, four : Nat
 
--- Abbreviated version
-zero' s z = z
+-- The first numbers
+zero' @a s z = z
 
-one s z = s z
+one @a s z = s z
 
-two s z = s (s z)
+two @a s z = s (s z)
 
-three s z = s (s (s z))
+three @a s z = s (s (s z))
 
 four = succ' three
 

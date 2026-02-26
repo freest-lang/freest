@@ -136,13 +136,14 @@ normalise mod = norm Set.empty
       -- N-Whnf
       | isWhnf t = t
       -- N-Visited
-      | reappears = T.Void (getSpan t) (T.kindOf t) -- (K.image k)
+      | reappears = T.Void span (K.uc span) -- (T.kindOf t)
       -- N-NotVisited + N-NoMuRedex
       | otherwise = norm visited' (reduce mod t)
       where
         u = tNameRedex t -- u is Maybe (µ∗U)
         reappears = maybe False   (`Set.member` visited) u
         visited'  = maybe visited (`Set.insert` visited) u
+        span = getSpan t
 
 -- | This is not exactly redexµ(T) = µκF. We must look at applied TNames, for
 -- these are the types that reappear.
