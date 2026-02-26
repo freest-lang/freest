@@ -28,10 +28,10 @@ flipFlopADT = ( @c
                 )
               )
             : FlipFlop
-  where (@c, (new, get, inc)) = counterADT
+  where (@(c : *T), (new, get, inc)) = counterADT
 
 main : Bool
 main = read (toggle (reset (toggle new)))
-  where (@f, (new, read, toggle, reset)) = flipFlopADT
+  where (@(f : *T), (new, read, toggle, reset)) = flipFlopADT
   
   

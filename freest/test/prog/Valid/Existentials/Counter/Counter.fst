@@ -17,6 +17,6 @@ counterADT = (@Int, ( 1
 
 main : Int
 main =
-  let (@c, (new, get, inc)) = counterADT
+  let (@(c : *T), (new, get, inc)) = counterADT
   in get (inc new)
 

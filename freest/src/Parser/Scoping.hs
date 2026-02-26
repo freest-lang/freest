@@ -421,6 +421,7 @@ scopeExp ctx = \case
   E.Select s i -> pure $ E.Select s i
   E.SendType s t ->
     E.SendType s <$> scopeType ctx t
+  E.ReceiveType s -> pure $ E.ReceiveType s
 
 -- | Scope a pattern. This function takes two contexts: the first being the main
 -- lexical context, and the second being an auxilliary context for 'let' definitions,

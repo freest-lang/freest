@@ -17,7 +17,7 @@ client c =              -- (Node Empty True (Node Empty 25 Empty))
 
 server : forall (a : 1S). Dual HTree; a -> a
 server @a (&Node c) = 
-    let (@b, c) = c |> server @(??(b : *T). ?b; Dual HTree; a) |> receiveType
+    let (@(b : *T), c) = c |> server @(??(b : *T). ?b; Dual HTree; a) |> receiveType
         (x , c) = receive c
     in server @a c
 server @a (&Empty c) = c

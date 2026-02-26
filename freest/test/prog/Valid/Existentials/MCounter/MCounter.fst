@@ -39,5 +39,5 @@ mCounterADT = (@IntRef, ( \(_ : ())     -> intRef 0                -- new
 main : Int
 main = inc x; get x
   where
-    (@c, (new, get, inc)) = mCounterADT
+    (@(c : *T), (new, get, inc)) = mCounterADT
     x = new ()
