@@ -5,7 +5,19 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements FreeST's bidirectional type checking algorithm.
 -}
-module Validation.Typing where
+module Validation.Typing
+  ( TypeCtx
+  , emptyTypeCtx
+  , synth
+  , synthRHS
+  , check
+  , checkDecls
+  , checkPat
+  , checkRHS
+  , typeModule
+  , runValidate
+  )
+where
 
 import Syntax.Base
 import Syntax.Expression qualified as E
