@@ -137,7 +137,7 @@ isProperType t = case T.kindOf t of
 --   T.Float{} -> True
 --   T.AppArrow{} -> True
 --   T.AppQuant{} -> True
---   T.AppTypeMsg{} -> True
+--   T.AppQuantS{} -> True
 --   T.AppLinChoice{} -> True
 --   T.UnChoice{} -> True
 --   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
@@ -246,7 +246,7 @@ fatTerminal = \case
   t@T.Char{}  -> Just t
   t@T.Arrow{} -> Just t
   -- Polymorphism
-  T.AppQuant s p aks t -> Just (T.AppQuant s p aks) <*> fatTerminal t
+  T.AppQuant s p pk aks t -> Just (T.AppQuant s p pk aks) <*> fatTerminal t
   -- Higher-order
   t@T.Var{}      -> Just t
   T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts

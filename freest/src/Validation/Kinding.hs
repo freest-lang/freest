@@ -72,9 +72,6 @@ synth modl ctx = \case
   T.Arrow s m -> pure $ TK.Arrow s m
   -- Session types
   T.Message s m p -> pure $ TK.Message s m p
-  T.AppTypeMsg s p a k t -> do
-    (_, pk, u) <- checkSession modl (Map.insert a k ctx) t
-    return $ TK.AppTypeMsg s p a k u
   T.UnChoice s p ls -> pure $ TK.UnChoice s p ls
   T.AppLinChoice s p lts -> do
     lts' <- forM lts (\(i, t) -> do 
@@ -92,9 +89,9 @@ synth modl ctx = \case
     t' <- check modl ctx t (ls s)
     return (TK.AppDual s t')
   -- Polymorphism
-  T.AppQuant s p aks t -> do
-    (_, _, kt) <- checkProper modl (Map.fromList aks `Map.union` ctx) t 
-    return $ TK.AppQuant s p aks kt
+  T.AppQuant s p pk aks t -> do
+    (_, _, kt) <- checkPrekind modl (Map.fromList aks `Map.union` ctx) t pk
+    return $ TK.AppQuant s p pk aks kt
   -- Equations (including built-ins)
   T.TName s i -> flip (TK.TName s) i <$> lookupKind modl i
   T.Tuple s ts -> do

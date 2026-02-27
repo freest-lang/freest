@@ -4,12 +4,11 @@ module Syntax.Type.Kinded
   , pattern Float
   , pattern Char
   , pattern Arrow
-  , pattern Quant
+  , pattern QuantS
   , pattern Void
   , pattern Skip
   , pattern End
   , pattern Message
-  , pattern TypeMsg
   , pattern Choice
   , pattern Semi
   , pattern Dual
@@ -23,7 +22,7 @@ module Syntax.Type.Kinded
   , pattern AppExists
   , pattern AppArrow
   , pattern AppMessage
-  , pattern AppTypeMsg
+  , pattern AppQuantS
   , pattern AppLinChoice
   , pattern UnMessage
   , pattern UnChoice
@@ -42,12 +41,14 @@ module Syntax.Type.Kinded
   , T.isVoid
   , T.isSemi
   , T.isAppSemi
-  , T.isAppTypeMsg
   , T.isAppArrow
   , T.isAppLinChoice
   , T.isAppQuant
+  , T.isAppQuantS
   , T.isAppDName
+  , T.isAppTypeMsg
   , T.isUnChoice
+  , T.isUnMessage
   , T.isDual
   , T.isTName
   , T.isDName
@@ -83,10 +84,6 @@ pattern Arrow s m <- T.Arrow s _ m
   where Arrow s m = T.Arrow s k m
           where k = K.Arrow s (K.lt s) (K.Arrow s (K.lt s) (K.Proper s m K.Top))
 
-pattern Quant :: Span -> K.Kind -> T.Polarity -> KindedType
-pattern Quant s k p <- T.Quant s k p
-  where Quant s k p = T.Quant s k p
-
 pattern Void :: Span -> K.Kind -> KindedType
 pattern Void s k <- T.Void s _ k
   where Void s k = T.Void s k k
@@ -104,10 +101,8 @@ pattern Message s m p <- T.Message s _ m p
   where Message s m p = T.Message s k m p
           where k = K.Arrow s (K.lt s) (if m == K.Lin then K.ls s else K.uc s)
 
-pattern TypeMsg :: Span -> T.Polarity -> KindedType
-pattern TypeMsg s p <- T.TypeMsg s _ p
-  -- where TypeMsg s p = T.TypeMsg s k p
-  --         where k = K.Arrow s (K.Arrow s (K.lt s) (K.lt s)) (K.lt s)
+pattern QuantS :: Span -> T.Polarity -> KindedType
+pattern QuantS s p <- T.Quant s _ p K.Session
 
 pattern Choice :: Span -> K.Multiplicity -> T.Polarity -> [Identifier] -> KindedType
 pattern Choice s m p is <- T.Choice s _ m p is
@@ -144,20 +139,20 @@ pattern App s t ts <- T.App s _ t ts
   where App s t ts = T.App s k t ts
           where k = foldr (\_ (K.Arrow _ _ k) -> k) (kindOf t) ts
                                          
-pattern AppQuant :: Span -> T.Polarity -> [(Variable, K.Kind)] -> KindedType -> KindedType
-pattern AppQuant s p aks t <- T.AppQuant s _ _ _ p aks t
-  where AppQuant s p aks t = T.AppQuant s (K.Proper s m K.Top) quant abs p aks t
-          where k@(K.Proper _ m _) = kindOf t
-                quant = K.Arrow s abs (K.Proper s m K.Top)
+pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> [(Variable, K.Kind)] -> KindedType -> KindedType
+pattern AppQuant s p pk aks t <- T.AppQuant s _ _ _ p pk aks t
+  where AppQuant s p pk aks t  = T.AppQuant s (K.Proper s m pk') quant abs p pk aks t
+          where k@(K.Proper _ m pk') = kindOf t
+                quant = K.Arrow s abs (K.Proper s m pk')
                 abs = foldr (K.Arrow s . snd ) k aks
 
 pattern AppForall :: Span -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppForall s aks t <- T.AppForall s _ _ _ aks t
-  where AppForall s aks t =  AppQuant s T.In aks t
+  where AppForall s aks t  = AppQuant s T.In K.Top aks t
 
 pattern AppExists :: Span -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppExists s aks t <- T.AppExists s _ _ _ aks t
-  where AppExists s aks t  = AppQuant s T.Out aks t
+  where AppExists s aks t  = AppQuant s T.Out K.Top aks t
 
 pattern AppArrow :: Span -> K.Multiplicity -> KindedType -> KindedType -> KindedType
 pattern AppArrow s m t u <- T.AppArrow s _ _ m t u
@@ -170,9 +165,9 @@ pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
   where AppMessage s m p t  = T.AppMessage s msg (K.Arrow s (K.lt s) msg) m p t
           where msg = K.Proper s m K.Session
      
-pattern AppTypeMsg :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
-pattern AppTypeMsg s p a k t <- T.AppTypeMsg s _ _ _ p a k t
-  where AppTypeMsg s p a k t  = T.AppTypeMsg s (K.Proper s' K.Lin pk) quant abs p a k t
+pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
+pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
+  where AppQuantS s p a k t  = T.AppQuantS s (K.Proper s' K.Lin pk) quant abs p a k t
           where k'@(K.Proper s' _ pk) = kindOf t
                 quant = K.Arrow s abs k'
                 abs = K.Arrow s k k'
@@ -238,13 +233,12 @@ kindOf = \case
   T.Float _ k -> k
   T.Char _ k -> k
   T.Arrow _ k _ -> k
-  T.Quant _ k _ -> k
+  T.Quant _ k _ _ -> k
   T.Skip _ k -> k
   T.Semi _ k -> k
   T.Dual _ k -> k
   T.End _ k _ -> k
   T.Message _ k _ _ -> k
-  T.TypeMsg _ k _ -> k
   T.Choice _ k _ _ _ -> k
   T.Var _ k _ -> k
   T.Abs _ k _ _ -> k
@@ -272,7 +266,7 @@ smartApp s t            us = App s t us
 --     T.End _ k T.In          -> "(Wait : " ++ show k ++ ")"
 --     T.End _ k T.Out         -> "(Close : " ++ show k ++ ")"
 --     T.Message _ k m p  -> "((" ++ showMsgMult m ++ show p ++ ") : " ++ show k ++ ")"
---     T.TypeMsg _ k p       -> "((" ++ show p ++ show p ++ ") : " ++ show k ++ ")"
+--     T.QuantS _ k p       -> "((" ++ show p ++ show p ++ ") : " ++ show k ++ ")"
 --     T.Choice _ k m p ls   ->
 --       "(" ++ (if m == K.Un then "*" else "")
 --       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "} : " ++ show k ++ ")"

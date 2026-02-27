@@ -412,7 +412,7 @@ check modl kctx tctx e t = case e of
     case normalise modl t of
       T.AppArrow s m t1 t2 -> do
         case normalise modl t2 of
-          T.AppTypeMsg s T.Out a k t2' -> do
+          T.AppQuantS s T.Out a k t2' -> do
             checkEquivTypes modl (Left e) 
               (T.AppArrow s m t1 (subs a u t2'))
               (T.AppArrow s m t1 t2)
@@ -423,7 +423,7 @@ check modl kctx tctx e t = case e of
     case normalise modl t of
       T.AppArrow s' m t1 t2 -> do
         case normalise modl t2 of
-          T.AppTypeMsg s'' T.In a k t2' -> do
+          T.AppQuantS s'' T.In a k t2' -> do
             checkEquivTypes modl (Left e) 
               (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t2'))
               (T.AppArrow s' m t1 t2)

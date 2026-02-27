@@ -319,8 +319,8 @@ TypePrimary :: { T.ParsedType }
 Type :: { T.ParsedType }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
-  | Polarity2 KindedVar '.' Type { let (a, k) = $2 in T.AppTypeMsg (spanFromTo (fst $1) $4) (snd $1) a k $4 }
+  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1) K.Top $2 $4 }
+  | Polarity2 KindedVar '.' Type { let (a, k) = $2 in T.AppQuantS (spanFromTo (fst $1) $4) (snd $1) a k $4 }
   | '\\' KindedVars '->' Type   { T.Abs (spanFromTo $1 $4) $2 $4 }
   | TypeApp                     { $1 }
 
