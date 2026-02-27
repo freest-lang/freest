@@ -516,12 +516,11 @@ scopeType ctx = \case
   T.Float s -> pure $ T.Float s
   T.Char s -> pure $ T.Char s
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity m
-  T.Quant s p -> pure $ T.Quant s p
+  T.Quant s p pk -> pure $ T.Quant s p pk
   T.Void s k -> T.Void s <$> scopeKind k
   T.Skip s -> pure $ T.Skip s
   T.End s p -> pure $ T.End s p
   T.Message s m p -> T.Message s <$> scopeMultiplicity m <*> pure p
-  T.TypeMsg s p -> pure $ T.TypeMsg s p
   T.Choice  s m p ls -> do
     m' <- scopeMultiplicity m
     let ds = foldr (\i -> Map.insertWith (++) i [i]) Map.empty ls

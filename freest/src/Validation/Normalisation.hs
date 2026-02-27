@@ -53,7 +53,7 @@ isWhnf = \case
   T.AppSemi _ T.AppMessage{}           _ -> True
   T.AppSemi _ T.AppVar{}               _ -> True
   T.AppSemi _ (T.AppDual _ T.AppVar{}) _ -> True
-  -- T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppTypeMsg t) -> True
+  -- T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppQuantS t) -> True
   _ -> False
 
 -- | One step type reduction (aka, the tau rules).
@@ -74,7 +74,7 @@ reduce mod = \case
   T.AppSemi _ (T.AppLinChoice s p lts) u ->
     T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
     -- R-SQuantDist (as in the paper; we may have a simpler version if Quant is always followed by Abs)
-  T.AppSemi s1 (T.App s2 q@T.Quant{} [f]) u ->
+  T.AppSemi s1 (T.App s2 q@T.QuantS{} [f]) u ->
     T.App s1 q [T.Abs s1 [(a,k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable a k]) u)]
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
           (K.Arrow _ k _) = T.kindOf q
@@ -98,8 +98,8 @@ reduce mod = \case
     -- particular case where the quantifier is followed by a lambda. This should
     -- be enforced by the parser and kept as an invariant. Reading the kind from
     -- the lambda.
-  T.AppDual s1 t@(T.AppTypeMsg s2 p a k t') ->
-    T.AppTypeMsg s1 (T.dual p) b k (T.AppDual s2 (subs a (T.fromVariable b k) t'))
+  T.AppDual s1 t@(T.AppQuantS s2 p a k t') ->
+    T.AppQuantS s1 (T.dual p) b k (T.AppDual s2 (subs a (T.fromVariable b k) t'))
     where b = mkFreshVar s1 (freeVars t)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
