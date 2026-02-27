@@ -72,6 +72,10 @@ mutual
           actions state s b
       &Bye s -> wait s; ftpThread state b
 
+-- Should be in the prelude
+parallel : forall (a : *T) . Int -> (() -> a) -> ()
+parallel @a n thunk = repeat @() n (\(_ : ()) -> fork @a thunk)
+
 -- |Initialise the server: create n FTP threads and launch the demon
 init : Int -> Dual FTP -> Void@*T
 init n pid =

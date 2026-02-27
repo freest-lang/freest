@@ -5,7 +5,19 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements FreeST's bidirectional type checking algorithm.
 -}
-module Validation.Typing where
+module Validation.Typing
+  ( TypeCtx
+  , emptyTypeCtx
+  , synth
+  , synthRHS
+  , check
+  , checkDecls
+  , checkPat
+  , checkRHS
+  , typeModule
+  , runValidate
+  )
+where
 
 import Syntax.Base
 import Syntax.Expression qualified as E
@@ -400,7 +412,7 @@ check modl kctx tctx e t = case e of
     case normalise modl t of
       T.AppArrow s m t1 t2 -> do
         case normalise modl t2 of
-          T.AppTypeMsg s T.Out a k t2' -> do
+          T.AppQuantS s T.Out a k t2' -> do
             checkEquivTypes modl (Left e) 
               (T.AppArrow s m t1 (subs a u t2'))
               (T.AppArrow s m t1 t2)
@@ -411,7 +423,7 @@ check modl kctx tctx e t = case e of
     case normalise modl t of
       T.AppArrow s' m t1 t2 -> do
         case normalise modl t2 of
-          T.AppTypeMsg s'' T.In a k t2' -> do
+          T.AppQuantS s'' T.In a k t2' -> do
             checkEquivTypes modl (Left e) 
               (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t2'))
               (T.AppArrow s' m t1 t2)
@@ -596,21 +608,22 @@ checkPat modl kctx p t = case p of
   -- x
   E.VarPat    s x   -> pure (kctx, Map.singleton (Left x) t)
   -- (@t1, ..., @tn, p)
-  E.PackPat s as p -> 
+  E.PackPat s aks p -> 
     case normalise modl t of
-      t'@(T.AppExists _ bks t'') -> checkPackPat kctx t'' as bks
+      t'@(T.AppExists _ bks t'') -> checkPackPat kctx t'' aks bks
       t' -> throwE (TypeMismatchExists (getSpan p) t (Left p))
     where
       checkPackPat kctx' u = \cases
         [] [] -> checkPat modl kctx' p u
         [] bks@((b, _) : _) -> 
           checkPat modl kctx' p (T.AppExists (spanFromTo b u) bks u)
-        as@(a : _) [] -> case normalise modl u of
-          u'@(T.AppExists _ bks u'') -> checkPackPat kctx' u'' as bks
+        aks@((a, k) : _) [] -> case normalise modl u of
+          u'@(T.AppExists _ bks u'') -> checkPackPat kctx' u'' aks bks
           u' -> throwE (TypeMismatchExists (spanFromTo a p) u 
-            (Left $ E.PackPat (spanFromTo a p) as p))
-        (a : as) ((b, k) : bks) -> checkPackPat 
-          (Map.insert a k kctx) (subs b (T.fromVariable a k) u) as bks
+            (Left $ E.PackPat (spanFromTo a p) aks p))
+        ((a, k) : aks) ((b, k') : bks) -> do
+          Kinding.checkK (T.fromVariable a k) k'
+          checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable a k) u) aks bks
   E.WildPat  s _    -> do
     when (Kinding.isStrictlyLin t) (throwE (NonLinPat s p t))
     return (kctx, Map.empty)
@@ -668,8 +681,8 @@ checkPat modl kctx p t = case p of
     (kctx'', tctxp2) <- checkPat modl kctx' p2 t2
     return (kctx'', Map.union tctxp1 tctxp2)
   -- ?@a. p
-  E.TypeInPat s a p' -> do
-    (b, k, t') <- Expose.typeInput modl (Left p) t
+  E.TypeInPat s (a, k) p' -> do
+    (b, k', t') <- Expose.typeInput modl (Left p) t
     checkPat modl (Map.insert a k kctx) p' (subs b (T.fromVariable a k) t')
   -- (&C p)
   E.ChoicePat s i p' -> do

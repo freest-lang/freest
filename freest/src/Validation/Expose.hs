@@ -99,17 +99,17 @@ message mod p pe t = do
 
 typeOutput :: M.KindedModule -> E.KindedExp -> T.KindedType 
            -> Validation (Variable, K.Kind, T.KindedType)
-typeOutput mod = typeMessage mod T.Out . Right
+typeOutput mod = typeMsg mod T.Out . Right
 
 typeInput :: M.KindedModule -> Either E.Pat E.KindedExp -> T.KindedType 
           -> Validation (Variable, K.Kind, T.KindedType)
-typeInput mod = typeMessage mod T.In
+typeInput mod = typeMsg mod T.In
 
-typeMessage :: M.KindedModule -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType
+typeMsg :: M.KindedModule -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType
             -> Validation (Variable, K.Kind, T.KindedType)
-typeMessage mod p pe t = do
+typeMsg mod p pe t = do
   case normalise mod t of
-    T.AppTypeMsg _ p' a k t' | p == p' -> return (a, k, t')
+    T.AppQuantS _ p' a k t' | p == p' -> return (a, k, t')
     _ -> throwE (ExposeError (getSpan pe) pe msg t)
   where msg = "a type-" ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
 
@@ -117,4 +117,5 @@ wait :: M.KindedModule -> E.Pat -> T.KindedType -> Validation ()
 wait mod p t = do
   case normalise mod t of
     T.End _ T.In -> return ()
+    T.AppSemi _ (T.End _ T.In) _ -> return ()
     _ -> throwE (ExposeError (getSpan p) (Left p) "a `Wait` channel" t)

@@ -17,8 +17,9 @@ module Syntax.Type.Internal
         , AppExists
         , AppArrow
         , AppMessage
-        , AppTypeMsg
+        , AppQuantS
         , AppLinChoice
+        , UnMessage
         , UnChoice
         , AppSemi
         , AppDual
@@ -36,12 +37,16 @@ module Syntax.Type.Internal
   , isVoid
   , isSemi
   , isAppSemi
-  , isAppLinChoice
   , isDual
   , isTName
   , isDName
   , isMsg
-  , isAppTypeMsg
+  , isAppQuantS
+  , isUnChoice
+  , isAppArrow
+  , isAppLinChoice
+  , isAppQuant
+  , isAppDName
   , fromVariable
   )
 where
@@ -85,13 +90,12 @@ data Type x
   | Float Span (XType x)
   | Char Span (XType x)
   | Arrow Span (XType x) K.Multiplicity
-  | Quant Span (XType x) Polarity
-  | Void Span (XType x) K.Kind  -- Only proper kinds are of interest, it seems...
+  | Quant Span (XType x) Polarity K.Prekind
+  | Void Span (XType x) K.Kind -- TODO: why a kind here and not in, say, Quant?
   --   Session types
   | Skip Span (XType x)
   | End Span (XType x) Polarity
   | Message Span (XType x) K.Multiplicity Polarity
-  | TypeMsg Span (XType x) Polarity
   | Choice Span (XType x) K.Multiplicity Polarity [Identifier]
   | Semi Span (XType x)
   | Dual Span (XType x)
@@ -109,18 +113,18 @@ deriving instance Ord (XType x) => Ord (Type x)
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
 
-pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> [(Variable, K.Kind)] -> Type x -> Type x
-pattern AppQuant s x1 x2 x3 p aks t <- App s x1 (Quant _ x2 p) [Abs _ x3 aks t]
-  where AppQuant _ _ _ _ _ []  t  = t
-        AppQuant s x1 x2 x3 p aks t  = App s x1 (Quant s x2 p) [Abs s x3 aks t]
+pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.Prekind -> [(Variable, K.Kind)] -> Type x -> Type x
+pattern AppQuant s x1 x2 x3 p pk aks t <- App s x1 (Quant _ x2 p pk) [Abs _ x3 aks t]
+  where AppQuant _ _ _ _ _ _ []  t  = t
+        AppQuant s x1 x2 x3 p pk aks t  = App s x1 (Quant s x2 p pk) [Abs s x3 aks t]
 
 pattern AppForall :: Span -> XType x -> XType x -> XType x -> [(Variable, K.Kind)] -> Type x -> Type x
-pattern AppForall s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 In aks t
-  where AppForall s x1 x2 x3 aks t  = AppQuant s x1 x2 x3 In aks t
+pattern AppForall s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 In K.Top aks t
+  where AppForall s x1 x2 x3 aks t  = AppQuant s x1 x2 x3 In K.Top aks t
 
 pattern AppExists :: Span -> XType x -> XType x -> XType x -> [(Variable, K.Kind)] -> Type x -> Type x
-pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out aks t
-  where AppExists s x1 x2 x3 aks t  = AppQuant s x1 x2 x3 Out aks t
+pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out K.Top aks t
+  where AppExists s x1 x2 x3 aks t  = AppQuant s x1 x2 x3 Out K.Top aks t
 
 pattern AppArrow :: Span -> XType x -> XType x -> K.Multiplicity -> Type x -> Type x -> Type x
 pattern AppArrow s x1 x2 m t u <- App s x1 (Arrow _ x2 m) [t,u]
@@ -130,14 +134,18 @@ pattern AppMessage :: Span -> XType x -> XType x -> K.Multiplicity -> Polarity -
 pattern AppMessage s x1 x2 m p t <- App s x1 (Message _ x2 m p) [t]
   where AppMessage s x1 x2 m p t  = App s x1 (Message s x2 m p) [t]
 
-pattern AppTypeMsg :: Span -> XType x -> XType x -> XType x -> Polarity -> Variable -> K.Kind -> Type x -> Type x
-pattern AppTypeMsg s x1 x2 x3 p a k t <- App s x1 (TypeMsg _ x2 p) [Abs _ x3 [(a, k)] t]
-  where AppTypeMsg s x1 x2 x3 p a k t  = App s x1 (TypeMsg s x2 p) [Abs s x3 [(a, k)] t]
+pattern AppQuantS :: Span -> XType x -> XType x -> XType x -> Polarity -> Variable -> K.Kind -> Type x -> Type x
+pattern AppQuantS s x1 x2 x3 p a k t <- App s x1 (Quant _ x2 p K.Session) [Abs _ x3 [(a, k)] t]
+  where AppQuantS s x1 x2 x3 p a k t  = App s x1 (Quant s x2 p K.Session) [Abs s x3 [(a, k)] t]
 
 pattern AppLinChoice :: Span -> XType x -> XType x -> Polarity -> [(Identifier, Type x)] -> Type x
 pattern AppLinChoice s x1 x2 p lts <- App s x1 (Choice _ x2 K.Lin p ls) (zip ls -> lts)
   where AppLinChoice s x1 x2 p lts  = App s x1 (Choice s x2 K.Lin p ls) ts
           where (ls, ts) = unzip $ sortBy (compare `on` fst) lts
+
+pattern UnMessage :: Span -> XType x -> Polarity -> Type x
+pattern UnMessage s x p <- Message s x K.Un p
+  where UnMessage s x p  = Message s x K.Un p
 
 pattern UnChoice :: Span -> XType x -> Polarity -> [Identifier] -> Type x
 pattern UnChoice s x p ls <- Choice s x K.Un p ls
@@ -212,17 +220,21 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isAppLinChoice :: Type x -> Bool
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuantS, isUnChoice, isAppArrow, isAppLinChoice, isAppQuant, isAppDName :: Type x -> Bool
 isSkip         = \case Skip{}         -> True; _ -> False
 isVoid         = \case Void{}         -> True; _ -> False
 isSemi         = \case Semi{}         -> True; _ -> False
-isAppSemi      = \case AppSemi{}      -> True; _ -> False
 isDual         = \case Dual{}         -> True; _ -> False
 isTName        = \case TName{}        -> True; _ -> False
 isDName        = \case DName{}        -> True; _ -> False
 isMsg          = \case Message{}      -> True; _ -> False
-isAppTypeMsg   = \case AppTypeMsg{}   -> True; _ -> False
+isUnChoice     = \case UnChoice{}     -> True; _ -> False
+isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isAppQuantS   = \case AppQuantS{}   -> True; _ -> False
+isAppArrow     = \case AppArrow{}     -> True; _ -> False
 isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
+isAppQuant     = \case AppQuant{}     -> True; _ -> False
+isAppDName     = \case AppDName{}     -> True; _ -> False
 
 fromVariable :: Variable -> XType x -> Type x
 fromVariable a x = Var (varSpan a) x a
@@ -246,7 +258,7 @@ instance Show (Type x) where
     Float{}   -> "Float"
     Char{}    -> "Char"
     Arrow _ _ m -> "("++show m++"->)"
-    Quant _ _ p -> "("++showQuant p++")"
+    Quant _ _ p K.Top -> "("++showQuant p++")"
     -- Session types
     Skip{}            -> "Skip"
     Semi{}            -> "(;)"
@@ -254,12 +266,12 @@ instance Show (Type x) where
     End _ _ In          -> "Wait"
     End _ _ Out         -> "Close"
     Message _ _ m p  -> "(" ++ showMsgMult m ++ show p ++ ")"
-    TypeMsg _ _ p       -> "(" ++ show p ++ show p ++ ")"
+    Quant _ _ p K.Session -> "(" ++ show p ++ show p ++ ")"
     Choice _ _ m p ls   ->
       (if m == K.Un then "*" else "")
       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
     AppMessage _ _ _ m p t  -> showMsgMult m ++ show p ++ show t
-    AppTypeMsg _ _ _ _ p a k t -> 
+    AppQuantS _ _ _ _ p a k t -> 
       "(" ++ show p ++ show p ++ "(" ++ show a ++ " : " ++ show k ++ "). "
       ++ show t ++ ")"
     AppLinChoice  _ _ _ p lts -> showView p ++ "{"
@@ -267,7 +279,7 @@ instance Show (Type x) where
       ++ "}"
       where showField (l, t) = show l ++ ": " ++ show t
     -- Polymorphism
-    AppQuant _ _ _ _ p aks t -> "(" ++ showQuant p ++ " " ++ showAbs aks ". " t ++ ")"
+    AppQuant _ _ _ _ p K.Top aks t -> "(" ++ showQuant p ++ " " ++ showAbs aks ". " t ++ ")"
     -- Higher-order
     Var _ _ a    -> show a
     AppSemi _ _ _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
@@ -299,14 +311,13 @@ instance Congruence (Type x) where
     Float{} Float{} -> True
     Char{} Char{}  -> True
     (Arrow _ _ m1) (Arrow _ _ m2) -> m1 == m2
-    (Quant _ _ p1) (Quant _ _ p2) -> p1 == p2
+    (Quant _ _ p1 pk1) (Quant _ _ p2 pk2) -> p1 == p2 && pk1 == pk2
   -- Session types
     Skip{} Skip{} -> True
     Semi{} Semi{} -> True
     Dual{} Dual{} -> True
     (End _ _ p1) (End _ _ p2) -> p1 == p2
     (Message _ _ m1 p1) (Message _ _ m2 p2) -> m1 == m2 && p1 == p2
-    (TypeMsg _ _ p1) (TypeMsg _ _ p2) -> p1 == p2
     (Choice _ _ m1 p1 is1) (Choice _ _ m2 p2 is2) -> m1 == m2 && p1 == p2 && is1 == is2
   -- Higher-order
     (Var _ _ v1) (Var _ _ v2) ->
@@ -342,14 +353,13 @@ instance Located (Type x) where
     Arrow s _ _      -> s
     -- Session types
     Message s _ _ _   -> s
-    TypeMsg s _ _     -> s
     Choice  s _ _ _ _ -> s
     End s _ _         -> s
     Skip s _         -> s
     Semi s _         -> s
     Dual s _         -> s
     -- Polymorphism
-    Quant s _ _       -> s
+    Quant s _ _ _ -> s
     -- Higher-order
     Var s _ _        -> s
     Abs s _ _ _      -> s
@@ -366,10 +376,9 @@ instance Located (Type x) where
     Float _ x          -> Float s x
     Char _ x          -> Char s x
     Arrow _ x m        -> Arrow s x m
-    Quant _ x p        -> Quant s x p
+    Quant _ x p pk -> Quant s x p pk
     -- Session types
     Message _ x m p    -> Message s x m p
-    TypeMsg _ x p      -> TypeMsg s x p
     Choice  _ x m p ls -> Choice s x m p ls
     End _ x p          -> End s x p
     Skip _ x          -> Skip s x

@@ -20,13 +20,13 @@ stackADT = ( @[Int]
 
 main : Int
 main = fst @Int @s $ pop (push 5 (push 7 new))
-  where (@s, (new, push, pop, toList)) = stackADT
+  where (@(s : *T), (new, push, pop, toList)) = stackADT
 
 -- Reversing a list in O(n)
 rev : [Int] -> [Int]
 rev = rev' new
   where 
-    (@s, (new, push, pop, toList)) = stackADT
+    (@(s : *T), (new, push, pop, toList)) = stackADT
 
     rev' : s -> [Int] -> [Int]
     rev' s []        = toList s

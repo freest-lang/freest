@@ -319,8 +319,8 @@ TypePrimary :: { T.ParsedType }
 Type :: { T.ParsedType }
   : Type Arrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
   | Type ';' Type               { T.AppSemi (spanFromTo $1 $3) $1 $3 }
-  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1)  $2 $4 }
-  | Polarity2 KindedVar '.' Type { let (a, k) = $2 in T.AppTypeMsg (spanFromTo (fst $1) $4) (snd $1) a k $4 }
+  | Quant KindedVars '.' Type   { T.AppQuant (spanFromTo (fst $1) $4) (snd $1) K.Top $2 $4 }
+  | Polarity2 KindedVar '.' Type { let (a, k) = $2 in T.AppQuantS (spanFromTo (fst $1) $4) (snd $1) a k $4 }
   | '\\' KindedVars '->' Type   { T.Abs (spanFromTo $1 $4) $2 $4 }
   | TypeApp                     { $1 }
 
@@ -532,7 +532,7 @@ PatPrimary :: { E.Pat }
   | '[' PatListComma ']'           { E.listPat (spanFromTo $1 $3) $2 }
   | '(' ')'                        { E.TuplePat (spanFromTo $1 $2) [] }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
-  | '(' AtVarListCommaPat ')'      { uncurry (E.PackPat (spanFromTo $1 $3)) $2 }
+  | '(' AtKindedVarListCommaPat ')'{ uncurry (E.PackPat (spanFromTo $1 $3)) $2 }
   | DataConstructor                { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'                    { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary         { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
@@ -541,7 +541,7 @@ Pat :: { E.Pat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
   | '?' PatPrimary ';' Pat           { E.InPat (spanFromTo $1 $4) $2 $4 } 
   | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
-  | '?' '?' TypeVar '.' Pat      { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
+  | '?' '?' KindedVar '.' Pat        { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
   | Pat '::' Pat                     { E.ConsPat (spanFromTo $1 $3) $1 $3 }
   | PatPrimary                       { $1 }
 
@@ -569,8 +569,8 @@ PatNEListComma :: { [E.Pat] }
   : Pat { [$1] }
   | Pat ',' PatNEListComma { $1 : $3 }
 
-AtVarListCommaPat :: { ([Variable], E.Pat) }
-  : '@' TypeVar ',' AtVarListCommaPat { first ($2 :) $4 }
+AtKindedVarListCommaPat :: { ([(Variable, K.Kind)], E.Pat) }
+  : '@' KindedVar ',' AtKindedVarListCommaPat { first ($2 :) $4 }
   | Pat { ([], $1) }
 
 LetDeclBlock :: { [E.ParsedLetDecl] }

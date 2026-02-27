@@ -722,3 +722,41 @@ case (\(n : (*T -> *T) -> *T -> *T) -> \(s : *T -> *T) -> \(z : *T) -> s (n s z)
      ((*T -> *T) -> *T -> *T) -> (*T -> *T) -> *T -> *T
 
 case Dual (!Int ; Close) == Dual !Int ; Wait : 1S
+
+-- Example from a paper
+
+case
+  IFRepeat
+  ==
+  IFRepeatExpanded
+  :
+  1C
+where
+  type IRepeat : 1S -> 1S
+  type IRepeat a = a ; IRepeat a
+  type IFRepeat : 1S -> 1S -> 1C
+  type IFRepeat a b = IRepeat (&{More: a, Done: b ; Wait})
+
+  type IFRepeatExpanded : 1S -> 1S -> 1C
+  type IFRepeatExpanded a b = &{More: a, Done: b ; Wait}
+
+case
+  Fold
+  ==
+  FoldExpanded
+  :
+  1S
+where
+  type IRepeat : 1S -> 1S
+  type IRepeat a = a ; IRepeat a
+  type IFRepeat : 1S -> 1S -> 1S
+  type IFRepeat a b = IRepeat (&{More: a, Done: b ; Wait})
+  type Fold : 1S
+  type Fold = ??(a:*T) . ?a ; IFRepeat (??(b:1S) . ?(a -> b -> a) ; ?b) (!a)
+
+  type FoldExpanded : 1S
+  type FoldExpanded = ??(a:*T) . ?a ; FE
+  type FE : 1S
+  type FE = &{More: ??(b:1S) . ?(a -> b -> a) ; ?b, Done: !a ; Wait}
+  
+  

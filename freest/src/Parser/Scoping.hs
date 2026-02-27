@@ -421,6 +421,7 @@ scopeExp ctx = \case
   E.Select s i -> pure $ E.Select s i
   E.SendType s t ->
     E.SendType s <$> scopeType ctx t
+  E.ReceiveType s -> pure $ E.ReceiveType s
 
 -- | Scope a pattern. This function takes two contexts: the first being the main
 -- lexical context, and the second being an auxilliary context for 'let' definitions,
@@ -435,10 +436,11 @@ scopePat ctx ictx = \case
   E.VarPat s x  -> case lookupEVar x ictx of
     Just x' -> pure (deleteEVar x ictx, E.VarPat s x{internal = internal x'})
     Nothing -> (ictx,) . E.VarPat s <$> freshInternal x
-  E.PackPat s as p -> do 
-    as' <- mapM freshInternal as
+  E.PackPat s aks p -> do 
+    as' <- mapM (freshInternal . fst) aks
+    ks' <- mapM (scopeKind     . snd) aks  
     (ictx', p') <- scopePat (foldr insertTVar ctx as') ictx p
-    return (ictx', E.PackPat s as' p')
+    return (ictx', E.PackPat s (zip as' ks') p')
   E.DConsPat s c ps -> do
     (ictx', ps') <- foldM (\(ictx'', ps'') p -> do
         (ictx''', p') <- scopePat ctx ictx'' p
@@ -449,10 +451,11 @@ scopePat ctx ictx = \case
     (ictx', p1') <- scopePat ctx ictx p1
     (ictx'', p2') <- scopePat ctx ictx' p2
     return (ictx'', E.InPat s p1' p2')
-  E.TypeInPat s a p -> do
+  E.TypeInPat s (a, k) p -> do
     a' <- freshInternal a
+    k' <- scopeKind k
     (ictx', p') <- scopePat (insertTVar a' ctx) ictx p
-    return (ictx', E.TypeInPat s a' p')
+    return (ictx', E.TypeInPat s (a', k') p')
   E.ChoicePat s c p -> do
     second (E.ChoicePat s c) <$> scopePat ctx ictx p
   E.AsPat s x p -> case lookupEVar x ictx of
@@ -492,10 +495,10 @@ insertPatVars p ctx =
     patVars :: E.Pat -> Set.Set (Level Variable Variable)
     patVars = \case
       E.VarPat _ x      -> Set.singleton (ExpLevel x)
-      E.PackPat _ as p  -> Set.fromList (map TypeLevel as) `Set.union` patVars p
+      E.PackPat _ aks p -> Set.fromList (map (TypeLevel . fst) aks) `Set.union` patVars p
       E.DConsPat _ _ ps -> Set.unions (map patVars ps)
       E.InPat _ p1 p2   -> patVars p1 `Set.union` patVars p2
-      E.TypeInPat _ a p'-> Set.insert (TypeLevel a) (patVars p')
+      E.TypeInPat _ (a, _) p'-> Set.insert (TypeLevel a) (patVars p')
       E.ChoicePat _ _ p -> patVars p
       E.AsPat _ x p     -> Set.insert (ExpLevel x) (patVars p)
       _                 -> Set.empty
@@ -513,12 +516,11 @@ scopeType ctx = \case
   T.Float s -> pure $ T.Float s
   T.Char s -> pure $ T.Char s
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity m
-  T.Quant s p -> pure $ T.Quant s p
+  T.Quant s p pk -> pure $ T.Quant s p pk
   T.Void s k -> T.Void s <$> scopeKind k
   T.Skip s -> pure $ T.Skip s
   T.End s p -> pure $ T.End s p
   T.Message s m p -> T.Message s <$> scopeMultiplicity m <*> pure p
-  T.TypeMsg s p -> pure $ T.TypeMsg s p
   T.Choice  s m p ls -> do
     m' <- scopeMultiplicity m
     let ds = foldr (\i -> Map.insertWith (++) i [i]) Map.empty ls

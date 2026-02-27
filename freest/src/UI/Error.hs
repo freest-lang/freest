@@ -321,6 +321,9 @@ toMessage src = \case
     ++ unlines (map (("  " ++) . show . getSpan) xs)
   NonLinPat s p t -> makeError src s
     ("Non-linear pattern for linear type " ++ bt (unparse t))
+  ParseError s (_, [x]) -> makeError src s
+    "Parse error"
+    ++ "(" ++ x ++ " expected)"
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"

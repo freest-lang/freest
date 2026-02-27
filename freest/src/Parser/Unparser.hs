@@ -73,12 +73,11 @@ instance Unparse (T.Type x) where
     T.Float _ _ -> (maxRator, "Float")
     T.Char _ _ -> (maxRator, "Char")
     T.Arrow _ _ m -> (maxRator, "(" ++ arrow m ++ ")")
-    T.Quant _ _ p -> (maxRator, "(" ++ quant p ++ ")")
+    T.Quant _ _ p pk -> (maxRator, "(" ++ quant True p pk ++ ")")
     T.Skip _ _ -> (maxRator, "Skip")
     T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
                                         T.In  -> "Wait")
     T.Message _ _ m p -> (maxRator, "(" ++ multiplicity m ++ polarity p ++ ")")
-    T.TypeMsg _ _ p -> (maxRator, "(" ++ polarity p ++ polarity p ++ ")")
     T.Choice _ _ m p is -> 
       (maxRator, multiplicity m ++ view p ++ "{" ++ fields ++ "}")
       where 
@@ -96,15 +95,15 @@ instance Unparse (T.Type x) where
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
-    T.AppQuant _ _ _ _ p aks t -> 
-      (dotRator, quant p ++ " " ++ bindings aks ++ ". " ++ unparse t)
+    T.AppQuant _ _ _ _ p pk aks t -> 
+      (dotRator, quant False p pk ++ bindings aks ++ ". " ++ unparse t)
     T.Tuple _ _ _ ts -> 
       (maxRator, "(" ++ List.intercalate ", " (map unparse ts) ++ ")")
     T.List _ _ _ t -> 
       (maxRator, "[" ++ unparse t ++ "]")
     T.AppMessage _ _ _ m p t -> 
       (msgRator, multiplicity m ++ polarity p ++ bracket (fragment t) RightAssoc msgRator)
-    T.AppTypeMsg _ _ _ _ p a k t ->
+    T.AppQuantS _ _ _ _ p a k t ->
       (dotRator, polarity p ++ polarity p ++ bindings [(a, k)] ++ ". " ++ unparse t)
     T.AppLinChoice _ _ _ p lts ->
       (maxRator, view p ++ "{" ++ fields lts ++ "}")
@@ -122,9 +121,11 @@ instance Unparse (T.Type x) where
                     LeftAssoc appRator
         r = bracket (fragment (last ts)) RightAssoc appRator
     where
-      quant = \case
-        T.In  -> "forall"
-        T.Out -> "exists"      
+      quant prefix = \cases
+        T.In  K.Top     -> "forall" ++ if prefix then "" else " "
+        T.Out K.Top     -> "exists" ++ if prefix then "" else " "
+        T.In  K.Session -> "??"
+        T.Out K.Session -> "!!"
       arrow = \case 
         K.Lin    -> "1->"
         K.Un     -> "->"

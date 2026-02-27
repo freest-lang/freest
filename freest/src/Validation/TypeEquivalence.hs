@@ -54,23 +54,23 @@ word' :: KindCtx -> T.KindedType -> TransState Word
 word' ctx = \case
   -- W-Skip
   T.Skip{} -> pure []
-  -- W-End
+  -- W-EndVoid (1/2)
   t@T.End{} -> getNonterminal $ Map.singleton (show t) [bottom]
-  -- Void
+  -- W-EndVoid (2/2)
   t@T.Void{} -> getNonterminal $ Map.singleton (show t) [bottom]
   -- Int, Float, Char, Variant types
   t@T.Int{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
-  -- W-Msg
-  T.AppMessage _ m p u -> do
-    w <- word ctx u
+  -- W-Msg -- TODO: FIX
+  T.AppMessage _ m p t -> do
+    w <- word ctx t
     getNonterminal $ Map.fromList
       [ (show m ++ show p, w ++ [bottom])
       , ("1", [bottom | m == K.Un])
       ]
-  -- W-Seq, T ; U
+  -- W-Seq
   T.AppSemi _ t u -> do
     liftM2 (++) (word ctx t) (word ctx u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
@@ -81,22 +81,20 @@ word' ctx = \case
       zip (map show [1..]) (map (++ [bottom]) words)
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
-  -- W_Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.App _ u vs) | isFullyApplied ctx t -> do
+  -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
+  t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppLinChoice t || T.isAppQuant t || T.isAppDName t)-> do -- TODO: restrict iota
     words <- mapM (word ctx) vs
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
       zip (map show [1..]) words
   -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.AppVar _ a _ us) | isFullyApplied ctx t -> do
+  t@(T.AppVar _ a _ us) | isProperType t -> do
     words <- mapM (word ctx) us
     getNonterminal $ Map.fromList $
       (show a, []) :
       zip (map show [1..]) (map (++ [bottom]) words)
   -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
-    y <- nextNonterminal
-    addVisited t y
     modl <- gets modl
     let u = normalise modl t
     case u of
@@ -104,6 +102,8 @@ word' ctx = \case
       T.Skip{} -> pure []
       -- W-μNSkip, t normalises to a type other than Skip
       _ -> do
+        y <- nextNonterminal
+        addVisited t y
         ~(z:δ) <- word ctx u
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
@@ -128,25 +128,28 @@ word' ctx = \case
         -- W-τ, t reduces
         word ctx (reduce modl t)
 
-isFullyApplied :: KindCtx -> T.KindedType -> Bool
-isFullyApplied ctx = \case
-  T.Int{} -> True
-  T.Float{} -> True
-  T.AppArrow{} -> True
-  T.AppQuant{} -> True
-  T.AppTypeMsg{} -> True
-  T.AppLinChoice{} -> True
-  T.UnChoice{} -> True
-  T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
-  T.Var _ k a -> K.depth k ==  0
-  T.AppVar _ a k ts -> K.depth k == length ts
-  _ -> False
+isProperType :: T.KindedType -> Bool
+isProperType t = case T.kindOf t of
+  K.Proper{} -> True
+  otherwise -> False
+-- isFullyApplied ctx = \case
+--   T.Int{} -> True
+--   T.Float{} -> True
+--   T.AppArrow{} -> True
+--   T.AppQuant{} -> True
+--   T.AppQuantS{} -> True
+--   T.AppLinChoice{} -> True
+--   T.UnChoice{} -> True
+--   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
+--   T.Var _ k a -> K.depth k ==  0
+--   T.AppVar _ a k ts -> K.depth k == length ts
+--   _ -> False
 
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal
 bottom = 0
 
--- The negative integer associated to a kind
+-- The negative integer associated with a kind
 toInt :: K.Kind -> (Int, Int)
 toInt k = (-n * 2, -n * 2 - 1)
   where
@@ -243,7 +246,7 @@ fatTerminal = \case
   t@T.Char{}  -> Just t
   t@T.Arrow{} -> Just t
   -- Polymorphism
-  T.AppQuant s p aks t -> Just (T.AppQuant s p aks) <*> fatTerminal t
+  T.AppQuant s p pk aks t -> Just (T.AppQuant s p pk aks) <*> fatTerminal t
   -- Higher-order
   t@T.Var{}      -> Just t
   T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts
