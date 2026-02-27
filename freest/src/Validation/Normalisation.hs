@@ -1,5 +1,5 @@
 {- |
-Module      :  SimpleGrammar.Normalisation
+Module      :  Validation.Normalisation
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
@@ -136,7 +136,7 @@ normalise mod = norm Set.empty
       -- N-Whnf
       | isWhnf t = t
       -- N-Visited
-      | reappears = T.Void span (K.uc span) -- (T.kindOf t)
+      | reappears = T.Void (getSpan t) (T.kindOf t)
       -- N-NotVisited + N-NoMuRedex
       | otherwise = norm visited' (reduce mod t)
       where

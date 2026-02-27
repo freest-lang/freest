@@ -1,5 +1,12 @@
 module Validation.Base
-  -- TODO: explicit export list
+  ( ValidationState(..)
+  , Validation
+  , emptyValidationState
+  , runValidation
+  , lookupKind
+  , incCounter
+  , unfold
+  )
 where
 
 import Syntax.Base
