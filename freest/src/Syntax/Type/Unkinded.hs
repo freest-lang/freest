@@ -43,14 +43,16 @@ module Syntax.Type.Unkinded
   , T.isVoid
   , T.isSemi
   , T.isAppSemi
-  , T.isAppTypeMsg
-  , T.isUnChoice
-  , T.isUnMessage
   , T.isDual
   , T.isTName
   , T.isDName
   , T.isMsg
   , T.isAppQuantS
+  , T.isUnChoice
+  , T.isAppArrow
+  , T.isAppLinChoice
+  , T.isAppQuant
+  , T.isAppDName
   , T.fromVariable
   )
 where

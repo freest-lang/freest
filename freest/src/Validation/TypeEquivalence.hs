@@ -81,7 +81,7 @@ word' ctx = \case
       zip (map show [1..]) (map (++ [bottom]) words)
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
-  -- W_Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
+  -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
   t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppLinChoice t || T.isAppQuant t || T.isAppDName t)-> do -- TODO: restrict iota
     words <- mapM (word ctx) vs
     getNonterminal $ Map.fromList $

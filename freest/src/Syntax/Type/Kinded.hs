@@ -41,18 +41,16 @@ module Syntax.Type.Kinded
   , T.isVoid
   , T.isSemi
   , T.isAppSemi
-  , T.isAppArrow
-  , T.isAppLinChoice
-  , T.isAppQuant
-  , T.isAppQuantS
-  , T.isAppDName
-  , T.isAppTypeMsg
-  , T.isUnChoice
-  , T.isUnMessage
   , T.isDual
   , T.isTName
   , T.isDName
   , T.isMsg
+  , T.isAppQuantS
+  , T.isUnChoice
+  , T.isAppArrow
+  , T.isAppLinChoice
+  , T.isAppQuant
+  , T.isAppDName
   , T.fromVariable
   , kindOf
   , smartApp

@@ -18,7 +18,6 @@ module Syntax.Type.Internal
         , AppArrow
         , AppMessage
         , AppQuantS
-        , AppTypeMsg
         , AppLinChoice
         , UnMessage
         , UnChoice
@@ -38,18 +37,16 @@ module Syntax.Type.Internal
   , isVoid
   , isSemi
   , isAppSemi
-  , isAppArrow
-  , isAppLinChoice
-  , isAppQuant
-  , isAppDName
-  , isUnChoice
   , isDual
   , isTName
   , isDName
   , isMsg
   , isAppQuantS
-  , isAppTypeMsg
-  , isUnMessage
+  , isUnChoice
+  , isAppArrow
+  , isAppLinChoice
+  , isAppQuant
+  , isAppDName
   , fromVariable
   )
 where
@@ -223,19 +220,21 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isUnChoice, isAppQuantS, isUnMessage :: Type x -> Bool
-isSkip       = \case Skip{}       -> True; _ -> False
-isVoid       = \case Void{}       -> True; _ -> False
-isSemi       = \case Semi{}       -> True; _ -> False
-isAppSemi    = \case AppSemi{}    -> True; _ -> False
-isDual       = \case Dual{}       -> True; _ -> False
-isTName      = \case TName{}      -> True; _ -> False
-isDName      = \case DName{}      -> True; _ -> False
-isMsg        = \case Message{}    -> True; _ -> False
-isAppTypeMsg = \case AppTypeMsg{} -> True; _ -> False
-isUnChoice   = \case UnChoice{}   -> True; _ -> False
-isAppQuantS  = \case AppQuantS{}  -> True; _ -> False
-isUnMessage  = \case UnMessage{}  -> True; _ -> False
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppQuantS, isUnChoice, isAppArrow, isAppLinChoice, isAppQuant, isAppDName :: Type x -> Bool
+isSkip         = \case Skip{}         -> True; _ -> False
+isVoid         = \case Void{}         -> True; _ -> False
+isSemi         = \case Semi{}         -> True; _ -> False
+isDual         = \case Dual{}         -> True; _ -> False
+isTName        = \case TName{}        -> True; _ -> False
+isDName        = \case DName{}        -> True; _ -> False
+isMsg          = \case Message{}      -> True; _ -> False
+isUnChoice     = \case UnChoice{}     -> True; _ -> False
+isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isAppQuantS   = \case AppQuantS{}   -> True; _ -> False
+isAppArrow     = \case AppArrow{}     -> True; _ -> False
+isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
+isAppQuant     = \case AppQuant{}     -> True; _ -> False
+isAppDName     = \case AppDName{}     -> True; _ -> False
 
 fromVariable :: Variable -> XType x -> Type x
 fromVariable a x = Var (varSpan a) x a
