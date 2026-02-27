@@ -44,7 +44,7 @@ module Syntax.Type.Unkinded
   , T.isVoid
   , T.isSemi
   , T.isAppSemi
-  , T.isAppLinChoice
+  , T.isUnChoice
   , T.isDual
   , T.isTName
   , T.isDName

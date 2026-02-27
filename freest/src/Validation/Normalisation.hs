@@ -41,37 +41,47 @@ isWhnf = \case
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && not (null us) -> True
   -- W-Var
   T.AppVar{} -> True
+  -- W-Dual
+  T.AppDual _ T.AppVar{} -> True
   -- W-Abs
   T.Abs{} -> True
   -- W-Seq1 _ semi-applied semicolon
   T.App _ T.Semi{} [_] -> True
   -- W-Seq2
-  T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppTypeMsg t) -> True
-  -- W-Dual
-  T.AppDual _ T.Var{} -> True
+  T.AppSemi _ T.End{}                  _ -> True
+  T.AppSemi _ T.Void{}                 _ -> True
+  T.AppSemi _ T.AppMessage{}           _ -> True
+  T.AppSemi _ T.AppVar{}               _ -> True
+  T.AppSemi _ (T.AppDual _ T.AppVar{}) _ -> True
+  -- T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppTypeMsg t) -> True
   _ -> False
 
--- | One step type reduction. Requires 'not (isWnhf t)'.
+-- | One step type reduction (aka, the tau rules).
+--   Requires 'not (isWnhf t)'.
 reduce :: M.KindedModule -> T.KindedType -> T.KindedType
 reduce mod = \case
-  -- 1. Sequential composition
-    -- R-Neut
+  -- 1. Sequential composition, the R-S* rules
+    -- R-SNeut
   T.AppSemi _ T.Skip{} t -> t
-    -- R-Assoc (must come before R.SemiL)
-  T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3)
-    -- R-ChoiceDist (must come before R.SemiL)
-  T.AppSemi _ (T.AppLinChoice s p lts) u -> T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
-    -- R-QuantDist - Requires the kind of f. Implementing the particular case
-    -- where the quantifier is followed by a lambda. This should be enforced by
-    -- the parser and kept as an invariant. Reading the kind from the lambda.
-  T.AppSemi s1 (T.App s2 (T.TypeMsg s3 p) [f]) u ->
-    T.AppTypeMsg s1 p a k (T.AppSemi s2 (T.App s3 f [T.fromVariable a k]) u)
+    -- R-SAssoc (see W-Seq2)
+  T.AppSemi s1 (T.AppSemi s2 t@T.End{} u) v                  -> T.AppSemi s1 t (T.AppSemi s2 u v)
+  T.AppSemi s1 (T.AppSemi s2 t@T.Void{} u) v                 -> T.AppSemi s1 t (T.AppSemi s2 u v)
+  T.AppSemi s1 (T.AppSemi s2 t@T.AppMessage{} u) v           -> T.AppSemi s1 t (T.AppSemi s2 u v)
+  T.AppSemi s1 (T.AppSemi s2 t@T.AppVar{} u) v               -> T.AppSemi s1 t (T.AppSemi s2 u v)
+  T.AppSemi s1 (T.AppSemi s2 t@(T.AppDual _ T.AppVar{}) u) v -> T.AppSemi s1 t (T.AppSemi s2 u v)
+      -- T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3) -- old R-Assoc
+    -- R-SChoiceDist
+  T.AppSemi _ (T.AppLinChoice s p lts) u ->
+    T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
+    -- R-SQuantDist (as in the paper; we may have a simpler version if Quant is always followed by Abs)
+  T.AppSemi s1 (T.App s2 q@T.Quant{} [f]) u ->
+    T.App s1 q [T.Abs s1 [(a,k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable a k]) u)]
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
-          (K.Arrow _ k _) = T.kindOf f
+          (K.Arrow _ k _) = T.kindOf q
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
 
-  -- 2. Dual
+  -- 2. Dual, the R-D* rule
     -- R-DSkip
   T.AppDual _ t@T.Skip{} -> t
     -- R-DVoid
@@ -140,7 +150,7 @@ normalise mod = norm Set.empty
       -- N-NotVisited + N-NoMuRedex
       | otherwise = norm visited' (reduce mod t)
       where
-        u = tNameRedex t -- u is Maybe (µ∗U)
+        u = tNameRedex t -- u is Maybe (µ∗F)
         reappears = maybe False   (`Set.member` visited) u
         visited'  = maybe visited (`Set.insert` visited) u
         span = getSpan t
@@ -149,8 +159,9 @@ normalise mod = norm Set.empty
 -- these are the types that reappear.
 tNameRedex :: T.KindedType -> Maybe T.KindedType
 tNameRedex = \case
-  t@T.AppTName{}                               -> Just t -- µ∗U
-  (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
-  (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗U)
-  (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
+  t@T.AppTName{}                               -> Just t -- µ∗F
+  (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗F)
+  (T.AppSemi _ t _)               -> tNameRedex t -- T; U
+  -- (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
+  -- (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing

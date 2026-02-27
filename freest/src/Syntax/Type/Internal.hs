@@ -36,7 +36,7 @@ module Syntax.Type.Internal
   , isVoid
   , isSemi
   , isAppSemi
-  , isAppLinChoice
+  , isUnChoice
   , isDual
   , isTName
   , isDName
@@ -86,7 +86,7 @@ data Type x
   | Char Span (XType x)
   | Arrow Span (XType x) K.Multiplicity
   | Quant Span (XType x) Polarity
-  | Void Span (XType x) K.Kind  -- Only proper kinds are of interest, it seems...
+  | Void Span (XType x) K.Kind -- TODO: why a kind here and not in, say, Quant?
   --   Session types
   | Skip Span (XType x)
   | End Span (XType x) Polarity
@@ -212,17 +212,17 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isAppLinChoice :: Type x -> Bool
-isSkip         = \case Skip{}         -> True; _ -> False
-isVoid         = \case Void{}         -> True; _ -> False
-isSemi         = \case Semi{}         -> True; _ -> False
-isAppSemi      = \case AppSemi{}      -> True; _ -> False
-isDual         = \case Dual{}         -> True; _ -> False
-isTName        = \case TName{}        -> True; _ -> False
-isDName        = \case DName{}        -> True; _ -> False
-isMsg          = \case Message{}      -> True; _ -> False
-isAppTypeMsg   = \case AppTypeMsg{}   -> True; _ -> False
-isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isUnChoice :: Type x -> Bool
+isSkip       = \case Skip{}       -> True; _ -> False
+isVoid       = \case Void{}       -> True; _ -> False
+isSemi       = \case Semi{}       -> True; _ -> False
+isAppSemi    = \case AppSemi{}    -> True; _ -> False
+isDual       = \case Dual{}       -> True; _ -> False
+isTName      = \case TName{}      -> True; _ -> False
+isDName      = \case DName{}      -> True; _ -> False
+isMsg        = \case Message{}    -> True; _ -> False
+isAppTypeMsg = \case AppTypeMsg{} -> True; _ -> False
+isUnChoice   = \case UnChoice{}   -> True; _ -> False
 
 fromVariable :: Variable -> XType x -> Type x
 fromVariable a x = Var (varSpan a) x a

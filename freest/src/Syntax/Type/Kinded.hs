@@ -4,7 +4,7 @@ module Syntax.Type.Kinded
   , pattern Float
   , pattern Char
   , pattern Arrow
-  -- , pattern Quant
+  , pattern Quant
   , pattern Void
   , pattern Skip
   , pattern End
@@ -41,7 +41,8 @@ module Syntax.Type.Kinded
   , T.isVoid
   , T.isSemi
   , T.isAppSemi
-  , T.isAppLinChoice
+  , T.isUnChoice
+  -- , T.isAppLinChoice
   , T.isDual
   , T.isTName
   , T.isDName
@@ -78,10 +79,9 @@ pattern Arrow s m <- T.Arrow s _ m
   where Arrow s m = T.Arrow s k m
           where k = K.Arrow s (K.lt s) (K.Arrow s (K.lt s) (K.Proper s m K.Top))
 
--- pattern Quant :: Span -> T.Polarity -> KindedType
--- pattern Quant s p <- T.Quant s _ p
---   where Quant s p = T.Quant s k p
---           where k = K.Arrow s (K.Arrow s ) (K.ut s)
+pattern Quant :: Span -> K.Kind -> T.Polarity -> KindedType
+pattern Quant s k p <- T.Quant s k p
+  where Quant s k p = T.Quant s k p
 
 pattern Void :: Span -> K.Kind -> KindedType
 pattern Void s k <- T.Void s _ k
