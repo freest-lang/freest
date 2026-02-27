@@ -672,10 +672,6 @@ case *+{One} : *C
 
 case *+{One, Two} : *C
 
-case *!Int ; !Char : 1C
-
-case *?Int ; !Char : 1C
-
 case *!(!Int ; ?Bool ; Close) ; !Char : 1C
 where
   type Bool : 1T
@@ -690,9 +686,9 @@ case *&{One} ; !Char : 1C
 
 case *&{One, Two} ; !Char : 1C
 
-case *&{One} ; !Char : 1C
+case *!Int ; !Char : 1C
 
-case *+{One, Two} ; !Char : 1C
+case *!Int ; !Char : 1C
 
 case Either : *T -> *T -> *T
 where

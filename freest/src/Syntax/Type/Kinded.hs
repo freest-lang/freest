@@ -25,6 +25,7 @@ module Syntax.Type.Kinded
   , pattern AppMessage
   , pattern AppTypeMsg
   , pattern AppLinChoice
+  , pattern UnMessage
   , pattern UnChoice
   , pattern AppSemi
   , pattern AppDual
@@ -41,13 +42,16 @@ module Syntax.Type.Kinded
   , T.isVoid
   , T.isSemi
   , T.isAppSemi
+  , T.isAppTypeMsg
+  , T.isAppArrow
+  , T.isAppLinChoice
+  , T.isAppQuant
+  , T.isAppDName
   , T.isUnChoice
-  -- , T.isAppLinChoice
   , T.isDual
   , T.isTName
   , T.isDName
   , T.isMsg
-  , T.isAppTypeMsg
   , T.fromVariable
   , kindOf
   , smartApp
@@ -178,6 +182,10 @@ pattern AppLinChoice s p lts <- T.AppLinChoice s _ _ p lts
   where AppLinChoice s p lts  = T.AppLinChoice s (K.Proper s K.Lin pk) app p lts
           where pk = foldr (\(_, kindOf -> K.Proper _ _ pk) -> K.join pk) K.Channel lts
                 app = foldr (const $ K.Arrow s (K.ls s)) (K.Proper s K.Lin pk) lts
+
+pattern UnMessage :: Span -> T.Polarity -> KindedType
+pattern UnMessage s p <- T.UnMessage s _ p
+  where UnMessage s p  = T.UnMessage s (K.uc s) p
 
 pattern UnChoice :: Span -> T.Polarity -> [Identifier] -> KindedType
 pattern UnChoice s p ls <- T.UnChoice s _ p ls

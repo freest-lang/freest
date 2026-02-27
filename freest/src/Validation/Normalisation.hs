@@ -14,7 +14,7 @@ module Validation.Normalisation
   , reduce
   , normalise
   , tNameRedex
-  , betaRule
+  -- , betaRule
   )
 where
 
@@ -53,7 +53,8 @@ isWhnf = \case
   T.AppSemi _ T.AppMessage{}           _ -> True
   T.AppSemi _ T.AppVar{}               _ -> True
   T.AppSemi _ (T.AppDual _ T.AppVar{}) _ -> True
-  -- T.AppSemi _ t _ | isWhnf t && not (T.isAppSemi t || T.isSkip t || T.isAppLinChoice t || T.isAppTypeMsg t) -> True
+  T.AppSemi _ T.UnChoice{}             _ -> True -- Extra
+  -- Otherwise
   _ -> False
 
 -- | One step type reduction (aka, the tau rules).
@@ -69,7 +70,6 @@ reduce mod = \case
   T.AppSemi s1 (T.AppSemi s2 t@T.AppMessage{} u) v           -> T.AppSemi s1 t (T.AppSemi s2 u v)
   T.AppSemi s1 (T.AppSemi s2 t@T.AppVar{} u) v               -> T.AppSemi s1 t (T.AppSemi s2 u v)
   T.AppSemi s1 (T.AppSemi s2 t@(T.AppDual _ T.AppVar{}) u) v -> T.AppSemi s1 t (T.AppSemi s2 u v)
-      -- T.AppSemi s1 (T.AppSemi s2 t1 t2) t3 -> T.AppSemi s1 t1 (T.AppSemi s2 t2 t3) -- old R-Assoc
     -- R-SChoiceDist
   T.AppSemi _ (T.AppLinChoice s p lts) u ->
     T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
@@ -91,13 +91,10 @@ reduce mod = \case
     -- R-DMsg
   T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
     -- R-DChoice, un
-  T.AppDual s u@T.UnChoice{} -> T.dual u -- for *& and *+
+  T.AppDual _ u@T.UnChoice{} -> T.dual u -- for *& and *+
     -- R-DChoice, lin
   T.AppDual s (T.AppLinChoice _ p lts) -> T.AppLinChoice s (T.dual p) (map (second $ T.AppDual s) lts)
-    -- R-DQuant - Requires the kind of the quantifier. Implementing the
-    -- particular case where the quantifier is followed by a lambda. This should
-    -- be enforced by the parser and kept as an invariant. Reading the kind from
-    -- the lambda.
+    -- R-DQuant - TODO: Fix me!
   T.AppDual s1 t@(T.AppTypeMsg s2 p a k t') ->
     T.AppTypeMsg s1 (T.dual p) b k (T.AppDual s2 (subs a (T.fromVariable b k) t'))
     where b = mkFreshVar s1 (freeVars t)
@@ -106,7 +103,7 @@ reduce mod = \case
     T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
     -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
-    -- R-DCtx
+    -- R-DAppR
   T.AppDual s t -> T.AppDual s (reduce mod t)
 
   -- 3. β, μ, Void, AppL
@@ -114,27 +111,13 @@ reduce mod = \case
   T.App _ t@T.Abs{} us -> betaRule t us
     -- R-μ
   T.TName _ _ name -> unfold mod name
-    -- R-VoidApp
+    -- R-Void
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
-    -- R-TAppL
-  T.App s t ts -> T.App s (reduce mod t) ts
+    -- R-AppL
+  T.App s f ts -> T.App s (reduce mod f) ts
 
   -- 4. Should not happen
   t -> internalError $ "Validation.Normalisation.reduce: Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
-
--- | Type application, the beta rule.
--- (λα1...αn. T) U1 ... Um -->β
---     T[U1/α1]...[Un/αn]                  if n = m
---     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
---     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
-betaRule :: T.KindedType -> [T.KindedType] -> T.KindedType
-betaRule (T.Abs s aks t) us
-  | n == m    = v
-  | m > n     = T.App s v (drop n us)
-  | otherwise = T.Abs s (drop m aks) v
-  where n = length aks
-        m = length us
-        v = subsAll (map fst aks) us t
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
@@ -165,3 +148,17 @@ tNameRedex = \case
   -- (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
   -- (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
   _                                            -> Nothing
+
+-- | Type application, the beta rule.
+-- (λα1...αn. T) U1 ... Um -->β
+--     T[U1/α1]...[Un/αn]                  if n = m
+--     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
+--     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
+betaRule :: T.KindedType -> [T.KindedType] -> T.KindedType
+betaRule (T.Abs s aks t) us
+  | n == m    = v
+  | m > n     = T.App s v (drop n us)
+  | otherwise = T.Abs s (drop m aks) v
+  where n = length aks
+        m = length us
+        v = subsAll (map fst aks) us t

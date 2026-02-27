@@ -19,6 +19,7 @@ module Syntax.Type.Internal
         , AppMessage
         , AppTypeMsg
         , AppLinChoice
+        , UnMessage
         , UnChoice
         , AppSemi
         , AppDual
@@ -36,6 +37,10 @@ module Syntax.Type.Internal
   , isVoid
   , isSemi
   , isAppSemi
+  , isAppArrow
+  , isAppLinChoice
+  , isAppQuant
+  , isAppDName
   , isUnChoice
   , isDual
   , isTName
@@ -139,6 +144,10 @@ pattern AppLinChoice s x1 x2 p lts <- App s x1 (Choice _ x2 K.Lin p ls) (zip ls 
   where AppLinChoice s x1 x2 p lts  = App s x1 (Choice s x2 K.Lin p ls) ts
           where (ls, ts) = unzip $ sortBy (compare `on` fst) lts
 
+pattern UnMessage :: Span -> XType x -> Polarity -> Type x
+pattern UnMessage s x p <- Message s x K.Un p
+  where UnMessage s x p  = Message s x K.Un p
+
 pattern UnChoice :: Span -> XType x -> Polarity -> [Identifier] -> Type x
 pattern UnChoice s x p ls <- Choice s x K.Un p ls
   where UnChoice s x p ls  = Choice s x K.Un p (sort ls)
@@ -212,17 +221,21 @@ isConstant = \case
   App{}   -> False
   _       -> True
 
-isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isUnChoice :: Type x -> Bool
-isSkip       = \case Skip{}       -> True; _ -> False
-isVoid       = \case Void{}       -> True; _ -> False
-isSemi       = \case Semi{}       -> True; _ -> False
-isAppSemi    = \case AppSemi{}    -> True; _ -> False
-isDual       = \case Dual{}       -> True; _ -> False
-isTName      = \case TName{}      -> True; _ -> False
-isDName      = \case DName{}      -> True; _ -> False
-isMsg        = \case Message{}    -> True; _ -> False
-isAppTypeMsg = \case AppTypeMsg{} -> True; _ -> False
-isUnChoice   = \case UnChoice{}   -> True; _ -> False
+isSkip, isVoid, isSemi, isAppSemi, isDual, isTName, isDName, isMsg, isAppTypeMsg, isUnChoice, isAppArrow, isAppLinChoice, isAppQuant, isAppDName :: Type x -> Bool
+isSkip         = \case Skip{}         -> True; _ -> False
+isVoid         = \case Void{}         -> True; _ -> False
+isSemi         = \case Semi{}         -> True; _ -> False
+isDual         = \case Dual{}         -> True; _ -> False
+isTName        = \case TName{}        -> True; _ -> False
+isDName        = \case DName{}        -> True; _ -> False
+isMsg          = \case Message{}      -> True; _ -> False
+isUnChoice     = \case UnChoice{}     -> True; _ -> False
+isAppSemi      = \case AppSemi{}      -> True; _ -> False
+isAppTypeMsg   = \case AppTypeMsg{}   -> True; _ -> False
+isAppArrow     = \case AppArrow{}     -> True; _ -> False
+isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
+isAppQuant     = \case AppQuant{}     -> True; _ -> False
+isAppDName     = \case AppDName{}     -> True; _ -> False
 
 fromVariable :: Variable -> XType x -> Type x
 fromVariable a x = Var (varSpan a) x a
