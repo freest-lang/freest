@@ -2,8 +2,8 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-light.svg">
-    <img alt="The Rust Programming Language: A language empowering everyone to build reliable and efficient software"
-         src="https://raw.githubusercontent.com/rust-lang/www.rust-lang.org/master/static/images/rust-social-wide-light.svg"
+    <img alt="FreeST: a functional programming language for safe concurrency powered by context-free session types"
+         src="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-light.svg"
          width="50%">
   </picture>  
   <br/><br/>
