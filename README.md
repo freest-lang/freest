@@ -1,6 +1,19 @@
-# The FreeST programming language
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-light.svg">
+    <img alt="The Rust Programming Language: A language empowering everyone to build reliable and efficient software"
+         src="https://raw.githubusercontent.com/rust-lang/www.rust-lang.org/master/static/images/rust-social-wide-light.svg"
+         width="50%">
+  </picture>  
+  <br/><br/>
+  A functional programming language for safe concurrency  
+  
+  Learn more at [freest-lang.github.io](https://freest-lang.github.io/)
+</div>
 
-FreeST is a typed concurrent programming language where processes communicate via message-passing. Learn more at [freest-lang.github.io](https://freest-lang.github.io/).
+# About
+FreeST is a typed concurrent programming language where processes communicate via message-passing. Messages are exchanged on bidirectional channels. Communication on channels is governed by a powerful type system based on polymorphic context-free session types. Built on a core linear functional programming language, FreeST features primitives for forking new threads, for creating channels and for communicating on these. The compiler builds on a novel algorithm for deciding the equivalence of context-free types.
 
 # Build
 For now, use the Haskell tool [Stack](https://docs.haskellstack.org/en/stable/).
