@@ -1,9 +1,9 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-light.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/images/freest-logo-h-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/images/freest-logo-h-light.svg">
     <img alt="FreeST: a functional programming language for safe concurrency powered by context-free session types"
-         src="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/freest-logo-h-light.svg"
+         src="https://raw.githubusercontent.com/freest-lang/freest-lang.github.io/master/resources/images/freest-logo-h-light.svg"
          width="50%">
   </picture>  
   <br/><br/>
