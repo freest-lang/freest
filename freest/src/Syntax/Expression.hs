@@ -303,9 +303,7 @@ allVarsPat = \case
 -- | The set of free variables ocurring in let declarations.
 freeVarsDecls :: LetDecl x -> Set.Set Variable
 freeVarsDecls = \case
-  -- TODO not sure about "Set.\\ allVarsPat pat"
-  ValDef pat rhs    -> freeVarsRHS rhs Set.\\ allVarsPat pat
-  -- TODO not sure about "Set.\\ Set.singleton var"
+  ValDef pat rhs    -> freeVarsRHS rhs
   FnDef var clauses -> Set.unions 
                         (map (\(params, rhs) -> 
                           let (pats, vars) = B.partitionLevels params 
