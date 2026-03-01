@@ -315,6 +315,8 @@ freeVarsDecls = \case
 -- | The set of free variables ocurring in RHS.
 freeVarsRHS :: RHS x -> Set.Set Variable
 freeVarsRHS = \case
+  -- TODO use fold, remove from a let (in where) all variables bound by previous let, maybe use boundVars function to handle this?
+  -- TODO remove from body all variables bound in where
   GuardedRHS guards whereDecls  -> case whereDecls of
                                     Just whereDecls' -> guards' `Set.union` Set.unions (map freeVarsDecls whereDecls')
                                     Nothing -> guards'
@@ -333,6 +335,7 @@ freeVars = \case
                                  in freeVars body Set.\\ Set.union pats' vars'
   Pack _ _ exp                -> freeVars exp
   Asc _ exp _                 -> freeVars exp
+  -- TODO use fold, remove from a let all variables bound by previous let, maybe use boundVars function to handle this?
   Let _ decls exp             -> Set.unions (map freeVarsDecls decls) `Set.union` freeVars exp
   Semi _ exp1 exp2            -> Set.union (freeVars exp1) (freeVars exp2)
   Case _ target alternatives  -> let freeVarsAlts = Set.unions $ map (\(pat, rhs) -> freeVarsRHS rhs Set.\\ allVarsPat pat) alternatives
