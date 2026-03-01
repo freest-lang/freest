@@ -84,8 +84,10 @@ type Clause = ([E.Pat], E.KindedRHS)
 compileFunctionToClosure :: [Clause] -> Value
 compileFunctionToClosure clauses = do
   let arity = length $ fst $ head clauses
-      -- TODO collect free variables from clauses
-      freeVars = []
+      -- TODO improve transformations from sets to lists
+      freeVars = Set.toList $ Set.unions 
+        (map (\(pats, rhs) -> E.freeVarsRHS rhs Set.\\ Set.unions (map E.allVarsPat pats))
+        clauses)
       -- generate list of fresh variables to be used as parameters to the closure (take into account previously generated vars with foldr and accumulator)
       params = snd $ foldl
         (\(freeVars', acc) _ -> (freeVars' ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')], acc ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')]))
