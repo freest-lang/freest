@@ -68,16 +68,20 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
     do  programModule  <- runParseModule programPath programSrc
         preludeModule  <- runParseModule preludePath preludeSrc
         let finalModule = if noImplicitPrelude then programModule 
-                         else mappend preludeModule programModule
+                         else {- mappend preludeModule -} programModule
         -- Scope the final module.
         runScopeModule finalModule
     of Left es -> putStrLn "[Scoping failed]" >>  printErrors src es >> exitFailure
        Right m -> do 
-          -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
+          putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
           -- Validate the module.
           runValidate m & \case 
             Left es -> putStrLn "[Validation failed]" >> printErrors src es >> exitFailure     
-            Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
+            Right m -> do
+              putStrLn "[Validation passed]"
+              res <- I.interpret $ fst m
+              print res
+              exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath
