@@ -26,6 +26,10 @@ module Syntax.Expression
        , Cons
        )
   , listExp
+  , allVarsPat
+  , freeVarsDecls
+  , freeVarsRHS
+  , freeVars
   )
 where
 
@@ -35,6 +39,10 @@ import Syntax.Names
 import Syntax.Type.Internal ( Type )
 
 import Data.List ( intercalate )
+import qualified Data.Set as Set
+import qualified Syntax.Base as B
+import Data.IntMap (alter)
+import qualified GHC.Generics as Set
 
 type ParsedLetDecl = LetDecl Parsed
 type ScopedLetDecl = LetDecl Scoped
@@ -290,3 +298,55 @@ instance Show (Exp x) where
     Select _ i     -> "(select "++show i++")"
     SendType _ t   -> "(sendType @" ++ show t ++ ")"
     ReceiveType _  -> "receiveType"
+
+-- | The set of all variables ocurring in a pattern.
+allVarsPat :: Pat -> Set.Set Variable
+allVarsPat = \case
+  VarPat _ var        -> Set.singleton var
+  PackPat _ vars pat  -> let vars' = map fst vars in Set.unions (map Set.singleton vars') `Set.union` allVarsPat pat
+  DConsPat _ _ pats   -> Set.unions $ map allVarsPat pats
+  InPat _ pat1 pat2   -> Set.union (allVarsPat pat1) (allVarsPat pat2)
+  ChoicePat _ _ pat   -> allVarsPat pat
+  TypeInPat _ var pat -> Set.singleton (fst var) `Set.union` allVarsPat pat
+  AsPat _ var pat     -> Set.singleton var `Set.union` allVarsPat pat
+  _                   -> Set.empty
+
+-- | The set of free variables ocurring in let declarations.
+freeVarsDecls :: LetDecl x -> Set.Set Variable
+freeVarsDecls = \case
+  ValDef pat rhs    -> freeVarsRHS rhs
+  FnDef var clauses -> Set.unions 
+                        (map (\(params, rhs) -> 
+                          let (pats, vars) = B.partitionLevels params 
+                          in freeVarsRHS rhs Set.\\ Set.union (Set.unions $ map allVarsPat pats) (Set.unions $ map Set.singleton vars)) 
+                        clauses) Set.\\ Set.singleton var
+  TypeSig vars _    -> Set.empty
+  Mutual letdecls   -> Set.unions $ map freeVarsDecls letdecls
+
+-- | The set of free variables ocurring in RHS.
+freeVarsRHS :: RHS x -> Set.Set Variable
+freeVarsRHS = \case
+  GuardedRHS guards whereDecls  -> case whereDecls of
+                                    Just whereDecls' -> guards' `Set.union` Set.unions (map freeVarsDecls whereDecls')
+                                    Nothing -> guards'
+                                    where guards' = Set.unions $ map (\(lhs, rhs) -> freeVars lhs `Set.union` freeVars rhs) guards
+  UnguardedRHS exp whereDecls   -> case whereDecls of
+                                    Just whereDecls' -> freeVars exp `Set.union` Set.unions (map freeVarsDecls whereDecls')
+                                    Nothing -> freeVars exp
+
+-- | The set of free variables ocurring in an expression.
+freeVars :: Exp x -> Set.Set Variable
+freeVars = \case
+  Var _ var                   -> Set.singleton var
+  App _ f args                -> freeVars f `Set.union` Set.unions (map freeVars $ fst $ B.partitionLevels args)
+  Abs _ params _ body         -> let (pats, vars) = B.partitionLevels params
+                                     (pats', vars') = (Set.unions $ map (allVarsPat . fst) pats, Set.fromList $ map fst vars)
+                                 in freeVars body Set.\\ Set.union pats' vars'
+  Pack _ _ exp                -> freeVars exp
+  Asc _ exp _                 -> freeVars exp
+  Let _ decls exp             -> Set.unions (map freeVarsDecls decls) `Set.union` freeVars exp
+  Semi _ exp1 exp2            -> Set.union (freeVars exp1) (freeVars exp2)
+  Case _ target alternatives  -> let freeVarsAlts = Set.unions $ map (\(pat, rhs) -> freeVarsRHS rhs Set.\\ allVarsPat pat) alternatives
+                                in freeVars target `Set.union` freeVarsAlts
+  If _ ifExp thenExp elseExp  -> freeVars ifExp `Set.union` freeVars thenExp `Set.union` freeVars elseExp
+  _                           -> Set.empty
