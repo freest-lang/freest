@@ -63,12 +63,12 @@ word' ctx = \case
   t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
-  -- W-Msg -- TODO: FIX
+  -- W-Msg _ TODO: We may need a special case for *?T and *!T
   T.AppMessage _ m p t -> do
     w <- word ctx t
     getNonterminal $ Map.fromList
-      [ (show m ++ show p, w ++ [bottom])
-      , ("1", [bottom | m == K.Un])
+      [ (show m ++ show p, [])
+      , ("1", w ++ [bottom])
       ]
   -- W-Seq
   T.AppSemi _ t u -> do
@@ -82,7 +82,7 @@ word' ctx = \case
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
-  t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppLinChoice t || T.isAppQuant t || T.isAppDName t)-> do -- TODO: restrict iota
+  t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppDName t || T.isAppLinChoice t || T.isAppQuant t)-> do
     words <- mapM (word ctx) vs
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
@@ -108,9 +108,8 @@ word' ctx = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- If we get here, then t is of higher order kind or reduces, hopefully
+  -- W-Abs and W-τ
   t -> do
-    modl <- gets modl
     case T.kindOf t of
       K.Arrow _ k _ -> do
         -- W-Abs, F : k => k'
@@ -126,24 +125,13 @@ word' ctx = \case
           ]
       _ -> do
         -- W-τ, t reduces
+        modl <- gets modl
         word ctx (reduce modl t)
 
 isProperType :: T.KindedType -> Bool
 isProperType t = case T.kindOf t of
   K.Proper{} -> True
   otherwise -> False
--- isFullyApplied ctx = \case
---   T.Int{} -> True
---   T.Float{} -> True
---   T.AppArrow{} -> True
---   T.AppQuant{} -> True
---   T.AppQuantS{} -> True
---   T.AppLinChoice{} -> True
---   T.UnChoice{} -> True
---   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
---   T.Var _ k a -> K.depth k ==  0
---   T.AppVar _ a k ts -> K.depth k == length ts
---   _ -> False
 
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal

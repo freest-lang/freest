@@ -99,8 +99,8 @@ pattern Message s m p <- T.Message s _ m p
   where Message s m p = T.Message s k m p
           where k = K.Arrow s (K.lt s) (if m == K.Lin then K.ls s else K.uc s)
 
-pattern QuantS :: Span -> T.Polarity -> KindedType
-pattern QuantS s p <- T.Quant s _ p K.Session
+pattern QuantS :: Span -> K.Kind -> T.Polarity -> KindedType
+pattern QuantS s k p <- T.Quant s k p K.Session
 
 pattern Choice :: Span -> K.Multiplicity -> T.Polarity -> [Identifier] -> KindedType
 pattern Choice s m p is <- T.Choice s _ m p is
