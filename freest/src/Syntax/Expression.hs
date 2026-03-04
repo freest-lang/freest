@@ -310,15 +310,26 @@ freeVarsDecls = \case
                           in freeVarsRHS rhs Set.\\ Set.union (Set.unions $ map allVarsPat pats) (Set.unions $ map Set.singleton vars)) 
                         clauses) Set.\\ Set.singleton var
   TypeSig vars _    -> Set.empty
-  Mutual letdecls   -> Set.unions $ map freeVarsDecls letdecls
+  Mutual letdecls   -> let boundVars = Set.unions $ map boundVarsDecls letdecls
+                       in Set.unions [ freeVarsDecls decls Set.\\ boundVars | decls <- letdecls]
+
+-- | The set of bound variables in a let declarations.
+boundVarsDecls :: LetDecl x -> Set.Set Variable
+boundVarsDecls = \case
+  ValDef pat rhs    -> allVarsPat pat
+  FnDef var clauses -> Set.singleton var
+  TypeSig vars _    -> Set.empty
+  Mutual letdecls   -> Set.unions $ map boundVarsDecls letdecls
+
+-- | The set of free and bound variables obtained sequentially from a list of let declarations.
+collectVarsLet :: [LetDecl x] -> (Set.Set Variable, Set.Set Variable)
+collectVarsLet = foldl (\(free, bound) letDecl -> (freeVarsDecls letDecl Set.\\ bound, bound `Set.union` boundVarsDecls letDecl)) (Set.empty, Set.empty)
 
 -- | The set of free variables ocurring in RHS.
 freeVarsRHS :: RHS x -> Set.Set Variable
 freeVarsRHS = \case
-  -- TODO use fold, remove from a let (in where) all variables bound by previous let, maybe use boundVars function to handle this?
-  -- TODO remove from body all variables bound in where
   GuardedRHS guards whereDecls  -> case whereDecls of
-                                    Just whereDecls' -> guards' `Set.union` Set.unions (map freeVarsDecls whereDecls')
+                                    Just whereDecls' -> let (free, bound) = collectVarsLet whereDecls' in free `Set.union` (guards' Set.\\ bound)
                                     Nothing -> guards'
                                     where guards' = Set.unions $ map (\(lhs, rhs) -> freeVars lhs `Set.union` freeVars rhs) guards
   UnguardedRHS exp whereDecls   -> case whereDecls of
@@ -335,8 +346,7 @@ freeVars = \case
                                  in freeVars body Set.\\ Set.union pats' vars'
   Pack _ _ exp                -> freeVars exp
   Asc _ exp _                 -> freeVars exp
-  -- TODO use fold, remove from a let all variables bound by previous let, maybe use boundVars function to handle this?
-  Let _ decls exp             -> Set.unions (map freeVarsDecls decls) `Set.union` freeVars exp
+  Let _ decls exp             -> let (free, bound) = collectVarsLet decls in free `Set.union` (freeVars exp Set.\\ bound)
   Semi _ exp1 exp2            -> Set.union (freeVars exp1) (freeVars exp2)
   Case _ target alternatives  -> let freeVarsAlts = Set.unions $ map (\(pat, rhs) -> freeVarsRHS rhs Set.\\ allVarsPat pat) alternatives
                                 in freeVars target `Set.union` freeVarsAlts
