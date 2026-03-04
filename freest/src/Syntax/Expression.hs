@@ -311,14 +311,14 @@ freeVarsDecls = \case
                         clauses) Set.\\ Set.singleton var
   TypeSig vars _    -> Set.empty
   Mutual letdecls   -> let boundVars = Set.unions $ map boundVarsDecls letdecls
-                       in Set.unions [ freeVarsDecls decls Set.\\ boundVars | decls <- letdecls]
+                       in Set.unions [freeVarsDecls decls Set.\\ boundVars | decls <- letdecls]
 
 -- | The set of bound variables in a let declarations.
 boundVarsDecls :: LetDecl x -> Set.Set Variable
 boundVarsDecls = \case
   ValDef pat rhs    -> allVarsPat pat
   FnDef var clauses -> Set.singleton var
-  TypeSig vars _    -> Set.empty
+  TypeSig vars _    -> Set.unions $ map Set.singleton vars
   Mutual letdecls   -> Set.unions $ map boundVarsDecls letdecls
 
 -- | The set of free and bound variables obtained sequentially from a list of let declarations.
@@ -333,7 +333,7 @@ freeVarsRHS = \case
                                     Nothing -> guards'
                                     where guards' = Set.unions $ map (\(lhs, rhs) -> freeVars lhs `Set.union` freeVars rhs) guards
   UnguardedRHS exp whereDecls   -> case whereDecls of
-                                    Just whereDecls' -> freeVars exp `Set.union` Set.unions (map freeVarsDecls whereDecls')
+                                    Just whereDecls' -> let (free, bound) = collectVarsLet whereDecls' in free `Set.union` (freeVars exp Set.\\ bound)
                                     Nothing -> freeVars exp
 
 -- | The set of free variables ocurring in an expression.
