@@ -302,14 +302,14 @@ instance Show (Exp x) where
 -- | The set of all variables ocurring in a pattern.
 allVarsPat :: Pat -> Set.Set Variable
 allVarsPat = \case
-  VarPat _ var        -> Set.singleton var
-  PackPat _ vars pat  -> let vars' = map fst vars in Set.unions (map Set.singleton vars') `Set.union` allVarsPat pat
-  DConsPat _ _ pats   -> Set.unions $ map allVarsPat pats
-  InPat _ pat1 pat2   -> Set.union (allVarsPat pat1) (allVarsPat pat2)
-  ChoicePat _ _ pat   -> allVarsPat pat
-  TypeInPat _ var pat -> Set.singleton (fst var) `Set.union` allVarsPat pat
-  AsPat _ var pat     -> Set.singleton var `Set.union` allVarsPat pat
-  _                   -> Set.empty
+  VarPat _ var              -> Set.singleton var
+  PackPat _ vars pat        -> let vars' = map fst vars in Set.unions (map Set.singleton vars') `Set.union` allVarsPat pat
+  DConsPat _ _ pats         -> Set.unions $ map allVarsPat pats
+  InPat _ pat1 pat2         -> Set.union (allVarsPat pat1) (allVarsPat pat2)
+  ChoicePat _ _ pat         -> allVarsPat pat
+  TypeInPat _ (var, _) pat  -> Set.singleton var `Set.union` allVarsPat pat
+  AsPat _ var pat           -> Set.singleton var `Set.union` allVarsPat pat
+  _                         -> Set.empty
 
 -- | The set of free variables ocurring in let declarations.
 freeVarsDecls :: LetDecl x -> Set.Set Variable
