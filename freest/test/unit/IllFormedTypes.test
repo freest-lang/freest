@@ -79,6 +79,41 @@ where
   type A a = B a
   type B b = A Int
 
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = A a ; A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = A b ; A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = B b ; A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = B Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B Char
+  type B b = A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a ; A Int
+  type B b = B b
+
 case NestedTree : 1T -> 1S
 where
   type NestedTree, A : 1T -> 1S

@@ -1384,6 +1384,19 @@ case Dual (!Int ; Close) : 1S
 
 case +{A: Skip, C: Close} ; Close : 1C
 
+-- Non contractive, mutually recursion
+
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = A a
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = A b
+
 -- See issue #19
 -- case
 --   Id Wait : 1C
