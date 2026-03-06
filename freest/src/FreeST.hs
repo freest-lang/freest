@@ -20,7 +20,7 @@ import Parser.Scoping ( runScopeModule )
 import Validation.Base
 import Validation.Kinding
 import Validation.Typing
-
+import Validation.PolyRecursion ( polyrec )
 
 import Control.Monad.State ( runState )
 import Data.Function ( (&) )
@@ -57,7 +57,7 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
           -- Validate the module.
           runValidate m & \case 
             Left es -> putStrLn "[Validation failed]" >> printErrors src es >> exitFailure     
-            Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
+            Right (m, _) ->  print (polyrec m) >> exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath

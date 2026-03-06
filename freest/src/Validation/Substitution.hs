@@ -12,7 +12,6 @@ module Validation.Substitution
   ( subs
   , subsAll
   , freeVars
-  -- , unfold
   )
 where
 
@@ -20,14 +19,9 @@ import Syntax.Base
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Kind qualified as K
-
-import Data.Bifunctor ( first, second )
-import Data.List ( intersperse, union )
-import Data.List.NonEmpty qualified as NE
-import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 
--- | The set of free variables ocurring in a type.
+-- | The set of free variables occurring in a type.
 freeVars :: T.Type x -> Set.Set Variable
 freeVars = \case
     T.Abs _ _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
