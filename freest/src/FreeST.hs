@@ -20,7 +20,6 @@ import Parser.Scoping ( runScopeModule )
 import Validation.Base
 import Validation.Kinding
 import Validation.Typing
-import Validation.PolyRecursion ( polyrec )
 
 import Control.Monad.State ( runState )
 import Data.Function ( (&) )

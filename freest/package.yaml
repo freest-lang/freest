@@ -72,6 +72,7 @@ library:
     - Validation.Substitution
     - Validation.TypeEquivalence
     - Validation.Typing
+    - Validation.PolyRecursion
 executables:
   freest:
     main:        FreeST.hs
