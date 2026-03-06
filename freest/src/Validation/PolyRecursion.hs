@@ -25,8 +25,8 @@ polyRec m = Map.foldlWithKey polyRecType (Right ()) typeDecls
         t@(T.AppTName s id' _) | id' == id -> addError errors (E.PolymorphicTypeRecursion s t)
         T.AppTName _ id' _     | id' `Set.member` visited -> errors
         T.AppTName _ id' us ->
-            polyRecType errors id (betaRule (toAbs (typeDecls Map.! id')) us)
-        T.App _ t us -> foldl (`polyRecType` id) errors (t:us)
+            polyRecAbs (Set.insert id' visited) errors id as (betaRule (toAbs (typeDecls Map.! id')) us)
+        T.App _ t us -> foldl (\errors' t' -> polyRecAbs visited errors' id as t') errors (t:us)
         _ -> errors
 
 paramsEqToArgs :: [Variable] -> [T.KindedType] -> Bool
