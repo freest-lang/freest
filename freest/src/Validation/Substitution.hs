@@ -11,6 +11,7 @@ To be replaced by a more efficient alternative.
 module Validation.Substitution
   ( subs
   , subsAll
+  , betaRule
   , freeVars
   )
 where
@@ -65,3 +66,17 @@ subs a u = \case
 -- between @as@ and @us@.
 subsAll :: [Variable] -> [TK.KindedType] -> TK.KindedType -> TK.KindedType
 subsAll as us t = foldr (uncurry subs) t (zip as us)
+
+-- | Type application, the beta rule.
+-- (λα1...αn. T) U1 ... Um -->β
+--     T[U1/α1]...[Un/αn]                  if n = m
+--     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
+--     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
+betaRule :: TK.KindedType -> [TK.KindedType] -> TK.KindedType
+betaRule (TK.Abs s aks t) us
+  | n == m    = v
+  | m > n     = TK.App s v (drop n us)
+  | otherwise = TK.Abs s (drop m aks) v
+  where n = length aks
+        m = length us
+        v = subsAll (map fst aks) us t

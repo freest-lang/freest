@@ -22,7 +22,7 @@ import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Validation.Base ( unfold )
-import Validation.Substitution ( freeVars, subs, subsAll )
+import Validation.Substitution ( freeVars, subs, subsAll, betaRule )
 import Utils ( internalError )
 
 import Data.Bifunctor (second)
@@ -144,17 +144,3 @@ tNameRedex = \case
   (T.AppDual _ t@T.AppTName{}) -> Just t -- Dual (µ∗F)
   (T.AppSemi _ t _)            -> tNameRedex t -- T; U
   _                            -> Nothing
-
--- | Type application, the beta rule.
--- (λα1...αn. T) U1 ... Um -->β
---     T[U1/α1]...[Un/αn]                  if n = m
---     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
---     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
-betaRule :: T.KindedType -> [T.KindedType] -> T.KindedType
-betaRule (T.Abs s aks t) us
-  | n == m    = v
-  | m > n     = T.App s v (drop n us)
-  | otherwise = T.Abs s (drop m aks) v
-  where n = length aks
-        m = length us
-        v = subsAll (map fst aks) us t

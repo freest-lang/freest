@@ -4,25 +4,38 @@ import Syntax.Base
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Syntax.Kind qualified as K
+import Validation.Substitution ( betaRule )
 import UI.Error qualified as E
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 
 polyRec :: M.KindedModule -> Either [E.Error] ()
-polyRec m = Map.foldlWithKey polyRecType (Right ()) (M.typeDecls m)
+polyRec m = Map.foldlWithKey (polyRecType Set.empty) (Right ()) typeDecls
     where
-        polyRecType :: Either [E.Error] () -> Identifier -> T.KindedType -> Either [E.Error] ()
-        polyRecType acc id (T.Abs _ aks t) = polyRecAbs acc id aks t
-        polyRecType acc _  _ = acc
-        polyRecAbs :: Either [E.Error] () -> Identifier -> [(Variable, K.Kind)] -> T.KindedType -> Either [E.Error] ()
-        polyRecAbs acc id aks (T.AppTName _ id' us) | id == id' && paramsEqToArgs aks us = acc
-        polyRecAbs acc id _ t@(T.AppTName _ id' _)  | id == id' = addTo acc (E.PolymorphicTypeRecursion (getSpan t) t)
-        polyRecAbs acc id aks (T.App _ t us) = foldl (`polyRecType` id) acc (t:us)
+    typeDecls :: M.TypeDecls Kinded
+    typeDecls = M.typeDecls m
+    polyRecType :: Set.Set Identifier -> Either [E.Error] () -> Identifier -> T.KindedType -> Either [E.Error] ()
+    polyRecType visited errors id (T.Abs _ aks t) = polyRecAbs visited errors id (map fst aks) t
+    polyRecType visited errors _  _ = errors
+    polyRecAbs :: Set.Set Identifier -> Either [E.Error] () -> Identifier -> [Variable] -> T.KindedType -> Either [E.Error] ()
+    polyRecAbs visited errors id as = \case
+        T.AppTName _ id' us    | id' == id && paramsEqToArgs as us -> errors
+        t@(T.AppTName s id' _) | id' == id -> addError errors (E.PolymorphicTypeRecursion s t)
+        T.AppTName _ id' _     | id' `Set.member` visited -> errors
+        T.AppTName _ id' us ->
+            polyRecType (Set.insert id' visited) errors id (betaRule (toAbs (typeDecls Map.! id')) us)
+        T.App _ t us -> foldl (\errors' t' -> polyRecType visited errors' id t') errors (t:us)
+        _ -> errors
 
-paramsEqToArgs :: [(Variable, K.Kind)] -> [T.KindedType] -> Bool
+paramsEqToArgs :: [Variable] -> [T.KindedType] -> Bool
 paramsEqToArgs [] [] = True
-paramsEqToArgs ((a, _):aks) (T.Var _ _ b:us) = a == b && paramsEqToArgs aks us
+paramsEqToArgs (a:as) (T.Var _ _ b:ts) = a == b && paramsEqToArgs as ts
 paramsEqToArgs _ _ = False
 
-addTo :: Either [E.Error] () -> E.Error -> Either [E.Error] ()
-addTo (Right _) e = Left [e]
-addTo (Left es) e = Left (es ++ [e])
+toAbs :: T.KindedType -> T.KindedType
+toAbs t@T.Abs{} = t
+toAbs t = T.Abs (getSpan t) [] t
+
+addError :: Either [E.Error] () -> E.Error -> Either [E.Error] ()
+addError (Right _) e = Left [e]
+addError (Left es) e = Left (es ++ [e])
