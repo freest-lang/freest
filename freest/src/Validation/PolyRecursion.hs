@@ -1,6 +1,14 @@
+{- |
+Module      :  Validation.PolyRecursion
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+This module looks for polymorphic recursion in type declarations.
+-}
+
 module Validation.PolyRecursion ( polyRec ) where
 
-import Syntax.Base
+import Syntax.Base ( Identifier, Kinded, Variable )
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Syntax.Kind qualified as K
@@ -24,8 +32,9 @@ polyRec m = Map.foldlWithKey polyRecType (Right ()) typeDecls
         T.AppTName _ id' us    | id' == id && paramsEqToArgs as us -> errors
         t@(T.AppTName s id' _) | id' == id -> addError errors (E.PolymorphicTypeRecursion s t)
         T.AppTName _ id' _     | id' `Set.member` visited -> errors
+        T.AppTName _ _ [] -> errors
         T.AppTName _ id' us ->
-            polyRecAbs (Set.insert id' visited) id as errors (betaRule (toAbs (typeDecls Map.! id')) us)
+            polyRecAbs (Set.insert id' visited) id as errors (betaRule (typeDecls Map.! id') us)
         T.App _ t us -> foldl (polyRecAbs visited id as) errors (t:us)
         _ -> errors
 
@@ -33,10 +42,6 @@ paramsEqToArgs :: [Variable] -> [T.KindedType] -> Bool
 paramsEqToArgs [] [] = True
 paramsEqToArgs (a:as) (T.Var _ _ b:ts) = a == b && paramsEqToArgs as ts
 paramsEqToArgs _ _ = False
-
-toAbs :: T.KindedType -> T.KindedType
-toAbs t@T.Abs{} = t
-toAbs t = T.Abs (getSpan t) [] t
 
 addError :: Either [E.Error] () -> E.Error -> Either [E.Error] ()
 addError (Right _) e = Left [e]
