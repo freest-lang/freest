@@ -10,21 +10,23 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 
 polyRec :: M.KindedModule -> Either [E.Error] ()
-polyRec m = Map.foldlWithKey (polyRecType Set.empty) (Right ()) typeDecls
+polyRec m = Map.foldlWithKey polyRecType (Right ()) typeDecls
     where
     typeDecls :: M.TypeDecls Kinded
     typeDecls = M.typeDecls m
-    polyRecType :: Set.Set Identifier -> Either [E.Error] () -> Identifier -> T.KindedType -> Either [E.Error] ()
-    polyRecType visited errors id (T.Abs _ aks t) = polyRecAbs visited errors id (map fst aks) t
-    polyRecType visited errors _  _ = errors
+
+    polyRecType :: Either [E.Error] () -> Identifier -> T.KindedType -> Either [E.Error] ()
+    polyRecType errors id (T.Abs _ aks t) = polyRecAbs Set.empty errors id (map fst aks) t
+    polyRecType errors _  _ = errors
+    
     polyRecAbs :: Set.Set Identifier -> Either [E.Error] () -> Identifier -> [Variable] -> T.KindedType -> Either [E.Error] ()
     polyRecAbs visited errors id as = \case
+        T.AppTName _ id' _     | id' `Set.member` visited -> errors
         T.AppTName _ id' us    | id' == id && paramsEqToArgs as us -> errors
         t@(T.AppTName s id' _) | id' == id -> addError errors (E.PolymorphicTypeRecursion s t)
-        T.AppTName _ id' _     | id' `Set.member` visited -> errors
         T.AppTName _ id' us ->
-            polyRecType (Set.insert id' visited) errors id (betaRule (toAbs (typeDecls Map.! id')) us)
-        T.App _ t us -> foldl (\errors' t' -> polyRecType visited errors' id t') errors (t:us)
+            polyRecType errors id (betaRule (toAbs (typeDecls Map.! id')) us)
+        T.App _ t us -> foldl (`polyRecType` id) errors (t:us)
         _ -> errors
 
 paramsEqToArgs :: [Variable] -> [T.KindedType] -> Bool
