@@ -17,6 +17,7 @@ default-extensions:
   - LambdaCase
   - MultiWayIf
   - NamedFieldPuns
+  - OverloadedRecordDot
   - PatternSynonyms
   - ScopedTypeVariables
   - TupleSections

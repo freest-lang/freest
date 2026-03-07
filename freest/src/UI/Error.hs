@@ -84,7 +84,7 @@ data Error
     (Level E.Pat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  | PolymorphicTypeRecursion Span TK.KindedType
+  | PolymorphicTypeRecursion Span Identifier
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -407,8 +407,8 @@ toMessage src = \case
     ++ msg2
   VarOutOfScope s x -> makeError src s
     ("Variable out of scope: " ++ bt (external x))
-  PolymorphicTypeRecursion s t -> makeError src s
-    ("Polymorphic type recursion not supported: type " ++ bt (unparse t))
+  PolymorphicTypeRecursion s i -> makeError src s
+    ("Polymorphic type recursion detected in the declaration for type " ++ bt (show i))
   where
     thirdPerson    = \case 
       1 -> "it"
