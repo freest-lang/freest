@@ -119,3 +119,10 @@ where
   type NestedTree, A : 1T -> 1S
   type NestedTree a = +{Leaf: !a, Node: A [a]}
   type A b = NestedTree b
+
+case PerfectTree : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type PerfectTree : 1T -> 1S
+  type PerfectTree = Id (\(a : 1T) -> +{Leaf: !a, Node: PerfectTree (a, a)})
