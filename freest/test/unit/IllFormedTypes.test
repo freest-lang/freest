@@ -140,3 +140,10 @@ where
   type Id a = a
   type PerfectTree : 1T -> 1S
   type PerfectTree = Id (\(a : 1T) -> +{Leaf: !a, Node: Id (PerfectTree (a, a))})
+
+case PerfectTree : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type PerfectTree : 1T -> 1S
+  type PerfectTree = Id (\(a : 1T) -> +{Leaf: !a, Node: Id (\(a : 1T) -> PerfectTree a) (a, a)})
