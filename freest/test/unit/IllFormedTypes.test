@@ -146,4 +146,16 @@ where
   type Id : (1T -> 1S) -> 1T -> 1S
   type Id a = a
   type PerfectTree : 1T -> 1S
-  type PerfectTree = Id (\(a : 1T) -> +{Leaf: !a, Node: Id (\(a : 1T) -> PerfectTree a) (a, a)})
+  type PerfectTree a = +{Leaf: !a, Node: Id (\(a : 1T) -> PerfectTree a) (a, a)}
+
+case A : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type A : 1T -> 1S
+  type A a = Id (\(a : 1T) -> A a) (a, a)
+
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = (\(a : 1T) -> A a) (a, a)
