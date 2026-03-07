@@ -408,7 +408,7 @@ toMessage src = \case
   VarOutOfScope s x -> makeError src s
     ("Variable out of scope: " ++ bt (external x))
   PolymorphicTypeRecursion s t -> makeError src s
-    ("Polymorphic type recursion not supported: type " ++ bt (unparse t))
+    ("Polymorphic type recursion detected in the declaration for type " ++ bt (unparse t))
   where
     thirdPerson    = \case 
       1 -> "it"

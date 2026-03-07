@@ -19,13 +19,9 @@ spec = mkTypeSpec
   "Invalid kinding tests" 
   errorsAreSuccesses
   \_ -> \case
-    (t, k, m) -> case {- runKindModule m >> -} runSynthOrCheck m t k of
+    (t, k, m) -> case do m' <- runKindModule m; polyRec m'; runSynthOrCheck m t k of
       Left _ -> return ()
-      Right kt ->
-        case runKindModule m >>= polyRec of
-        Left _  -> return ()
-        Right _ -> expectationFailure $
-             "An error was expected but none was thrown.\n" ++ show kt
+      Right _ -> expectationFailure "An error was expected but none was thrown"
 
     -- (t, mk, m) -> case runKindModule m >> runSynthOrCheck m t mk of
     --   Left _ -> return ()
