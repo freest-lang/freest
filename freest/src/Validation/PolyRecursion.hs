@@ -13,6 +13,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Syntax.Kind qualified as K
 import Validation.Substitution ( betaRule )
+import Validation.Normalisation (normalise)
 import UI.Error qualified as E
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
@@ -24,8 +25,9 @@ polyRec m = Map.foldlWithKey polyRecType (Right ()) typeDecls
     typeDecls = M.typeDecls m
 
     polyRecType :: Either [E.Error] () -> Identifier -> T.KindedType -> Either [E.Error] ()
-    polyRecType errors id (T.Abs _ aks t) = polyRecAbs Set.empty id (map fst aks) errors t
-    polyRecType errors _  _ = errors
+    polyRecType errors id t = case normalise m t of
+        T.Abs _ aks u -> polyRecAbs Set.empty id (map fst aks) errors u
+        otherwise -> errors
 
     polyRecAbs :: Set.Set Identifier -> Identifier -> [Variable] -> Either [E.Error] () -> T.KindedType -> Either [E.Error] ()
     polyRecAbs visited id as errors = \case
