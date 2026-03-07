@@ -758,5 +758,3 @@ where
   type FoldExpanded = ??(a:*T) . ?a ; FE
   type FE : 1S
   type FE = &{More: ??(b:1S) . ?(a -> b -> a) ; ?b, Done: !a ; Wait}
-  
-  
