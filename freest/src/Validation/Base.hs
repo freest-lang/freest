@@ -75,7 +75,7 @@ lookupKind mod i = do
 unfold :: M.KindedModule -> Identifier -> TK.KindedType
 unfold mod i =
   case M.typeDecls mod Map.!? i of
-    Just u  -> u
+    Just (_, u)  -> u
     Nothing -> internalError $ "Validation.Base.unfold: name " ++ show i ++ " not in type declaration map"
 
 -- getKind :: M.KindedModule -> Identifier -> K.Kind

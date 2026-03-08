@@ -4,7 +4,7 @@ import Syntax.Module qualified as M
 import UI.Error (showErrors)
 import UnitSpecUtils
 import Validation.Kinding (runKindModule, runCheck)
-import Validation.PolyRecursion (polyRec)
+import Validation.PolyRecursion (runCheckPolyRec)
 
 import Test.Hspec
 
@@ -18,6 +18,6 @@ spec = mkTypeSpec
   errorsAreFailures
   \src -> \case 
     (t, Nothing, m) -> expectationFailure "Ill formed test case: missing kind annotation"
-    (t, Just k , m) -> case runKindModule m >>= polyRec >> runCheck m t k of
+    (t, Just k , m) -> case runKindModule m >>= runCheckPolyRec >> runCheck m t k of
       Left es -> expectationFailure (showErrors src es)
       _       -> return ()

@@ -278,10 +278,10 @@ scopeTypeDecls :: ScopingCtx -> M.TypeDecls Parsed
                -> Validation (ScopingCtx, M.TypeDecls Scoped)
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
   where
-    scopeTypeDecl (ctx', tds') (ti, t) = do
+    scopeTypeDecl (ctx', tds') (ti, (n, t)) = do
       unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
       t'  <- scopeType ctx' t
-      return (ctx', Map.insert ti t' tds')
+      return (ctx', Map.insert ti (n, t') tds')
 
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
 -- context. Besides scoping the variables, this procedure also groups function

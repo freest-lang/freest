@@ -230,8 +230,8 @@ kindModule mod = do
   (_, lds) <- kindLetDecls mod mod' Map.empty (M.definitions mod)
   return mod'{M.definitions = lds}
   where
-    kindTypeDecl :: Identifier -> T.ScopedType -> Validation TK.KindedType
-    kindTypeDecl i t = do
+    kindTypeDecl :: Identifier -> (Int, T.ScopedType) -> Validation (Int, TK.KindedType)
+    kindTypeDecl i (n, t) = do
       k <- lookupKind mod i
       t' <- case t of
         T.Abs s aks u -> do
@@ -249,7 +249,7 @@ kindModule mod = do
 
         t' -> synth mod Map.empty t' -- TODO: Map.empty? 
       checkK t' k
-      return t'
+      return (n, t')
 
     kindDataConsDecls :: M.ConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))

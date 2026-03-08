@@ -17,6 +17,7 @@ module Syntax.Kind
   , Meet(..)
   , isSession
   , isChannel
+  , isProper
   , image
   , depth
   )
@@ -126,13 +127,17 @@ us s = Proper s Un  Session
 lc s = Proper s Lin Channel
 uc s = Proper s Un  Channel
 
-isChannel, isSession :: Kind -> Bool
+isChannel, isSession, isProper :: Kind -> Bool
 
 isChannel (Proper _ _ Channel) = True
 isChannel _ = False
 
 isSession (Proper _ _ pk) = pk <: Session
 isSession _ = False
+
+isProper = \case
+  Proper{} -> True
+  _        -> False
 
 -- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
 image :: Kind -> Kind

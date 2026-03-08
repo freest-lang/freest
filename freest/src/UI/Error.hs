@@ -84,7 +84,8 @@ data Error
     (Level E.Pat Variable) 
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  | PolymorphicTypeRecursion Span TK.KindedType
+  | PolymorphicTypeRecursion Span Identifier
+  | HigherOrderTypeRHS Span Identifier
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -138,6 +139,7 @@ instance Located Error where
     UnsupportedError s _ _ -> s
     VarOutOfScope s _ -> s
     PolymorphicTypeRecursion s _ -> s
+    HigherOrderTypeRHS s _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -407,8 +409,10 @@ toMessage src = \case
     ++ msg2
   VarOutOfScope s x -> makeError src s
     ("Variable out of scope: " ++ bt (external x))
-  PolymorphicTypeRecursion s t -> makeError src s
-    ("Polymorphic type recursion detected in the declaration for type " ++ bt (unparse t))
+  PolymorphicTypeRecursion s i -> makeError src s
+    ("Polymorphic type recursion detected in the declaration for type " ++ bt (show i))
+  HigherOrderTypeRHS s i -> makeError src s
+    ("The declaration for " ++ bt (show i) ++ " is recursive. It needs a complete parameter list on the left-hand side") -- TODO: better error using kind info
   where
     thirdPerson    = \case 
       1 -> "it"
