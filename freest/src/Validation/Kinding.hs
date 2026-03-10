@@ -38,6 +38,7 @@ import UI.Error
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
+import Validation.HOTRecursion (checkNoHOTRec)
 import Validation.Normalisation
 import Validation.Substitution ( subs )
 
@@ -227,11 +228,12 @@ kindModule mod = do
                  , M.consDecls   = cds
                  , M.definitions = []
                  }
+  checkNoHOTRec mod'
   (_, lds) <- kindLetDecls mod mod' Map.empty (M.definitions mod)
   return mod'{M.definitions = lds}
   where
-    kindTypeDecl :: Identifier -> (Int, T.ScopedType) -> Validation (Int, TK.KindedType)
-    kindTypeDecl i (n, t) = do
+    kindTypeDecl :: Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
+    kindTypeDecl i (b, t) = do
       k <- lookupKind mod i
       t' <- case t of
         T.Abs s aks u -> do
@@ -249,7 +251,7 @@ kindModule mod = do
 
         t' -> synth mod Map.empty t' -- TODO: Map.empty? 
       checkK t' k
-      return (n, t')
+      return (b, t')
 
     kindDataConsDecls :: M.ConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))

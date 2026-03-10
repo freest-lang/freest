@@ -68,12 +68,12 @@ library:
     - Utils
     - Validation.Base
     - Validation.Expose
+    - Validation.HOTRecursion
     - Validation.Kinding
     - Validation.Normalisation
     - Validation.Substitution
     - Validation.TypeEquivalence
     - Validation.Typing
-    - Validation.PolyRecursion
 executables:
   freest:
     main:        FreeST.hs
