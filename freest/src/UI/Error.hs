@@ -81,10 +81,11 @@ data Error
   | TypeVarOutOfScope Span Variable
   | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind) (Level E.KindedExp TK.KindedType)
   | UnexpectedParam Span Int (Level TK.KindedType K.Kind)
-    (Level E.Pat Variable) 
+    (Level E.Pat Variable)
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  | PolymorphicTypeRecursion Span TK.KindedType
+  | PolymorphicTypeRecursion Span Identifier [Variable] (Either K.Kind TK.KindedType)
+  | HigherOrderTypeRHS Span Identifier
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -137,7 +138,8 @@ instance Located Error where
     UnexpectedParam s _ _ _ -> s
     UnsupportedError s _ _ -> s
     VarOutOfScope s _ -> s
-    PolymorphicTypeRecursion s _ -> s
+    PolymorphicTypeRecursion s _ _ _ -> s
+    HigherOrderTypeRHS s _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -157,7 +159,7 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
   unlines ([ spaces (n + 1) ++ show s | showSpan ] ++
            [ spaces n ++ sep
            , rpad n ' ' (show sl) ++ sep ++ l
-           , spaces n ++ sep ++ spaces (sc - 1) 
+           , spaces n ++ sep ++ spaces (sc - 1)
              ++ if sl == el then carets (ec - sc)
                 else carets (length (strip (drop (sc - 1) l))) ++ "..."
            ])
@@ -177,8 +179,8 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
     sep = " | "
     ls  = take (el - (sl - 1)) $ drop (sl - 1) $ src Map.! fp
     spaces x = replicate x ' '
-    lineCarets i li = 
-      rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep 
+    lineCarets i li =
+      rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep
       ++ if | sl == el  -> spaces (sc - 1) ++ carets (ec - sc)
             | i  == sl  -> spaces (sc - 1) ++ caretsFrom (strip (drop (sc - 1) li))
             | i  == el  -> ws ++ carets (ec - 1 - length ws)
@@ -215,9 +217,9 @@ toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m m' -> makeError src s
     ("Expected " ++ showMult m ++ " function, but got " ++ showMult m'
-      ++ " one instead" 
+      ++ " one instead"
       ++ (if i > 0
-          then " (on the " ++ ordinal (i + 1) ++ " parameter of this " 
+          then " (on the " ++ ordinal (i + 1) ++ " parameter of this "
             ++ (case xe of Left _ -> "function definition" -- should not occur
                            Right _ -> "expression") ++ ")"
           else ""))
@@ -247,7 +249,7 @@ toMessage src = \case
   ExpectsTooManyArgs s t n m -> makeError src s
      ("This function expects " ++ prettyArgs n
        ++ ", but its type " ++ bt (unparse t) ++ " takes"
-       ++ case m of 
+       ++ case m of
         0 -> " none"
         n -> " only " ++ show n)
   ExpectsTooManyArgsK s i k -> makeError src s
@@ -259,16 +261,16 @@ toMessage src = \case
       Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
     ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
   GivenTooManyArgs s e t n m -> makeError src s
-    ("Got " ++ prettyQArgs "unexpected" (m - n))
-    ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to " 
+    ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
+    ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to "
     ++ thirdPerson (m - n) ++ ")"
   GivenTooManyArgsK s t k n m -> makeError src s
-    ("Got " ++ prettyQArgs "unexpected" (m - n))
-    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to " 
+    ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
+    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to "
     ++ thirdPerson (m - n) ++ ")"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
-  KindMismatch s k1 t -> makeError src s 
+  KindMismatch s k1 t -> makeError src s
     -- TODO: this would give us weird errors, like "Expected 1 less argument to
     -- type `Int`" with `type T : *T -> *T` and `type T = Int`
     -- if | K.depth k1 < K.depth k2 ->
@@ -280,7 +282,7 @@ toMessage src = \case
         ++ " with actual kind " ++ bt (unparse $ TK.kindOf t))
     -- where
     --   diff = (K.depth k2 - K.depth k1)
-  KindMismatchK s k1 k2 t -> makeError src s 
+  KindMismatchK s k1 k2 t -> makeError src s
       ("Couldn't match expected kind " ++ bt (unparse k1)
         ++ " with actual kind " ++ bt (unparse k2))
     -- where
@@ -331,7 +333,7 @@ toMessage src = \case
     ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
   PrekindMismatch s pk t k -> makeError src s
     ("Expected a " ++ prettyPk pk ++ ", but got " ++
-      (case k of 
+      (case k of
         K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (unparse t)
         k               -> bt (unparse t) ++ " of kind " ++ bt (unparse k))
       ++ " instead")
@@ -347,9 +349,9 @@ toMessage src = \case
   LinNotConsumedEvenly s xi t fpe -> errorHeader s ++ "\n" ++
     ("Linear " ++ (case xi of Left x  -> "variable " ++ bt (external x)
                               Right i -> "constructor " ++ bt (show i))
-      ++ " of type " ++ bt (unparse t) ++", bound at\n" 
+      ++ " of type " ++ bt (unparse t) ++", bound at\n"
       ++ snippet src xi True
-      ++ "was not consumed evenly among the branches of a" 
+      ++ "was not consumed evenly among the branches of a"
       ++ (case fpe of
         Left (Left  x) -> " function definition"
         Left (Right p) -> " value definition"
@@ -362,11 +364,11 @@ toMessage src = \case
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with actual type " ++ bt (unparse u))
   TypeMismatchExists s t poe -> makeError src s
-    ("Couldn't match expected type " ++ bt (show t) ++ " with a package " 
+    ("Couldn't match expected type " ++ bt (show t) ++ " with a package "
       ++ case poe of Left  p -> "pattern"
                      Right e -> "expression")
   TypeMismatchList s t _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (unparse t) 
+    ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a list pattern")
   TypeMismatchChoice s t i p -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
@@ -388,16 +390,16 @@ toMessage src = \case
   TypeVarOutOfScope s a -> makeError src s
     ("Type variable out of scope: " ++ external a)
   UnexpectedArg s n a1 a2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
-    (case (a1, a2) of 
+    (case (a1, a2) of
       (TypeLevel k, ExpLevel e) ->
-        "Expected a type argument of kind " ++ bt (unparse k) 
+        "Expected a type argument of kind " ++ bt (unparse k)
         ++ ", but got a value argument"
       (ExpLevel  t, TypeLevel u) ->
         "Expected a value argument "
-        ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t 
+        ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t
         ++ ", but got type argument")
   UnexpectedParam s n p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
-    (case (p1, p2) of 
+    (case (p1, p2) of
       (TypeLevel k, ExpLevel p ) ->
         "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
       (ExpLevel  t, TypeLevel a) ->
@@ -407,23 +409,31 @@ toMessage src = \case
     ++ msg2
   VarOutOfScope s x -> makeError src s
     ("Variable out of scope: " ++ bt (external x))
-  PolymorphicTypeRecursion s t -> makeError src s
-    ("Polymorphic type recursion detected in the declaration for type " ++ bt (unparse t))
+  PolymorphicTypeRecursion s i as ekt -> makeError src s
+    ("Higher-order recursion detected in the declaration for type " ++ bt (show i))
+    ++ case ekt of 
+      Left k ->
+        "(Expected a proper type on the right-hand side, but found a type of kind "
+        ++ bt (unparse k) ++ ". Consider adding " ++ prettyMoreParams (K.depth k)
+        ++ " to the equation.)"
+      Right t -> 
+        "(Found a self-reference different from the left-hand side "
+        ++ bt (show i ++ (if null as then "" else " ") ++ unwords (map external as))
+        ++ ", namely " ++ bt (unparse t) ++ ")"
   where
-    thirdPerson    = \case 
-      1 -> "it"
-      _ -> "them"
+    thirdPerson = \case 1 -> "it"; _ -> "them"
 
-    prettyQArgs q  = \case 
-      0 -> "no "   ++ q ++ " arguments"
-      1 -> "1 "    ++ q ++ " argument"
-      n -> show n ++ " " ++ q ++ " arguments"
+    prettyModifiedPlural w q  = \case
+      0 -> "no "   ++ q ++ " " ++ w ++ "s"
+      1 -> "1 "    ++ q ++ " " ++ w
+      n -> show n ++ " " ++ q ++ " " ++ w ++ "s"
+    
+    prettyModifiedArgs = prettyModifiedPlural "argument"
+    prettyArgs         = prettyModifiedArgs ""
+    prettyMoreArgs     = prettyModifiedArgs "more"
+    prettyLessArgs     = prettyModifiedArgs "less"
 
-    prettyArgs     = prettyQArgs ""
-
-    prettyMoreArgs = prettyQArgs "more"
-
-    prettyLessArgs = prettyQArgs "less"
+    prettyMoreParams = prettyModifiedPlural "parameter" "more"
 
     bt s = "`" ++ s ++ "`"
 
@@ -431,7 +441,7 @@ toMessage src = \case
       Left x -> "variable " ++ bt (external x)
       Right i -> "constructor " ++ bt (show i)
 
-    prettyPk = \case 
+    prettyPk = \case
       K.Top     -> "type"
       K.Session -> "session type"
       K.Channel -> "channel type"

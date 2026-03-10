@@ -3,7 +3,6 @@ module KindInvalidSpec (spec) where
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Validation.Kinding ( runSynth, runCheck, runKindModule )
-import Validation.PolyRecursion ( polyRec )
 
 import Data.Either ( isRight )
 import Data.Map qualified as Map
@@ -19,7 +18,7 @@ spec = mkTypeSpec
   "Invalid kinding tests" 
   errorsAreSuccesses
   \_ -> \case
-    (t, k, m) -> case do m' <- runKindModule m; polyRec m'; runSynthOrCheck m t k of
+    (t, k, m) -> case do runKindModule m >> runSynthOrCheck m t k of
       Left _ -> return ()
       Right _ -> expectationFailure "An error was expected but none was thrown"
 

@@ -159,3 +159,14 @@ case A : 1T -> 1S
 where
   type A : 1T -> 1S
   type A a = (\(a : 1T) -> A a) (a, a)
+
+case A : 1T -> 1S -> 1S
+where
+  type A : 1T -> 1S -> 1S
+  type A a = (\(a : 1T) -> A a) (a, a)
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = +{Done: Skip, More: B a}
+  type B b = +{Done: Skip, More: B (b, b); A b}

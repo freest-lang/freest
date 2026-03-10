@@ -75,7 +75,7 @@ type KindSigs p = ModuleAssoc p Identifier K.Kind
 -- are represented as
 --
 --   > fromList [(Age, ([], Int)), (Stream, ([a], (!a ; Stream a))]
-type TypeDecls p = ModuleAssoc p Identifier (T.Type p)
+type TypeDecls p = ModuleAssoc p Identifier (Bool, T.Type p)
 
 -- | Datatype constructor declarations, e.g.,
 --
@@ -123,7 +123,7 @@ insertTypeDecl :: Identifier
                -> TU.ParsedType
                -> ParsedModule
                -> ParsedModule
-insertTypeDecl i aks t m = m{typeDecls = (i, t') : typeDecls m}
+insertTypeDecl i aks t m = m{typeDecls = (i, (not (null aks), t')) : typeDecls m}
   where t' = if null aks then t else TU.Abs (getSpan t) aks t 
 
 insertKindSig :: [Identifier] -> K.Kind -> ParsedModule -> ParsedModule
@@ -177,9 +177,9 @@ instance Show ParsedModule where
         ++ List.intercalate " | " (map ((++ " ...") . show) is)
       showConsDecl (i, (i', aks, ts)) =
         "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
-      showTypeDecl (i, T.Abs _ _ aks t) = 
-        "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
-      showTypeDecl (i, t) = "type " ++ show i ++ " = " ++ show t
+      showTypeDecl (i, (hasParams, T.Abs _ _ aks t)) 
+        | hasParams = "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
+        | otherwise = "type " ++ show i ++ " = " ++ show t
 
 instance Show ScopedModule where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
@@ -201,6 +201,6 @@ instance Show ScopedModule where
         ++ List.intercalate " | " (map ((++ " ...") . show) is)
       showConsDecl (i, (i', aks, ts)) =
         "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
-      showTypeDecl (i, T.Abs _ _ aks t) = 
-        "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
-      showTypeDecl (i, t) = "type " ++ show i ++ " = " ++ show t
+      showTypeDecl (i, (hasParams, T.Abs _ _ aks t)) 
+        | hasParams = "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
+        | otherwise = "type " ++ show i ++ " = " ++ show t
