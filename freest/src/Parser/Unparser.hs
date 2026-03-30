@@ -65,7 +65,7 @@ instance Unparse K.Kind where
     K.Var _ τ       -> (maxRator, show τ)
 
 instance Unparse Variable where
-  fragment a = (maxRator, external a)
+  fragment a = (maxRator, external a ++ "#" ++ show (internal a))
   
 instance Unparse (T.Type x) where
   fragment = \case 

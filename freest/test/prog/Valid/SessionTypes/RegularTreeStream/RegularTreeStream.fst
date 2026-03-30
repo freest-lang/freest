@@ -11,32 +11,27 @@ data Tree = Leaf | Node Int Tree Tree | Error
 --    8      3            7
 --         5   4
 aTree : Tree
-aTree = Node 1 (Node 2 (Node 8 Leaf Leaf) (Node 3 (Node 5 Leaf Leaf) (Node 4 Leaf Leaf))) (Node 6 Leaf (Node 7 Leaf Leaf))
+aTree = Node 1 (Node 2 (Node 8 Leaf 
+                               Leaf) 
+                       (Node 3 (Node 5 Leaf 
+                                       Leaf) 
+                               (Node 4 Leaf 
+                                       Leaf))) 
+               (Node 6 Leaf 
+                       (Node 7 Leaf 
+                               Leaf))
 
--- Tree lists and operations on Lists
+getFromSingleton : [Tree] -> Tree
+getFromSingleton [x] = x
+getFromSingleton []  = print "Error: Premature EndOfStream"; Error
+getFromSingleton _   = print "Error: Extraneous elements in the stream after reading a full tree"; Error
 
-type List : *T
-data List = Nil | Cons Tree List
-
-null : List -> Bool
-null Nil = True
-null (Cons _ _) = False
-
-head : List -> Tree
-head (Cons x _) = x
-
-tail : List -> List
-tail (Cons _ xs) = xs
-
-getFromSingleton : List -> Tree
-getFromSingleton (Cons x Nil) = x
-getFromSingleton Nil = print @String "Error: Premature EndOfStream" ; Error
-getFromSingleton _ = print @String "Error: Extraneous elements in the stream after reading a full tree" ; Error
-
-getTwo : List -> (List, (Tree, Tree))
-getTwo (Cons left (Cons right xs)) = (xs, (left, right))
-getTwo Nil = print @String "Error: Empty stack on right subtree" ; (Nil, (Error, Error))
-getTwo (Cons left Nil) = print @String "Error: Empty stack on left subtree" ; (Nil, (Error, left))
+getTwo : [Tree] -> ([Tree], (Tree, Tree))
+getTwo (l :: r :: xs) = (xs, (l, r))
+getTwo []             = print "Error: Empty stack on right subtree"; 
+                        ([] @Tree, (Error, Error))
+getTwo [l]            = print "Error: Empty stack on left subtree"; 
+                        ([] @Tree, (Error, l))
 
 -- Streams
 type Stream : 1C
@@ -49,28 +44,25 @@ type Stream = +{
 -- Writing trees on channels
 
 streamTree : Tree -> Stream -> Stream
-streamTree Leaf c = select LeafC c
-streamTree (Node x l r) c = send x $ select NodeC $ streamTree r $ streamTree l c
-streamTree Error c = select LeafC c
+streamTree Error        c = select LeafC c
+streamTree Leaf         c = select LeafC c
+streamTree (Node x l r) c = 
+  c |> streamTree l |> streamTree r |> select NodeC |> send x
 
 sendTree : Tree -> Stream -> ()
 sendTree t c = c |> streamTree t |> select EndOfStreamC |> close
 
 -- Reading trees from channels
 
-recTree : List -> Dual Stream -> Tree
-recTree xs (&NodeC c) =
-  let (xs, p) = getTwo xs in
-  let (left, right) = p in
-  let (root, c) = receive c in
-  recTree (Cons (Node root left right) xs) c
-recTree xs (&LeafC c) =
-  recTree (Cons Leaf xs) c
-recTree xs (&EndOfStreamC c) =
-  wait c ; getFromSingleton xs
+recTree : [Tree] -> Dual Stream -> Tree
+recTree xs (&EndOfStreamC c) = wait c ; getFromSingleton xs
+recTree xs (&LeafC        c) = recTree (Leaf       :: xs) c
+recTree ts (&NodeC        c) = recTree (Node x l r :: ts) c
+  where (ts, (l, r)) = getTwo ts
+        (x, c) = receive c  
 
 receiveTree : Dual Stream -> Tree
-receiveTree = recTree Nil
+receiveTree = recTree ([] @Tree)
 
 -- Babdly behaving writers
 
@@ -92,10 +84,10 @@ writeLeftTreeOnly c =
 main : Tree
 main =
   let (w, r) = channel @(Stream ; Close) in
-  -- fork @()  (\(_ : ()) 1-> sendTree aTree w);   -- No error
-  fork @() (\(_ : ()) 1-> writeNothing w) ;      -- Error: Premature EndOfStream
-  -- fork @() (\(_ : ()) 1-> writeTooMuch w);      -- Error: Extraneous elements in the stream after reading a full tree
-  -- fork @() (\(_ : ()) 1-> writeRootTreeOnly w); -- "Error: Empty stack on right subtree"
-  -- fork @() (\(_ : ()) 1-> writeLeftTreeOnly w); -- "Error: Empty stack on left subtree",
+  -- fork (\(_ : ()) 1-> sendTree aTree w);   -- No error
+  fork (\(_ : ()) 1-> writeNothing w);             -- Error: Premature EndOfStream
+  -- fork (\(_ : ()) 1-> writeTooMuch w);      -- Error: Extraneous elements in the stream after reading a full tree
+  -- fork (\(_ : ()) 1-> writeRootTreeOnly w); -- "Error: Empty stack on right subtree"
+  -- fork (\(_ : ()) 1-> writeLeftTreeOnly w); -- "Error: Empty stack on left subtree",
   receiveTree r
-  -- let t = receiveTree r in repeat @() 10000 (\(_ : ()) -> ()) ; t
+  -- let t = receiveTree r in repeat 10000 (\(_ : ()) -> ()) ; t

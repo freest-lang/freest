@@ -60,8 +60,8 @@ mutual
     case v of
       StringVal s -> select StringVal c |> send s
       IntVal    i -> select IntVal    c |> send i
-      ObjectVal j -> select ObjectVal c |> writeObject  @a j
-      ArrayVal  l -> select ArrayVal  c |> writeArray  @a l
+      ObjectVal j -> select ObjectVal c |> writeObject j
+      ArrayVal  l -> select ArrayVal  c |> writeArray l
       BoolVal   b -> select BoolVal   c |> send b
       NullVal     -> select NullVal   c
    
@@ -71,8 +71,8 @@ mutual
       ConsObject key val j1 ->
         select ConsObject c
         |> send key
-        |> writeValue  @(ObjectChannel; a) val
-        |> writeObject  @a j1
+        |> writeValue val
+        |> writeObject j1
       EmptyObject ->
         select Empty c
   
@@ -81,8 +81,8 @@ mutual
     case l of
       ConsArray j l1 ->
         select ConsObject c
-        |> writeValue  @(ArrayChannel; a) j
-        |> writeArray  @a l1
+        |> writeValue j
+        |> writeArray l1
       EmptyArray ->
         select Empty c
 
@@ -93,8 +93,8 @@ mutual
     case c of
       &StringVal c -> let (s, c) = receive c in (StringVal s, c)
       &IntVal    c -> let (i, c) = receive c in (IntVal i, c)
-      &ObjectVal c -> let (j, c) = readObject  @a c in (ObjectVal j, c)
-      &ArrayVal  c -> let (l, c) = readArray  @a c in (ArrayVal l, c)
+      &ObjectVal c -> let (j, c) = readObject c in (ObjectVal j, c)
+      &ArrayVal  c -> let (l, c) = readArray c in (ArrayVal l, c)
       &BoolVal   c -> let (b, c) = receive c in (BoolVal b, c)
       &NullVal   c -> (NullVal, c)
   
@@ -103,8 +103,8 @@ mutual
     case c of
       &ConsObject c ->
         let (key, c)   = receive c in
-        let (value, c) = readValue  @(Dual ObjectChannel; a) c in
-        let (next, c)  = readObject  @a c in
+        let (value, c) = readValue c in
+        let (next, c)  = readObject c in
         (ConsObject key value next, c)
       &Empty c ->
         (EmptyObject, c)
@@ -113,8 +113,8 @@ mutual
   readArray @a c =
     case c of
       &ConsObject c ->
-        let (j, c) = readValue  @(Dual ArrayChannel; a) c in
-        let (l, c) = readArray  @a c in
+        let (j, c) = readValue c in
+        let (l, c) = readArray c in
         (ConsArray j l, c)
       &Empty c ->
         (EmptyArray, c)
@@ -122,7 +122,7 @@ mutual
 main : Object 
 main =
   let (w, r) = channel @(ObjectChannel; Close) in
-  fork (\(_ : ()) 1-> writeObject @Close json w |> close);
-  let (obj, r) = readObject @Wait r in
+  fork (\(_ : ()) 1-> writeObject json w |> close);
+  let (obj, r) = readObject r in
   wait r;
   obj

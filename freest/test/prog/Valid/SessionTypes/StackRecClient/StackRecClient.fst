@@ -23,14 +23,14 @@ type NEStack = &{Push: ?Int; NEStack; NEStack, Pop : !Int}
 neStack : forall (a : 1S). Int -> NEStack;a -> a
 neStack @a x c =
   case c of
-    &Push c -> let (y, c) = receive c in neStack @a x (neStack @(NEStack ; a) y c)
+    &Push c -> let (y, c) = receive c in neStack x (neStack y c)
     &Pop  c -> send x c
 
 -- Stack server. The empty stack case
 eStack : forall (a : 1S). EStack;a -> a
 eStack @a c =
   case c of
-    &Push c -> let (x, c) = receive c in eStack @a (neStack @(EStack ; a) x c)
+    &Push c -> let (x, c) = receive c in eStack (neStack x c)
     &Stop  c -> c
 
 -- Stack operations. Push on an empty stack
@@ -45,42 +45,38 @@ pushNE @a n c = select Push c |> send n
 pop : forall (a : 1S). Dual NEStack;a -> a
 pop @a c = 
   let c = select Pop c in let (x, c) = receive c in
-  putStr (show @Int x) ; putStr " " ; c
+  putStr (show x) ; putStr " " ; c
 
 -- A finite client
 reverseThree : Dual EStack -> Skip
 reverseThree c =
-  pushE   @Skip 5 c
-  |> pushNE  @(Dual EStack) 6
-  |> pushNE  @(Dual NEStack ; Dual EStack) 7
-  |> pop     @(Dual NEStack ; Dual NEStack ; Dual EStack)
-  |> pop     @(Dual NEStack ; Dual EStack)
-  |> pop     @(Dual EStack)
+  pushE 5 c
+  |> pushNE 6
+  |> pushNE 7
+  |> pop
+  |> pop
+  |> pop @(Dual EStack) -- CANNOT INFER
   |> select Stop
 
 -- A recursive client working on a nonempty stack
-reverseNE : forall (a : 1S). Int -> Dual NEStack ; a -> Dual NEStack ; a
-reverseNE @a n c =
-  if n == 0
-  then c
-  else
-    pushNE  @a n c
-    |> reverseNE  @(Dual NEStack ; a) (n - 1)
-    |> pop  @(Dual NEStack ; a)
+reverseNE : forall (a : 1S). Int -> Dual NEStack; a -> Dual NEStack; a
+reverseNE @a n c 
+  | n == 0    = c
+  | otherwise = pushNE n c |> reverseNE (n - 1) |> pop
 
 -- A generic client working on an empty stack
-reverseE : Int -> Dual EStack;Close -> ()
+reverseE : Int -> Dual EStack; Close -> ()
 reverseE n c =
-  pushE @Close n c
-  |> reverseNE  @(Dual EStack;Close) (n-1)
-  |> pop  @(Dual EStack;Close)
+  pushE n c
+  |> reverseNE (n-1)
+  |> pop
   |> select Stop
   |> close
 
 main : ()
 main =
   let (r, w) = channel @(EStack;Wait) in
-  fork  @() (\(_ : ()) 1-> eStack @Wait r |> wait);
+  fork (\(_ : ()) 1-> eStack r |> wait);
   reverseE 10 w
   -- reverseThree w
 

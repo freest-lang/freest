@@ -1,6 +1,4 @@
 module SendAndWait where
 
 main : ()
-main =  
-  forkWith @(!Int ; Wait) @Int (receiveAndClose @Int) 
-    |> sendAndWait @Int 5
+main = forkWith (receiveAndClose @Int) |> sendAndWait 5 -- CANNOT INFER

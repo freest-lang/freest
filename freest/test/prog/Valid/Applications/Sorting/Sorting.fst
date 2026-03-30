@@ -26,12 +26,12 @@ client c =
           send 1 $ select Value $
           send 4 $ select Value $
           send 5 $ select Value c in
-  let (x, c) = receive c in print @Int x;
-  let (x, c) = receive c in print @Int x;
-  let (x, c) = receive c in print @Int x;
-  let (x, c) = receive c in print @Int x;
-  let (x, c) = receive c in print @Int x;
-  let (x, c) = receive c in print @Int x;
+  let (x, c) = receive c in print x;
+  let (x, c) = receive c in print x;
+  let (x, c) = receive c in print x;
+  let (x, c) = receive c in print x;
+  let (x, c) = receive c in print x;
+  let (x, c) = receive c in print x;
   wait c
 
 type IntList : *T
@@ -71,7 +71,7 @@ sortingServer @a xs c =
   case c of
     &Value c ->
       let (x, c)  = receive c in
-      let (xs, c) = sortingServer @(!Int ; a) (Cons x xs) c in
+      let (xs, c) = sortingServer (Cons x xs) c in
       case xs of
         Cons y ys -> (ys, send y c)
         -- Nil is never reached
@@ -85,5 +85,5 @@ sortingServer @a xs c =
 main : ()
 main =
   let (w, r) = channel @(OrderingChannel; Wait) in
-  fork (\(_ : ()) 1-> sortingServer @Close Nil r |> snd @IntList @Close |> close);
+  fork (\(_ : ()) 1-> sortingServer Nil r |> snd |> close);
   client w

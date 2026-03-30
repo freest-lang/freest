@@ -17,35 +17,30 @@ type TreeChannel = +{
  }
 
 write : forall (a : 1S). Tree -> TreeChannel; a -> a
-write @a t c =
-  case t of
-    Leaf ->
-      select LeafC c
-    Node x l r ->
-      select NodeC c
-      |> send x
-      |> write  @(TreeChannel ; a) l
-      |> write @a r
+write @a t c = case t of
+  Leaf       -> c |> select LeafC
+  Node x l r -> c |> select NodeC
+                  |> send x
+                  |> write l
+                  |> write r
 
 read : forall (a : 1S). Dual TreeChannel; a -> (Tree, a)
-read @a c =
-  case c of
-    &LeafC c ->
-      (Leaf, c)
-    &NodeC c ->
-      let (x, c) = receive c in
-      let (left, c) = read  @(Dual TreeChannel; a) c in
-      let (right, c) = read  @a c in
-      (Node x left right, c)
+read @a c = case c of
+  &LeafC c -> (Leaf             , c)
+  &NodeC c -> (Node x left right, c)
+    where (x    , c) = receive c
+          (left , c) = read c
+          (right, c) = read c
+    
+xs, main : Tree
 
-aTree, main : Tree
-
-aTree = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf))
+xs = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf))
 
 main =
   let (writer, reader) = channel @(TreeChannel;Close) in
-  fork  @() (\(_ : ()) 1-> write  @Close aTree writer |> close);
-  let (tree, reader) = read  @Wait reader in 
+  fork (\(_ : ()) 1-> write xs writer |> close);
+  let (ys, reader) = read reader in 
   wait reader;
-  tree
+  ys
+
 

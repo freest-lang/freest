@@ -14,7 +14,7 @@ transform @a list c =
         Cons i rest ->
             let (rest, c) = c |> select ConsC 
                               |> send i 
-                              |> transform @(?Int ; a) rest in
+                              |> transform rest in
             let (y, c) = receive c in
             (Cons y rest, c)
 
@@ -26,7 +26,7 @@ listSum @a c =
             (0, c)
         &ConsC c ->
             let (x, c) = receive c in
-            let (rest, c) = listSum @(!Int; a) c in
+            let (rest, c) = listSum c in
             let c = send (x + rest) c in
             (x+rest,c)
 
@@ -36,7 +36,7 @@ aCons = Cons 5 (Cons 4 (Cons 3 (Cons 2 (Cons 1 Nil))))
 
 main =
     let (w, r) = channel @(IntListC;Close) in
-    fork (\(_ : ()) 1-> r |> listSum @Wait |> snd @Int @Wait |> wait);
-    let (l, c) = transform @Close aCons w in
+    fork (\(_ : ()) 1-> r |> listSum |> snd |> wait);
+    let (l, c) = transform aCons w in
     close c;
     l

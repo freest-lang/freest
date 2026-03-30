@@ -17,57 +17,55 @@ back the sum of the integer values under (and including) that node.
 
 module TreeTransform where
 
-type Tree : *T
-data Tree = Leaf | Node Int Tree Tree
+type Tree : *T -> *T
+data Tree a = Leaf | Node a (Tree a) (Tree a)
 
-type TreeC : 1S
-type TreeC = +{LeafC: Skip, NodeC: !Int;TreeC;TreeC;?Int}
+type TreeC : *T -> 1S
+type TreeC a = +{LeafC: Skip, NodeC: !a; TreeC a; TreeC a; ?a}
 
--- Note: we use the same constructors for the datatype and the channel, namely Leaf and Node
-
-{-
-  Writes a tree on a given channel;
-  for each node in the tree reads an integer from the channel;
-  returns a tree isomorphic to the input where each integer in nodes
-  is read from the channel.
--}
-transform : forall (a : 1S). Tree -> TreeC ; a -> (Tree, a)
-transform @a tree c =
+-- Writes a tree on a given channel;
+-- for each node in the tree reads an integer from the channel;
+-- returns a tree isomorphic to the input where each integer in nodes
+-- is read from the channel.
+transform : forall (a : *T) (b : 1S). Tree a -> TreeC a; b -> (Tree a, b)
+transform @a @b tree c =
   case tree of
-    Leaf ->
-      (Leaf, select LeafC c)
-    Node x l r ->
-      let c = select NodeC c in
-      let c = send x c in
-      let (l, c) = transform  @(TreeC ; ?Int ; a) l c in
-      let (r, c) = transform  @(?Int ; a) r c in
-      let (y, c) = receive c in
-      (Node y l r, c)
+    Leaf       -> (Leaf @a, select LeafC c) -- CANNOT INFER
+    Node x l r -> (Node y l r, c)
+      where c = select NodeC c
+            c = send x c
+            (l, c) = transform l c
+            (r, c) = transform r c
+            (y, c) = receive c
 
-{-
-  Reads a tree from a given channel;
-  writes back on the channel the sum of the elements in the tree;
-  returns this sum.
--}
-treeSum : forall (a : 1S). Dual TreeC; a -> (Int, a)
+-- Reads a tree from a given channel;
+-- writes back on the channel the sum of the elements in the tree;
+-- returns this sum.
+treeSum : forall (a : 1S). Dual (TreeC Int); a -> (Int, a)
 treeSum @a c =
   case c of
-    &LeafC c ->
-     (0, c)
-    &NodeC c ->
-      let (x, c) = receive c in
-      let (l, c) = treeSum  @(Dual TreeC; !Int; a) c in
-      let (r, c) = treeSum  @(!Int; a) c in
-      let c = send (x + l + r) c in
-      (x + l + r, c)
+    &LeafC c -> (0, c)
+    &NodeC c -> (x + l + r, c)
+      where (x, c) = receive c
+            (l, c) = treeSum c
+            (r, c) = treeSum c
+            c = send (x + l + r) c
 
-aTree, main : Tree
+xs, main : Tree Int
 
-aTree = Node 1 (Node 2 (Node 8 Leaf Leaf) (Node 3 (Node 5 Leaf Leaf) (Node 4 Leaf Leaf))) (Node 6 Leaf (Node 7 Leaf Leaf))
+xs = Node 1 (Node 2 (Node 8 (Leaf @Int)  -- CANNOT INFER
+                               (Leaf @Int)) 
+                    (Node 3 (Node 5 (Leaf @Int) 
+                                    (Leaf @Int)) 
+                            (Node 4 (Leaf @Int) 
+                                    (Leaf @Int)))) 
+            (Node 6 (Leaf @Int) 
+                    (Node 7 (Leaf @Int) 
+                            (Leaf @Int)))
 
 main =
-  let (w, r) = channel @(TreeC;Wait) in
-  fork @() (\(_ : ()) 1-> close $ snd @Int @Close $ treeSum @Close r);
-  let (t, w) = transform @Wait aTree w in
+  let (w, r) = channel @(TreeC Int; Wait) in
+  fork (\(_ : ()) 1-> treeSum r |> snd |> close);
+  let (t, w) = transform @Int @Wait xs w in
   wait w;
   t

@@ -18,12 +18,12 @@ writer i c =
 reader : Dual T -> ()
 reader c =
   let (i, c) = receive c in
-  print @Int i;
+  print i;
   reader c
 
 main : ()
 main =
-  let (w,r) = channel @(!Char;T) in
-  fork (\(_ : ()) 1-> writer 0 (f @T w));
-  reader (g @(Dual T) r)
+  let (w,r) = channel @(!Char; T) in
+  fork (\(_ : ()) 1-> writer 0 (f w));
+  reader (g r)
 

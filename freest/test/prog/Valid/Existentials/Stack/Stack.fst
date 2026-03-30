@@ -10,16 +10,16 @@ type StackADT = exists (a : *T).
 
 stackADT : StackADT
 stackADT = ( @[Int]
-           , ( [] @Int                                       -- new
-             , \(x : Int) (xs : [Int]) -> x :: xs            -- push
-             , \(xs : [Int]) -> (head @Int xs, tail @Int xs) -- pop
-             , \(xs : [Int]) -> xs                           -- toList
+           , ( [] @Int                             -- new -- CANNOT INFER
+             , \(x : Int) (xs : [Int]) -> x :: xs  -- push
+             , \(xs : [Int]) -> (head xs, tail xs) -- pop
+             , \(xs : [Int]) -> xs                 -- toList
              )
            )
          : StackADT
 
 main : Int
-main = fst @Int @s $ pop (push 5 (push 7 new))
+main = fst $ pop (push 5 (push 7 new))
   where (@(s : *T), (new, push, pop, toList)) = stackADT
 
 -- Reversing a list in O(n)

@@ -100,10 +100,10 @@ main =
   fork (\(_ : ()) 1-> evenProcess (p / 2)     44 r5 l6 cw6);
   fork (\(_ : ()) 1-> last                    77 r6    cw7);
   -- collect' and print results
-  print @Int (receiveAndWait @Int cr1);
-  print @Int (receiveAndWait @Int cr2);
-  print @Int (receiveAndWait @Int cr3);
-  print @Int (receiveAndWait @Int cr4);
-  print @Int (receiveAndWait @Int cr5);
-  print @Int (receiveAndWait @Int cr6);
-  print @Int (receiveAndWait @Int cr7)
+  print (receiveAndWait cr1);
+  print (receiveAndWait cr2);
+  print (receiveAndWait cr3);
+  print (receiveAndWait cr4);
+  print (receiveAndWait cr5);
+  print (receiveAndWait cr6);
+  print (receiveAndWait cr7)

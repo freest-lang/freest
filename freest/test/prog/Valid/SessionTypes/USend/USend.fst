@@ -13,14 +13,14 @@ unrestricted values. The partially evaluated function can then be reused, contra
 
 module USend where
 
-unsend : forall (a : *T) .        a  -> forall (b : 1S) .        ()  -> !a;b 1-> b
-unsend = \     @(a : *T) -> \(x : a) -> \     @(b : 1S) -> \(_ : ()) -> send @a x @b
+unsend : forall (a : *T). a -> forall (b : 1S). () -> !a;b 1-> b
+unsend @a x @b () = send x @b -- CANNOT INFER
 
 main : Int
 main =
-  let (s1, r1) = channel @(!Int;Close) in
-  let (s2, r2) = channel @(!Int;Close) in
-  let sendFive = unsend @Int 5 @Close in
+  let (s1, r1) = channel @(!Int;Close)
+      (s2, r2) = channel @(!Int;Close)
+      sendFive = unsend 5 in
   fork (\(_ : ()) 1-> close (sendFive () s1));
   fork (\(_ : ()) 1-> close (sendFive () s2));
 -- Now let's try with send, rather than unsend:
@@ -28,4 +28,4 @@ main =
   -- fork (\(_ : ()) 1-> sendFive s1 |> close);
   -- fork (\(_ : ()) 1-> sendFive s2 |> close);
 -- Variable or data constructor not in scope: 'sendFive'
-  receiveAndWait @Int r1 + receiveAndWait @Int r2
+  receiveAndWait r1 + receiveAndWait r2

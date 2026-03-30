@@ -32,17 +32,17 @@ handleClient gotCake f s =
 
 runCakeStore : Bool -> Int -> Int -> Dual CakeStore -> (Fork, Join) -> ()
 runCakeStore gotCake k n cakeStore fj =
-  if k == 0 then waitFor n (snd @Fork @Join fj)
+  if k == 0 then waitFor n (snd fj)
   else
-    let s = accept @CakeService cakeStore in
-    fork (\(_ : ()) 1-> handleClient gotCake (fst @Fork @Join fj) s);
+    let s = accept cakeStore in
+    fork (\(_ : ()) 1-> handleClient gotCake (fst fj) s);
     runCakeStore False (k - 1) n cakeStore fj
 
 storeClient : String -> CakeStore -> ()
 storeClient name cakeStore =
-  case receive_ @CakeService cakeStore of
-    &Cake           c -> putStrLn ((++) @Char name " got cake!") ; close c
-    &Disappointment c -> putStrLn ((++) @Char name " got disappointment") ; close c
+  case receive_ cakeStore of
+    &Cake           c -> putStrLn (name ++ " got cake!"         ); close c
+    &Disappointment c -> putStrLn (name ++ " got disappointment"); close c
 
 main : ()
 main =

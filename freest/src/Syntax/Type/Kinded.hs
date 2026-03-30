@@ -53,6 +53,7 @@ module Syntax.Type.Kinded
   , T.isAppDName
   , T.fromVariable
   , kindOf
+  , isProper
   , smartApp
   )
 where
@@ -136,7 +137,7 @@ pattern App :: Span -> KindedType -> [KindedType] -> KindedType
 pattern App s t ts <- T.App s _ t ts
   where App s t ts = T.App s k t ts
           where k = foldr (\_ (K.Arrow _ _ k) -> k) (kindOf t) ts
-                                         
+
 pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppQuant s p pk aks t <- T.AppQuant s _ _ _ p pk aks t
   where AppQuant s p pk aks t  = T.AppQuant s (K.Proper s m pk') quant abs p pk aks t
@@ -244,6 +245,9 @@ kindOf = \case
   T.TName _ k _ -> k
   T.DName _ k _ -> k
   T.Void _ k _ -> k
+
+isProper :: KindedType -> Bool
+isProper = K.isProper . kindOf
 
 smartApp :: Span -> KindedType -> [KindedType] -> KindedType
 smartApp s (App x t ts) us = App s t (ts ++ us)

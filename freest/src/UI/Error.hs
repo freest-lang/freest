@@ -36,6 +36,7 @@ import Data.Char qualified as Char
 data Error
   = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
     K.Multiplicity K.Multiplicity
+  | CannotInferHigherKindedTypeApp Span K.Kind
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
@@ -46,7 +47,7 @@ data Error
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
-  | GivenTooManyArgs Span E.KindedExp TK.KindedType Int Int
+  | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
   | KindMismatch Span K.Kind TK.KindedType
@@ -93,6 +94,7 @@ instance Located Error where
   -- source code.
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
+    CannotInferHigherKindedTypeApp s _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
@@ -103,7 +105,7 @@ instance Located Error where
     ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     ExposeError s _ _ _ -> s
-    GivenTooManyArgs s _ _ _ _ -> s
+    GivenTooManyArgs s _ _ _ -> s
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
     KindMismatch s _ _ -> s
@@ -228,6 +230,9 @@ toMessage src = \case
         K.Lin    -> "a linear"
         K.Un     -> "an unrestricted"
         K.VarM x -> "a multiplicity" ++ external x
+  CannotInferHigherKindedTypeApp s k -> makeError src s
+    ("Cannot infer type application for a type of kind " ++ bt (unparse k))
+    ++ "Please provide all type arguments before this one"
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesiseReceiveType s -> makeError src s
@@ -260,7 +265,7 @@ toMessage src = \case
       Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
       Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
     ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
-  GivenTooManyArgs s e t n m -> makeError src s
+  GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to "
     ++ thirdPerson (m - n) ++ ")"
