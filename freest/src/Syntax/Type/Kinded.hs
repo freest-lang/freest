@@ -213,7 +213,7 @@ pattern AppVar s a k ts <- T.AppVar s _ k a ts
 pattern Tuple :: Span -> [KindedType] -> KindedType
 pattern Tuple s ts <- T.Tuple s _ _ ts 
   where Tuple s ts = T.Tuple s (K.Proper s m K.Top) app ts
-          where m = foldr (\(kindOf -> K.Proper _ m _) -> K.meet m ) K.Un ts
+          where m = foldr (\(kindOf -> K.Proper _ m _) -> K.join m ) K.Un ts
                 app = foldr (const $ K.Arrow s (K.lt s)) (K.Proper s m K.Top) ts
   
 pattern List :: Span -> KindedType -> KindedType
