@@ -187,7 +187,7 @@ pattern Tuple :: Span -> XType x -> XType x -> [Type x] -> Type x
 pattern Tuple s x1 x2 ts <- AppDName s x1 x2 (isTupleId -> True) ts
   where Tuple s x1 x2    = \case
           [_] -> internalError "cannot construct a 1-tuple type."
-          ts  -> AppDName s x1 x2 (mkTupleId (length ts - 1) s) ts
+          ts  -> AppDName s x1 x2 (mkTupleId (length ts) s) ts
 
 pattern List :: Span -> XType x -> XType x -> Type x -> Type x
 pattern List s x1 x2 t <- AppDName s x1 x2 ((== mkListId s) -> True) [t]

@@ -288,7 +288,7 @@ TypePrimary :: { T.ParsedType }
   | 'Wait'   { T.End   (getSpan $1) T.In  }
   | 'Void' '@' Kind { T.Void (spanFromTo $1 $3) $3 }
   -- Unit, Tuples, Operators
-  | '(' ')'        { T.DName (spanFromTo $1 $2) (mkUnitId (spanFromTo $1 $2)) }
+  | '(' ')'        { T.Tuple (spanFromTo $1 $2) [] } -- { T.DName (spanFromTo $1 $2) (mkUnitId (spanFromTo $1 $2)) }
   | '(' Type ',' TypeListComma ')' { T.Tuple (spanFromTo $1 $5) ($2 : $4) }
   | '(' Commas ')' {% prefixTupleTypeConsError $1 $3 }
                 -- { T.DName (spanFromTo $1 $3) (mkTupleId $2 (spanFromTo $1 $3)) }
@@ -387,7 +387,7 @@ ExpPrimary :: { E.ParsedExp }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
   | 'receiveType' { E.ReceiveType (getSpan $1) }
-  | '(' ')'     {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
+  | '(' ')'     { E.Tuple (spanFromTo $1 $2) [] } -- {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
                 -- { let s = spanFromTo $1 $3 in E.DCons s (mkTupleId $2 s) } -- TODO: multiplicities
   | '(' AtTypeListExpComma ')' { uncurry (E.Pack (spanFromTo $1 $3)) $2 }

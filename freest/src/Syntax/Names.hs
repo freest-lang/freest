@@ -53,16 +53,22 @@ mkNilId  = mkId "[]"
 mkConsId = mkId "(::)"
 
 mkTupleId :: Located a => Int -> a -> Identifier
-mkTupleId n = mkId $ "("++replicate n ','++")"
+mkTupleId = \case 
+  0 -> mkId "()"
+  n | n >= 2 -> mkId $ "("++replicate (n - 1) ','++")"
 
 isTupleId :: Identifier -> Bool
-isTupleId (Identifier s ('(':cs)) = isTupleId' cs
-  where
-    isTupleId' = \case 
-      (',':cs) -> isTupleId' cs
-      ")"      -> True
-      _        -> False
-isTupleId _ = False
+isTupleId = \case
+  (Identifier _ ('(' : cs)) -> isTupleId' cs
+    where
+      isTupleId' = \case 
+        (',' : cs) -> isTupleId' cs
+        ")"      -> True
+        _        -> False
+  _ -> False
+
+isUnitId :: Identifier -> Bool
+isUnitId (Identifier _ cs) = cs == "()" 
 
 mkBoolId :: Located a => a -> Identifier
 mkBoolId (getSpan -> s) = mkId "Bool" s
