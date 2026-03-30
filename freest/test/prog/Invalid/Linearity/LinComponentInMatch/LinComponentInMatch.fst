@@ -10,4 +10,4 @@ server s _ =
 main : Int
 main = let (s, c) = channel @Server in
        fork (server s);
-       c |> select A |> receiveAndClose @Int
+       c |> select A |> receiveAndClose
