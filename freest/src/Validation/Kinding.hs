@@ -233,25 +233,24 @@ kindModule mod = do
   return mod'{M.definitions = lds}
   where
     kindTypeDecl :: Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
-    kindTypeDecl i (b, t) = do
+    kindTypeDecl i (hasParams, t) = do
       k <- lookupKind mod i
-      t' <- case t of
-        T.Abs s aks u -> do
-          aks' <- kindParams aks k
-          u' <- synth mod (Map.fromList aks') u -- TODO: Map.empty'
+      (hasParams,) <$> case t of
+        T.Abs s aks u | hasParams -> do
+          (aks', k') <- kindParams aks k
+          u' <- check mod (Map.fromList aks') u k' -- TODO: Map.empty'
           return $ TK.Abs s aks' u'
           where
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
-              ((a, k1) :) <$> kindParams aks' k2
+              first ((a, k1) :) <$> kindParams aks' k2
             kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
               checkK (TK.Var (getSpan a) k a) k1
-              ((a, k) :) <$> kindParams aks' k2
-            kindParams []  _ = pure []
+              first ((a, k) :) <$> kindParams aks' k2
+            kindParams []  k' = pure ([], k')
             kindParams aks _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
 
-        t' -> synth mod Map.empty t' -- TODO: Map.empty? 
-      checkK t' k
-      return (b, t')
+        t' -> check mod Map.empty t' k-- TODO: Map.empty? 
+      -- return (hasParams, t')
 
     kindDataConsDecls :: M.ConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))

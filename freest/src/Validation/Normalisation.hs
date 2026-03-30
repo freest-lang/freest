@@ -76,7 +76,7 @@ reduce mod = \case
   T.AppSemi s1 (T.App s2 q@T.QuantS{} [f]) u ->
     T.App s1 q [T.Abs s1 [(a,k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable a k]) u)]
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
-          (K.Arrow _ k _) = T.kindOf q
+          (K.Arrow _ (K.Arrow _ k _) _) = T.kindOf q
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
 

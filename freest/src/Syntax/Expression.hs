@@ -67,7 +67,7 @@ pattern ConsPat s p1 p2 <- DConsPat s ((== mkConsId s) -> True) [p1,p2]
 
 pattern TuplePat :: Span -> [Pat] -> Pat
 pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
-  where TuplePat s ps =  DConsPat s (mkTupleId (length ps - 1) s) ps
+  where TuplePat s ps =  DConsPat s (mkTupleId (length ps) s) ps
 
 listPat :: Span -> [Pat] -> Pat
 listPat s = \case
@@ -112,10 +112,12 @@ data Exp x
 
 pattern Tuple :: Span -> [Exp x] -> Exp x
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
-                             e@(DCons s i@(isTupleId -> True)) -> App s e []
+                             e@(DCons s i@(isUnitId -> True)) -> App s e []
                              e -> e
                       -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_)))
-  where Tuple s es =  App s (DCons s (mkTupleId (length es - 1) s)) (map ExpLevel es)
+  where Tuple s = \case 
+          [] -> DCons s (mkTupleId 0 s)
+          es -> App s (DCons s (mkTupleId (length es) s)) (map ExpLevel es)
 
 pattern Nil :: Span -> Type x -> Exp x
 pattern Nil s t <- App s (DCons _ ((== mkNilId s) -> True)) [TypeLevel t]
