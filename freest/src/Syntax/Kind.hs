@@ -94,7 +94,19 @@ instance Eq Kind where
   Arrow _ k11 k12 == Arrow _ k21 k22 = k11 == k21 && k12 == k22
   Var _ τ1        == Var _ τ2        = τ1 == τ2 
   _               == _               = False
-  
+
+instance Enum Kind where
+  fromEnum (Proper _ Lin Top)     = 1
+  fromEnum (Proper _ Un  Top)     = 2
+  fromEnum (Proper _ Lin Session) = 3
+  fromEnum (Proper _ Un  Session) = 4
+  fromEnum (Proper _ Lin Channel) = 5
+  fromEnum (Proper _ Un  Channel) = 6
+  fromEnum (Arrow _ k1 k2) = pair (fromEnum k1) (fromEnum k2)
+    where pair x y = (x + y) * (x + y + 1) `div` 2 + y
+  fromEnum k = internalError ("fromEnum of kind " ++ show k)
+  toEnum = internalError "toEnum of Kind"
+
 instance Meet Kind where
   meet (Proper s m1 b1) (Proper _ m2 b2) = 
     Proper s (meet m1 m2) (meet b1 b2)
