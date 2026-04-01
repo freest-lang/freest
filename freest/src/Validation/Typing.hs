@@ -850,10 +850,31 @@ instantiate i modl kctx tctx t1 args = do
               (ExpLevel  e : args') -> do
                 (u1, tctx') <- synth modl kctx tctx e
                 t2 <- Expose.internalChoice modl e u1 i
-                (us, t3) <- instantiate 1 modl kctx tctx' t2 args'
+                (_, t3) <- instantiate 1 modl kctx tctx' t2 args'
                 -- traceM ("*** quickLook select match: " ++ show t1 ++ " ≐ " ++ show t3)
                 match e modl t1 t3
                  -- modl kctx tctx' ui as'
+            (E.App s h@(E.SendType s' t0) args) t1 -> 
+              case args of
+                [] -> throwE (CannotSynthesiseSendType s')
+                (TypeLevel u : _) ->
+                  throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel u))
+                (ExpLevel e : args') -> do
+                  (u1, tctx') <- synth modl kctx tctx e
+                  (a, _, t2) <- Expose.typeOutput modl e u1
+                  (_, t3) <- instantiate 1 modl kctx tctx' (subs a t0 t2) args'
+                  match e modl t1 t3
+            (E.App s f@(E.ReceiveType s') args) t2 ->
+              case args of
+                [] -> throwE (CannotSynthesiseReceiveType s)
+                (TypeLevel u : _) ->
+                  throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel u))
+                (ExpLevel e : args') -> do
+                  (u1, tctx') <- synth modl kctx tctx e
+                  (a, k, t2') <- Expose.typeInput modl (Right e) u1
+                  let t2 = T.AppExists (spanFromTo f e) [(a, k)] t2
+                  (_, t3) <- instantiate 1 modl kctx tctx' t2 args'
+                  match e modl t1 t3
             e@(E.App _ h args) t1 -> do
               (t2, tctx') <- synth modl kctx tctx h
               -- traceM ("*** quickLook:\n  " ++ show e ++ "\n  " ++ show t1 ++ "\n  " ++ show t2)
