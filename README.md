@@ -8,7 +8,7 @@
   </picture>  
   <br/><br/>
   <p>A functional programming language for safe concurrency powered by context-free session types</p>
-  <p>Learn more at [freest-lang.github.io](https://freest-lang.github.io/)</p>
+  <p>Learn more at <a href="https://freest-lang.github.io/">freest-lang.github.io</a></p>
 </div>
 
 # About
