@@ -7,11 +7,8 @@
          width="50%">
   </picture>  
   <br/><br/>
-  A functional programming language for safe concurrency  
-  
-  powered by context-free session types
-  <br/><br/>
-  Learn more at [freest-lang.github.io](https://freest-lang.github.io/)
+  <p>A functional programming language for safe concurrency powered by context-free session types</p>
+  <p>Learn more at [freest-lang.github.io](https://freest-lang.github.io/)</p>
 </div>
 
 # About
