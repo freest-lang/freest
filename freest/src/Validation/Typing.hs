@@ -107,7 +107,7 @@ synth modl kctx tctx = \case
   -- Tuples, (e1 ... , en)
   E.Tuple s es -> do
     first (T.Tuple s) <$>
-      foldrM (\e (ts, tctx') -> first (: ts) <$> synth modl kctx tctx' e)
+      foldM (\(ts, tctx') e -> first (List.snoc ts) <$> synth modl kctx tctx' e)
             ([], tctx) es
   -- Nil, [] @a
   E.Nil s t -> do

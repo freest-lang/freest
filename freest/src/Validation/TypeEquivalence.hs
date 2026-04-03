@@ -140,16 +140,7 @@ bottom = 0
 -- The negative integer associated with a kind
 toInt :: K.Kind -> (Int, Int)
 toInt k = (-n * 2, -n * 2 - 1)
-  where
-    n = toInt' k
-    toInt' (K.Proper _ K.Lin K.Top)     = 1
-    toInt' (K.Proper _ K.Un  K.Top)     = 2
-    toInt' (K.Proper _ K.Lin K.Session) = 3
-    toInt' (K.Proper _ K.Un  K.Session) = 4
-    toInt' (K.Proper _ K.Lin K.Channel) = 5
-    toInt' (K.Proper _ K.Un  K.Channel) = 6
-    toInt' (K.Arrow _ k1 k2) = pair (toInt' k1) (toInt' k2)
-    pair x y = (x + y) * (x + y + 1) `div` 2 + y
+  where n = fromEnum k
 
 -- The state of the translation to grammar procedure
 
