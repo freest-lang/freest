@@ -134,15 +134,30 @@ pattern Abs s aks t <- T.Abs s _ aks t
 
 pattern App :: Span -> KindedType -> [KindedType] -> KindedType
 pattern App s t ts <- T.App s _ t ts
-  where App s t ts = T.App s k t ts
-          where k = foldr (\_ (K.Arrow _ _ k) -> k) (kindOf t) ts
-                                         
+  where App s t ts = -- TODO: this is not the most efficient way to kind these special cases, but it seems the most maintainable for now
+          case T.App s (foldr (\_ (K.Arrow _ _ k) -> k) (kindOf t) ts) t ts of
+            AppQuantS s p a k t -> AppQuantS s p a k t
+            AppQuant s p pk aks t -> AppQuant s p pk aks t
+            AppLinChoice s p lts -> AppLinChoice s p lts
+            AppSemi s t1 t2 -> AppSemi s t1 t2
+            AppDual s t -> AppDual s t
+            Tuple s ts -> Tuple s ts
+            List s t -> List s t
+            t -> t
+
+pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
+pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
+  where AppQuantS s p a k t  = T.AppQuantS s (K.Proper s' K.Lin pk) quant abs p a k t
+          where k'@(K.Proper s' _ pk) = kindOf t
+                quant = K.Arrow s abs k'
+                abs = K.Arrow s k k'
+
 pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppQuant s p pk aks t <- T.AppQuant s _ _ _ p pk aks t
   where AppQuant s p pk aks t  = T.AppQuant s (K.Proper s m pk') quant abs p pk aks t
           where k@(K.Proper _ m pk') = kindOf t
                 quant = K.Arrow s abs (K.Proper s m pk')
-                abs = foldr (K.Arrow s . snd ) k aks
+                abs = foldr (K.Arrow s . snd) k aks
 
 pattern AppForall :: Span -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppForall s aks t <- T.AppForall s _ _ _ aks t
@@ -162,13 +177,6 @@ pattern AppMessage :: Span -> K.Multiplicity -> T.Polarity -> KindedType -> Kind
 pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
   where AppMessage s m p t  = T.AppMessage s msg (K.Arrow s (K.lt s) msg) m p t
           where msg = K.Proper s m K.Session
-     
-pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
-pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
-  where AppQuantS s p a k t  = T.AppQuantS s (K.Proper s' K.Lin pk) quant abs p a k t
-          where k'@(K.Proper s' _ pk) = kindOf t
-                quant = K.Arrow s abs k'
-                abs = K.Arrow s k k'
 
 pattern AppLinChoice :: Span -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
 pattern AppLinChoice s p lts <- T.AppLinChoice s _ _ p lts
