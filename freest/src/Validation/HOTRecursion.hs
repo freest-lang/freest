@@ -40,7 +40,7 @@ checkNoHOTRec modl = forM_ (Map.toList modl.typeDecls) checkNoHOTRecDecl
           paramsNotEqualToArgs = not (paramsEqToArgs as ts)
           paramsEqToArgs = \cases
             []     []               -> True
-            (a:as) (T.Var _ _ b:ts) -> a == b && paramsEqToArgs as ts
+            (a : as) (T.Var _ _ _ b : ts) -> a == b && paramsEqToArgs as ts
             _      _                -> False
           t' = betaRule (snd $ modl.typeDecls Map.! i') ts
       T.Abs _ _ t -> checkNoHOTRecType v k i as t

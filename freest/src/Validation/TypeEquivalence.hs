@@ -74,7 +74,7 @@ word' ctx = \case
   T.AppSemi _ t u -> do
     liftM2 (++) (word ctx t) (word ctx u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
-  T.AppDual s (T.AppVar _ a _ ts) -> do
+  T.AppDual s (T.AppVar _ a _ _ ts) -> do
     words <- mapM (word ctx) ts
     getNonterminal $ Map.fromList $
       ("dual " ++ show a, []) :
@@ -88,7 +88,7 @@ word' ctx = \case
       (show u, [bottom]) :
       zip (map show [1..]) words
   -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.AppVar _ a _ us) | isProperType t -> do
+  t@(T.AppVar _ a _ _ us) | isProperType t -> do
     words <- mapM (word ctx) us
     getNonterminal $ Map.fromList $
       (show a, []) :

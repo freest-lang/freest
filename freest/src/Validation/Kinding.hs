@@ -104,7 +104,7 @@ synth modl ctx = \case
   T.DName s i -> flip (TK.DName s) i <$> lookupKind modl i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
-    Just k -> pure $ TK.Var s k a
+    Just k -> pure $ TK.fromVariable a k
     Nothing -> do
       throwE (TypeVarOutOfScope s a)
   T.App s t ts -> do
@@ -244,7 +244,7 @@ kindModule mod = do
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
               first ((a, k1) :) <$> kindParams aks' k2
             kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
-              checkK (TK.Var (getSpan a) k a) k1
+              checkK (TK.fromVariable a k) k1
               first ((a, k) :) <$> kindParams aks' k2
             kindParams []  k' = pure ([], k')
             kindParams aks _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
@@ -270,7 +270,7 @@ kindModule mod = do
         checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
           checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) aks' k2
         checkDataDecl k f ctx ((a, k') : aks') (Arrow s k1 k2) = do
-          checkK (TK.Var (getSpan a) k' a) k1
+          checkK (TK.fromVariable a k') k1
           checkDataDecl k (f . Arrow s k') (Map.insert a k' ctx) aks' k2
         checkDataDecl k f ctx aks Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
@@ -355,7 +355,7 @@ kindModule mod = do
                   Just ki -> checkK (TK.fromVariable ai ki) k >> return ki
                   Nothing -> return k
                 first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) (Map.insert ai k' kctx) tctxds ps' 
-                  rhs (TK.AppForall s' aks $ subs a (TK.Var (getSpan ai) k' ai) u)
+                  rhs (TK.AppForall s' aks $ subs a (TK.fromVariable ai k') u)
               (ExpLevel  (p, mtp) : ps', t''@(TK.AppArrow s' m u v)) -> do
                 tp' <- case mtp of
                   Just tp -> do

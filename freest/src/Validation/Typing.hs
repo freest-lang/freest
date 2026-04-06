@@ -520,11 +520,11 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
         -- regular cases
         (TypeLevel (ai, mki) : ps'', T.AppForall s' ((a, k) : aks) u) -> do
           ki <- case mki of
-            Just ki -> do Kinding.checkK (T.Var (getSpan ai) ki ai) k
+            Just ki -> do Kinding.checkK (T.fromVariable ai ki) k
                           return ki
             Nothing -> return k
           checkFun' (i + 1) (Map.insert ai ki kctxi) tctxi ps''
-            (T.AppForall s' aks $ subs a (T.Var (getSpan ai) ki ai) u)
+            (T.AppForall s' aks $ subs a (T.fromVariable ai ki) u)
         (ExpLevel  (pi, mti) : ps'', t''@(T.AppArrow s' m u v)) -> do
           case mti of
             Just ti -> do
@@ -656,7 +656,7 @@ checkPat modl kctx p t = case p of
           (kctx, Map.empty) (zip ps ts')
       t' -> throwE
         (TypeMismatch (getSpan p) t
-          (T.AppDName (getSpan i) k i' (map (\(a, k) -> T.Var (getSpan i) k a) aks)) (Right p))
+          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable a k)) aks)) (Right p))
   -- Wait
   E.WaitPat s -> do
     Expose.wait modl p t
@@ -766,17 +766,17 @@ instantiate i modl kctx tctx t1 args = do
       inst@(T.AppForall s ((a, k) : aks) t1, ExpLevel e : args') -> do
         unless (K.isProper k) do
           throwE (CannotInferHigherKindedTypeApp (getSpan e) k)
-        χ <- Matching.freshInstVar (foldl spanFromTo (getSpan e) args')
-        instantiate' (succ i) (subs a (T.fromVariable χ k) (T.AppForall s aks t1)) (ExpLevel e : args')
+        tχ <- Matching.freshInstVarT (foldl spanFromTo (getSpan e) args') k
+        instantiate' (succ i) (subs a tχ (T.AppForall s aks t1)) (ExpLevel e : args')
       -- I-AllType
       inst@(T.AppForall s ((a, k) : aks) t1, TypeLevel t2 : args') -> do
         Kinding.checkK t2 k
         instantiate' (succ i) (subs a t2 (T.AppForall s aks t1)) args'
       -- I-Var
-      inst@(T.Var s k χ, ExpLevel e : args') | Matching.isInstVar χ -> do
-        χ1 <- Matching.freshInstVar s
-        χ2 <- Matching.freshInstVar s
-        let t = T.AppArrow s K.Un (T.fromVariable χ1 (K.lt s)) (T.fromVariable χ2 (K.lt s))
+      inst@(T.Var s k T.IVar χ, ExpLevel e : args') -> do
+        t <- T.AppArrow s <$> Matching.freshInstVarM s 
+                          <*> Matching.freshInstVarT s (K.lt s)
+                          <*> Matching.freshInstVarT s (K.lt s)
         (θ, us, u) <- instantiate' (succ i) t (ExpLevel e : args')
         return (Matching.subsType χ t <> θ, us, u)
       -- I-Arg
@@ -838,7 +838,7 @@ instantiate i modl kctx tctx t1 args = do
               (t2, tctx') <- synth modl kctx tctx h
               (us , t3   ) <- instantiate 0 modl kctx tctx' t2 []
               Matching.match e modl t1 t3
-            e (T.Var _ _ χ) | Matching.isInstVar χ -> do
+            e (T.Var _ _ T.IVar χ) -> do
               (t2, _) <- synth modl kctx tctx e
               return $ Matching.subsType χ t2
             e t1 -> do

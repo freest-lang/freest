@@ -35,7 +35,7 @@ class Join t where
 class Meet t where
   meet :: t -> t -> t
 
-data Multiplicity = Lin | Un | VarM Variable 
+data Multiplicity = Lin | Un | VarM Variable | IVarM Variable
   deriving (Eq, Ord)
 
 instance Subsort Multiplicity where

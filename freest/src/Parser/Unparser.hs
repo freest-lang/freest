@@ -89,7 +89,7 @@ instance Unparse (T.Type x) where
     T.Void _ _ k -> (appRator, "Void @" ++ r)
       where
         r = bracket (fragment k) RightAssoc appRator
-    T.Var  _ _ a -> fragment a
+    T.Var  _ _ _ a -> fragment a
     T.Abs _ _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
     T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
       where

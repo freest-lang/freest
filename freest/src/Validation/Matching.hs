@@ -39,13 +39,13 @@ applySubs (Θ χtms) t =
   foldr (\(χi, tmi) ti -> either (subst χi) (subsm χi) tmi ti) t χtms
   where
     subst χ t = \case
-      T.Var _ _ χ' | isInstVar χ && χ == χ' -> t
+      T.Var _ _ T.IVar χ' | χ == χ' -> t
       T.Abs s aks u -> T.Abs s aks (subst χ t u)
       T.App s u us -> T.App s (subst χ t u) (map (subst χ t) us)
       t -> t
 
     subsm χ m = \case
-      T.Arrow s (K.VarM χ') | χ == χ' -> T.Arrow s m
+      T.Arrow s (K.IVarM χ') | χ == χ' -> T.Arrow s m
       T.Abs s aks u -> T.Abs s aks $ subsm χ m u
       T.App s u us -> T.App s (subsm χ m u) (map (subsm χ m) us)
 
@@ -65,18 +65,18 @@ match e modl = match' e modl Set.empty Set.empty
       -- M-FIV
       _ | Set.null fiv12 -> return emptySubs
       -- M-IVar
-      (T.Var s k χ, t2) | isInstVar χ -> do
+      (T.Var s k T.IVar χ, t2) -> do
         unless (T.kindOf t2 K.<: k) do
           throwE (KindMismatch (getSpan t2) k t2)
         return $ subsType χ t2
-      (t1, T.Var s k χ) | isInstVar χ -> do
+      (t1, T.Var s k T.IVar χ) -> do
         unless (T.kindOf t1 K.<: k) do
           throwE (KindMismatch (getSpan t1) k t1)
         return $ subsType χ t1
       -- M-DualIVar
-      (T.AppDual _ t1'@(T.Var _ _ χ), t2) | isInstVar χ ->
+      (T.AppDual _ t1'@(T.Var _ _ T.IVar χ), t2) ->
         match' e modl bindings visited t1' (T.AppDual (getSpan t2) t2)
-      (t1, T.AppDual _ t2'@(T.Var _ _ χ)) | isInstVar χ ->
+      (t1, T.AppDual _ t2'@(T.Var _ _ T.IVar χ)) ->
         match' e modl bindings visited (T.AppDual (getSpan t1) t1) t2'
       -- M-AbsorbSeqL/R
       (T.AppSemi _ (T.End _ p1) t1, T.End _ p2)
@@ -123,12 +123,13 @@ match e modl = match' e modl Set.empty Set.empty
           K.Un  -> return $ isubsAbsorbed (fiv t12)
         return $ θ2 <> θ1
       -- M-DualVar
-      (T.AppDual _ (T.AppVar _ a1 k1 t1s), T.AppDual _ (T.AppVar _ a2 k2 t2s))
+      (T.AppDual _ (T.AppVar _ a1 k1 T.NotMeta t1s), T.AppDual _ (T.AppVar _ a2 k2 T.NotMeta t2s))
         | (a1, a2) `Set.member` bindings && length t1s == length t2s
         -> foldMatch e modl bindings visited emptySubs t1s t2s
-        | (isInstVar a1 || isInstVar a2) && length t1s == length t2s
+      (T.AppDual _ (T.AppVar _ a1 k1 vm1 t1s), T.AppDual _ (T.AppVar _ a2 k2 vm2 t2s))
+        | vm1 == vm2 && length t1s == length t2s
         -> do
-        θ <- match' e modl bindings visited (T.fromVariable a1 k1) (T.fromVariable a2 k2)
+        θ <- match' e modl bindings visited (T.Var (getSpan a1) k1 vm1 a1) (T.Var (getSpan a2) k2 vm2 a2)
         foldMatch e modl bindings visited θ t1s t2s
       -- M-Const (M-ArrowL/R)
       (T.App _ t1' t1s, T.App _ t2' t2s)
@@ -140,8 +141,8 @@ match e modl = match' e modl Set.empty Set.empty
         -> do
         θ <- case (t1', t2') of
           (T.Arrow _ m1, T.Arrow _ m2) -> case (m1, m2) of
-            (K.VarM χ, m2) | isInstVar χ -> return $ subsMult χ m2
-            (m1, K.VarM χ) | isInstVar χ -> return $ subsMult χ m1
+            (K.IVarM χ, m2) -> return $ subsMult χ m2
+            (m1, K.IVarM χ) -> return $ subsMult χ m1
             (_, _) -> return emptySubs
           _ -> return emptySubs
         foldMatch e modl bindings visited θ t1s t2s
@@ -151,7 +152,7 @@ match e modl = match' e modl Set.empty Set.empty
         -> match' e modl (Set.insert (a1, a2) bindings) visited
             (T.AppQuant s1 p1 pk1 aks1 t1') (T.AppQuant s2 p2 pk2 aks2 t2')
       -- M-Var
-      (T.AppVar _ a1 _ t1s, T.AppVar _ a2 _ t2s)
+      (T.AppVar _ a1 _ T.NotMeta t1s, T.AppVar _ a2 _ T.NotMeta t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
         -> foldMatch e modl bindings visited emptySubs t1s t2s
       (t1, t2)
@@ -187,17 +188,19 @@ match e modl = match' e modl Set.empty Set.empty
 
 fiv :: T.KindedType -> Set.Set (Either Variable Variable)
 fiv = \case
-  T.Var _ _ χ | isInstVar χ -> Set.singleton (Left χ)
-  T.Arrow _ (K.VarM χ) | isInstVar χ -> Set.singleton (Right χ)
+  T.Var _ _ T.IVar χ -> Set.singleton (Left χ)
+  T.Arrow _ (K.IVarM χ) -> Set.singleton (Right χ)
   T.Abs _ _ t -> fiv t
   T.App _ t ts -> Set.unions (fiv t : map fiv ts)
   _ -> Set.empty
 
-isInstVar :: Variable -> Bool
-isInstVar = (< -1) . internal
+freshInstVarT :: Span -> K.Kind -> Validation T.KindedType
+freshInstVarT s k = T.Var s k T.IVar <$> freshInstVar s
+
+freshInstVarM :: Span -> Validation K.Multiplicity
+freshInstVarM s = K.IVarM <$> freshInstVar s
 
 freshInstVar :: Span -> Validation Variable
-freshInstVar s = do
-  whileM ((< 1) <$> incCounter)
+freshInstVar s = do 
   i <- incCounter
-  return $ Variable s ("χ" ++ show i) (- i)
+  return (Variable s ("χ" ++ show i) i)

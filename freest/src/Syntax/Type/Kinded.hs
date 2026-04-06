@@ -1,5 +1,6 @@
 module Syntax.Type.Kinded
   ( KindedType
+  , TypeVarMeta(..)
   , pattern Int
   , pattern Float
   , pattern Char
@@ -51,10 +52,10 @@ module Syntax.Type.Kinded
   , T.isAppLinChoice
   , T.isAppQuant
   , T.isAppDName
-  , T.fromVariable
   , kindOf
   , isProper
   , smartApp
+  , fromVariable
   )
 where
 
@@ -64,7 +65,14 @@ import Syntax.Names
 import Syntax.Type.Internal qualified as T
 import Data.List (intercalate)
 
+
 type KindedType = T.Type Kinded
+
+type instance T.XType Kinded = K.Kind
+
+type instance T.XTypeVar Kinded = TypeVarMeta
+
+data TypeVarMeta = NotMeta | IVar | Unification deriving (Eq, Ord)
 
 pattern Int :: Span -> KindedType
 pattern Int s <- T.Int s _
@@ -124,9 +132,9 @@ pattern DName :: Span -> K.Kind -> Identifier -> KindedType
 pattern DName s k i <- T.DName s k i
   where DName s k i = T.DName s k i
 
-pattern Var :: Span -> K.Kind -> Variable -> KindedType
-pattern Var s k a <- T.Var s k a
-  where Var s k a = T.Var s k a
+pattern Var :: Span -> K.Kind -> TypeVarMeta -> Variable -> KindedType
+pattern Var s k m a <- T.Var s k m a
+  where Var = T.Var
 
 pattern Abs :: Span -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern Abs s aks t <- T.Abs s _ aks t
@@ -215,8 +223,8 @@ pattern AppDName s k i ts <- T.AppDName s _ k i ts
   where AppDName s k i ts  = T.AppDName s k' k i ts
           where k' = foldr (\_ (K.Arrow _ _ k) -> k) k ts
           
-pattern AppVar :: Span -> Variable -> K.Kind -> [KindedType] -> KindedType
-pattern AppVar s a k ts <- T.AppVar s _ k a ts
+pattern AppVar :: Span -> Variable -> K.Kind -> TypeVarMeta -> [KindedType] -> KindedType
+pattern AppVar s a k m ts <- T.AppVar s _ k m a ts
 --  where AppVar s a ts  = T.AppVar s void void a ts
 
 pattern Tuple :: Span -> [KindedType] -> KindedType
@@ -247,7 +255,7 @@ kindOf = \case
   T.End _ k _ -> k
   T.Message _ k _ _ -> k
   T.Choice _ k _ _ _ -> k
-  T.Var _ k _ -> k
+  T.Var _ k _ _ -> k
   T.Abs _ k _ _ -> k
   T.App _ k _ _ -> k
   T.TName _ k _ -> k
@@ -260,6 +268,9 @@ isProper = K.isProper . kindOf
 smartApp :: Span -> KindedType -> [KindedType] -> KindedType
 smartApp s (App x t ts) us = App s t (ts ++ us)
 smartApp s t            us = App s t us
+
+fromVariable :: Variable -> K.Kind -> KindedType
+fromVariable a k = T.fromVariable a k NotMeta
 
 -- instance {-# OVERLAPS #-} Show KindedType where
 --   show = \case

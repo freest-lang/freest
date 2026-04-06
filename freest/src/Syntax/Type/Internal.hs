@@ -11,6 +11,7 @@ polymorphic context-free session types.
 module Syntax.Type.Internal
   ( Polarity(..)
   , XType
+  , XTypeVar
   , Type( ..
         , AppQuant
         , AppForall
@@ -60,18 +61,16 @@ import Data.Bifunctor
 import Data.Function ( on )
 import Data.List ( intercalate, sort, sortBy )
 import Data.Map.Strict qualified as M
-import Data.Void qualified  as V
+import Data.Void (Void)
 
 
 type ScopedType = Type Scoped
 type KindedType = Type Kinded
 -- type TypedType  = Type Typed
 
-type family XType x
-type instance XType Parsed = V.Void
-type instance XType Scoped = V.Void
-type instance XType Kinded = K.Kind -- Testing
--- type instance XType Typed = K.Kind  -- Testing
+type family XType phase
+type family XTypeVar phase
+
 
 data Polarity = In | Out
   deriving (Eq, Ord)
@@ -103,11 +102,11 @@ data Type x
   | TName Span (XType x) Identifier
   | DName Span (XType x) Identifier
   -- Non-constants
-  | Var Span (XType x) Variable
+  | Var Span (XType x) (XTypeVar x) Variable
   | Abs Span (XType x) [(Variable, K.Kind)] (Type x)
   | App Span (XType x) (Type x) [Type x]
-  
-deriving instance Ord (XType x) => Ord (Type x)
+
+deriving instance (Ord (XType x), Ord (XTypeVar x)) => Ord (Type x)
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
@@ -175,13 +174,13 @@ pattern AppDName s x1 x2 i ts <- (\case DName s x1 i            -> App s x1 (DNa
   where AppDName _ _ x2 i []  = DName (getSpan i) x2 i
         AppDName s x1 x2 i ts  = App s x1 (DName (getSpan i) x2 i) ts
 
-pattern AppVar :: Span -> XType x -> XType x -> Variable -> [Type x] -> Type x
-pattern AppVar s x1 x2 a ts <- (\case Var s x1 a            -> App s x1 (Var s x1 a) []
-                                      App s x1 (Var _ x2 a) ts -> App s x1 (Var s x2 a) ts
-                                      t                  -> t
-                               -> App s x1 (Var _ x2 a) ts)
-  where AppVar _ _ x2 a []  = Var (getSpan a) x2 a
-        AppVar s x1 x2 a ts  = App s x1 (Var (getSpan a) x2 a) ts
+pattern AppVar :: Span -> XType x -> XType x -> XTypeVar x -> Variable -> [Type x] -> Type x
+pattern AppVar s x1 x2 xv a ts <- (\case Var s x1 xv a -> App s x1 (Var s x1 xv a) []
+                                         App s x1 (Var _ x2 xv a) ts -> App s x1 (Var s x2 xv a) ts
+                                         t -> t
+                               -> App s x1 (Var _ x2 xv a) ts)
+  where AppVar _ _ x2 xv a []  = Var (getSpan a) x2 xv a
+        AppVar s x1 x2 xv a ts  = App s x1 (Var (getSpan a) x2 xv a) ts
 
 pattern Tuple :: Span -> XType x -> XType x -> [Type x] -> Type x
 pattern Tuple s x1 x2 ts <- AppDName s x1 x2 (isTupleId -> True) ts
@@ -236,8 +235,8 @@ isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 isAppQuant     = \case AppQuant{}     -> True; _ -> False
 isAppDName     = \case AppDName{}     -> True; _ -> False
 
-fromVariable :: Variable -> XType x -> Type x
-fromVariable a x = Var (varSpan a) x a
+fromVariable :: Variable -> XType x -> XTypeVar x -> Type x
+fromVariable a x xv = Var (varSpan a) x xv a
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"
@@ -281,7 +280,7 @@ instance Show (Type x) where
     -- Polymorphism
     AppQuant _ _ _ _ p K.Top aks t -> "(" ++ showQuant p ++ " " ++ showAbs aks ". " t ++ ")"
     -- Higher-order
-    Var _ _ a    -> show a
+    Var _ _ _ a    -> show a
     AppSemi _ _ _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
     Abs _ _ aks t -> "(\\" ++ showAbs aks " -> " t ++ ")"
     App _ _ t [] -> "(" ++ show t ++ "[])"
@@ -320,7 +319,7 @@ instance Congruence (Type x) where
     (Message _ _ m1 p1) (Message _ _ m2 p2) -> m1 == m2 && p1 == p2
     (Choice _ _ m1 p1 is1) (Choice _ _ m2 p2 is2) -> m1 == m2 && p1 == p2 && is1 == is2
   -- Higher-order
-    (Var _ _ v1) (Var _ _ v2) ->
+    (Var _ _ _ v1) (Var _ _ _ v2) ->
       v1 == v2 ||              -- free variables
       Just v2 == M.lookup v1 m -- bound variables
     (Abs _ _ (unzip -> (as1,ks1)) t) (Abs _ _ (unzip -> (as2, ks2)) u) ->
@@ -361,7 +360,7 @@ instance Located (Type x) where
     -- Polymorphism
     Quant s _ _ _ -> s
     -- Higher-order
-    Var s _ _        -> s
+    Var s _ _ _       -> s
     Abs s _ _ _      -> s
     App s _ _ _       -> s
     -- Equations
@@ -385,7 +384,7 @@ instance Located (Type x) where
     Semi _ x          -> Semi s x
     Dual _ x          -> Dual s x
     -- Higher-order
-    Var _ x a          -> Var s x a
+    Var _ x xv a       -> Var s x xv a
     Abs _ x aks t      -> Abs s x aks t
     App _ x t1 t2      -> App s x t1 t2
     -- Equations

@@ -26,7 +26,7 @@ import Data.Set qualified as Set
 freeVars :: T.Type x -> Set.Set Variable
 freeVars = \case
     T.Abs _ _ aks t -> freeVars t Set.\\ Set.fromList (map fst aks)
-    T.Var _ _ a     -> Set.singleton a
+    T.Var _ _ _ a -> Set.singleton a
     T.App _ _ t ts  -> Set.unions (freeVars t : map freeVars ts)
     _               -> Set.empty
 
@@ -34,7 +34,7 @@ freeVars = \case
 allVars :: T.Type x -> Set.Set Variable
 allVars = \case 
     T.Abs _ _ aks t -> allVars t
-    T.Var _ _ a     -> Set.singleton a
+    T.Var _ _ _ a -> Set.singleton a
     T.App _ _ t ts  -> Set.unions (allVars t : map allVars ts)
     _               -> Set.empty
 
@@ -43,7 +43,7 @@ allVars = \case
 subs :: Variable -> TK.KindedType -> TK.KindedType -> TK.KindedType
 subs a u = \case 
   -- Variables
-  t@(TK.Var _ _ b)
+  t@(TK.Var _ _ _ b)
     | b == a    -> u
     | otherwise -> t
   -- Abstractions (can we do this more elegantly?)
@@ -52,7 +52,7 @@ subs a u = \case
       | b == a -> t
       | b `Set.member` fvu ->
         let b' = mkFreshVar (getSpan b) (Set.insert a fvu `Set.union` allVars t')
-            TK.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') k b') (TK.Abs s bks t'))
+            TK.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') k TK.NotMeta b') (TK.Abs s bks t'))
         in TK.Abs s ((b',k):bks') t''
       | otherwise ->
         let TK.Abs _ bks' t'' = subs a u (TK.Abs s bks t')
