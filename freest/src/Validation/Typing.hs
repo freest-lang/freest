@@ -31,6 +31,7 @@ import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Kinding ( KindCtx )
 import Validation.Kinding qualified as Kinding
+import Validation.Matching qualified as Matching
 import Validation.Normalisation ( normalise, tNameRedex, isWhnf, reduce )
 import Validation.Substitution ( subs, subsAll )
 import Validation.TypeEquivalence ( equivalent )
@@ -49,11 +50,9 @@ import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Maybe (isJust, fromJust)
 import Control.Exception (assert)
--- import Debug.Trace (traceM, trace)
 import Data.Bitraversable (bimapM)
 import Data.List (sort)
 
-traceM _ = return () 
 
 -- The type context. It keeps track of the variables and constructors in scope
 -- and their types.
@@ -67,7 +66,8 @@ emptyTypeCtx = Map.empty
 -- linear, then the variable or identifier will not be present in the updated 
 -- type context. If the variable or identifier is not present in the type 
 -- context, an error is thrown.
-lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier -> Validation (T.KindedType, TypeCtx)
+lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier 
+           -> Validation (T.KindedType, TypeCtx)
 lookupType kctx tctx xi = case tctx Map.!? xi of
   Just t -> do
     return (t, if Kinding.isStrictlyLin t then Map.delete xi tctx else tctx)
@@ -120,26 +120,6 @@ synth modl kctx tctx = \case
     (t,) <$> check modl kctx tctx' e2 t
   E.DCons s i     -> lookupType kctx tctx (Right i)
   E.Var s x       -> lookupType kctx tctx (Left  x)
-  -- send e1 e2
-  -- E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do  -- TODO: remove magic constants (and refactor Syntax.Names).
-  --   (t, tctx') <- synth modl kctx tctx e2                                            -- (or not, since these cases are temporary...)
-  --   (t1, t2) <- Expose.output modl e2 t
-  --   (t2,) <$> check modl kctx tctx' e1 t1
-  -- receive e
-  -- E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
-  --   (t, tctx') <- synth modl kctx tctx e
-  --   (t1, t2) <- Expose.input modl (Right e) t
-  --   return (T.Tuple s [t1,t2], tctx')
-  -- fork e
-  -- E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
-  --   (t, tctx') <- synth modl kctx tctx e
-  --   (m, t1, t2) <- Expose.arrow modl e t
-  --   Kinding.checkK t2 (K.ut (getSpan e)) -- used to be checkSubkindOf
-  --   checkEquivTypes modl (Left e)
-  --     (T.AppArrow (getSpan e) m t1 t2)
-  --     (T.AppArrow (getSpan e) K.Lin (T.DName s (K.ut s) (mkUnitId s)) t2)
-  --   return (T.DName s (K.ut s) (mkUnitId s), tctx')
-  -- select l e1 ... en
   E.App s f@(E.Select s' i) as ->
     case as of
       [] -> throwE (CannotSynthesiseSelect s' i)
@@ -149,7 +129,7 @@ synth modl kctx tctx = \case
         (u, tctx') <- synth modl kctx tctx e
         ui <- Expose.internalChoice modl e u i
         checkArgsQL 1 modl kctx tctx' ui as'
-  E.App s f@(E.SendType s' t) as -> -- TODO: avoid this duplication. find a way to deal with select, sendType and receiveType
+  E.App s f@(E.SendType s' t) as ->                                            -- TODO: is there a better way to deal with SendType and ReceiveType?
     case as of
       [] -> throwE (CannotSynthesiseSendType s)
       (TypeLevel u : _) ->
@@ -157,7 +137,7 @@ synth modl kctx tctx = \case
       (ExpLevel e : as') -> do
         (u, tctx') <- synth modl kctx tctx e
         (a, _, u') <- Expose.typeOutput modl e u
-        checkArgsQL 1 modl {- (E.App s f [ExpLevel e]) -} kctx tctx' (subs a t u') as'
+        checkArgsQL 1 modl kctx tctx' (subs a t u') as'
   E.App s f@(E.ReceiveType s') as ->
     case as of
       [] -> throwE (CannotSynthesiseReceiveType s)
@@ -167,12 +147,8 @@ synth modl kctx tctx = \case
         (u, tctx') <- synth modl kctx tctx e
         (a, k, u') <- Expose.typeInput modl (Right e) u
         let v = T.AppExists (spanFromTo f e) [(a, k)] u'
-        traceM ("*** synth AppReceiveType:\n  " ++ show u ++ "\n  " ++ show (iterate (reduce modl) u !! 3) ++ "\n  " ++ show (normalise modl u) ++ "\n  " ++ show a ++ " : " ++ show k ++ ". " ++ show u')
-        checkArgsQL 1 modl {- (E.App s f [ExpLevel e]) -} kctx tctx' v as'
+        checkArgsQL 1 modl kctx tctx' v as'
   E.App s h as    -> do
-    -- (t, tctx') <- synth modl kctx tctx f
-    -- t' <- Expose.function modl f t
-    -- checkArgs modl f kctx tctx' t' as
     (t, tctx') <- synth modl kctx tctx h
     checkArgsQL 0 modl kctx tctx' t as
   e@(E.Abs s ps m e') -> synthAbs kctx tctx ps
@@ -206,8 +182,7 @@ synth modl kctx tctx = \case
       throwE (KindMismatch s (K.ut se1) t)
     synth modl kctx tctx' e2
     where se1 = getSpan e1
-  E.Case s e cs@((p1, rhs1) : cs')   -> do
-    -- TODO: detect redundant and incomplete patterns
+  E.Case s e cs@((p1, rhs1) : cs')   -> do                                     -- TODO: detect redundant and incomplete patterns
     (t, tctx') <- synth modl kctx tctx e
     (kctxp1, tctxp1) <- checkPat modl kctx p1 t
     (t1, tctxrhs1) <- synthRHS modl kctxp1 (tctxp1 `Map.union` tctx') (Right e) rhs1
@@ -304,23 +279,6 @@ check modl kctx tctx e t = case e of
     (u, tctx') <- lookupType kctx tctx (Left x)
     checkEquivTypes modl (Left e) t u
     return tctx'
-  -- send e1 e2
-  -- E.App s (E.Var s' x) [ExpLevel e1, ExpLevel e2] | external x == "send" -> do -- TODO: remove magic constants (and refactor Syntax.Names).
-  --   (u, tctx') <- synth modl kctx tctx e                                            -- (or not, since these cases are temporary...)
-  --   checkEquivTypes modl (Left e) t u
-  --   return tctx'
-  -- receive e
-  -- E.App s (E.Var s' x) [ExpLevel e] | external x == "receive" -> do
-  --   (u, tctx') <- synth modl kctx tctx e
-  --   (t1, t2) <- Expose.input modl (Right e) u
-  --   checkEquivTypes modl (Left e) t (T.Tuple s [t1,t2])
-  --   return tctx'
-  -- fork e
-  -- E.App s (E.Var s' x) [ExpLevel e] | external x == "fork" -> do
-  --   (u, tctx') <- synth modl kctx tctx e
-  --   checkEquivTypes modl (Left e) t u
-  --   return tctx'
-  -- select l e1 ... en
   E.App s f@(E.Select s' i) as ->
     case as of
       [] -> throwE (CannotSynthesiseSelect s' i)
@@ -343,36 +301,32 @@ check modl kctx tctx e t = case e of
         (t', tctx'') <- checkArgs modl (E.App s f [ExpLevel e']) kctx tctx' (subs a u v') as'
         checkEquivTypes modl (Left e) t t'
         return tctx''
-  E.App s f@(E.ReceiveType s') as ->
-    case as of
+  E.App s f@(E.ReceiveType s') args ->
+    case args of
       [] -> throwE (CannotSynthesiseReceiveType s)
       (TypeLevel u : _) ->
         throwE (UnexpectedArg (getSpan u) 1 (ExpLevel Nothing) (TypeLevel u))
-      (ExpLevel e' : as') -> do
+      (ExpLevel e' : args') -> do
         (u, tctx') <- synth modl kctx tctx e'
         (a, k, u') <- Expose.typeInput modl (Right e') u
         let v = T.AppExists (spanFromTo f e') [(a, k)] u'
-        (t', tctx'') <- checkArgs modl (E.App (spanFromTo f e') f [ExpLevel e']) kctx tctx' v as'
+        (t', tctx'') <- checkArgs modl (E.App (spanFromTo f e') f [ExpLevel e']) kctx tctx' v args'
         checkEquivTypes modl (Left e) t t'
         return tctx''
-  E.App s h as -> do
-    -- (u, tctx') <- synth modl kctx tctx f
-    -- (v, tctx'') <- checkArgs modl f kctx tctx' u as
-    -- checkEquivTypes modl (Left e) t v
-    -- return tctx''
+  E.App s h args -> do
     (t', tctx') <- synth modl kctx tctx h
-    (us, t'') <- instantiate 0 modl kctx tctx t' as
-    traceM ("*** check matching: " ++ show t ++ " ≐ " ++ show t'' ++ "\n  h=" ++ show h ++ "\n  t'=" ++ show t' ++ "\n  us=" ++ show us)
-    θ <- match e modl t t''
-    -- traceM ("matched check app:\n  " ++ show t'' ++ "\n  " ++ show σ)
-    checkEquivTypes modl (Left e) (applySubs θ t) (applySubs θ t'')
-    let (es, _) = partitionLevels as
+    (us, t'') <- instantiate 0 modl kctx tctx t' args
+    θ <- Matching.match e modl t t''
+    checkEquivTypes modl (Left e) (Matching.applySubs θ t  )
+                                  (Matching.applySubs θ t'')
+    let (es, _) = partitionLevels args
     assert (length es == length us) do
-      foldM (\tctxi (ei, ui) -> check modl kctx tctxi ei (applySubs θ ui)) tctx' (zip es us)
-  E.Abs s ps m e' -> do
-    checkFun modl kctx tctx (Right e) pps (Just m) (E.UnguardedRHS e' Nothing) t
+      foldM (\tctxi (ei, ui) -> 
+        check modl kctx tctxi ei (Matching.applySubs θ ui)) tctx' (zip es us)
+  E.Abs s pars m e' -> do
+    checkFun modl kctx tctx (Right e) pars' (Just m) (E.UnguardedRHS e' Nothing) t
     where
-      pps = map (bimap (second Just) (second Just)) ps
+      pars' = map (bimap (second Just) (second Just)) pars
   E.Pack s ts e' -> do
     case normalise modl t of
       T.AppExists s aks t -> checkPack modl kctx tctx e' ts aks t
@@ -534,10 +488,9 @@ checkArgsQL :: Int
             -> T.KindedType
             -> [Level (E.Exp Kinded) T.KindedType]
             -> Validation (T.KindedType, TypeCtx)
-checkArgsQL i modl kctx tctx t as = do
-    (us, t') <- instantiate i modl kctx tctx t as
-    traceM ("*** checkArgsQL:\n  t=" ++ show t ++ "\n  as=" ++ show as ++ "\n  us=" ++ show us ++ "\n  t'=" ++ show t' ++ "\n  tctx=" ++ show (tctx Map.!? Left (Variable (getSpan t) "" 481)))
-    let (es, _) = partitionLevels as
+checkArgsQL i modl kctx tctx t args = do
+    (us, t') <- instantiate i modl kctx tctx t args
+    let (es, _) = partitionLevels args
     tctx' <- assert (length es == length us) do
       foldM (uncurry . check modl kctx) tctx (zip es us)
     return (t', tctx')
@@ -578,7 +531,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
               Kinding.checkProperK ti
               checkEquivTypes modl (Right pi) ti u
             Nothing -> return ()
-          case mm of -- TODO: check if this is the right approach, tune error message, revisit multiplicity subtyping or polymorphism
+          case mm of                                                           -- TODO: revisit when implementing multiplicity polymorphism
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo pi fe) fe i m m')
             Nothing -> return ()
@@ -656,7 +609,6 @@ checkPat modl kctx p t = case p of
           u' -> throwE (TypeMismatchExists (spanFromTo a p) u
             (Left $ E.PackPat (spanFromTo a p) aks p))
         ((a, k) : aks) ((b, k') : bks) -> do
-          traceM ("checking " ++ show a ++ " against " ++ show k')
           Kinding.checkK (T.fromVariable a k) k'
           checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable a k) u) aks bks
   E.WildPat  s _    -> do
@@ -799,15 +751,13 @@ instantiate :: Int
             -> [Level (E.Exp Kinded) T.KindedType]
             -> Validation ([T.KindedType], T.KindedType)
 instantiate i modl kctx tctx t1 args = do
-  -- traceM ("*** instantiating:\n  " ++ show (normalise modl t1) ++ "(" ++ show (getSpan t1) ++ ")"++ "\n  " ++ show args)
   (θ, us, t2) <- instantiate' i t1 args
-  traceM ("*** instantiated " ++ show t1 ++ " with args " ++ show args ++ " yielding subs " ++ show θ)
   return (us, t2)
   where
     instantiate' :: Int
                  -> T.KindedType
                  -> [Level (E.Exp Kinded) T.KindedType]
-                 -> Validation (Substitution, [T.KindedType], T.KindedType)
+                 -> Validation (Matching.Substitution, [T.KindedType], T.KindedType)
     instantiate' i t args = case (normalise modl t, args) of
       -- I-Result
       inst@(t', []) -> do
@@ -816,45 +766,50 @@ instantiate i modl kctx tctx t1 args = do
       inst@(T.AppForall s ((a, k) : aks) t1, ExpLevel e : args') -> do
         unless (K.isProper k) do
           throwE (CannotInferHigherKindedTypeApp (getSpan e) k)
-        χ <- freshInstVar (foldl spanFromTo (getSpan e) args')
+        χ <- Matching.freshInstVar (foldl spanFromTo (getSpan e) args')
         instantiate' (succ i) (subs a (T.fromVariable χ k) (T.AppForall s aks t1)) (ExpLevel e : args')
       -- I-AllType
       inst@(T.AppForall s ((a, k) : aks) t1, TypeLevel t2 : args') -> do
         Kinding.checkK t2 k
         instantiate' (succ i) (subs a t2 (T.AppForall s aks t1)) args'
+      -- I-Var
+      inst@(T.Var s k χ, ExpLevel e : args') | Matching.isInstVar χ -> do
+        χ1 <- Matching.freshInstVar s
+        χ2 <- Matching.freshInstVar s
+        let t = T.AppArrow s K.Un (T.fromVariable χ1 (K.lt s)) (T.fromVariable χ2 (K.lt s))
+        (θ, us, u) <- instantiate' (succ i) t (ExpLevel e : args')
+        return (Matching.subsType χ t <> θ, us, u)
       -- I-Arg
       inst@(T.AppArrow s p t1 t2, ExpLevel e : args') -> do
         θ1 <- quickLook e t1
-        (θ2, us, t₃) <- instantiate' (succ i) (applySubs θ1 t2) args'
+        (θ2, us, t₃) <- instantiate' (succ i) (Matching.applySubs θ1 t2) args'
         let θ = θ2 <> θ1
-        return (θ, applySubs θ t1 : us, t₃)
+        return (θ, Matching.applySubs θ t1 : us, t₃)
         where
-          quickLook :: E.Exp Kinded -> T.KindedType -> Validation Substitution
+          quickLook :: E.Exp Kinded -> T.KindedType -> Validation Matching.Substitution
           quickLook = \cases
             e@E.Tuple{} _ -> do
               (t2, tctx') <- synth modl kctx tctx e
               (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              traceM ("*** quickLook Tuple:\n  "++show t1 ++ "\n  "++show t2 ++ "\n  " ++ show t3)
-              match e modl t1 t3
+              Matching.match e modl t1 t3
             e@E.Nil{}   _ -> do
               (t2, tctx') <- synth modl kctx tctx e
               (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              match e modl t1 t3
+              Matching.match e modl t1 t3
             e@E.Cons{}  _ -> do
               (t2, tctx') <- synth modl kctx tctx e
               (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              match e modl t1 t3
-            (E.App s f@(E.Select s' i) args) t1 -> case args of
+              Matching.match e modl t1 t3
+            e@(E.App s f@(E.Select s' i) args) t1 -> case args of
               [] -> throwE (CannotSynthesiseSelect s' i)
-              (TypeLevel t : _) -> throwE (UnexpectedArg (getSpan t) 1 (ExpLevel Nothing) (TypeLevel t))
+              (TypeLevel t : _) -> 
+                throwE (UnexpectedArg (getSpan t) 1 (ExpLevel Nothing) (TypeLevel t))
               (ExpLevel  e : args') -> do
                 (u1, tctx') <- synth modl kctx tctx e
                 t2 <- Expose.internalChoice modl e u1 i
                 (_, t3) <- instantiate 1 modl kctx tctx' t2 args'
-                -- traceM ("*** quickLook select match: " ++ show t1 ++ " ≐ " ++ show t3)
-                match e modl t1 t3
-                 -- modl kctx tctx' ui as'
-            (E.App s h@(E.SendType s' t0) args) t1 -> 
+                Matching.match e modl t1 t3
+            e@(E.App s h@(E.SendType s' t0) args) t1 -> 
               case args of
                 [] -> throwE (CannotSynthesiseSendType s')
                 (TypeLevel u : _) ->
@@ -863,8 +818,8 @@ instantiate i modl kctx tctx t1 args = do
                   (u1, tctx') <- synth modl kctx tctx e
                   (a, _, t2) <- Expose.typeOutput modl e u1
                   (_, t3) <- instantiate 1 modl kctx tctx' (subs a t0 t2) args'
-                  match e modl t1 t3
-            (E.App s f@(E.ReceiveType s') args) t2 ->
+                  Matching.match e modl t1 t3
+            e@(E.App s f@(E.ReceiveType s') args) t2 ->
               case args of
                 [] -> throwE (CannotSynthesiseReceiveType s)
                 (TypeLevel u : _) ->
@@ -874,318 +829,26 @@ instantiate i modl kctx tctx t1 args = do
                   (a, k, t2') <- Expose.typeInput modl (Right e) u1
                   let t2 = T.AppExists (spanFromTo f e) [(a, k)] t2
                   (_, t3) <- instantiate 1 modl kctx tctx' t2 args'
-                  match e modl t1 t3
+                  Matching.match e modl t1 t3
             e@(E.App _ h args) t1 -> do
               (t2, tctx') <- synth modl kctx tctx h
-              -- traceM ("*** quickLook:\n  " ++ show e ++ "\n  " ++ show t1 ++ "\n  " ++ show t2)
               (us , t3   ) <- instantiate 0 modl kctx tctx' t2 args
-              -- traceM ("match QL app: " ++ show t1 ++ " ≐ " ++ show t3)
-              match e modl t1 t3
+              Matching.match e modl t1 t3
             h@(E.Var _ x) t1 -> do
               (t2, tctx') <- synth modl kctx tctx h
               (us , t3   ) <- instantiate 0 modl kctx tctx' t2 []
-              -- traceM ("*** quickLook:\n  e=" ++ show e ++ "\n  t1=" ++ show t1 ++ "\n  t2=" ++ show t2 ++ "\n  t3=" ++ show t3)
-              -- traceM ("match QL app: " ++ show t1 ++ " ≐ " ++ show t3)
-              match e modl t1 t3
-            e (T.Var _ _ χ) | isInstVar χ -> do
+              Matching.match e modl t1 t3
+            e (T.Var _ _ χ) | Matching.isInstVar χ -> do
               (t2, _) <- synth modl kctx tctx e
-              return $ subsType χ t2
+              return $ Matching.subsType χ t2
             e t1 -> do
               (t2, tctx') <- synth modl kctx tctx e
-              traceM ("*** quickLook e t1 synth:\n  e=" ++ show e ++ "\n  t2=" ++ show t2)
               (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              -- traceM ("*** quickLook e match:\n  " ++ show t1 ++ "\n  " ++ show t3)
-              match e modl t1 t3
-              -- traceM ("matched QL exp: " ++ show t1 ++ " ≐ " ++ show t3 ++ " --> " ++ show (snd subs))
-            -- e (T.Var _ _ χ) | isInstVar χ -> do
-            --   (t2, _) <- synth modl kctx tctx e
-            --   return (isubs χ t2)
-            -- e t -> error ("quick looking at \n  " ++ show e ++ "\n  " ++ show t)
-      -- I-Var
-      inst@(T.Var s k χ, ExpLevel e : args') | isInstVar χ -> do
-        -- traceM ((\(t', args) -> "*** I-Var:\n  " ++ show t' ++ "\n  " ++ show args) inst)
-        χ1 <- freshInstVar s
-        χ2 <- freshInstVar s
-        let t = T.AppArrow s K.Un (T.fromVariable χ1 (K.lt s)) (T.fromVariable χ2 (K.lt s))
-        (θ, us, u) <- instantiate' (succ i) t (ExpLevel e : args')
-        return (subsType χ t <> θ, us, u)
+              Matching.match e modl t1 t3
       (T.AppArrow s p t1 t2, TypeLevel t : args) ->
         throwE (UnexpectedArg (getSpan t) 0 (ExpLevel (Just t1)) (TypeLevel t))
       (t, as) -> 
-        throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as)) --e t n (n+length as))
-
-isInstVar :: Variable -> Bool
-isInstVar = (< -1) . internal
-
-freshInstVar :: Span -> Validation Variable
-freshInstVar s = do
-  whileM ((< 1) <$> incCounter)
-  i <- incCounter
-  return $ Variable s ("χ" ++ show i) (- i)
-
--- match :: Set.Set T.KindedType -> T.KindedType -> T.KindedType -> Validation (T.KindedType -> T.KindedType, [(Variable, T.KindedType)])
--- match ξ t1 t2 = do 
---   traceM ("*** matching:\n  " ++ show t1 ++ "\n  " ++ show t2) 
---   case (t1, t2) of
---     -- M-FIV
---     _ | Set.null fivt1t2 -> return (id, [])
---     -- M-Redex
---     _ | isJust (mapM tNameRedex [t1, t2]) ->
---       foldM (\(θ, σ) χ -> pure (isubs χ (T.Skip (getSpan χ)) . θ, (χ, T.Skip (getSpan χ)) : σ)) (id, []) fivt1t2
---     -- TODO: M-Reduce-L, M-Reduce-R
---     -- M-IVar-L
---     (T.Var _ _ χ, t) | isInstVar χ -> return (isubs χ t, [(χ, t)])
---     -- M-IVar-R
---     (t, T.Var _ _ χ) | isInstVar χ -> return (isubs χ t, [(χ, t)])
---     -- M-EndSeqL
---     (T.AppSemi _ (T.End _ p1) t1, T.End _ p2) | p1 == p2 ->
---       foldM (\(θ, σ) χ -> pure (isubs χ (T.Skip (getSpan χ)) . θ, (χ, T.Skip (getSpan χ)) : σ)) (id, []) fivt1t2
---     -- M-EndSeqR
---     (T.End _ p1, T.AppSemi _ (T.End _ p2) t2) | p1 == p2 ->
---       foldM (\(θ, σ) χ -> pure (isubs χ (T.Skip (getSpan χ)) . θ, (χ, T.Skip (getSpan χ)) : σ)) (id, []) fivt1t2
---     -- M-Msg
---     (T.AppMessage _ _ p1 t1', T.AppMessage _ _ p2 t2') | p1 == p2 ->
---       match ξ t1' t2'
---     -- M-MsgSeqL
---     (T.AppSemi _ (T.AppMessage _ _ p1 t1') t1'', T.AppMessage s _ p2 t2') | p1 == p2 -> do
---       (θ1, σ1) <- match ξ t1' t2'
---       (θ2, σ2) <- match ξ t1'' (T.Skip s)
---       return (θ2 . θ1, σ2 ++ σ1)
---     -- M-MsgSeqR
---     (T.AppMessage s _ p1 t1', T.AppSemi _ (T.AppMessage _ _ p2 t2') t2'') | p1 == p2 -> do
---       (θ1, σ1) <- match ξ t1' t2'
---       (θ2, σ2) <- match ξ t2'' (T.Skip s)
---       return (θ2 . θ1, σ2 ++ σ1)
---     -- M-Seq
---     (T.AppSemi _ t11 t12, T.AppSemi _ t21 t22) -> do
---       (θ1, σ1) <- match ξ t11 t21
---       (θ2, σ2) <- match ξ t12 t22
---       return (θ2 . θ1, σ2 ++ σ1)
---     -- M-Choice
---     (T.AppLinChoice _ p1 (Map.fromList -> aks1), T.AppLinChoice _ p2 (Map.fromList -> aks2))
---                                           | p1 == p2 && Map.keysSet aks1 == Map.keysSet aks2 ->
---       foldM (\(θ, σ) vθσ -> bimap (θ .) (σ ++) <$> vθσ) (id, []) (Map.intersectionWith (match ξ) aks1 aks2)
---     -- M-ArrowL
---     (T.AppArrow _ (K.VarM χ1) t11 t12, T.AppArrow _ m2 t21 t22) | isInstVar χ1 -> do
---       (θ1, σ1) <- match ξ t11 t21
---       (θ2, σ2) <- match ξ t21 t22
---       return (isubsm χ1 m2 . θ1 . θ2, σ1 ++ σ2)
---     -- M-ArrowR
---     (T.AppArrow _ m1 t11 t12, T.AppArrow _ (K.VarM χ2) t21 t22) | isInstVar χ2 -> do
---       (θ1, σ1) <- match ξ t11 t21
---       (θ2, σ2) <- match ξ t21 t22
---       return (isubsm χ2 m1 . θ1 . θ2, σ1 ++ σ2)
---     -- M-Arrow
---     (T.AppArrow _ m1 t11 t12, T.AppArrow _ m2 t21 t22) -> do
---       (θ1, σ1) <- match ξ t11 t21
---       (θ2, σ2) <- match ξ t21 t22
---       return (θ1 . θ2, σ1 ++ σ2)
---     -- M-Quant -- TODO: do this in a single case
---     (T.AppQuant _  _  _   []               t1', t2                                       ) -> match ξ t1' t2
---     (t1                                       , T.AppQuant _  _  _   []   t2'            ) -> match ξ t1 t2'
---     (T.AppQuant s1 p1 pk1 ((a, k1) : aks1) t1', T.AppQuant s2 p2 pk2 ((b, k2) : aks2) t2')
---                                                                   | p1 == p2 && pk1 == pk2 -> do
---       c <- freshInstVar (getSpan a)
---       match ξ (T.AppQuant s1 p1 pk1 aks1 (subs a (T.fromVariable c k1) t1'))
---               (T.AppQuant s2 p2 pk2 aks2 (subs b (T.fromVariable c k2) t2'))
---     (t1, t2) -> error ("matching\n  " ++ show t1 ++ "\n  " ++ show t2)
---   where
---     traceM _ = return ()
---     fivt1t2 = Set.unions (map fiv [t1, t2])
-
-fiv :: T.KindedType -> Set.Set (Either Variable Variable)
-fiv = \case
-  T.Var _ _ χ | isInstVar χ -> Set.singleton (Left χ)
-  T.Arrow _ (K.VarM χ) | isInstVar χ -> Set.singleton (Right χ)
-  T.Abs _ _ t -> fiv t
-  T.App _ t ts -> Set.unions (fiv t : map fiv ts)
-  _ -> Set.empty
-
-newtype Substitution = Subs [(Variable, Either T.KindedType K.Multiplicity)]
-
-instance Semigroup Substitution where
-  Subs χtms1 <> Subs χtms2 = Subs (χtms1 ++ χtms2)
-instance Monoid Substitution where
-  mempty = Subs []
-
-instance Show Substitution where
-  show (Subs χtms2) = show χtms2
-
-subsMult :: Variable -> K.Multiplicity -> Substitution
-subsMult χ m = Subs [(χ, Right m)]
-
-subsType :: Variable -> T.KindedType -> Substitution
-subsType χ t = Subs [(χ, Left t)]
-
-applySubs :: Substitution -> T.KindedType -> T.KindedType
-applySubs (Subs χtms) t = 
-  foldr (\(χi, tmi) ti -> either (subst χi) (subsm χi) tmi ti) t χtms
-  where
-    subst :: Variable -> T.KindedType -> T.KindedType -> T.KindedType
-    subst χ t = \case
-      T.Var _ _ χ' | isInstVar χ && χ == χ' -> t
-      T.Abs s aks u -> T.Abs s aks (subst χ t u)
-      T.App s u us -> T.App s (subst χ t u) (map (subst χ t) us)
-      t -> t
-
-    subsm :: Variable -> K.Multiplicity -> T.KindedType -> T.KindedType
-    subsm χ m = \case
-      T.Arrow s (K.VarM χ') | χ == χ' -> T.Arrow s m
-      T.Abs s aks u -> T.Abs s aks $ subsm χ m u
-      T.App s u us -> T.App s (subsm χ m u) (map (subsm χ m) us)
-
-subsUnreachable :: T.KindedType -> T.KindedType
-subsUnreachable t = (`applySubs` t) 
-  (foldr (\eχi θi -> case eχi of
-    Left  χi -> subsType χi (T.Void (getSpan χi) (K.uc (getSpan χi))) <> θi
-    Right χi -> subsMult χi K.Un <> θi) mempty (fiv t))
-
-match :: E.KindedExp -> M.KindedModule -> T.KindedType -> T.KindedType -> Validation Substitution
-match e modl = match' e modl Set.empty Set.empty
-  where
-  match' e modl bindings visited t1 t2 =
-    case (tNameRedex t1, tNameRedex t2) of
-      (Just t1', Just t2') | Set.fromList [t1', t2'] `Set.isSubsetOf` visited -> return mempty -- isubsAbsorbed (fiv t1 `Set.union` fiv t2)
-      (Just t1', _) | t1' `Set.member` visited -> do
-        -- traceM ("*** isubsAbsorbed " ++ show (fiv t1))
-        return mempty -- isubsAbsorbed (fiv t1)
-      (_, Just t2') | t2' `Set.member` visited -> do
-        -- traceM ("*** isubsAbsorbed " ++ show (fiv t2))
-        return mempty -- isubsAbsorbed (fiv t2)
-      -- (_, Just t2') | t2' `Set.member` visited -> return $ isubsAbsorbed (fiv t1 `Set.union` fiv t2)
-      _ -> do
-        -- traceM ("*** matching :\n  t1=" ++ show t1 ++ "\n  t2=" ++ show t2 ++ "\n visited=" ++ show visited)
-        match'' e modl bindings visited t1 t2
-
-  match'' e modl bindings visited t1 t2 = do
-    let fiv12 = fiv t1 `Set.union` fiv t2
-    case (t1, t2) of
-      -- M-FIV
-      _ | Set.null fiv12 -> return mempty
-      -- M-IVar
-      (T.Var s k χ, t2) | isInstVar χ -> do
-        unless (T.kindOf t2 K.<: k) do
-          throwE (KindMismatch s k t2)
-        return $ subsType χ t2
-      (t1, T.Var s k χ) | isInstVar χ -> do
-        unless (T.kindOf t2 K.<: k) do
-          throwE (KindMismatch s k t1)
-        return $ subsType χ t1
-      -- M-DualIVar
-      (T.AppDual _ t1'@(T.Var _ _ χ), t2) | isInstVar χ ->
-        match' e modl bindings visited t1' (T.AppDual (getSpan t2) t2)
-        -- return (isubs χ (T.AppDual (getSpan t2) t2), [(χ, Left (T.AppDual (getSpan t2) t2))])
-      (t1, T.AppDual _ t2'@(T.Var _ _ χ)) | isInstVar χ ->
-        match' e modl bindings visited (T.AppDual (getSpan t1) t1) t2'
-        -- return (isubs χ (T.AppDual (getSpan t1) t1), [(χ, Left (T.AppDual (getSpan t1) t1))])
-      -- M-AbsorbSeqL/R
-      (T.AppSemi _ (T.End _ p1) t1, T.End _ p2)
-        | p1 == p2 -> return $ isubsAbsorbed fiv12
-      (T.End _ p1, T.AppSemi _ (T.End _ p2) t2)
-        | p1 == p2 -> return $ isubsAbsorbed fiv12
-      (T.AppSemi _ (T.Void _ k1) t1, T.Void _ k2)
-        | k1 == k2 -> return $ isubsAbsorbed fiv12
-      (T.Void _ k1, T.AppSemi _ (T.Void _ k2) t2)
-        | k1 == k2 -> return $ isubsAbsorbed fiv12
-      (T.AppSemi _ (T.UnChoice _ p1 ls1) t1, T.UnChoice _ p2 ls2)
-        | p1 == p2 && sort ls1 == sort ls2 -> return $ isubsAbsorbed fiv12
-      (T.UnChoice _ p1 ls1, T.AppSemi _ (T.UnChoice _ p2 ls2) t2)
-        | p1 == p2 && sort ls1 == sort ls2 -> return $ isubsAbsorbed fiv12
-      -- M-MsgSeqL
-      (T.AppSemi _ (T.AppMessage _ m1 p1 t11) t12, T.AppMessage s m2 p2 t21)
-        | m1 == m2 && p1 == p2
-        -> do
-        θ1 <- match' e modl bindings visited t11 t21
-        θ2 <- case m1 of
-          K.Lin -> match' e modl bindings visited t12 (T.Skip s)
-          K.Un  -> return $ isubsAbsorbed (fiv t12)
-        return $ θ2 <> θ1
-      -- M-MsgSeqR
-      (T.AppMessage s m1 p1 t11, T.AppSemi _ (T.AppMessage _ m2 p2 t21) t22)
-        | m1 == m2 && p1 == p2
-        -> do
-        θ1 <- match' e modl bindings visited t11 t21
-        θ2 <- case m2 of
-          K.Lin -> match' e modl bindings visited t22 (T.Skip s)
-          K.Un  -> return $ isubsAbsorbed (fiv t22)
-        return $ θ2 <> θ1
-      -- M-Msg
-      (T.AppMessage s m1 p1 t1', T.AppMessage _ m2 p2 t2')
-        | m1 == m2 && p1 == p2
-        -> match' e modl bindings visited t1' t2'
-      -- M-MsgSeq
-      (T.AppSemi _ (T.AppMessage _ m1 p1 t11) t12, T.AppSemi _ (T.AppMessage _ m2 p2 t21) t22)
-        | m1 == m2 && p1 == p2
-        -> do
-        θ1 <- match' e modl bindings visited t11 t21
-        θ2 <- case m1 of
-          K.Lin -> match' e modl bindings visited t12 t22
-          K.Un  -> return $ isubsAbsorbed (fiv t12)
-        return $ θ2 <> θ1
-      -- M-Seq
-      -- (T.AppSemi _ t11 t12, T.AppSemi _ t21 t22) 
-      --   -> do
-      --   (θ1, σ1) <- match' e modl bindings visited t11 t21
-      --   (θ2, σ2) <- match' e modl bindings visited t12 t22
-      --   return $ composeSubs θ2 θ1
-      -- M-DualVar
-      (T.AppDual _ (T.AppVar _ a1 k1 t1s), T.AppDual _ (T.AppVar _ a2 k2 t2s))
-        | (a1, a2) `Set.member` bindings && length t1s == length t2s
-        -> foldMatch e modl bindings visited mempty t1s t2s
-        | (isInstVar a1 || isInstVar a2) && length t1s == length t2s
-        -> do
-        θ <- match' e modl bindings visited (T.fromVariable a1 k1) (T.fromVariable a2 k2)
-        foldMatch e modl bindings visited θ t1s t2s
-      -- M-Const (M-ArrowL/R)
-      (T.App _ t1' t1s, T.App _ t2' t2s)
-        |  T.isProper t1 && T.isProper t2
-        && (  T.isAppArrow t1     && T.isAppArrow t2
-           || T.isAppDName t1     && T.isAppDName t2
-           || T.isAppLinChoice t1 && T.isAppLinChoice t2
-            )
-        -> do
-        θ <- case (t1', t2') of
-          (T.Arrow _ m1, T.Arrow _ m2) -> case (m1, m2) of
-            (K.VarM χ, m2) | isInstVar χ -> return $ subsMult χ m2
-            (m1, K.VarM χ) | isInstVar χ -> return $ subsMult χ m1
-            (_, _) -> return mempty
-          _ -> return mempty
-        foldMatch e modl bindings visited θ t1s t2s
-      -- M-Quant
-      (T.AppQuant s1 p1 pk1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 pk2 ((a2, k2) : aks2) t2')
-        | p1 == p2 && pk1 == pk2
-        -> match' e modl (Set.insert (a1, a2) bindings) visited
-            (T.AppQuant s1 p1 pk1 aks1 t1') (T.AppQuant s2 p2 pk2 aks2 t2')
-      (T.AppVar _ a1 _ t1s, T.AppVar _ a2 _ t2s)
-        | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
-        -> foldMatch e modl bindings visited mempty t1s t2s
-      (t1, t2)
-        | isJust (tNameRedex t1)
-        -> match' e modl bindings (Set.insert (fromJust $ tNameRedex t1) visited) (normalise modl t1) t2
-        | isJust (tNameRedex t2)
-        -> match' e modl bindings (Set.insert (fromJust $ tNameRedex t2) visited) t1 (normalise modl t2)
-        | not (T.isProper t1)
-        -> throwE (CannotInferHigherKindedTypeApp (getSpan e) (T.kindOf t1))
-        | not (T.isProper t2)
-        -> throwE (CannotInferHigherKindedTypeApp (getSpan e) (T.kindOf t2))
-        | not (isWhnf t1)
-        -> match' e modl bindings visited (reduce modl t1) t2
-        | not (isWhnf t2)
-        -> match' e modl bindings visited t1 (reduce modl t2)
-        | otherwise -> return mempty -- error ("could not unify:\n  " ++ show t1 ++ "\n  " ++ show t2)
-
-  isubsAbsorbed =
-    foldl (\θ -> \case
-        Left  χ -> subsType χ (T.Void (getSpan χ) (K.uc (getSpan χ))) <> θ
-        Right χ -> subsMult χ K.Un <> θ)
-      mempty
-
-  foldMatch :: E.KindedExp -> M.KindedModule -> Set.Set (Variable, Variable) -> Set.Set T.KindedType -> Substitution -> [T.KindedType] -> [T.KindedType] -> Validation Substitution
-  foldMatch e modl bindings visited θ t1s t2s = do
-    x <- zipWithM (\t1i t2i -> (t1i, t2i,) <$> match' e modl bindings visited t1i t2i) t1s t2s 
-    traceM ("*** foldMatching:\n"++ unlines (map (("  " ++ ) . show) x))
-    fold <$> zipWithM (match' e modl bindings visited) t1s t2s
-    -- foldrM (\(t1i, t2i) θi -> (θi <>) <$> match' e modl bindings visited t1i t2i) θ (zip t1s t2s)
+        throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
 
 typeModule :: M.KindedModule -> Validation (M.KindedModule, TypeCtx)
 typeModule modl = do
