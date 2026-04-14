@@ -196,22 +196,22 @@ synth modl kctx tctx = \case
       throwE (KindMismatch s (K.ut se1) t)
     synth modl kctx tctx' e2
     where se1 = getSpan e1
-  E.Case s e cs@((p1, rhs1) : cs')   -> do
+  e@(E.Case s e' cs@((p1, rhs1) : cs'))   -> do
     -- TODO: detect redundant and incomplete patterns
-    (t, tctx') <- synth modl kctx tctx e
+    (t, tctx') <- synth modl kctx tctx e'
     (kctxp1, tctxp1) <- checkPat modl kctx p1 t
-    (t1, tctxrhs1) <- synthRHS modl kctxp1 (tctxp1 `Map.union` tctx') (Right e) rhs1
+    (t1, tctxrhs1) <- synthRHS modl kctxp1 (tctxp1 `Map.union` tctx') (Right e') rhs1
     tctx1 <- typeCtxDifference kctxp1 tctxrhs1 tctxp1
     tctxis <- forM cs' \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat modl kctx pi t
-      tctxrhsi <- checkRHS modl kctxpi (tctxpi `Map.union` tctx') (Right e) rhsi t1
+      tctxrhsi <- checkRHS modl kctxpi (tctxpi `Map.union` tctx') (Right e') rhsi t1
       typeCtxDifference kctxpi tctxrhsi tctxpi
     checkEquivTypeCtxs (Right e) (tctx1 : tctxis)
     return (t1, tctx1)
   e@(E.If s e1 e2 e3) -> do
     tctx1 <- check modl kctx tctx e1 (T.Bool (getSpan e1))
     (t2, tctx2) <- synth modl kctx tctx1 e2
-    tctx3 <- check modl kctx tctx1 e2 t2
+    tctx3 <- check modl kctx tctx1 e3 t2
     checkEquivTypeCtxs (Right e) [tctx2, tctx3]
     return (t2, tctx2)
   E.Channel s t -> do

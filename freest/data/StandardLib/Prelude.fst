@@ -82,30 +82,6 @@ curry @a @b @c f x y =  f (x, y)
 uncurry : forall (a b c : 1T). (a -> b -> c) -> ((a, b) -> c)
 uncurry @a @b @c f (x, y) =  f x y
 
--- ** Lists
-(++) : forall (a : *T). [a] -> [a] -> [a]
-(++) @a []      ys = ys
-(++) @a (x::xs) ys = x :: ((++) @a xs ys) 
-
-head : forall (a : *T). [a] -> a
-head @a []       = error @a "*** List.head: empty list"
-head @a (x :: _) = x
-
-last : forall (a : *T). [a] -> a
-last @a []        = error @a "*** List.last: empty list"
-last @a (x :: []) = x
-last @a (_ :: xs) = last @a xs
-
-tail : forall (a : *T). [a] -> [a]
-tail @a []        = error @[a] "*** List.tail: empty list"
-tail @a (_ :: []) = [] @a
-tail @a (_ :: xs) = xs
-
-init : forall (a : *T). [a] -> [a]
-init @a []        = error @[a] "*** List.init: empty list"
-init @a (_ :: []) = [] @a
-init @a (x::xs)   = x :: init @a xs
-
 -- ** Comparison (only Int and Float, for now)
 (<), (<=), (==), (>=), (>), (/=) : Int -> Int -> Bool
 (< ) = undefined @(Int -> Int -> Bool)
@@ -231,6 +207,34 @@ until @a p f = go
 
 (;) : forall (a : *T) (b : 1T). a -> b -> b
 (;) @a @b _ x = x
+
+-- * Lists
+(++) : forall (a : *T). [a] -> [a] -> [a]
+(++) @a []      ys = ys
+(++) @a (x::xs) ys = x :: ((++) @a xs ys) 
+
+head : forall (a : *T). [a] -> a
+head @a []       = error @a "*** List.head: empty list"
+head @a (x :: _) = x
+
+last : forall (a : *T). [a] -> a
+last @a []        = error @a "*** List.last: empty list"
+last @a (x :: []) = x
+last @a (_ :: xs) = last @a xs
+
+tail : forall (a : *T). [a] -> [a]
+tail @a []        = error @[a] "*** List.tail: empty list"
+tail @a (_ :: []) = [] @a
+tail @a (_ :: xs) = xs
+
+init : forall (a : *T). [a] -> [a]
+init @a []        = error @[a] "*** List.init: empty list"
+init @a (_ :: []) = [] @a
+init @a (x::xs)   = x :: init @a xs
+
+length : forall (a : *T). [a] -> Int
+length @a []        = 0
+length @a (_ :: xs) = succ (length @a xs)
 
 -- * Concurrency
 
