@@ -15,7 +15,7 @@ type CakeService = &{Cake: Close, Disappointment: Close}
 
 runCakeStore : Dual CakeStore -> Bool -> ()
 runCakeStore cakeStore gotCake =
-    let s = accept @CakeService cakeStore in
+    let s = accept cakeStore in
     if gotCake
     then 
         s |> select Cake |> wait;
@@ -25,9 +25,9 @@ runCakeStore cakeStore gotCake =
 
 storeClient : String -> CakeStore -> ()
 storeClient name cakeStore =
-  case receive_ @CakeService cakeStore of
-    &Cake           c -> putStrLn ((++) @Char name " got cake!") ; close c
-    &Disappointment c -> putStrLn ((++) @Char name " got disappointment") ; close c
+  case receive_ cakeStore of
+    &Cake           c -> putStrLn (name  ++ " got cake!"         ); close c
+    &Disappointment c -> putStrLn (name  ++ " got disappointment"); close c
 
 main : ()
 main =

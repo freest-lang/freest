@@ -66,7 +66,7 @@ sendTree t c =
 errorWhen : Bool -> String -> ()
 errorWhen b s =
   if b
-  then error @() s
+  then error s
   else ()
 
 -- Receives a Tree from a TreeC
@@ -88,7 +88,7 @@ receiveTree_ ts c =
       wait c; 
       errorWhen (stackIsEmpty ts)  "Channel was closed without sending a Tree";
       errorWhen (stackSize ts > 1) "Channel was closed mid-stream or with leftover tree elements";
-      snd @TreeStack @Tree $ stackPop ts
+      snd $ stackPop ts
 
 -- Facade function to receive a Tree through a channel
 receiveTree : Dual TreeC -> Tree
@@ -144,10 +144,10 @@ badClientSendOnlyValue c =
 main : Tree
 main =
   let (w, r) = channel @TreeC in
-  fork @() (\(_ : ()) 1-> treeClient w);
-  --fork @() $ badClientPrematureEnd w;
-  --fork @() $ badClientSendExtraValue w;
-  --fork @() $ badClientSendExtraLeaf w;
-  --fork @() $ badClientForgotRight w;
-  --fork @() $ badClientSendOnlyValue w;
+  fork (\(_ : ()) 1-> treeClient w);
+  --fork $ badClientPrematureEnd w;
+  --fork $ badClientSendExtraValue w;
+  --fork $ badClientSendExtraLeaf w;
+  --fork $ badClientForgotRight w;
+  --fork $ badClientSendOnlyValue w;
   receiveTree r

@@ -13,7 +13,7 @@ server @a c =
   case c of
     &More c ->
       let (h, c) = receive c in
-      let (t, c) = server @a c in
+      let (t, c) = server c in
       (Cons h t, c)
     &Done c ->
       (Nil, c)
@@ -24,7 +24,7 @@ client @a l c =
     Nil ->
       select Done c
     Cons h t ->
-      c |> select More |> send h |> client @a t
+      c |> select More |> send h |> client t
 
 hello, main : List
 
@@ -32,7 +32,7 @@ hello = Cons 'H' (Cons 'e' (Cons 'l' (Cons 'l' (Cons 'o' Nil))))
 
 main = 
   let (c, s) = channel @(OutCharStream; Close) in
-  fork (\(_:()) 1-> c |> client @Close hello |> close);
-  let (res, c) = server @Wait s in
+  fork (\(_ : ()) 1-> c |> client hello |> close);
+  let (res, c) = server s in
   wait c;
   res

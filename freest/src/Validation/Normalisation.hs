@@ -74,7 +74,7 @@ reduce mod = \case
     T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
     -- R-SQuantDist (We may have a simpler version if Quant is always followed by Abs)
   T.AppSemi s1 (T.App s2 q@T.QuantS{} [f]) u ->
-    T.App s1 q [T.Abs s1 [(a,k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable a k]) u)]
+    T.App s1 q [T.Abs s1 [(a, k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable ObjLv a k]) u)]
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
           (K.Arrow _ (K.Arrow _ k _) _) = T.kindOf q
     -- R-SemiL
@@ -95,7 +95,7 @@ reduce mod = \case
   T.AppDual s (T.AppLinChoice _ p lts) -> T.AppLinChoice s (T.dual p) (map (second $ T.AppDual s) lts)
     -- R-DQuant
   T.AppDual s1 (T.App s2 (T.QuantS s3 (K.Arrow _ (K.Arrow _ k _) _) p) [f]) ->
-    T.AppQuantS s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable a k]))
+    T.AppQuantS s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable ObjLv a k]))
     where a = mkFreshVar s1 (freeVars f)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->

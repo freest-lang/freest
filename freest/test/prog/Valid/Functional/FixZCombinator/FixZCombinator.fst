@@ -12,7 +12,7 @@ fixZcomb @a f =
   (\(x : X a) -> f (\(z : a) -> x x z))
 
 fact : Int -> Int
-fact = fixZcomb  @Int (\(f : Int -> Int) -> (\(n : Int) ->
+fact = fixZcomb (\(f : Int -> Int) -> (\(n : Int) ->
   if n == 0 then 1 else n * f (n - 1)))
 
 main : Int

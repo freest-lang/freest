@@ -28,19 +28,19 @@ receiveEval @a c =
   case c of
     &Const c -> receive c
     &Add c ->
-      let (n1, c) = receiveEval @(Dual TermChannel; a) c in
-      let (n2, c) = receiveEval @a c in
+      let (n1, c) = receiveEval c in
+      let (n2, c) = receiveEval c in
       (n1 + n2, c)
     &Mult c ->
-      let (n1, c) = receiveEval @(Dual TermChannel; a) c in
-      let (n2, c) = receiveEval @a c in
+      let (n1, c) = receiveEval c in
+      let (n2, c) = receiveEval c in
       (n1 * n2, c)
 
 -- Read an arithmetic expression from a channel; compute its value;
 -- return the value on the same channel.
 computeService : (Dual TermChannel; !Int; Close) -> ()
 computeService c =
-  let (n1, c1) = receiveEval @(!Int; Close) c in
+  let (n1, c1) = receiveEval c in
   c1 |> send n1 |> close
 
 -- Compute 5 + (7 * 9); return the result
@@ -53,7 +53,7 @@ client c = c |> select Add
              |> send 7
              |> select Const 
              |> send 9 
-             |> receiveAndWait @Int
+             |> receiveAndWait
 
 main : Int
 main =

@@ -201,6 +201,6 @@ instance Show ScopedModule where
         ++ List.intercalate " | " (map ((++ " ...") . show) is)
       showConsDecl (i, (i', aks, ts)) =
         "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
-      showTypeDecl (i, (hasParams, T.Abs _ _ aks t)) 
-        | hasParams = "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
-        | otherwise = "type " ++ show i ++ " = " ++ show t
+      showTypeDecl = \case 
+        (i, (True, T.Abs _ _ aks t)) -> "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
+        (i, (_, t)) -> "type " ++ show i ++ " = " ++ show t

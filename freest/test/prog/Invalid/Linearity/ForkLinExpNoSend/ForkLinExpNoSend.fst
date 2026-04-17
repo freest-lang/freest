@@ -4,4 +4,4 @@ main : Int
 main = 
   let (r, w) = channel @(?Int; Wait) in 
   fork (\(_ : ()) 1-> w);
-  receiveAndWait @Int r
+  receiveAndWait r

@@ -16,7 +16,7 @@ import UI.CLI
 import UI.Error
 import Parser.Parser
 import Syntax.Module qualified as M
-import Parser.Scoping ( runScopeModule )
+import Parser.Scoping ( runScopeModule, scopeModule, emptyScopingCtx )
 import Validation.Base
 import Validation.Kinding
 import Validation.Typing
@@ -41,22 +41,19 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
   programSrc <- readFile programPath
   let src = Map.fromList [ (programPath, lines programSrc)
                          , (preludePath, lines preludeSrc) ]
+
   case  -- Parse the source code of both the Prelude and the program
         -- and join them in a single module (unless noImplicitPrelude).
         -- TODO: why do we parse the Prelude when noImplicitPrelude?
     do  programModule  <- runParseModule programPath programSrc
         preludeModule  <- runParseModule preludePath preludeSrc
-        let finalModule = if noImplicitPrelude then programModule 
+        let finalModule = if noImplicitPrelude then programModule
                          else mappend preludeModule programModule
         -- Scope the final module.
-        runScopeModule finalModule
-    of Left es -> putStrLn "[Scoping failed]" >>  printErrors src es >> exitFailure
-       Right m -> do 
-          -- putStrLn ("[Scoping passed]\n"++unlines (map ("> "++) (lines $ show m)))
-          -- Validate the module.
-          runValidate m & \case 
-            Left es -> putStrLn "[Validation failed]" >> printErrors src es >> exitFailure     
-            Right _ -> {- putStrLn "[Validation passed]" >> -} exitSuccess
+        runValidation emptyValidationState do
+          scopeModule emptyScopingCtx finalModule >>= kindModule >>= typeModule
+    of Left es -> printErrors src es >> exitFailure
+       Right m -> exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath

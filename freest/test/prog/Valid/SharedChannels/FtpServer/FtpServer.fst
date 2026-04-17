@@ -14,12 +14,12 @@ type State = (*?File, *!File)
 -- |Read a file from the state
 readFrom : State -> File
 readFrom state =
-  receive_ @File $ fst @*?File @*!File state
+  receive_ $ fst state
 
 -- |Write a file to the state
 writeTo : File -> State -> ()
 writeTo file state =
-  send file $ snd @*?File @*!File state; ()
+  send_ file $ snd state; ()
 
 -- 2 _ Types for the FTP server
 
@@ -43,45 +43,45 @@ type FTPThread = *?(Dual FTPSession)
 
 -- |FTP demon: wait for a client, wait for a thread;
 -- |pass the client to the thread
-ftpd : Dual FTP -> Dual FTPThread -> Void@*T
+ftpd : Dual FTP -> Dual FTPThread -> Void @*T
 ftpd pid b = 
-  send (accept @FTPSession pid) b;
+  send_ (accept pid) b;
   ftpd pid b
 
 mutual
   -- |An FTP thread: receive a request from the demon;
   -- |authenticate the client; pass the thread to the actions loop
-  ftpThread : State -> FTPThread -> Void@*T
+  ftpThread : State -> FTPThread -> Void @*T
   ftpThread state b =
     -- TODO: authenticate the client
-    actions state (receive_ @(Dual FTPSession) b) b
+    actions state (receive_ b) b
 
   -- |A linear interaction with the client;
   -- |once done become an FTP thread
-  actions : State -> Dual FTPSession -> FTPThread 1-> Void@*T
+  actions : State -> Dual FTPSession -> FTPThread 1-> Void @*T
   actions state s b =
     case s of
       &Get s ->
           let file = readFrom state in
-          print @Int (- file);
+          print (- file);
           actions state (send file s) b
       &Put s ->
           let (file, s) = receive s in
-          print @Int  file;
+          print file;
           writeTo file state;
           actions state s b
       &Bye s -> wait s; ftpThread state b
 
 -- Should be in the prelude
 parallel : forall (a : *T) . Int -> (() -> a) -> ()
-parallel @a n thunk = repeat @() n (\(_ : ()) -> fork @a thunk)
+parallel @a n thunk = repeat n (\(_ : ()) -> fork (\(_ : ()) 1-> thunk ()))
 
 -- |Initialise the server: create n FTP threads and launch the demon
-init : Int -> Dual FTP -> Void@*T
+init : Int -> Dual FTP -> Void @*T
 init n pid =
   let (r, w) = channel @(Dual FTPThread) in
   let state  = channel @*?File in
-  parallel @() n (\(_ : ()) -> ftpThread state w);
+  parallel n (\(_ : ()) -> ftpThread state w);
   ftpd pid r
 
 -- Sample clients
@@ -89,40 +89,31 @@ init n pid =
 -- |Put a file and terminate
 putClient : FTP -> File -> ()
 putClient pid file =
-  let (c, _) = receive pid in
-  select Put c |> send file |> select Bye |> close 
+  receive_ pid |> select Put |> send file |> select Bye |> close 
 
 -- |Get a file and terminate
 getClient : FTP -> ()
 getClient pid =
-  let (c, _) = receive pid in
-  let c = select Get c in
-  let (file, c) = receive c in
-  select Bye c |> close
+  let (file, c) = receive_ pid |> select Get |> receive
+  in c |> select Bye |> close
 
 -- |Put two files and terminate
 putClient' : FTP -> File -> File -> ()
 putClient' pid file1 file2 =
-  let c = receive_ @FTPSession pid in
-  select Put c |> send file1 |>
-  select Put   |> send file2 |>
-  select Bye |> close
+  receive_ pid |> select Put |> send file1
+               |> select Put |> send file2
+               |> select Bye |> close
 
 -- |Get a file and terminate
 putgetClient : FTP -> File -> ()
 putgetClient pid file =
-  let (c, _)    = receive pid in
-  let c         = select Put c in
-  let c         = send file c in
-  let c         = select Get c in
-  let (file, c) = receive c in
-  let c         = select Put c in
-  let c         = send file c in
-  select Bye c |> close
+  let (file, c) = receive_ pid |> select Put |> send file
+                               |> select Get |> receive
+  in c |> select Put |> send file |> select Bye |> close
 
 -- Application
 
-main : Void@*T
+main : Void @*T
 main =
   let (ftpc, ftps) = channel @FTP in
   -- A few clients

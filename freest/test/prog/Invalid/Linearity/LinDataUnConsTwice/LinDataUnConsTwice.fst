@@ -14,7 +14,7 @@ unSend n us = case us () of
 
 unRecv : (() 1-> UnRecv) -> Int 
 unRecv ur = case ur () of
-  UnRecv r _ -> receiveAndWait @Int r
+  UnRecv r _ -> receiveAndWait r
 
 main : Int
 main = let (s, r) = channel @(!Int;Close) in 

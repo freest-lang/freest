@@ -28,12 +28,12 @@ client1 : BoolClient -> Bool
 client1 w = w |> select And
               |> send True
               |> send False
-              |> receiveAndClose @Bool
+              |> receiveAndClose
 
 client2 : BoolClient -> Bool
 client2 w = w |> select Not
               |> send True
-              |> receiveAndClose @Bool
+              |> receiveAndClose
 
 startClient : (BoolClient -> Bool) -> Bool
 startClient client =

@@ -10,5 +10,5 @@ isZero : Int -> Bool
 isZero x = x == 0
 
 main : Bool
-main = dot  @Int @Int @Bool isZero double 7
+main = dot isZero double 7
 

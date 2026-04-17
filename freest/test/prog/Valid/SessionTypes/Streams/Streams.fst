@@ -11,8 +11,8 @@ module Streams where
 -- of functions that can consume an arbitrary number of unit values,
 -- each time returning a pair of a number and a new stream.
 
-type Stream : *T
-type Stream = () -> (Int, Stream) 
+type Stream : *T -> *T
+type Stream a = () -> (a, Stream a) 
 
 {- Alternatives:
 type Stream = rec x:TU. () -> (Int, x) 
@@ -22,17 +22,17 @@ type Stream = rec x. () -> (Int, x)
 -- We can define two “destructors” for streams; if s is a stream, then
 -- hd s is the first number it returns when we pass it unit.
 
-hd : Stream -> Int
-hd s = fst  @Int @Stream (s ())
+hd : forall (a : *T). Stream a -> a
+hd @a s = fst (s ())
 
 -- Similarly, tl s is the new stream that we obtain when we pass unit to s.
 
-tl : Stream -> Stream
-tl s = snd  @Int @Stream (s ())
+tl : forall (a : *T). Stream a -> Stream a
+tl @a s = snd (s ())
 
 -- Construct a stream
 
-upFrom : Int -> Stream
+upFrom : Int -> Stream Int
 upFrom n = (\ (_ : ()) -> (n, upFrom (n + 1)))
 
 -- The third element in the upFrom 0 stream

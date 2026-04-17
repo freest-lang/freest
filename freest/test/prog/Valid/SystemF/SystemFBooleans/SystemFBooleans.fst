@@ -58,7 +58,7 @@ toBit : Bool' -> Int
 toBit b = b  @Int 1 0
 
 ifInt : Bool' -> Int -> Int -> Int
-ifInt = cond  @Int
+ifInt = cond  @Int -- CANNOT INFER
 
 -- main : Int
 -- main = ifInt (not' true) 1 2

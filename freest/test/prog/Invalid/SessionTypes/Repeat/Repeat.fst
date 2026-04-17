@@ -18,14 +18,14 @@ writeInt : forall (b : 1S). (!Int; b) -> b
 writeInt @b c = send 7 c
 
 writeIntStream : Stream Int -> ()
-writeIntStream = consumeStream @(!Int) writeInt @OutIntStream
+writeIntStream = consumeStream @Int (writeInt @(Stream Int))
 
 -- Read from an int stream
 readInt' : forall (b : 1S). ?Int; b -> b
-readInt' @b c = let (v, c) = receive c in printInt v; c
+readInt' @b c = let (v, c) = receive c in print v; c
 
 readIntStream : Dual (Stream Int) -> ()
-readIntStream = consumeStream @(?Int) readInt' @(Dual OutIntStream)
+readIntStream = consumeStream @Int (readInt' @(Dual (Stream Int)))
 
 -- Run an int stream
 mainIntStream : ()
@@ -40,7 +40,7 @@ type OutCharInBoolStream = !Char; ?Bool; OutCharInBoolStream
 
 -- Write and read on an out-char-in-bool stream; return the continuation channel
 writeCharReadBool : forall (b : 1S). !Char; ?Bool; b -> b
-writeCharReadBool c =
+writeCharReadBool @b c =
   let (v, c) = receive (send 'z' c) in printBool v; c
 
 writeCharReadBoolStream : OutCharInBoolStream -> ()

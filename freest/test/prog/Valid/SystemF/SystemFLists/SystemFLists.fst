@@ -6,6 +6,8 @@ Copyright   : (c) Vasco T. Vasconcelos, Gil Silva, 2 Dec 2021
 Church Encoding _ Lists
 -}
 
+-- CANNOT INFER nil @T, diverge @T
+
 module SystemFLists where
 
 type List : *T -> *T

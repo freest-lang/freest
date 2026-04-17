@@ -7,14 +7,14 @@ ints : forall (c : 1S). Int -> (Dual FiniteStream; c) -> c
 ints @c n c = 
   if n < 0
   then select Done c
-  else select More c |> send n |> ints @c (n - 1)
+  else select More c |> send n |> ints (n - 1)
 
 type Fold : 1C
 type Fold = FiniteStream;!Int;Wait
 
 foldClient : Int -> Dual Fold -> Int
 foldClient n w =
-  let (x, w) = ints @(?Int;Close) n w |> receive in x
+  let (x, w) = ints n w |> receive in x
 
 foldServer : Int -> Fold -> ()
 foldServer sum c =
