@@ -35,7 +35,7 @@ class Join t where
 class Meet t where
   meet :: t -> t -> t
 
-data Multiplicity = Lin | Un | VarM Variable | IVarM Variable
+data Multiplicity = Lin | Un | VarM VarLevel Variable
   deriving (Eq, Ord)
 
 instance Subsort Multiplicity where
@@ -168,7 +168,7 @@ instance Show Multiplicity where
   show = \case 
     Lin    -> "1"
     Un     -> "*"
-    VarM φ -> external φ
+    VarM _ φ -> external φ
 
 instance Show Prekind where
   show = \case 

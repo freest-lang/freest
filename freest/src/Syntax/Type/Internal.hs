@@ -11,7 +11,6 @@ polymorphic context-free session types.
 module Syntax.Type.Internal
   ( Polarity(..)
   , XType
-  , XTypeVar
   , Type( ..
         , AppQuant
         , AppForall
@@ -63,14 +62,7 @@ import Data.List ( intercalate, sort, sortBy )
 import Data.Map.Strict qualified as M
 import Data.Void (Void)
 
-
-type ScopedType = Type Scoped
-type KindedType = Type Kinded
--- type TypedType  = Type Typed
-
-type family XType phase
-type family XTypeVar phase
-
+type family XType x
 
 data Polarity = In | Out
   deriving (Eq, Ord)
@@ -102,11 +94,11 @@ data Type x
   | TName Span (XType x) Identifier
   | DName Span (XType x) Identifier
   -- Non-constants
-  | Var Span (XType x) (XTypeVar x) Variable
+  | Var Span (XType x) VarLevel Variable
   | Abs Span (XType x) [(Variable, K.Kind)] (Type x)
   | App Span (XType x) (Type x) [Type x]
 
-deriving instance (Ord (XType x), Ord (XTypeVar x)) => Ord (Type x)
+deriving instance (Ord (XType x)) => Ord (Type x)
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
@@ -174,13 +166,13 @@ pattern AppDName s x1 x2 i ts <- (\case DName s x1 i            -> App s x1 (DNa
   where AppDName _ _ x2 i []  = DName (getSpan i) x2 i
         AppDName s x1 x2 i ts  = App s x1 (DName (getSpan i) x2 i) ts
 
-pattern AppVar :: Span -> XType x -> XType x -> XTypeVar x -> Variable -> [Type x] -> Type x
-pattern AppVar s x1 x2 xv a ts <- (\case Var s x1 xv a -> App s x1 (Var s x1 xv a) []
-                                         App s x1 (Var _ x2 xv a) ts -> App s x1 (Var s x2 xv a) ts
+pattern AppVar :: Span -> XType x -> XType x -> VarLevel -> Variable -> [Type x] -> Type x
+pattern AppVar s x1 x2 vl a ts <- (\case Var s x1 vl a -> App s x1 (Var s x1 vl a) []
+                                         App s x1 (Var _ x2 vl a) ts -> App s x1 (Var s x2 vl a) ts
                                          t -> t
-                               -> App s x1 (Var _ x2 xv a) ts)
-  where AppVar _ _ x2 xv a []  = Var (getSpan a) x2 xv a
-        AppVar s x1 x2 xv a ts  = App s x1 (Var (getSpan a) x2 xv a) ts
+                               -> App s x1 (Var _ x2 vl a) ts)
+  where AppVar _ _ x2 vl a []  = Var (getSpan a) x2 vl a
+        AppVar s x1 x2 vl a ts  = App s x1 (Var (getSpan a) x2 vl a) ts
 
 pattern Tuple :: Span -> XType x -> XType x -> [Type x] -> Type x
 pattern Tuple s x1 x2 ts <- AppDName s x1 x2 (isTupleId -> True) ts
@@ -235,8 +227,8 @@ isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 isAppQuant     = \case AppQuant{}     -> True; _ -> False
 isAppDName     = \case AppDName{}     -> True; _ -> False
 
-fromVariable :: Variable -> XType x -> XTypeVar x -> Type x
-fromVariable a x xv = Var (varSpan a) x xv a
+fromVariable :: VarLevel -> Variable -> XType x -> Type x
+fromVariable vl a x = Var (varSpan a) x vl a
 
 instance Show Polarity where
   show = \case In -> "?"; Out -> "!"

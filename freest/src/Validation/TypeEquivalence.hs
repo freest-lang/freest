@@ -117,8 +117,8 @@ word' ctx = \case
         let (internalα, internalβ) = toInt k
         let αk = Variable s ('α' : show k) internalα
         let βk = Variable s ('β' : show k) internalβ
-        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk k]
-        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk k]
+        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable ObjLv αk k]
+        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable ObjLv βk k]
         getNonterminal $ Map.fromList
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)

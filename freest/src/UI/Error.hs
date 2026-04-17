@@ -208,7 +208,7 @@ prettyKind = \case
     prettyMulti = \case
       K.Lin -> "a linear"
       K.Un -> "an unrestricted"
-      K.VarM φ -> "a multiplicity variable " ++ external φ
+      K.VarM _ φ -> "a multiplicity variable " ++ external φ
     prettyPre = \case
       K.Top -> ""
       K.Session -> " session"
@@ -229,7 +229,7 @@ toMessage src = \case
       showMult = \case
         K.Lin    -> "a linear"
         K.Un     -> "an unrestricted"
-        K.VarM x -> "a multiplicity" ++ external x
+        K.VarM _ x -> "a multiplicity" ++ external x
   CannotInferHigherKindedTypeApp s k -> makeError src s
     ("Cannot infer type application for a type of kind " ++ bt (unparse k))
     ++ "Please provide all type arguments before this one"

@@ -52,7 +52,7 @@ subs a u = \case
       | b == a -> t
       | b `Set.member` fvu ->
         let b' = mkFreshVar (getSpan b) (Set.insert a fvu `Set.union` allVars t')
-            TK.Abs _ bks' t'' = subs a u (subs b (T.Var (getSpan b') k TK.NotMeta b') (TK.Abs s bks t'))
+            TK.Abs _ bks' t'' = subs a u (subs b (TK.fromVariable ObjLv b' k) (TK.Abs s bks t'))
         in TK.Abs s ((b',k):bks') t''
       | otherwise ->
         let TK.Abs _ bks' t'' = subs a u (TK.Abs s bks t')

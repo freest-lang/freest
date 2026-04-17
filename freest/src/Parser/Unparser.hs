@@ -129,11 +129,11 @@ instance Unparse (T.Type x) where
       arrow = \case 
         K.Lin    -> "1->"
         K.Un     -> "->"
-        K.VarM φ -> external φ ++ "->"
+        K.VarM _ φ -> external φ ++ "->"
       multiplicity = \case
         K.Lin    -> ""
         K.Un     -> "*"
-        K.VarM φ -> external φ
+        K.VarM _ φ -> external φ
       polarity = \case
         T.In  -> "?"
         T.Out -> "!"

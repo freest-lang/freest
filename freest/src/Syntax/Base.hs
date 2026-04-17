@@ -21,6 +21,7 @@ module Syntax.Base
   , mkFreshVar
   , firstInternal
   , defaultInternal
+  , VarLevel (..)
   -- Level
   , Level (..)
   , partitionLevels
@@ -28,18 +29,13 @@ module Syntax.Base
   )
 where
 
-
 import Data.Bifunctor ( Bifunctor(..) )
 import Data.List ( (\\) )
 import Data.Set qualified as Set
 import Data.Void ( Void )
 
--- The different phases of annotated AST's
-
-data Parsed
-data Scoped
-data Kinded
-data Typed
+-- | The different phases of annotated ASTs
+data Parsed; data Scoped; data Kinded; data Typed
 
 void :: Void
 void = error "Attempt to evaluate void"
@@ -171,6 +167,15 @@ mkFreshVar s fvs = unusedVar [firstInternal..] (mkDefaultVar "_γ" s) fvs
     unusedVar :: [Int] -> Variable -> Set.Set Variable -> Variable
     unusedVar stock a as  = a{internal = head (stock \\ map internal (Set.toList as))}
     
+-- | The level to which a variable belongs. Used to distinguish between
+-- object-level variables and metavariables. The only metavariables for now are
+-- instantiation variables, used during local type inference. In the future we
+-- may have, e.g., unification variables for more general type inference.
+data VarLevel 
+  = ObjLv -- ^ Object-level variable
+  | InstLv -- ^ Instantiation-level variable
+  deriving (Eq, Ord)
+
 -- 4 _ Levels
 
 -- | Used to separate the syntax of different computational levels 

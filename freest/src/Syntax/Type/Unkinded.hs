@@ -64,17 +64,14 @@ import Data.Void
 
 type instance T.XType Parsed = Void
 
-type instance T.XTypeVar Parsed = Void
-
 type ParsedType = T.Type Parsed
 
 type instance T.XType Scoped = Void
 
 type ScopedType = T.Type Scoped
 
-type instance T.XTypeVar Scoped = Void
 
-type Unkinded x = (T.XType x ~ Void, T.XTypeVar x ~ Void)
+type Unkinded x = (T.XType x ~ Void)
 
 pattern Int :: Unkinded x => Span -> T.Type x
 pattern Int s <- T.Int s _
@@ -134,7 +131,7 @@ pattern DName s i <- T.DName s _ i
 
 pattern Var :: Unkinded x => Span -> Variable -> T.Type x
 pattern Var s a <- T.Var s _ _ a
-  where Var s a = T.Var s void void a
+  where Var s a = T.Var s void ObjLv a
 
 pattern Abs :: Unkinded x => Span -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
 pattern Abs s aks t <- T.Abs s _ aks t
@@ -194,7 +191,7 @@ pattern AppDName s i ts <- T.AppDName s _ _ i ts
 
 pattern AppVar :: Unkinded x => Span -> Variable -> [T.Type x] -> T.Type x
 pattern AppVar s a ts <- T.AppVar s _ _ _ a ts
-  where AppVar s a ts  = T.AppVar s void void void a ts
+  where AppVar s a ts  = T.AppVar s void void ObjLv a ts
 
 pattern Tuple :: Unkinded x => Span -> [T.Type x] -> T.Type x
 pattern Tuple s ts <- T.Tuple s _ _ ts 
@@ -209,4 +206,4 @@ pattern Bool s <- T.Bool s _
   where Bool s = T.Bool s void
 
 fromVariable :: Unkinded x => Variable -> T.Type x
-fromVariable a = T.Var (varSpan a) void void a
+fromVariable a = T.Var (varSpan a) void ObjLv a

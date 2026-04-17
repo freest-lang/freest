@@ -17,39 +17,52 @@ import Data.List (sort)
 import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
 
+-- | Instantiation-level substitution. Instantiation variables may occur as
+-- types or as multiplicities.
 newtype Substitution = Θ [(Variable, Either T.KindedType K.Multiplicity)]
   deriving Show
 
+-- | Composition for substitutions.
 instance Semigroup Substitution where
-  Θ χtms1 <> Θ χtms2 = Θ (χtms1 ++ χtms2)
+  Θ ivtms1 <> Θ ivtms2 = Θ (ivtms1 ++ ivtms2)
+
+-- | The empty substitution.
 instance Monoid Substitution where
   mempty = Θ []
 
+-- | Alias for the empty substitution.
 emptySubs :: Substitution
 emptySubs = Θ []
 
+-- | Make a multiplicity substitution.
 subsMult :: Variable -> K.Multiplicity -> Substitution
-subsMult χ m = Θ [(χ, Right m)]
+subsMult iv m = Θ [(iv, Right m)]
 
+-- | Make a type substitution.
 subsType :: Variable -> T.KindedType -> Substitution
-subsType χ t = Θ [(χ, Left t)]
+subsType iv t = Θ [(iv, Left t)]
 
+-- | Apply a substitution.
 applySubs :: Substitution -> T.KindedType -> T.KindedType
-applySubs (Θ χtms) t = 
-  foldr (\(χi, tmi) ti -> either (subst χi) (subsm χi) tmi ti) t χtms
+applySubs (Θ ivtms) t = 
+  foldr (\(ivi, tmi) ti -> either (subst ivi) (subsm ivi) tmi ti) t ivtms
   where
-    subst χ t = \case
-      T.Var _ _ T.IVar χ' | χ == χ' -> t
-      T.Abs s aks u -> T.Abs s aks (subst χ t u)
-      T.App s u us -> T.App s (subst χ t u) (map (subst χ t) us)
+    subst iv t = \case
+      T.Var _ _ InstLv iv' | iv == iv' -> t
+      T.Abs s aks u -> T.Abs s aks (subst iv t u)
+      T.App s u us -> T.App s (subst iv t u) (map (subst iv t) us)
       t -> t
 
-    subsm χ m = \case
-      T.Arrow s (K.IVarM χ') | χ == χ' -> T.Arrow s m
-      T.Abs s aks u -> T.Abs s aks $ subsm χ m u
-      T.App s u us -> T.App s (subsm χ m u) (map (subsm χ m) us)
+    subsm iv m = \case
+      T.Arrow s (K.VarM InstLv iv') | iv == iv' -> T.Arrow s m
+      T.Abs s aks u -> T.Abs s aks $ subsm iv m u
+      T.App s u us -> T.App s (subsm iv m u) (map (subsm iv m) us)
 
-match :: E.KindedExp -> M.KindedModule -> T.KindedType -> T.KindedType
+-- | Find a substitution for instantiation variables that attempts
+-- to make two given types equivalent. Adapted (heavily) from
+-- https://doi.org/10.4204/EPTCS.420.1
+match :: E.KindedExp -> M.KindedModule
+      -> T.KindedType -> T.KindedType
       -> Validation Substitution
 match e modl = match' e modl Set.empty Set.empty
   where
@@ -64,19 +77,19 @@ match e modl = match' e modl Set.empty Set.empty
     case (t1, t2) of
       -- M-FIV
       _ | Set.null fiv12 -> return emptySubs
-      -- M-IVar
-      (T.Var s k T.IVar χ, t2) -> do
+      -- M-Inst
+      (T.Var s k InstLv iv, t2) -> do
         unless (T.kindOf t2 K.<: k) do
           throwE (KindMismatch (getSpan t2) k t2)
-        return $ subsType χ t2
-      (t1, T.Var s k T.IVar χ) -> do
+        return $ subsType iv t2
+      (t1, T.Var s k InstLv iv) -> do
         unless (T.kindOf t1 K.<: k) do
           throwE (KindMismatch (getSpan t1) k t1)
-        return $ subsType χ t1
-      -- M-DualIVar
-      (T.AppDual _ t1'@(T.Var _ _ T.IVar χ), t2) ->
+        return $ subsType iv t1
+      -- M-DualInst
+      (T.AppDual _ t1'@(T.Var _ _ InstLv iv), t2) ->
         match' e modl bindings visited t1' (T.AppDual (getSpan t2) t2)
-      (t1, T.AppDual _ t2'@(T.Var _ _ T.IVar χ)) ->
+      (t1, T.AppDual _ t2'@(T.Var _ _ InstLv iv)) ->
         match' e modl bindings visited (T.AppDual (getSpan t1) t1) t2'
       -- M-AbsorbSeqL/R
       (T.AppSemi _ (T.End _ p1) t1, T.End _ p2)
@@ -123,7 +136,7 @@ match e modl = match' e modl Set.empty Set.empty
           K.Un  -> return $ isubsAbsorbed (fiv t12)
         return $ θ2 <> θ1
       -- M-DualVar
-      (T.AppDual _ (T.AppVar _ a1 k1 T.NotMeta t1s), T.AppDual _ (T.AppVar _ a2 k2 T.NotMeta t2s))
+      (T.AppDual _ (T.AppVar _ a1 k1 ObjLv t1s), T.AppDual _ (T.AppVar _ a2 k2 ObjLv t2s))
         | (a1, a2) `Set.member` bindings && length t1s == length t2s
         -> foldMatch e modl bindings visited emptySubs t1s t2s
       (T.AppDual _ (T.AppVar _ a1 k1 vm1 t1s), T.AppDual _ (T.AppVar _ a2 k2 vm2 t2s))
@@ -141,8 +154,8 @@ match e modl = match' e modl Set.empty Set.empty
         -> do
         θ <- case (t1', t2') of
           (T.Arrow _ m1, T.Arrow _ m2) -> case (m1, m2) of
-            (K.IVarM χ, m2) -> return $ subsMult χ m2
-            (m1, K.IVarM χ) -> return $ subsMult χ m1
+            (K.VarM InstLv iv, m2) -> return $ subsMult iv m2
+            (m1, K.VarM InstLv iv) -> return $ subsMult iv m1
             (_, _) -> return emptySubs
           _ -> return emptySubs
         foldMatch e modl bindings visited θ t1s t2s
@@ -152,7 +165,7 @@ match e modl = match' e modl Set.empty Set.empty
         -> match' e modl (Set.insert (a1, a2) bindings) visited
             (T.AppQuant s1 p1 pk1 aks1 t1') (T.AppQuant s2 p2 pk2 aks2 t2')
       -- M-Var
-      (T.AppVar _ a1 _ T.NotMeta t1s, T.AppVar _ a2 _ T.NotMeta t2s)
+      (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
         -> foldMatch e modl bindings visited emptySubs t1s t2s
       (t1, t2)
@@ -178,29 +191,31 @@ match e modl = match' e modl Set.empty Set.empty
 
   isubsAbsorbed =
     foldl (\θ -> \case
-        Left  χ -> subsType χ (T.Void (getSpan χ) (K.uc (getSpan χ))) <> θ
-        Right χ -> subsMult χ K.Un <> θ)
+        Left  iv -> subsType iv (T.Void (getSpan iv) (K.uc (getSpan iv))) <> θ
+        Right iv -> subsMult iv K.Un <> θ)
       emptySubs
 
   foldMatch e modl bindings visited θ t1s t2s = do
     x <- zipWithM (\t1i t2i -> (t1i, t2i,) <$> match' e modl bindings visited t1i t2i) t1s t2s 
     fold <$> zipWithM (match' e modl bindings visited) t1s t2s
 
+-- | The free instantiation variables in a type.
 fiv :: T.KindedType -> Set.Set (Either Variable Variable)
 fiv = \case
-  T.Var _ _ T.IVar χ -> Set.singleton (Left χ)
-  T.Arrow _ (K.IVarM χ) -> Set.singleton (Right χ)
+  T.Var _ _ InstLv iv -> Set.singleton (Left iv)
+  T.Arrow _ (K.VarM InstLv iv) -> Set.singleton (Right iv)
   T.Abs _ _ t -> fiv t
   T.App _ t ts -> Set.unions (fiv t : map fiv ts)
   _ -> Set.empty
 
+-- | Make a fresh type instantiation variable.
 freshInstVarT :: Span -> K.Kind -> Validation T.KindedType
-freshInstVarT s k = T.Var s k T.IVar <$> freshInstVar s
-
-freshInstVarM :: Span -> Validation K.Multiplicity
-freshInstVarM s = K.IVarM <$> freshInstVar s
-
-freshInstVar :: Span -> Validation Variable
-freshInstVar s = do 
+freshInstVarT s k = do
   i <- incCounter
-  return (Variable s ("χ" ++ show i) i)
+  return $ T.Var s k InstLv (Variable s ("_a" ++ show i) i)
+
+-- | Make a fresh multiplicity instantiation variable.
+freshInstVarM :: Span -> Validation K.Multiplicity
+freshInstVarM s = do
+  i <- incCounter 
+  return $ K.VarM InstLv (Variable s ("_m" ++ show i) i)

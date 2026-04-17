@@ -576,8 +576,8 @@ scopeKind = \case
 -- | Scope a multiplicity.
 scopeMultiplicity :: K.Multiplicity -> Validation K.Multiplicity
 scopeMultiplicity = \case
-  K.VarM φ -> do
+  K.VarM vl φ -> do
     φ' <- freshInternal φ
-    return $ K.VarM φ'{external = "φ" ++ show (internal φ')}
+    return $ K.VarM vl φ'{external = "φ" ++ show (internal φ')}
   m -> pure m
 

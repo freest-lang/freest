@@ -520,11 +520,11 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
         -- regular cases
         (TypeLevel (ai, mki) : ps'', T.AppForall s' ((a, k) : aks) u) -> do
           ki <- case mki of
-            Just ki -> do Kinding.checkK (T.fromVariable ai ki) k
+            Just ki -> do Kinding.checkK (T.fromVariable ObjLv ai ki) k
                           return ki
             Nothing -> return k
           checkFun' (i + 1) (Map.insert ai ki kctxi) tctxi ps''
-            (T.AppForall s' aks $ subs a (T.fromVariable ai ki) u)
+            (T.AppForall s' aks $ subs a (T.fromVariable ObjLv ai ki) u)
         (ExpLevel  (pi, mti) : ps'', t''@(T.AppArrow s' m u v)) -> do
           case mti of
             Just ti -> do
@@ -609,8 +609,8 @@ checkPat modl kctx p t = case p of
           u' -> throwE (TypeMismatchExists (spanFromTo a p) u
             (Left $ E.PackPat (spanFromTo a p) aks p))
         ((a, k) : aks) ((b, k') : bks) -> do
-          Kinding.checkK (T.fromVariable a k) k'
-          checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable a k) u) aks bks
+          Kinding.checkK (T.fromVariable ObjLv a k) k'
+          checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
   E.WildPat  s _    -> do
     when (Kinding.isStrictlyLin t) (throwE (NonLinPat s p t))
     return (kctx, Map.empty)
@@ -656,7 +656,7 @@ checkPat modl kctx p t = case p of
           (kctx, Map.empty) (zip ps ts')
       t' -> throwE
         (TypeMismatch (getSpan p) t
-          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable a k)) aks)) (Right p))
+          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable ObjLv a k)) aks)) (Right p))
   -- Wait
   E.WaitPat s -> do
     Expose.wait modl p t
@@ -670,7 +670,7 @@ checkPat modl kctx p t = case p of
   -- ?@a. p
   E.TypeInPat s (a, k) p' -> do
     (b, k', t') <- Expose.typeInput modl (Left p) t
-    checkPat modl (Map.insert a k kctx) p' (subs b (T.fromVariable a k) t')
+    checkPat modl (Map.insert a k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
   -- (&C p)
   E.ChoicePat s i p' -> do
     ti <- Expose.externalChoice modl p t i
@@ -766,19 +766,19 @@ instantiate i modl kctx tctx t1 args = do
       inst@(T.AppForall s ((a, k) : aks) t1, ExpLevel e : args') -> do
         unless (K.isProper k) do
           throwE (CannotInferHigherKindedTypeApp (getSpan e) k)
-        tχ <- Matching.freshInstVarT (foldl spanFromTo (getSpan e) args') k
-        instantiate' (succ i) (subs a tχ (T.AppForall s aks t1)) (ExpLevel e : args')
+        tiv <- Matching.freshInstVarT (foldl spanFromTo (getSpan e) args') k
+        instantiate' (succ i) (subs a tiv (T.AppForall s aks t1)) (ExpLevel e : args')
       -- I-AllType
       inst@(T.AppForall s ((a, k) : aks) t1, TypeLevel t2 : args') -> do
         Kinding.checkK t2 k
         instantiate' (succ i) (subs a t2 (T.AppForall s aks t1)) args'
       -- I-Var
-      inst@(T.Var s k T.IVar χ, ExpLevel e : args') -> do
+      inst@(T.Var s k InstLv iv, ExpLevel e : args') -> do
         t <- T.AppArrow s <$> Matching.freshInstVarM s 
                           <*> Matching.freshInstVarT s (K.lt s)
                           <*> Matching.freshInstVarT s (K.lt s)
         (θ, us, u) <- instantiate' (succ i) t (ExpLevel e : args')
-        return (Matching.subsType χ t <> θ, us, u)
+        return (Matching.subsType iv t <> θ, us, u)
       -- I-Arg
       inst@(T.AppArrow s p t1 t2, ExpLevel e : args') -> do
         θ1 <- quickLook e t1
@@ -838,9 +838,9 @@ instantiate i modl kctx tctx t1 args = do
               (t2, tctx') <- synth modl kctx tctx h
               (us , t3   ) <- instantiate 0 modl kctx tctx' t2 []
               Matching.match e modl t1 t3
-            e (T.Var _ _ T.IVar χ) -> do
+            e (T.Var _ _ InstLv iv) -> do
               (t2, _) <- synth modl kctx tctx e
-              return $ Matching.subsType χ t2
+              return $ Matching.subsType iv t2
             e t1 -> do
               (t2, tctx') <- synth modl kctx tctx e
               (_, t3) <- instantiate 0 modl kctx tctx' t2 []
@@ -880,7 +880,7 @@ typeModule modl = do
                 return $ T.AppArrow (spanFromTo t u) K.Un t u
             buildLinArrow kctx aks k = foldrM
               (\t u -> pure $ T.AppArrow (spanFromTo t u) K.Lin t u) (returnType aks k)
-            returnType aks k = T.AppDName (getSpan it) k it (map (uncurry T.fromVariable) aks)
+            returnType aks k = T.AppDName (getSpan it) k it (map (uncurry $ T.fromVariable ObjLv) aks)
 
 runValidate :: M.ScopedModule -> Either [Error] (M.KindedModule, TypeCtx)
 runValidate modl =
