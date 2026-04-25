@@ -726,6 +726,7 @@ case Dual (!Int ; Close) == Dual !Int ; Wait : 1S
 
 -- Example from a paper
 
+-- needs prekind bounded polymorhism?
 case
   IFRepeat
   ==
@@ -733,10 +734,12 @@ case
   :
   1S -> 1S -> 1C
 where
+  -- type IRepeat : forall a <: 1S . a -> a
   type IRepeat : 1S -> 1S
   type IRepeat a = a ; IRepeat a
   type IFRepeat : 1S -> 1S -> 1C
   type IFRepeat a b = IRepeat (&{More: a, Done: b ; Wait})
+
   type IFRepeatExpanded : 1S -> 1S -> 1C
   type IFRepeatExpanded a b = &{More: a, Done: b ; Wait}
 
@@ -755,6 +758,6 @@ where
   type Fold = ??(a:*T) . ?a ; IFRepeat (??(b:1S) . ?(a -> b -> a) ; ?b) (!a)
 
   type FoldExpanded : 1S
-  type FoldExpanded = ??(a:*T) . ?a ; FE
-  type FE : 1S
-  type FE = &{More: ??(b:1S) . ?(a -> b -> a) ; ?b, Done: !a ; Wait}
+  type FoldExpanded = ??(a:*T) . ?a ; FE a
+  type FE : *T -> 1S
+  type FE a = &{More: ??(b:1S) . ?(a -> b -> a) ; ?b ; FE a, Done: !a ; Wait}
