@@ -269,6 +269,8 @@ case *?Int == *?Int ; Close : *C
 
 case *?Int ; Close == *?Int : *C
 
+case *&{A, B} == *&{B, A} : *C
+
 case Dual (*&{A, B}) == *+{A, B} : *C
 
 case *&{A, B} ; !Int == *&{B, A} : *S
@@ -729,13 +731,12 @@ case
   ==
   IFRepeatExpanded
   :
-  1C
+  1S -> 1S -> 1C
 where
   type IRepeat : 1S -> 1S
   type IRepeat a = a ; IRepeat a
   type IFRepeat : 1S -> 1S -> 1C
   type IFRepeat a b = IRepeat (&{More: a, Done: b ; Wait})
-
   type IFRepeatExpanded : 1S -> 1S -> 1C
   type IFRepeatExpanded a b = &{More: a, Done: b ; Wait}
 

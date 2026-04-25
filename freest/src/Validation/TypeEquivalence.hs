@@ -63,11 +63,10 @@ word' ctx = \case
   t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
-  -- W-Msg _ TODO: We may need a special case for *?T and *!T
   T.AppMessage _ m p t -> do
     w <- word ctx t
     getNonterminal $ Map.fromList
-      [ (show m ++ show p, [])
+      [ (show m ++ show p, [bottom | m == K.Un])
       , ("1", w ++ [bottom])
       ]
   -- W-Seq
