@@ -66,7 +66,7 @@ orderedServer @a c list =
   case c of
     &Vals c ->
       let (x, c)  = receive c in
-      let (list, c) = orderedServer @(!Int; a) c (Cons x list) in
+      let (list, c) = orderedServer c (Cons x list) in
       case list of
         Cons y ys ->
           let c = send y c in
@@ -82,7 +82,7 @@ orderedServer @a c list =
 -- Facade function to initialize server with an empty list
 initOrderedServer : (Dual OrderingChannel; Wait) -> ()
 initOrderedServer c =
-  let (_, c) = orderedServer @Wait c Nil in
+  let (_, c) = orderedServer c Nil in
   wait c
 
 -- ==================== Client ====================
@@ -99,7 +99,7 @@ order @a c sList direction =
     Cons x xs ->
       let c          = select Vals c in
       let c          = send x c in
-      let (c, rList) = order @(?Int; a) c xs direction in
+      let (c, rList) = order c xs direction in
       let (y, c)     = receive c in
       (c, Cons y rList)
 
@@ -111,12 +111,12 @@ aList = Cons 4 (Cons 1 (Cons 3 (Cons 2 Nil)))
 ascClient, descClient : (OrderingChannel; Close )-> IntList
 
 ascClient c =
-  let (c, rList) = order @Close c aList True in
+  let (c, rList) = order c aList True in
   close c;
   rList
 
 descClient c =
-  let (c, rList) = order @Close c aList False in
+  let (c, rList) = order c aList False in
   close c;
   rList
 

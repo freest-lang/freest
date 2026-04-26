@@ -12,18 +12,18 @@ type IntRefSession : 1C
 type IntRefSession = +{Read: ?Int, Write: !Int} ; Close
 
 write : Int -> IntRef -> ()
-write x r = r |> receive_ @IntRefSession |> select Write |> sendAndClose @Int x
+write x r = r |> receive_ |> select Write |> sendAndClose x
 
 read : IntRef -> Int
-read r = r |> receive_ @IntRefSession |> select Read |> receiveAndClose @Int
+read r = r |> receive_ |> select Read |> receiveAndClose
 
 intRef : Int -> IntRef
-intRef x = forkWith @IntRef @() (handle x)
+intRef x = forkWith (handle x)
   where
     handle : Int -> Dual IntRef -> ()
-    handle x r = case accept @IntRefSession r of
-      &Write s -> handle (receiveAndWait @Int s) r
-      &Read  s -> sendAndWait @Int x s; handle x r
+    handle x r = case accept r of
+      &Write s -> handle (receiveAndWait s) r
+      &Read  s -> sendAndWait x s; handle x r
 
 type MCounter : *T
 type MCounter = exists (a : *T) . (() -> a, a -> Int, a -> ())

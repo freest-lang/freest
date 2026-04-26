@@ -17,6 +17,7 @@ module Syntax.Kind
   , Meet(..)
   , isSession
   , isChannel
+  , isProper
   , image
   , depth
   )
@@ -34,7 +35,7 @@ class Join t where
 class Meet t where
   meet :: t -> t -> t
 
-data Multiplicity = Lin | Un | VarM Variable 
+data Multiplicity = Lin | Un | VarM VarLevel Variable
   deriving (Eq, Ord)
 
 instance Subsort Multiplicity where
@@ -93,7 +94,19 @@ instance Eq Kind where
   Arrow _ k11 k12 == Arrow _ k21 k22 = k11 == k21 && k12 == k22
   Var _ τ1        == Var _ τ2        = τ1 == τ2 
   _               == _               = False
-  
+
+instance Enum Kind where
+  fromEnum (Proper _ Lin Top)     = 1
+  fromEnum (Proper _ Un  Top)     = 2
+  fromEnum (Proper _ Lin Session) = 3
+  fromEnum (Proper _ Un  Session) = 4
+  fromEnum (Proper _ Lin Channel) = 5
+  fromEnum (Proper _ Un  Channel) = 6
+  fromEnum (Arrow _ k1 k2) = pair (fromEnum k1) (fromEnum k2)
+    where pair x y = (x + y) * (x + y + 1) `div` 2 + y
+  fromEnum k = internalError ("fromEnum of kind " ++ show k)
+  toEnum = internalError "toEnum of Kind"
+
 instance Meet Kind where
   meet (Proper s m1 b1) (Proper _ m2 b2) = 
     Proper s (meet m1 m2) (meet b1 b2)
@@ -126,13 +139,17 @@ us s = Proper s Un  Session
 lc s = Proper s Lin Channel
 uc s = Proper s Un  Channel
 
-isChannel, isSession :: Kind -> Bool
+isChannel, isSession, isProper :: Kind -> Bool
 
 isChannel (Proper _ _ Channel) = True
 isChannel _ = False
 
 isSession (Proper _ _ pk) = pk <: Session
 isSession _ = False
+
+isProper = \case
+  Proper{} -> True
+  _        -> False
 
 -- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
 image :: Kind -> Kind
@@ -151,7 +168,7 @@ instance Show Multiplicity where
   show = \case 
     Lin    -> "1"
     Un     -> "*"
-    VarM φ -> external φ
+    VarM _ φ -> external φ
 
 instance Show Prekind where
   show = \case 

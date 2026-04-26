@@ -1,9 +1,9 @@
 module KindSynthValidSpec (spec) where
 
 import Syntax.Module qualified as M
-import Validation.Kinding (runKindModule, runSynth)
 import UI.Error (showErrors)
 import UnitSpecUtils
+import Validation.Kinding (runKindModule, runSynth)
 
 import Test.Hspec
 

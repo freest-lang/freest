@@ -7,4 +7,4 @@ snd' : forall (a : *T) (b : 1T). (a, b) -> b
 snd' @a @b p = let (_, y) = p in y
 
 main : Int
-main = fst' @Int @Char (5, 'h') + snd' @Bool @Int (True, 7)
+main = fst' (5, 'h') + snd' (True, 7)

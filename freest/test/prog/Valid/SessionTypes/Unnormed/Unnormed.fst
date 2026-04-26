@@ -27,7 +27,7 @@ whether two context-free session types are equivalent.
 module Unnormed where
 
 type T : 1C
-type T = !Int;T;?Int
+type T = !Int; T; ?Int
 
 writer : Int -> T -> ()
 writer i c =
@@ -37,11 +37,11 @@ writer i c =
 reader : Dual T -> ()
 reader c =
   let (i, c) = receive c in
-  print @Int i;
+  print i;
   reader c
 
 main : ()
 main =
   let (w, r) = channel @T in
-  fork @() (\(_ : ()) 1-> writer 0 w);
+  fork (\(_ : ()) 1-> writer 0 w);
   reader r

@@ -38,6 +38,7 @@ import UI.Error
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
+import Validation.HOTRecursion (checkNoHOTRec)
 import Validation.Normalisation
 import Validation.Substitution ( subs )
 
@@ -103,7 +104,7 @@ synth modl ctx = \case
   T.DName s i -> flip (TK.DName s) i <$> lookupKind modl i
   -- Higher-order
   T.Var s a -> case ctx Map.!? a of
-    Just k -> pure $ TK.Var s k a
+    Just k -> pure $ TK.fromVariable ObjLv a k
     Nothing -> do
       throwE (TypeVarOutOfScope s a)
   T.App s t ts -> do
@@ -227,29 +228,29 @@ kindModule mod = do
                  , M.consDecls   = cds
                  , M.definitions = []
                  }
+  checkNoHOTRec mod'
   (_, lds) <- kindLetDecls mod mod' Map.empty (M.definitions mod)
   return mod'{M.definitions = lds}
   where
-    kindTypeDecl :: Identifier -> T.ScopedType -> Validation TK.KindedType
-    kindTypeDecl i t = do
+    kindTypeDecl :: Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
+    kindTypeDecl i (hasParams, t) = do
       k <- lookupKind mod i
-      t' <- case t of
-        T.Abs s aks u -> do
-          aks' <- kindParams aks k
-          u' <- synth mod (Map.fromList aks') u -- TODO: Map.empty'
+      (hasParams,) <$> case t of
+        T.Abs s aks u | hasParams -> do
+          (aks', k') <- kindParams aks k
+          u' <- check mod (Map.fromList aks') u k' -- TODO: Map.empty'
           return $ TK.Abs s aks' u'
           where
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
-              ((a, k1) :) <$> kindParams aks' k2
+              first ((a, k1) :) <$> kindParams aks' k2
             kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
-              checkK (TK.Var (getSpan a) k a) k1
-              ((a, k) :) <$> kindParams aks' k2
-            kindParams []  _ = pure []
+              checkK (TK.fromVariable ObjLv a k) k1
+              first ((a, k) :) <$> kindParams aks' k2
+            kindParams []  k' = pure ([], k')
             kindParams aks _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
 
-        t' -> synth mod Map.empty t' -- TODO: Map.empty? 
-      checkK t' k
-      return t'
+        t' -> check mod Map.empty t' k-- TODO: Map.empty? 
+      -- return (hasParams, t')
 
     kindDataConsDecls :: M.ConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))
@@ -269,7 +270,7 @@ kindModule mod = do
         checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
           checkDataDecl k (f . Arrow s k1) (Map.insert a k1 ctx) aks' k2
         checkDataDecl k f ctx ((a, k') : aks') (Arrow s k1 k2) = do
-          checkK (TK.Var (getSpan a) k' a) k1
+          checkK (TK.fromVariable ObjLv a k') k1
           checkDataDecl k (f . Arrow s k') (Map.insert a k' ctx) aks' k2
         checkDataDecl k f ctx aks Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
@@ -351,10 +352,10 @@ kindModule mod = do
               ([], _) -> ([],) <$> kindRHS smodl kmodl kctx rhs
               (TypeLevel (ai, mki) : ps', TK.AppForall s' ((a, k) : aks) u) -> do
                 k' <- case mki of
-                  Just ki -> checkK (TK.fromVariable ai ki) k >> return ki
+                  Just ki -> checkK (TK.fromVariable ObjLv ai ki) k >> return ki
                   Nothing -> return k
                 first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) (Map.insert ai k' kctx) tctxds ps' 
-                  rhs (TK.AppForall s' aks $ subs a (TK.Var (getSpan ai) k' ai) u)
+                  rhs (TK.AppForall s' aks $ subs a (TK.fromVariable ObjLv ai k') u)
               (ExpLevel  (p, mtp) : ps', t''@(TK.AppArrow s' m u v)) -> do
                 tp' <- case mtp of
                   Just tp -> do

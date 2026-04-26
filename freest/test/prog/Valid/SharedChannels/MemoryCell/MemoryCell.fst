@@ -11,24 +11,25 @@ type IntCellSession : 1C
 type IntCellSession = +{Read: ?Int, Write: !Int} ; Close
 
 write: Int -> IntCell 1-> ()
-write n s = (receive_ @IntCellSession s) |> select Write |> sendAndClose @Int n 
+write n s = receive_ s |> select Write |> sendAndClose n 
 
 read: IntCell -> Int
-read s = (receive_ @IntCellSession s) |> select Read|> receiveAndClose @Int
+read s = receive_ s |> select Read |> receiveAndClose
 
 cell : Int -> Dual IntCell -> Void @*T
 cell n c =
-  case accept @IntCellSession c of
-    &Write s -> cell (receiveAndWait @Int s) c
-    &Read s -> sendAndWait @Int n s ; cell n c
+  case accept c of
+    &Write s -> cell (receiveAndWait s) c
+    &Read  s -> sendAndWait n s; cell n c
 
 sleep : Int -> ()
-sleep n = if n == 0 then () else sleep (n - 1)
+sleep 0 = () 
+sleep n = sleep (n - 1)
 
 -- Expect 0, 5 or 6
 main: Int
 main =
-  let c = forkWith @IntCell @(Void@*T) (cell 0) in
+  let c = forkWith (cell 0) in
   let (r, w) = channel @*?IntCellSession in
   fork (\(_ : ()) 1-> read c);
   fork (\(_ : ()) 1-> read c);

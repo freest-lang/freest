@@ -8,6 +8,7 @@ module MemoryCellDestructive where
 type IntCell : *C
 type IntCell = *!Int
 
+-- CANNOT INFER
 write: Int -> IntCell 1-> ()
 write = send_ @Int
 

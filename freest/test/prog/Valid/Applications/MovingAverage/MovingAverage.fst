@@ -21,7 +21,7 @@ Structure:
 
 -}
 
-type FiniteOutStream, FiniteInStream : 1S
+type FiniteOutStream, FiniteInStream : 1C
 type FiniteOutStream = +{More: !Int;FiniteOutStream, Enough: Close}
 type FiniteInStream = Dual FiniteOutStream
 
@@ -33,7 +33,7 @@ writeAll i c =
      writeAll (i + 1)
   else c |> select Enough |> close
 
-writeValues : !Int;!Int;FiniteOutStream;Close 1-> ()
+writeValues : !Int;!Int;FiniteOutStream;Close -> ()
 writeValues c = c |> send 1 |> send 2 |> writeAll 3
 
 average3 : Int -> Int -> Int -> Int
@@ -49,7 +49,7 @@ readAll x y from to =
       readAll y z from
     &Enough from -> from |> wait ; to |> select Enough |> close
 
-readValues : ?Int;?Int;FiniteInStream -> FiniteOutStream 1-> ()
+readValues : ?Int; ?Int; FiniteInStream -> FiniteOutStream 1-> ()
 readValues from to =
   let (x, from) = receive from in
   let (y, from) = receive from in
@@ -60,12 +60,12 @@ collectValues c =
   case c of
     &More c ->
       let (v, c) = receive c in
-      print @Int v;
+      print v;
       collectValues c
     &Enough c -> c |> wait
 
 main : ()
 main =
-  let r1 = forkWith @(?Int; ?Int; FiniteInStream; Wait) @() writeValues in
-  let r2 = forkWith @(FiniteInStream; Wait) @() (readValues r1) in
+  let r1 = forkWith  writeValues in
+  let r2 = forkWith1 (readValues r1) in
   collectValues r2

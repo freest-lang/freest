@@ -48,43 +48,43 @@ waitFor n join
 
 donate : PromotionS -> String -> CreditCard -> Amount -> ()
 donate p donor ccard amount =
-  receive_ @Promotion p |> send donor |> send ccard |> send amount |> close
+  receive_ p |> send donor |> send ccard |> send amount |> close
 
 helpSavingTheWolf : Dual DonationS -> ()
 helpSavingTheWolf d =
   case
-    d |> receive_ @Donation 
+    d |> receive_ 
       |> select SetDate  |> send 2012                   -- setup the date
       |> select SetTitle |> send "Help Saving the Wolf" -- setup the title
       |> select SetDate  |> send 2013                   -- fix the 2012 date
       |> select Commit
   of
     &Accepted d ->
-      let p = receiveAndClose @PromotionS d in 
+      let p = receiveAndClose d in 
       fork (\(_ : ()) 1-> donate p "Benefactor1" "2345" 5);
       donate p "Benefactor3" "1004" 10
     &Denied d ->
-      putStrLn $ receiveAndClose @String d
+      putStrLn $ receiveAndClose d
 
 wrongYear : Dual DonationS -> ()
 wrongYear d = 
   case
-    d |> receive_ @Donation 
+    d |> receive_ 
       |> select SetDate  |> send 1999 -- wrong date
       |> select SetTitle |> send "Help Saving the Mink" 
       |> select Commit
   of
     &Accepted d -> -- Not going to happen...
-      let p = receiveAndClose @PromotionS d in 
+      let p = receiveAndClose d in 
       donate p "No Benefactor" "0000" 0
     &Denied d ->
-      putStrLn $ receiveAndClose @String d
+      putStrLn $ receiveAndClose d
 
 
 -- 3. The bank that charges credit cards
 charge : CreditCard -> Amount -> ()
 charge ccard amount =
-  putStrLn $ (++) @Char ((++) @Char ((++) @Char "Charging " (show @Int amount)) " euros on card ") ccard
+  putStrLn $ "Charging " ++ show amount ++ " euros on card " ++ ccard
 
 
 -- 4. The Online Donation Server
@@ -92,10 +92,10 @@ promotion : Int -> Fork -> Dual PromotionS -> ()
 promotion k f pc
   | k == 0 = select Over f; ()
   | otherwise =
-    let p = accept @Promotion pc in
+    let p = accept pc in
     let (donor, p) = receive p in
     let (ccard, p) = receive p in
-    let amount     = receiveAndWait @Int p in
+    let amount     = receiveAndWait p in
     charge ccard amount;
     promotion (k - 1) f pc
 
@@ -112,16 +112,16 @@ setup title date f p (&Commit   d) =
 
 server : Int -> Int -> (Fork, Join) -> PromotionS -> DonationS -> ()
 server k n fj p ds
-  | k == 0    = waitFor n (snd @Fork @Join fj)
+  | k == 0    = waitFor n (snd fj)
   | otherwise =
-    let d = accept @Donation ds in
-    fork (\(_ : ()) 1-> setup "<default>" 0000 (fst @Fork @Join fj) p d);
+    let d = accept ds in
+    fork (\(_ : ()) 1-> setup "<default>" 0000 (fst fj) p d);
     server (k - 1) n fj p ds
 
 donationServer : Int -> Int -> DonationS -> ()
 donationServer noOfClients noOfDonations ds =
   let (f, j) = channel @Fork in
-  let p = forkWith @PromotionS @() (promotion noOfDonations f) in
+  let p = forkWith (promotion noOfDonations f) in
   server noOfClients noOfClients (channel @Fork) p ds;
   case j of &Over _ -> ()
 

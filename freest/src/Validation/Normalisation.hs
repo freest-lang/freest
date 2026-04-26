@@ -14,7 +14,6 @@ module Validation.Normalisation
   , reduce
   , normalise
   , tNameRedex
-  -- , betaRule
   )
 where
 
@@ -23,7 +22,7 @@ import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Validation.Base ( unfold )
-import Validation.Substitution ( freeVars, subs, subsAll )
+import Validation.Substitution ( freeVars, subs, subsAll, betaRule )
 import Utils ( internalError )
 
 import Data.Bifunctor (second)
@@ -73,11 +72,11 @@ reduce mod = \case
     -- R-SChoiceDist
   T.AppSemi _ (T.AppLinChoice s p lts) u ->
     T.AppLinChoice s p (map (second \t -> T.AppSemi (getSpan t) t u) lts)
-    -- R-SQuantDist (as in the paper; we may have a simpler version if Quant is always followed by Abs)
+    -- R-SQuantDist (We may have a simpler version if Quant is always followed by Abs)
   T.AppSemi s1 (T.App s2 q@T.QuantS{} [f]) u ->
-    T.App s1 q [T.Abs s1 [(a,k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable a k]) u)]
+    T.App s1 q [T.Abs s1 [(a, k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable ObjLv a k]) u)]
     where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
-          (K.Arrow _ k _) = T.kindOf q
+          (K.Arrow _ (K.Arrow _ k _) _) = T.kindOf q
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
 
@@ -94,13 +93,10 @@ reduce mod = \case
   T.AppDual _ u@T.UnChoice{} -> T.dual u -- for *& and *+
     -- R-DChoice, lin
   T.AppDual s (T.AppLinChoice _ p lts) -> T.AppLinChoice s (T.dual p) (map (second $ T.AppDual s) lts)
-    -- R-DQuant - Requires the kind of the quantifier. Implementing the
-    -- particular case where the quantifier is followed by a lambda. This should
-    -- be enforced by the parser and kept as an invariant. Reading the kind from
-    -- the lambda.
-  T.AppDual s1 t@(T.AppQuantS s2 p a k t') ->
-    T.AppQuantS s1 (T.dual p) b k (T.AppDual s2 (subs a (T.fromVariable b k) t'))
-    where b = mkFreshVar s1 (freeVars t)
+    -- R-DQuant
+  T.AppDual s1 (T.App s2 (T.QuantS s3 (K.Arrow _ (K.Arrow _ k _) _) p) [f]) ->
+    T.AppQuantS s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable ObjLv a k]))
+    where a = mkFreshVar s1 (freeVars f)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
     T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)
@@ -141,27 +137,10 @@ normalise mod = norm Set.empty
         visited'  = maybe visited (`Set.insert` visited) u
         span = getSpan t
 
--- | This is not exactly redexµ(T) = µκF. We must look at applied TNames, for
--- these are the types that reappear.
+-- | The 𝜇-redex extraction. Partial function; hence the Maybe
 tNameRedex :: T.KindedType -> Maybe T.KindedType
 tNameRedex = \case
-  t@T.AppTName{}                               -> Just t -- µ∗F
-  (T.AppDual _ t@T.AppTName{})                 -> Just t -- Dual (µ∗F)
-  (T.AppSemi _ t _)               -> tNameRedex t -- T; U
-  -- (T.AppSemi _ t@T.AppTName{} _)               -> Just t -- (µ∗U) ; V
-  -- (T.AppSemi _ (T.AppDual _ t@T.AppTName{}) _) -> Just t -- (Dual (µ∗U)) ; V
-  _                                            -> Nothing
-
--- | Type application, the beta rule.
--- (λα1...αn. T) U1 ... Um -->β
---     T[U1/α1]...[Un/αn]                  if n = m
---     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
---     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
-betaRule :: T.KindedType -> [T.KindedType] -> T.KindedType
-betaRule (T.Abs s aks t) us
-  | n == m    = v
-  | m > n     = T.App s v (drop n us)
-  | otherwise = T.Abs s (drop m aks) v
-  where n = length aks
-        m = length us
-        v = subsAll (map fst aks) us t
+  t@T.AppTName{}               -> Just t -- µ∗F
+  (T.AppDual _ t@T.AppTName{}) -> Just t -- Dual (µ∗F)
+  (T.AppSemi _ t _)            -> tNameRedex t -- T; U
+  _                            -> Nothing

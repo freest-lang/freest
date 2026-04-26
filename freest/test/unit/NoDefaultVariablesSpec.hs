@@ -19,7 +19,7 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Only proper internal numbers for variables" 
   errorsAreFailures
-  \_ (t, _, m) -> noDefault t && noDefault (M.typeDecls m) && noDefault (M.dataDecls m) `shouldBe` True
+  \_ (t, _, m) -> noDefault t && noDefault (snd <$> M.typeDecls m) && noDefault (M.dataDecls m) `shouldBe` True
 
 class NoDefaultVariables a where
   noDefault :: a -> Bool

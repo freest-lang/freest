@@ -63,18 +63,18 @@ word' ctx = \case
   t@T.Float{} -> getNonterminal $ Map.singleton (show t) []
   t@T.Char{} -> getNonterminal $ Map.singleton (show t) []
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
-  -- W-Msg -- TODO: FIX
+  -- W-Msg _ TODO: We may need a special case for *?T and *!T
   T.AppMessage _ m p t -> do
     w <- word ctx t
     getNonterminal $ Map.fromList
-      [ (show m ++ show p, w ++ [bottom])
-      , ("1", [bottom | m == K.Un])
+      [ (show m ++ show p, [])
+      , ("1", w ++ [bottom])
       ]
   -- W-Seq
   T.AppSemi _ t u -> do
     liftM2 (++) (word ctx t) (word ctx u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
-  T.AppDual s (T.AppVar _ a _ ts) -> do
+  T.AppDual s (T.AppVar _ a _ _ ts) -> do
     words <- mapM (word ctx) ts
     getNonterminal $ Map.fromList $
       ("dual " ++ show a, []) :
@@ -82,13 +82,13 @@ word' ctx = \case
   -- *+{} and *&{}
   t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
-  t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppLinChoice t || T.isAppQuant t || T.isAppDName t)-> do -- TODO: restrict iota
+  t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppDName t || T.isAppLinChoice t || T.isAppQuant t)-> do
     words <- mapM (word ctx) vs
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
       zip (map show [1..]) words
   -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
-  t@(T.AppVar _ a _ us) | isProperType t -> do
+  t@(T.AppVar _ a _ _ us) | isProperType t -> do
     words <- mapM (word ctx) us
     getNonterminal $ Map.fromList $
       (show a, []) :
@@ -108,9 +108,8 @@ word' ctx = \case
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
-  -- If we get here, then t is of higher order kind or reduces, hopefully
+  -- W-Abs and W-τ
   t -> do
-    modl <- gets modl
     case T.kindOf t of
       K.Arrow _ k _ -> do
         -- W-Abs, F : k => k'
@@ -118,32 +117,21 @@ word' ctx = \case
         let (internalα, internalβ) = toInt k
         let αk = Variable s ('α' : show k) internalα
         let βk = Variable s ('β' : show k) internalβ
-        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable αk k]
-        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable βk k]
+        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable ObjLv αk k]
+        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable ObjLv βk k]
         getNonterminal $ Map.fromList
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)
           ]
       _ -> do
         -- W-τ, t reduces
+        modl <- gets modl
         word ctx (reduce modl t)
 
 isProperType :: T.KindedType -> Bool
 isProperType t = case T.kindOf t of
   K.Proper{} -> True
   otherwise -> False
--- isFullyApplied ctx = \case
---   T.Int{} -> True
---   T.Float{} -> True
---   T.AppArrow{} -> True
---   T.AppQuant{} -> True
---   T.AppQuantS{} -> True
---   T.AppLinChoice{} -> True
---   T.UnChoice{} -> True
---   T.AppDName{} -> True -- TODO: BUG, tname must be fully applied
---   T.Var _ k a -> K.depth k ==  0
---   T.AppVar _ a k ts -> K.depth k == length ts
---   _ -> False
 
 -- "⊥" - A nonterminal without transitions (up to us to keep the invariant)
 bottom :: Nonterminal
@@ -152,16 +140,7 @@ bottom = 0
 -- The negative integer associated with a kind
 toInt :: K.Kind -> (Int, Int)
 toInt k = (-n * 2, -n * 2 - 1)
-  where
-    n = toInt' k
-    toInt' (K.Proper _ K.Lin K.Top)     = 1
-    toInt' (K.Proper _ K.Un  K.Top)     = 2
-    toInt' (K.Proper _ K.Lin K.Session) = 3
-    toInt' (K.Proper _ K.Un  K.Session) = 4
-    toInt' (K.Proper _ K.Lin K.Channel) = 5
-    toInt' (K.Proper _ K.Un  K.Channel) = 6
-    toInt' (K.Arrow _ k1 k2) = pair (toInt' k1) (toInt' k2)
-    pair x y = (x + y) * (x + y + 1) `div` 2 + y
+  where n = fromEnum k
 
 -- The state of the translation to grammar procedure
 

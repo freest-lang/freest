@@ -65,7 +65,7 @@ instance Unparse K.Kind where
     K.Var _ τ       -> (maxRator, show τ)
 
 instance Unparse Variable where
-  fragment a = (maxRator, external a)
+  fragment a = (maxRator, external a ++ "#" ++ show (internal a))
   
 instance Unparse (T.Type x) where
   fragment = \case 
@@ -89,7 +89,7 @@ instance Unparse (T.Type x) where
     T.Void _ _ k -> (appRator, "Void @" ++ r)
       where
         r = bracket (fragment k) RightAssoc appRator
-    T.Var  _ _ a -> fragment a
+    T.Var  _ _ _ a -> fragment a
     T.Abs _ _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
     T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
       where
@@ -129,11 +129,11 @@ instance Unparse (T.Type x) where
       arrow = \case 
         K.Lin    -> "1->"
         K.Un     -> "->"
-        K.VarM φ -> external φ ++ "->"
+        K.VarM _ φ -> external φ ++ "->"
       multiplicity = \case
         K.Lin    -> ""
         K.Un     -> "*"
-        K.VarM φ -> external φ
+        K.VarM _ φ -> external φ
       polarity = \case
         T.In  -> "?"
         T.Out -> "!"

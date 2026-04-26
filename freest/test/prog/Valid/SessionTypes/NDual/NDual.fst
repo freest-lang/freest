@@ -15,7 +15,7 @@ rcvInt @a c = receive c
 main : Int
 main =
   let (w,r) = channel @(DD;Close) in
-  fork (\(_ : ()) 1-> w |> sendInt @Close |> close);
-  let (i, r) = rcvInt @Wait r in
+  fork (\(_ : ()) 1-> w |> sendInt |> close);
+  let (i, r) = rcvInt r in
   wait r;
   i

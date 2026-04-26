@@ -33,7 +33,7 @@ client c = c |> select Const
              |> select Mult
              |> select Add
              |> select EOS
-             |> receiveAndWait @Int
+             |> receiveAndWait
 
 {-|
   An easy consumer: counts the number of nodes in the stream.  Copes

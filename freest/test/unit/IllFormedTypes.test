@@ -30,18 +30,6 @@ where
   type Y : (*T -> *T) -> *T
   type Y f = (G f) (G f)
 
--- Polymorphic type recursion
-
-case PerfectTree : 1T -> 1S
-where
-  type PerfectTree : 1T -> 1S
-  type PerfectTree a = +{Leaf: !a, Node: PerfectTree (a, a)}
-
-case NestedTree : 1T -> 1S
-where
-  type NestedTree : 1T -> 1S
-  type NestedTree a = +{Leaf: !a, Node: NestedTree [a]}
-
 -- (Non) Channel types
 
 case T : 1C -> 1C
@@ -68,4 +56,117 @@ case
     ((\(f : *T -> *T) (x : *T -> *T) -> f (x x)) f) 
     ((\(f : *T -> *T) (x : *T -> *T) -> f (x x)) f)
 
-case \(x : *T) (x : *T) -> x -- should give "conflicting definitions"
+-- Polymorphic type recursion
+
+case PerfectTree : 1T -> 1S
+where
+  type PerfectTree : 1T -> 1S
+  type PerfectTree a = +{Leaf: !a, Node: PerfectTree (a, a)}
+
+case NestedTree : 1T -> 1S
+where
+  type NestedTree : 1T -> 1S
+  type NestedTree a = +{Leaf: !a, Node: NestedTree [a]}
+
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = A Int
+
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = A a ; A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = A b ; A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = B b ; A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = B Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B Char
+  type B b = A Int
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a ; A Int
+  type B b = B b
+
+case NestedTree : 1T -> 1S
+where
+  type NestedTree, A : 1T -> 1S
+  type NestedTree a = +{Leaf: !a, Node: A [a]}
+  type A b = NestedTree b
+
+case PerfectTree : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type PerfectTree : 1T -> 1S
+  type PerfectTree = Id (\(a : 1T) -> +{Leaf: !a, Node: PerfectTree (a, a)})
+
+case PerfectTree : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type PerfectTree : 1T -> 1S
+  type PerfectTree = \(a : 1T) -> +{Leaf: !a, Node: Id (PerfectTree (a, a))}
+
+case PerfectTree : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type PerfectTree : 1T -> 1S
+  type PerfectTree = Id (\(a : 1T) -> +{Leaf: !a, Node: Id (PerfectTree (a, a))})
+
+case PerfectTree : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type PerfectTree : 1T -> 1S
+  type PerfectTree a = +{Leaf: !a, Node: Id (\(a : 1T) -> PerfectTree a) (a, a)}
+
+case A : 1T -> 1S
+where
+  type Id : (1T -> 1S) -> 1T -> 1S
+  type Id a = a
+  type A : 1T -> 1S
+  type A a = Id (\(a : 1T) -> A a) (a, a)
+
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = (\(a : 1T) -> A a) (a, a)
+
+case A : 1T -> 1S -> 1S
+where
+  type A : 1T -> 1S -> 1S
+  type A a = (\(a : 1T) -> A a) (a, a)
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = +{Done: Skip, More: B a}
+  type B b = +{Done: Skip, More: B (b, b); A b}

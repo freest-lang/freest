@@ -43,19 +43,19 @@ mutual
       Leaf ->
         select LeafC c
       Node x l r ->
-        exploreNode @a (select NodeC c) x l r
+        exploreNode (select NodeC c) x l r
 
   exploreNode : forall (a : 1S). XploreNodeChan;a -> Int 1-> Tree 1-> Tree 1-> a
   exploreNode @a c x l r =
     case c of
       &Value c ->
-        exploreNode @a (send x c) x l r
+        exploreNode (send x c) x l r
       &Left c ->
-        let c = exploreTree @(XploreNodeChan ; a) c l in
-        exploreNode @a c x l r
+        let c = exploreTree c l in
+        exploreNode c x l r
       &Right c ->
-        let c = exploreTree @(XploreNodeChan ; a) c r in
-        exploreNode @a c x l r
+        let c = exploreTree c r in
+        exploreNode c x l r
       &Exit c ->
         c
 
@@ -66,7 +66,7 @@ mutual
   server @a c1 n =
     case c1 of
       &LeafC c1 -> (c1, n)
-      &NodeC c1 -> serverNode @a c1 n
+      &NodeC c1 -> serverNode c1 n
 
   serverNode : forall (a : 1S). Dual XploreNodeChan;a -> Int 1-> (a, Int)
   serverNode @a c n =
@@ -75,8 +75,8 @@ mutual
     then (select Exit c, 0)
     else
       let c = select Left c in
-      let (c, m) = server @(Dual XploreNodeChan ; a) c (m * n) in
-      let (c, k) = server @(Dual XploreNodeChan ; a) (select Right c) m in
+      let (c, m) = server c (m * n) in
+      let (c, k) = server (select Right c) m in
       (select Exit c, k)
 
 aTree : Tree
@@ -85,7 +85,7 @@ aTree = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf
 main : Int
 main =
   let (writer, reader) = channel @(XploreTreeChan;Close) in
-  fork @() (\(_:()) 1-> close (exploreTree @Close writer aTree));
-  let (reader, n) = server @Wait reader 1 in
+  fork (\(_:()) 1-> close (exploreTree writer aTree));
+  let (reader, n) = server reader 1 in
   wait reader;
   n

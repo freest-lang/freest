@@ -30,22 +30,22 @@ receiveEval : forall (a : 1S). (Dual TermChannel; a) -> (Int, a)
 receiveEval @a c =
   case c of
     &Const c ->
-      receive @Int @a c
+      receive c
     &Add c ->
-      let (n1, c) = receiveEval @(Dual TermChannel ; a) c in
-      let (n2, c) = receiveEval @a c in
+      let (n1, c) = receiveEval c in
+      let (n2, c) = receiveEval c in
       (n1 + n2, c)
     &Mult c ->
-      let (n1, c) = receiveEval @(Dual TermChannel ; a) c in
-      let (n2, c) = receiveEval @a c in
+      let (n1, c) = receiveEval c in
+      let (n2, c) = receiveEval c in
       (n1 * n2, c)
 
 -- Read an arithmetic expression from a channel; compute its value;
 -- return the value on the same channel.
 computeService : (Dual TermChannel; !Int; Close) -> ()
 computeService c =
-  let (n1, c1) = receiveEval @(!Int ; Close) c in
-  close (send @Int n1 @Close c1)
+  let (n1, c1) = receiveEval c in
+  close (send n1 c1)
 
 -- Compute 5 + (7 * 9); return the result
 client : (TermChannel; ?Int; Wait) -> Int
@@ -57,7 +57,7 @@ client c = c |> select Add
              |> send 7
              |> select Const
              |> send 9
-             |> receiveAndWait @Int 
+             |> receiveAndWait 
 
 main : Int
 main =

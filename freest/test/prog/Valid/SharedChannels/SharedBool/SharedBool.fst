@@ -3,10 +3,10 @@ module SharedBool where
 type Bool' : *C
 type Bool' = *+{False', True'}
 
-true' : Bool' -> Void@*T
+true' : Bool' -> Void @*T
 true' c = true' $ select True' c
 
-false' : Bool' -> Void@*T
+false' : Bool' -> Void @*T
 false' c = false' $ select False' c
 
 cond : forall (a : *T) . Dual Bool' -> a -> a -> a
@@ -21,5 +21,5 @@ main =
   let (fw, fr) = channel @Bool' in
   fork (\(_ : ()) 1-> true' tw);
   fork (\(_ : ()) 1-> false' fw);
-  cond @Int tr 1 2 + cond @Int fr 3 4
+  cond tr 1 2 + cond fr 3 4
   -- 1

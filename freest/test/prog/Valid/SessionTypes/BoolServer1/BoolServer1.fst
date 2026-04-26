@@ -28,7 +28,7 @@ client1 : BoolClient -> Bool
 client1 w = w |> select Or
               |> send True
               |> send False
-              |> receiveAndClose @Bool 
+              |> receiveAndClose 
 
 main : Bool
 main =

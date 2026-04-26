@@ -28,7 +28,7 @@ mutual
       Empty ->
         select Empty c
       Node i children ->
-        c |> select Node |> send i |> sendTreeList @a children
+        c |> select Node |> send i |> sendTreeList children
 
   sendTreeList : forall (a : 1S). TreeList -> TreeListChannel;a -> a
   sendTreeList @a list c =
@@ -36,7 +36,7 @@ mutual
       Nil ->
         select Nil c
       Cons tree rest ->
-        c |> select Cons |> sendTree @(TreeListChannel ; a) tree |> sendTreeList @a rest
+        c |> select Cons |> sendTree tree |> sendTreeList rest
 
 -- ===== RECEIVING =====
 
@@ -48,7 +48,7 @@ mutual
         (Empty, c)
       &Node c ->
         let (i, c)        = receive c in
-        let (children, c) = receiveTreeList @a c in
+        let (children, c) = receiveTreeList c in
         (Node i children, c)
 
   receiveTreeList : forall (a : 1S). Dual TreeListChannel;a -> (TreeList, a)
@@ -57,8 +57,8 @@ mutual
       &Nil c ->
         (Nil, c)
       &Cons c ->
-        let (tree, c) = receiveTree @(Dual TreeListChannel ; a) c in
-        let (rest, c) = receiveTreeList @a c in
+        let (tree, c) = receiveTree c in
+        let (rest, c) = receiveTreeList c in
         (Cons tree rest, c)
 
 -- ===== MAIN =====
@@ -83,12 +83,12 @@ aTree = Node 0 $ Cons (Node 1 $ Cons (Node 7 $ Cons (Node 13 Nil)
                  Nil
 
 clientSendTree : TreeChannel;Close -> ()
-clientSendTree c = c |> sendTree @Close aTree |> close
+clientSendTree c = c |> sendTree aTree |> close
 
 main : Tree
 main =
   let (client, server) = channel @(TreeChannel;Close) in
   fork (\(_ : ()) 1-> clientSendTree client);
-  let (t, server) = receiveTree @Wait server in
+  let (t, server) = receiveTree server in
   wait server;
   t

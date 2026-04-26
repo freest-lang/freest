@@ -531,12 +531,11 @@ where
 --   type CTree : 1T -> 1S
 --   type CTree a = +{Leaf: !a, Node: CTree (a, a)}
 
--- Is this poly rec? (translation does not hang)
-
-case !Int ; T Char Int == T Int Char : 1S
-where
-  type T : *T -> *T -> 1S
-  type T a b = ! a ; T b a
+-- TODO: invalid after HOTRec check. Remove completely?
+-- case !Int ; T Char Int == T Int Char : 1S
+-- where
+--  type T : *T -> *T -> 1S
+--  type T a b = ! a ; T b a
 
 -- As above, w/o poly record
 
@@ -682,14 +681,14 @@ case (\(a : 1S -> 1S) (b : 1S) -> a b) (\(a : 1S) -> a) (Tree Int)
    : 1S
 where
   type Tree : *T -> 1S
-  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+  type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
 
 case (\(a : 1S -> 1S) (b : 1S) -> a b) (\(a : 1S) -> a) (Tree Int)
   == Tree Int
    : 1S
 where
   type Tree : *T -> 1S
-  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+  type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
 
 case Succ Zero
   == \(s : *T -> *T) (z : *T) -> s z
@@ -758,5 +757,3 @@ where
   type FoldExpanded = ??(a:*T) . ?a ; FE
   type FE : 1S
   type FE = &{More: ??(b:1S) . ?(a -> b -> a) ; ?b, Done: !a ; Wait}
-  
-  

@@ -189,7 +189,7 @@ geneticAlg_ seed iterations pop =
     -- Compute fitness of the (hopefully) new fittest individual
     --let (fittest, _) = getFittestIndividual pop in
     -- Print information
-    --print @Int fittest;
+    --print fittest;
     -- Re-add the fittest individual |> Continue the algorithm (-1 iteration)
     geneticAlg_ seed (iterations - 1) (ConsPop fittest pop)
 
@@ -201,7 +201,7 @@ geneticAlg seed populationSize iterations =
   -- Get first fittest individual
   --let (fittest, _) = getFittestIndividual pop in
   -- Print out first individual
-  --print @Int fittest;
+  --print fittest;
   -- Apply the genetic algorithm
   let (_, pop) = geneticAlg_ seed iterations pop in
   -- Get the resulting population's fittest individual
@@ -237,7 +237,7 @@ foldIslands @a f x chs =
       (x, Nil ())
     Cons ch chss ->
       let (x, ch) = f x ch in
-      let (x, chss) = foldIslands @a f x chss in
+      let (x, chss) = foldIslands f x chss in
       (x, Cons ch chss)
 
 receiveFittestF :  Individual -> IslandChannel -> (Individual, IslandChannel)
@@ -247,14 +247,14 @@ receiveFittestF ind0 island =
 
 -- Compute the absolute fittest individual of all islands
 receiveFittest : ListIslandChannel -> (Individual, ListIslandChannel)
-receiveFittest = foldIslands @Individual receiveFittestF 0
+receiveFittest = foldIslands receiveFittestF 0
 
 sendFittestF :  Int -> IslandChannel -> (Int, IslandChannel)
 sendFittestF fittest island = (fittest, send fittest $ select Crossover island)
 
 -- Send an individual to every island to do another round of the GA
 sendFittest : Individual -> ListIslandChannel -> ListIslandChannel
-sendFittest fittest channels0 = snd @Individual @ListIslandChannel $ foldIslands @Int sendFittestF fittest channels0
+sendFittest fittest channels0 = snd $ foldIslands sendFittestF fittest channels0
 
 
 -- Auxiliary function that performs the getFittest-sendFittest loop
@@ -267,7 +267,7 @@ masterLoop channels nIterG =
     -- Get fittest from all
     let (fittest, channels) = receiveFittest channels in
     -- Print information
-    --print @Int fittest;
+    --print fittest;
     -- Send fittest to all
     let channels = sendFittest fittest channels in
     -- Continue iterating
@@ -376,6 +376,6 @@ main : ()
 main =
   let result = clientParallel in
   -- Print value
-  putStr "  Value: "; print @Int result;
+  putStr "  Value: "; print result;
   -- Print fitness
-  putStr "Fitness: "; print @Int $ fitnessAllOnes result
+  putStr "Fitness: "; print $ fitnessAllOnes result

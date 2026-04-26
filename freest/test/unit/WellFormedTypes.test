@@ -855,10 +855,11 @@ where
   type T : 1S
   type T = !T
 
-case Z : 1S -> 1S
-where
-  type Z : 1S -> 1S
-  type Z b = Z ?Char
+-- TODO: invalid after HOTRec check. Remove completely?
+-- case Z : 1S -> 1S
+-- where
+--  type Z : 1S -> 1S
+--  type Z b = Z ?Char
 
 case Z : 1S
 where
@@ -1258,10 +1259,11 @@ case (->) Wait : *T -> *T
 
 case (->) Int !Int : *T
 
-case A ((->) Int) : *T
-where
-  type A : (*T -> *T) -> *T
-  type A a = A ((->) Char)
+-- TODO: invalid after HOTRec check. Remove completely?
+-- case A ((->) Int) : *T
+-- where
+--   type A : (*T -> *T) -> *T
+--   type A a = A ((->) Char)
 
 -- Sections
 
@@ -1325,7 +1327,7 @@ case (\(a : 1S -> 1S) (b : 1S) -> a b)
        (Tree Int) : 1S
 where
   type Tree : *T -> 1S
-  type Tree = \(a : *T) -> +{Leaf: Skip, Node: !a ; Tree a ; !a}
+  type Tree a = +{Leaf: Skip, Node: !a ; Tree a ; !a}
 
 case \(a : 1C -> 1S) (b : 1C) -> a b : (1C -> 1S) -> 1C -> 1S
 
@@ -1384,6 +1386,19 @@ case Dual (!Int ; Close) : 1S
 
 case +{A: Skip, C: Close} ; Close : 1C
 
+-- Non contractive, mutually recursion
+
+case A : 1T -> 1S
+where
+  type A : 1T -> 1S
+  type A a = A a
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = B a
+  type B b = A b
+
 -- See issue #19
 -- case
 --   Id Wait : 1C
@@ -1414,3 +1429,9 @@ case +{A: Skip, C: Close} ; Close : 1C
 -- where
 --   type IFRepeatExpanded : 1S -> 1S -> 1C
 --   type IFRepeatExpanded a b = &{More: a ; IFRepeatExpanded a b, Done: b ; Wait}
+
+case A : 1T -> 1S
+where
+  type A, B : 1T -> 1S
+  type A a = +{Done: Skip, More: B a}
+  type B b = +{Done: Skip, More: B b; A b}

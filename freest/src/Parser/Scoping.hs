@@ -9,7 +9,7 @@ This consists mainly of renaming the variables internally according to their
 scope (which, in turn, requires grouping function equations, detecting 
 duplicate variable declarations, etc.).
 -}
-{-# LANGUAGE TypeApplications #-}
+
 module Parser.Scoping
   (ScopingCtx
   ,emptyScopingCtx
@@ -20,6 +20,7 @@ module Parser.Scoping
   ,scopeExp
   ,scopeType
   ,scopeKind
+  ,freshInternal
   )
 where
 
@@ -278,10 +279,10 @@ scopeTypeDecls :: ScopingCtx -> M.TypeDecls Parsed
                -> Validation (ScopingCtx, M.TypeDecls Scoped)
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
   where
-    scopeTypeDecl (ctx', tds') (ti, t) = do
+    scopeTypeDecl (ctx', tds') (ti, (n, t)) = do
       unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
       t'  <- scopeType ctx' t
-      return (ctx', Map.insert ti t' tds')
+      return (ctx', Map.insert ti (n, t') tds')
 
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
 -- context. Besides scoping the variables, this procedure also groups function
@@ -575,8 +576,8 @@ scopeKind = \case
 -- | Scope a multiplicity.
 scopeMultiplicity :: K.Multiplicity -> Validation K.Multiplicity
 scopeMultiplicity = \case
-  K.VarM φ -> do
+  K.VarM vl φ -> do
     φ' <- freshInternal φ
-    return $ K.VarM φ'{external = "φ" ++ show (internal φ')}
+    return $ K.VarM vl φ'{external = "φ" ++ show (internal φ')}
   m -> pure m
 

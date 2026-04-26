@@ -17,6 +17,7 @@ default-extensions:
   - LambdaCase
   - MultiWayIf
   - NamedFieldPuns
+  - OverloadedRecordDot
   - PatternSynonyms
   - ScopedTypeVariables
   - TupleSections
@@ -67,6 +68,7 @@ library:
     - Utils
     - Validation.Base
     - Validation.Expose
+    - Validation.HOTRecursion
     - Validation.Kinding
     - Validation.Normalisation
     - Validation.Substitution

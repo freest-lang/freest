@@ -21,7 +21,7 @@ pair : forall (a b : *T). a -> b -> Pair a b
 pair @a @b x y = \@(c : *T) (z : a -> b -> c) -> z x y
 
 intBoolPair : Int -> Bool -> Pair Int Bool
-intBoolPair = pair  @Int @Bool
+intBoolPair = pair  @Int @Bool -- CANNOT INFER
 
 main : Char
 main = snd'  @Int @Char $
