@@ -21,6 +21,7 @@ TODO:
 
 import Data.List (find, groupBy)
 import Data.Set qualified as Set
+import Data.Map (empty, singleton, union, unions, lookup)
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
 -- for debuging don't forget to remove
@@ -28,7 +29,7 @@ import Debug.Trace
 -- ends here
 
 import Interpreter.PatternMatching (compileFunctionToClosure, resolvePatternMatching)
-import Interpreter.Values (Binding, Env, Value(..), chan, send, builtins, fstToHsBool)
+import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
@@ -51,7 +52,7 @@ chooseGuard env ((guard, exp):guards) = do
   if fstToHsBool val then return exp else chooseGuard env guards
 
 -- | Choose the correct alternative, matching it against an argument via pattern matching
-chooseCase :: [Alternative] -> Value -> Maybe (Alternative, [Binding])
+chooseCase :: [Alternative] -> Value -> Maybe (Alternative, Env)
 chooseCase [] _ = Nothing
 chooseCase ((pat, rhs) : alternatives) val =
   -- try to match pattern and argument through pattern matching
@@ -70,32 +71,32 @@ extractFromRHS (global, local) rhs = do
       return (exp, whereDecls)
 
 -- | Collect bindings from variables to values from declarations
-collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO [Binding]
-collectLetDecls _ [] = return []
+collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
+collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
   -- extract expression and where declarations from either guarded or unguarded rhs
   (exp, whereDecls) <- extractFromRHS (global, local) rhs
   -- get bindings from where declaration
   whereBindings <- case whereDecls of
     Just whereDecls' -> collectLetDecls (global, local) whereDecls'
-    Nothing -> return []
+    Nothing -> return empty
   -- evaluate expression
-  val <- eval (global, whereBindings ++ local) exp
+  val <- eval (global, whereBindings `union` local) exp
   -- resolve pattern matching to match variables from pattern to the value from rhs
   let patternMatchRes = resolvePatternMatching pat val
   bindings <- case patternMatchRes of
     Left _ -> error "Pattern matching failed!"
     Right bindings -> return bindings
   -- collect the rest of the let declarations, inserting into the environment the bindings obtained from the first expression
-  remainingBindings <- collectLetDecls (global, bindings ++ local) letdecls
-  return $ bindings ++ remainingBindings
+  remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
+  return $ bindings `union` remainingBindings
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
   -- remove type arguments from clauses
   let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
   -- create binding for function
-  let binding = (var, compileFunctionToClosure clauses')
-  remainingBindings <- collectLetDecls (global, binding : local) letdecls
-  return $ binding : remainingBindings
+  let binding = singleton var (compileFunctionToClosure clauses')
+  remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
+  return $ binding `union` remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
@@ -104,7 +105,7 @@ getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var ==
 
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env
-buildEnv m = collectLetDecls (builtins,[]) letDecls
+buildEnv m = collectLetDecls (builtins, empty) letDecls
   -- obtain all let declarations from the module except the main function
   where letDecls = filter (\case
           E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
@@ -117,15 +118,16 @@ envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 envLookup (global, local) var =
   -- search in local context first
   case envLookup' local var of
-    Just (_, val) -> val
+    Just val -> val
     -- search in global context after
     Nothing -> case envLookup' global var of
-      Just (_, val) -> val
+      Just val -> val
       Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
                        " This should not happen. This is a bug in the compiler")
   where
-    envLookup' :: Env -> B.Variable -> Maybe Binding
-    envLookup' ctx var = find (\(variable, value) -> var == variable) ctx
+    envLookup' :: Env -> B.Variable -> Maybe Value
+    envLookup' ctx var = Data.Map.lookup var ctx
+    -- envLookup' ctx var = find (\(variable, value) -> var == variable) ctx
 
 -- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
@@ -145,7 +147,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
           Left _ -> error "Pattern matching failed!"
           Right bindings ->
             -- create a new closure with the remaining parameters
-            return $ VClosure (drop (numParams - numArgs) pats) body $ concat bindings ++ env
+            return $ VClosure (drop (numParams - numArgs) pats) body $ unions bindings `union` env
 
   -- if numParams <= numArgs, evaluate app, return app against remaining arguments
   else do
@@ -155,7 +157,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
           Left _ -> error "Pattern matching failed!"
           Right bindings -> do
             -- evaluate application of closure against arguments
-            func <- eval (global, concat bindings ++ env) body
+            func <- eval (global, unions bindings `union` env) body
             -- the number of arguments is the same as parameters, return result of evaluation
             if numArgs == numParams then
               return func
@@ -217,7 +219,7 @@ eval (global, local) (E.Let _ decls exp) = do
   -- remove type signature declarations
   let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
   letBindings <- collectLetDecls (global, local) expDecls
-  eval (global, letBindings ++ local) exp
+  eval (global, letBindings `union` local) exp
 eval (global, local) (E.Semi span exp1 exp2) =
   eval (global, local) exp1 >> eval (global, local) exp2
 eval (global, local) (E.Case _ exp alternatives) = do
@@ -226,12 +228,12 @@ eval (global, local) (E.Case _ exp alternatives) = do
     Nothing -> error "Non-exaustive patterns in case alternatives"
     Just (alternative, bindings) -> do
       -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp', whereDecls) <- extractFromRHS (global, bindings ++ local) (snd alternative)
+      (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
       -- get bindings from where declaration
       whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (global, bindings ++ local) whereDecls'
-        Nothing -> return []
-      eval (global, whereBindings ++ bindings ++ local) exp'      
+        Just whereDecls' -> collectLetDecls (global, bindings `union` local) whereDecls'
+        Nothing -> return empty
+      eval (global, whereBindings `union` bindings `union` local) exp'      
   {- do
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
   case chooseCase pats val labels of
@@ -263,12 +265,12 @@ interpret m = do
     -- main function of the form main = <exp>
     Just (E.ValDef pat rhs) -> do
       -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp, whereDecls) <- extractFromRHS (initial_env ++ builtins, []) rhs
+      (exp, whereDecls) <- extractFromRHS (initial_env `union` builtins, empty) rhs
       -- get bindings from where declaration
       whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (initial_env ++ builtins, []) whereDecls'
-        Nothing -> return []
-      eval (initial_env ++ builtins, whereBindings) exp
+        Just whereDecls' -> collectLetDecls (initial_env `union` builtins, empty) whereDecls'
+        Nothing -> return empty
+      eval (initial_env `union` builtins, whereBindings) exp
     -- if main function is not present, return unit
     Nothing -> do return VUnit
 

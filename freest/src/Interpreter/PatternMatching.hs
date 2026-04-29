@@ -20,8 +20,9 @@ import Control.Monad (zipWithM)
 import Data.Function (on)
 import Data.List (groupBy)
 import qualified Data.Set as Set
+import Data.Map (empty, singleton, unions, insert)
 
-import Interpreter.Values (Value(VInt, VFloat, VChar, VCons, VClosure), Binding)
+import Interpreter.Values (Value(VInt, VFloat, VChar, VCons, VClosure), Env)
 import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
 import Syntax.Base (nullSpan)
@@ -30,21 +31,21 @@ import Syntax.Base (nullSpan)
 -- HANDLING PATTERN MATCHING
 
 -- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
-resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) [Binding]
+resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) Env
 resolvePatternMatching (E.IntPat s i) val =
   case val of
-    VInt i' -> if i == i' then Right [] else Left (E.IntPat s i, val)
+    VInt i' -> if i == i' then Right empty else Left (E.IntPat s i, val)
     otherVal -> Left (E.IntPat s i, otherVal)
 resolvePatternMatching (E.FloatPat s f) val =
   case val of
-    VFloat f' -> if f == f' then Right [] else Left (E.FloatPat s f, val)
+    VFloat f' -> if f == f' then Right empty else Left (E.FloatPat s f, val)
     otherVal -> Left (E.FloatPat s f, otherVal)
 resolvePatternMatching (E.CharPat s c) val =
   case val of
-    VChar c' -> if c == c' then Right [] else Left (E.CharPat s c, val)
+    VChar c' -> if c == c' then Right empty else Left (E.CharPat s c, val)
     otherVal -> Left (E.CharPat s c, otherVal)
-resolvePatternMatching (E.WildPat _ _) _ = Right []
-resolvePatternMatching (E.VarPat _ var) val = Right [(var, val)]
+resolvePatternMatching (E.WildPat _ _) _ = Right empty
+resolvePatternMatching (E.VarPat _ var) val = Right $ singleton var val
 resolvePatternMatching (E.PackPat _ vars pat) val = undefined
 resolvePatternMatching (E.DConsPat s iden pats) val = do
   let (B.Identifier s' patIden) = iden
@@ -57,7 +58,7 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
         let binding = zipWithM resolvePatternMatching pats vals'
         case binding of
           Left _ -> Left (E.DConsPat s iden pats, val)
-          Right bindings -> Right $ concat bindings
+          Right bindings -> Right $ unions bindings
       else Left (E.DConsPat s iden pats, val)
     {- VChan (c1, c2) -> do
       if patIden == "(,)" then do
@@ -73,7 +74,7 @@ resolvePatternMatching (E.AsPat s var pat) val = do
   let binding = resolvePatternMatching pat val
   case binding of
     Left _ -> Left (E.AsPat s var pat, val)
-    Right bindings -> Right $ (var, val) : bindings
+    Right bindings -> Right $ insert var val  bindings
 
 -- COMPILATION OF FUNCTIONS WITH PATTERN MATCHING
 
@@ -96,7 +97,7 @@ compileFunctionToClosure clauses = do
       -- generate case expressions to serve as body of the closure
       body = flatNaiveClauseCompilation params clauses
   -- attach closures
-  VClosure [E.VarPat B.nullSpan param | param <- params] body []
+  VClosure [E.VarPat B.nullSpan param | param <- params] body empty
 
 -- simple, naive compilation of clauses into cases by adding a single case expression that checks pattern matching for all parameters
 flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.KindedExp
