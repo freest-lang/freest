@@ -12,10 +12,9 @@ module Interpreter.Interpreter
 
 {-
 TODO:
-- Improve treatment of functions: generate fresh variables for the closures taking into account free variables in subterms
-- Change the environment from an association list to a map
 - How to handle Prelude definitions that come as undefined? Do I need to filter them, or attach builtins to each declaration from the Prelude?
 - Missing evaluation for E.Pack, E.Case (what about labels?), SendType, ReceiveType
+- About SendType and ReceiveType, do we need to define sending and receiving operations?
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -70,7 +69,7 @@ extractFromRHS (global, local) rhs = do
       exp <- chooseGuard (global, local) guards
       return (exp, whereDecls)
 
--- | Collect bindings from variables to values from declarations
+-- | Collect bindings, of variables to values, from declarations
 collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
@@ -117,17 +116,13 @@ envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
 envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 envLookup (global, local) var =
   -- search in local context first
-  case envLookup' local var of
+  case Data.Map.lookup var local of
     Just val -> val
     -- search in global context after
-    Nothing -> case envLookup' global var of
+    Nothing -> case Data.Map.lookup var global of
       Just val -> val
       Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
                        " This should not happen. This is a bug in the compiler")
-  where
-    envLookup' :: Env -> B.Variable -> Maybe Value
-    envLookup' ctx var = Data.Map.lookup var ctx
-    -- envLookup' ctx var = find (\(variable, value) -> var == variable) ctx
 
 -- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
