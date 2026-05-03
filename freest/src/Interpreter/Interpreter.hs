@@ -12,7 +12,8 @@ module Interpreter.Interpreter
 
 {-
 TODO:
-- How to handle Prelude definitions that come as undefined? Do I need to filter them, or attach builtins to each declaration from the Prelude?
+- Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
+- Handling of undefined is correct?
 - Missing evaluation for E.Pack, E.Case (what about labels?), SendType, ReceiveType
 - About SendType and ReceiveType, do we need to define sending and receiving operations?
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
@@ -21,6 +22,7 @@ TODO:
 import Data.List (find, groupBy)
 import Data.Set qualified as Set
 import Data.Map (empty, singleton, union, unions, lookup)
+import Data.Maybe (isJust)
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
 -- for debuging don't forget to remove
@@ -28,12 +30,13 @@ import Debug.Trace
 -- ends here
 
 import Interpreter.PatternMatching (compileFunctionToClosure, resolvePatternMatching)
-import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool)
+import Interpreter.Values (Env, Value(..), isVUndefined, chan, send, builtins, fstToHsBool)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
 
 import Syntax.Expression ( KindedLetDecl )
+import qualified Syntax.Module as N
 
 type GlobalEnv = Env
 type LocalEnv = Env
@@ -72,30 +75,58 @@ extractFromRHS (global, local) rhs = do
 -- | Collect bindings, of variables to values, from declarations
 collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
-collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls) = do
-  -- extract expression and where declarations from either guarded or unguarded rhs
-  (exp, whereDecls) <- extractFromRHS (global, local) rhs
-  -- get bindings from where declaration
-  whereBindings <- case whereDecls of
-    Just whereDecls' -> collectLetDecls (global, local) whereDecls'
-    Nothing -> return empty
-  -- evaluate expression
-  val <- eval (global, whereBindings `union` local) exp
-  -- resolve pattern matching to match variables from pattern to the value from rhs
-  let patternMatchRes = resolvePatternMatching pat val
-  bindings <- case patternMatchRes of
-    Left _ -> error "Pattern matching failed!"
-    Right bindings -> return bindings
-  -- collect the rest of the let declarations, inserting into the environment the bindings obtained from the first expression
-  remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
-  return $ bindings `union` remainingBindings
-collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls) = do
-  -- remove type arguments from clauses
-  let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
-  -- create binding for function
-  let binding = singleton var (compileFunctionToClosure clauses')
-  remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
-  return $ binding `union` remainingBindings
+collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
+  -- bind builtin value declaration to corresponding value in Values.builtins
+  -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
+  | isVarPat pat && isJust (Data.Map.lookup (B.external $ getVarPat pat) builtins) = do
+    let var = getVarPat pat
+    let (Just value) = Data.Map.lookup (B.external var) builtins
+    let binding = singleton var value
+    remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
+    return $ binding `union` remainingBindings
+  | otherwise = do
+    -- extract expression and where declarations from either guarded or unguarded rhs
+    (exp, whereDecls) <- extractFromRHS (global, local) rhs
+    -- get bindings from where declaration
+    whereBindings <- case whereDecls of
+      Just whereDecls' -> collectLetDecls (global, local) whereDecls'
+      Nothing -> return empty
+    -- evaluate expression
+    val <- eval (global, whereBindings `union` local) exp
+    -- resolve pattern matching to match variables from pattern to the value from rhs
+    let patternMatchRes = resolvePatternMatching pat val
+    bindings <- case patternMatchRes of
+      Left _ -> error "Pattern matching failed!"
+      Right bindings -> return bindings
+    -- collect the rest of the let declarations, inserting into the environment the bindings obtained from the first expression
+    remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
+    return $ bindings `union` remainingBindings
+  where
+    isVarPat :: E.Pat -> Bool
+    isVarPat (E.VarPat _ var) = True
+    isVarPat _                = False
+    getVarPat :: E.Pat -> B.Variable
+    getVarPat (E.VarPat _ var) = var
+collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
+  -- bind function declaration for undefined (in Prelude) to value VUndefined
+  | var.external == "undefined" = do
+    let binding = singleton var VUndefined
+    remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
+    return $ binding `union` remainingBindings
+  -- bind builtin function declaration to corresponding value in Values.builtins
+  -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
+  | isJust $ Data.Map.lookup var.external builtins = do
+    let (Just value) = Data.Map.lookup var.external builtins
+    let binding = singleton var value
+    remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
+    return $ binding `union` remainingBindings
+  | otherwise = do
+    -- remove type arguments from clauses
+    let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
+    -- create binding for function
+    let binding = singleton var (compileFunctionToClosure clauses')
+    remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
+    return $ binding `union` remainingBindings
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
@@ -104,8 +135,8 @@ getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var ==
 
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env
-buildEnv m = collectLetDecls (builtins, empty) letDecls
-  -- obtain all let declarations from the module except the main function
+buildEnv m = collectLetDecls (empty, empty) letDecls
+  -- obtain all let declarations from the module except the main function and those related to kinds / types
   where letDecls = filter (\case
           E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
           E.TypeSig _ _ -> False
@@ -176,6 +207,8 @@ handleApplication _ (VSelect label) args =
       return $ VChan chan2
     -- otherwise
     _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
+handleApplication _ VUndefined _ =
+  error "Exception: Prelude.undefined"
 
 -- MAIN FUNCTIONS
 
@@ -198,9 +231,13 @@ eval (global, local) (E.App _ exp args) = do
   func <- eval (global, local) exp
   -- remove type arguments, as these are not useful during reduction
   let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
-  -- evaluate arguments
-  evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
-  handleApplication (global, local) func evalArgs
+  -- handle undefined
+  if null expArgs && isVUndefined func
+  then return VUndefined
+  else do
+    -- evaluate arguments
+    evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
+    handleApplication (global, local) func evalArgs
 eval (_, local) (E.Abs _ params _ body) =
   -- remove type parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
@@ -255,17 +292,17 @@ eval (global, local) (E.ReceiveType span) =
 interpret :: M.KindedModule -> IO Value
 interpret m = do
   -- collect module declarations, forming the initial environment
-  initial_env <- buildEnv m
+  m_env <- buildEnv m
   case getMainFunction m of
     -- main function of the form main = <exp>
     Just (E.ValDef pat rhs) -> do
       -- extract expression and where declarations from either guarded or unguarded rhs
-      (exp, whereDecls) <- extractFromRHS (initial_env `union` builtins, empty) rhs
+      (exp, whereDecls) <- extractFromRHS (m_env, empty) rhs
       -- get bindings from where declaration
       whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (initial_env `union` builtins, empty) whereDecls'
+        Just whereDecls' -> collectLetDecls (m_env, empty) whereDecls'
         Nothing -> return empty
-      eval (initial_env `union` builtins, whereBindings) exp
+      eval (m_env, whereBindings) exp
     -- if main function is not present, return unit
     Nothing -> do return VUnit
 
