@@ -27,7 +27,7 @@ import Data.Map qualified as Map
 import Options.Applicative
 import System.Exit ( exitFailure, exitSuccess )
 
-import Interpreter.Interpreter as I
+import Interpreter.Eval (interpret)
 
 -- | The entry point of the FreeST compiler. Parses the command line options
 -- and passes them to the compiler pipeline.
@@ -73,7 +73,11 @@ freest RunOpts{file=programPath, noImplicitPrelude} = do
         runValidation emptyValidationState do
           scopeModule emptyScopingCtx finalModule >>= kindModule >>= typeModule
     of Left es -> printErrors src es >> exitFailure
-       Right m -> exitSuccess
+       Right m -> do
+        putStrLn "[Validation passed]"
+        res <- interpret $ fst m
+        print res
+        exitSuccess
 
 -- | The path to the source code of the Prelude.
 preludePath :: FilePath

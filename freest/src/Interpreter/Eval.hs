@@ -5,7 +5,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements FreeST's interpreter.
 -}
-module Interpreter.Interpreter
+module Interpreter.Eval
   (
     interpret
   ) where
