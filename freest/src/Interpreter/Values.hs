@@ -9,7 +9,6 @@ module Interpreter.Values
   (
     Env,
     Value(..),
-    isVUndefined,
     showTups,
     chan,
     receive,
@@ -51,11 +50,6 @@ data Value
   | VFork
   | VChan ChannelEnd
   | VSelect String
-  | VUndefined
-
-isVUndefined :: Value -> Bool
-isVUndefined VUndefined = True
-isVUndefined _ = False
 
 instance Show Value where
   show VUnit = "()"
@@ -71,7 +65,6 @@ instance Show Value where
   show (VLabel str) = "<label> string"
   show (VChan _) = "<chan>"
   show (VSelect _) = "<select>"
-  show VUndefined = "<undefined>"
 
 showTups :: [Value] -> String
 showTups [val] = show val
@@ -111,8 +104,11 @@ close (VChan c) = do
 
 builtins :: Map.Map String Value
 builtins = Map.fromList 
-  [ -- communication primitives
-    ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
+  [
+  -- undefined
+    ("undefined",    VBuiltin undefined)
+  -- communication primitives
+  , ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
   , ("send",          VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c)))
   , ("wait",          VBuiltin wait)
   , ("close",         VBuiltin (VIO . close))

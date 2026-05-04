@@ -30,7 +30,7 @@ import Debug.Trace
 -- ends here
 
 import Interpreter.PatternMatching (compileFunctionToClosure, resolvePatternMatching)
-import Interpreter.Values (Env, Value(..), isVUndefined, chan, send, builtins, fstToHsBool)
+import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
@@ -108,11 +108,6 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
     getVarPat :: E.Pat -> B.Variable
     getVarPat (E.VarPat _ var) = var
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
-  -- bind function declaration for undefined (in Prelude) to value VUndefined
-  | var.external == "undefined" = do
-    let binding = singleton var VUndefined
-    remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
-    return $ binding `union` remainingBindings
   -- bind builtin function declaration to corresponding value in Values.builtins
   -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
   | isJust $ Data.Map.lookup var.external builtins = do
@@ -207,8 +202,6 @@ handleApplication _ (VSelect label) args =
       return $ VChan chan2
     -- otherwise
     _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
-handleApplication _ VUndefined _ =
-  error "Exception: Prelude.undefined"
 
 -- MAIN FUNCTIONS
 
@@ -232,12 +225,9 @@ eval (global, local) (E.App _ exp args) = do
   -- remove type arguments, as these are not useful during reduction
   let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
   -- handle undefined
-  if null expArgs && isVUndefined func
-  then return VUndefined
-  else do
-    -- evaluate arguments
-    evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
-    handleApplication (global, local) func evalArgs
+  -- evaluate arguments
+  evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
+  handleApplication (global, local) func evalArgs
 eval (_, local) (E.Abs _ params _ body) =
   -- remove type parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
