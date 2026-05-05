@@ -70,6 +70,16 @@ showTups :: [Value] -> String
 showTups [val] = show val
 showTups (val:vals) = show val ++ " (-1), " ++ showTups vals
 
+-- | Convert Haskell's True and False into FreeST's value representation
+hsToFstBool :: Bool -> Value
+hsToFstBool True = VCons "True" []
+hsToFstBool False = VCons "False" []
+
+-- | Extract True and False from FreeST's value representation
+fstToHsBool :: Value -> Bool
+fstToHsBool (VCons "True" []) = True
+fstToHsBool (VCons "False" []) = False
+
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
 chan :: IO (ChannelEnd, ChannelEnd)
@@ -224,13 +234,3 @@ builtins = Map.fromList
   , ("isEOF",         VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hIsEOF handle <&> hsToFstBool))
   , ("closeFile",     VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hClose handle $> VUnit)) -}
   ]
-
--- | Convert Haskell's True and False into FreeST's value representation
-hsToFstBool :: Bool -> Value
-hsToFstBool True = VCons "True" []
-hsToFstBool False = VCons "False" []
-
--- | Extract True and False from FreeST's value representation 
-fstToHsBool :: Value -> Bool
-fstToHsBool (VCons "True" []) = True
-fstToHsBool (VCons "False" []) = False

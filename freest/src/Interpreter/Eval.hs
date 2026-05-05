@@ -22,7 +22,7 @@ TODO:
 import Data.List (find, groupBy)
 import Data.Set qualified as Set
 import Data.Map (empty, singleton, union, unions, lookup)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromJust)
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
 -- for debuging don't forget to remove
@@ -72,16 +72,24 @@ extractFromRHS (global, local) rhs = do
       exp <- chooseGuard (global, local) guards
       return (exp, whereDecls)
 
+-- | Check if a let decl in a module is actually a builtin
+getBuiltinDecl :: KindedLetDecl -> Maybe Env
+getBuiltinDecl (E.ValDef (E.VarPat _ var) _) = do
+  value <- Data.Map.lookup (B.external var) builtins
+  return $ singleton var value
+getBuiltinDecl (E.FnDef var _) = do
+  value <- Data.Map.lookup (B.external var) builtins
+  return $ singleton var value
+getBuiltinDecl _ = Nothing
+
 -- | Collect bindings, of variables to values, from declarations
 collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
   -- bind builtin value declaration to corresponding value in Values.builtins
   -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
-  | isVarPat pat && isJust (Data.Map.lookup (B.external $ getVarPat pat) builtins) = do
-    let var = getVarPat pat
-    let (Just value) = Data.Map.lookup (B.external var) builtins
-    let binding = singleton var value
+  | isJust builtInBinding' = do
+    let binding = fromJust builtInBinding'
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
@@ -102,17 +110,12 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
     remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
     return $ bindings `union` remainingBindings
   where
-    isVarPat :: E.Pat -> Bool
-    isVarPat (E.VarPat _ var) = True
-    isVarPat _                = False
-    getVarPat :: E.Pat -> B.Variable
-    getVarPat (E.VarPat _ var) = var
+    builtInBinding' = getBuiltinDecl (E.ValDef pat rhs)
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
   -- bind builtin function declaration to corresponding value in Values.builtins
   -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
-  | isJust $ Data.Map.lookup var.external builtins = do
-    let (Just value) = Data.Map.lookup var.external builtins
-    let binding = singleton var value
+  | isJust builtInBinding' = do
+    let binding = fromJust builtInBinding'
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
@@ -122,6 +125,8 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     let binding = singleton var (compileFunctionToClosure clauses')
     remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
     return $ binding `union` remainingBindings
+  where
+    builtInBinding' = getBuiltinDecl (E.FnDef var clauses)
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
