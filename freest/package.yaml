@@ -54,6 +54,7 @@ library:
     - Parser.Parser
     - Parser.Scoping
     - Parser.Unparser
+    - Parser.Lexer  # for FreeSTi
     - Paths_freest
     - Syntax.Base
     - Syntax.Expression
@@ -63,6 +64,7 @@ library:
     - Syntax.Type.Internal
     - Syntax.Type.Unkinded
     - Syntax.Type.Kinded
+    - Syntax.Command  # for FreeSTi
     - UI.CLI
     - UI.Error
     - Utils

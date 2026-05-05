@@ -5,6 +5,7 @@ Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 This module implements a layout-sensitive parser for FreeST.
+If further includes support for parsing FreeSTi commands and test cases.
 -}
 module Parser.Parser where
 
@@ -19,19 +20,24 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Unkinded qualified as T 
 import Syntax.Module qualified as M
 import UI.Error
+-- FreeSTi
+import Syntax.Command
 
 import Control.Monad.Except
 import Data.Bifunctor
 import Data.Function ( on )
 import Data.List ( sortBy )
-import Data.List.NonEmpty qualified as NE
+-- import Data.List.NonEmpty qualified as NE
 }
 
-%name parseExp Exp
-%name parseType Type
-%name parseTypePrimaryListWS TypePrimaryListWS
-%name parseModuleDecl ModuleDecl
+-- Parser entry points for FreeST modules
 %name parseModule Module
+-- Parser entry points for FreeSTi commands
+%name parseCommand Command
+%name parseType Type
+%name parseTwoTypes TwoTypes
+%name parseTypes TypePrimaryListWS
+-- Parser entry points for test cases
 %name parseEquivalenceTests EquivalenceTestCases
 %name parseKindingTests KindingTestCases
 
@@ -198,7 +204,7 @@ TypeDecl :: { M.ParsedModule -> M.ParsedModule }
 KindSig :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
 
-LetDecl
+LetDecl :: { E.ParsedLetDecl }
   : Pat RHS('=') { E.ValDef $1 $2 }
   | FnDef { $1 }
   | TypeSig { $1 }
@@ -585,6 +591,32 @@ Close
   : CLOSE { () }
   | error {% popLayout }
 
+-- Parsing FreeSTi commands
+
+Command :: { Command }
+  : OPEN Type PIPE Close {Type $2}
+  | OPEN CmdDeclListPIPE Close { Decls $2 }
+
+CmdDeclListPIPE :: { M.ParsedModule }
+  : CmdDecl PIPE CmdDeclListPIPE { $1 $3 }
+  | CmdDecl { $1 M.emptyParsedModule }
+  | {- empty -} { M.emptyParsedModule }
+
+CmdDecl :: { M.ParsedModule -> M.ParsedModule }
+  : DataDecl { $1 }
+  | TypeDecl { $1 }
+
+TwoTypes :: { (T.ParsedType, T.ParsedType) }
+  : TypePrimary TypePrimary { ($1, $2) }
+
+-- Parsing test cases
+
+EquivalenceTestCases :: { [((T.ParsedType, T.ParsedType, K.Kind), M.ParsedModule)] }
+  : TypeTestCases(EquivalenceTest) { $1 }
+
+KindingTestCases :: {[((T.ParsedType, Maybe K.Kind), M.ParsedModule)]}
+  : TypeTestCases(KindingTest) {$1}
+
 TypeTestCases(t)
   : TypeTestCase(t) TypeTestCases(t) { $1 : $2 }
   | {- empty -}    { [] }
@@ -592,12 +624,6 @@ TypeTestCases(t)
 TypeTestCase(t)
   : 'case' t 'where' TypeTestBlock { ($2, $4) }
   | 'case' t { ($2, M.emptyParsedModule) }
-
-EquivalenceTestCases :: { [((T.ParsedType, T.ParsedType, K.Kind), M.ParsedModule)] }
-  : TypeTestCases(EquivalenceTest) { $1 }
-
-KindingTestCases :: {[((T.ParsedType, Maybe K.Kind), M.ParsedModule)]}
-  : TypeTestCases(KindingTest) {$1}
 
 EquivalenceTest :: { (T.ParsedType, T.ParsedType, K.Kind) }
   : Type CMP Type ':' Kind { ($1, $3, $5) }

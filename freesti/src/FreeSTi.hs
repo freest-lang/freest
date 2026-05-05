@@ -1,28 +1,45 @@
-module FreeSTi (main) where
+module FreeSTi ( main ) where
 
-import Parser.Lexer (layoutSC)
-import Parser.LexerUtils (runLexer, pushStartCode)
-import Parser.Parser (parseType, parseTwoTypes, parseTypes, parseCommand)
-import Parser.Scoping 
-  ( ScopingCtx, emptyScopingCtx, scopeType, freshInternal, insertTId, insertDId)
-import Parser.Unparser (unparse)
+import Parser.Lexer ( layoutSC )
+import Parser.LexerUtils ( runLexer, pushStartCode )
+import Parser.Parser ( parseType, parseTwoTypes, parseTypes, parseCommand )
+import Parser.Scoping
+  ( ScopingCtx, emptyScopingCtx, scopeType, freshInternal, insertTId, insertDId )
+import Parser.Unparser ( unparse )
 import Syntax.Base ( Located(spanFromTo) )
-import Syntax.Command ( Equation(..), Command(..) )
+import Syntax.Command ( Command(..) )
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
-import UI.Error (showErrors, Error)
-import Validation.Base (Validation, ValidationState (..), emptyValidationState, runValidation)
+import UI.Error ( showErrors, Error )
+import Validation.Base ( Validation, ValidationState (..), emptyValidationState, runValidation )
 import Validation.Kinding qualified as Kinding
-import Validation.Normalisation (normalise)
-import Validation.TypeEquivalence (equivalent, showGrammar, fromTypes)
+import Validation.Normalisation ( normalise )
+import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 
 import Control.Monad.State
+    ( (>=>),
+      foldM,
+      unless,
+      modify,
+      evalStateT,
+      MonadIO(..),
+      MonadState(get),
+      StateT )
 import Data.Bitraversable (bimapM)
 import Data.List qualified as List
 import Data.Map qualified as Map
 import System.Console.Repline
+    ( CompletionFunc,
+      evalRepl,
+      listCompleter,
+      wordCompleter,
+      CompleterStyle(Prefix),
+      ExitDecision(Exit),
+      HaskelineT,
+      MultiLine(MultiLine, SingleLine),
+      WordCompleter )
 import System.Exit (exitSuccess)
 import System.Process (callCommand, system)
 
@@ -31,7 +48,7 @@ type Repl a = HaskelineT (StateT ReplState IO) a
 data ReplState =
   ReplState { validationState :: ValidationState
             , scopingCtx :: ScopingCtx
-            , modl :: M.Module
+            , modl :: M.ScopedModule
             }
 
 cmd :: String -> Repl ()
@@ -46,11 +63,11 @@ cmd src = do
             >>= Kinding.synth (modl s) Map.empty of 
         Left es -> printErrors src es
         Right (t', vs) -> do
-            unless (null $ errors vs) $ printErrors src (errors vs)
-            let t'' = normalise (modl s) t'
-            liftIO $ putStrLn (unparse t'' ++ " : " ++ unparse (TK.kindOf t''))
-            modify (\s -> s{validationState = vs})
-      Equations ds -> do
+          unless (null $ errors vs) $ printErrors src (errors vs)
+          let t'' = normalise (modl s) t'
+          liftIO $ putStrLn (unparse t'' ++ " : " ++ unparse (TK.kindOf t''))
+          modify (\s -> s{validationState = vs})
+      Decls ds -> do
         let modl' = foldr insertKindSig (modl s) ds
             ctx' = foldr scopeEquation (scopingCtx s) ds
         case runValidation (validationState s) (foldM (insertEquation ctx') modl' ds) of
@@ -59,15 +76,15 @@ cmd src = do
             unless (null $ errors vs) $ printErrors src (errors vs)
             modify \s -> s{scopingCtx = ctx', modl = modl''}
 
-insertKindSig :: Equation -> M.Module -> M.Module
+insertKindSig :: M.KindedModule -> M.KindedModule -> M.KindedModule
 insertKindSig (i, map snd -> ks, t, k) m = 
   m{M.kindSigs = Map.insert i (buildArrow ks k) (M.kindSigs m)}
   where buildArrow ks k = foldr (\k k' -> K.Arrow (spanFromTo k k') k k') k ks
 
-scopeEquation :: Equation -> ScopingCtx -> ScopingCtx
+scopeEquation :: M.KindedModule -> ScopingCtx -> ScopingCtx
 scopeEquation (i, _, _, _) = insertTId i
 
-insertEquation :: ScopingCtx -> M.Module -> Equation -> Validation M.Module
+insertEquation :: ScopingCtx -> M.KindedModule -> M.KindedModule -> Validation M.KindedModule
 insertEquation ctx modl (i, aks, t, k) = do 
   t' <- scopeType ctx (if null aks then t else TU.Abs (spanFromTo i t) aks t)
   t'' <- Kinding.check modl Map.empty t' (M.kindSigs modl Map.! i)
@@ -126,6 +143,7 @@ opts = [ ("?"         , handleHelp)
       ]
       where ind = ("  " ++)
 
+    handleKind :: String -> Repl ()
     handleKind src = do
       s <- get
       case runLexer parseType interactivePath src of
@@ -135,11 +153,13 @@ opts = [ ("?"         , handleHelp)
             Kinding.synth (modl s) Map.empty t'
           of Left es -> do 
               printErrors src es
-             Right (t'', vs) -> do
+             Right t'' -> do
+              let vs = validationState s
               unless (null $ errors vs) $ printErrors src (errors vs)
               liftIO $ putStrLn (src ++ " : " ++ unparse (TK.kindOf t''))
               modify (\s -> s{validationState = vs})
               
+    handleEquivalent :: String -> Repl ()
     handleEquivalent src = do
       s <- get
       case runLexer parseTwoTypes interactivePath src of
@@ -150,11 +170,13 @@ opts = [ ("?"         , handleHelp)
                    (t, u)
           of Left es -> do 
               printErrors src es
-             Right ((t', u'), vs) -> do
+             Right (t', u') -> do
+              let vs = validationState s
               unless (null $ errors vs) $ printErrors src (errors vs)
               liftIO $ print (equivalent (modl s) t' u')
               modify (\s -> s{validationState = vs})
     
+    handleNormalise :: String -> Repl ()
     handleNormalise src = do
       s <- get
       case runLexer parseType interactivePath src of
@@ -163,11 +185,13 @@ opts = [ ("?"         , handleHelp)
             scopeType (scopingCtx s) t >>= Kinding.synth (modl s) Map.empty
           of Left es -> do 
               printErrors src es
-             Right (t'', vs) -> do
+             Right t'' -> do
+              let vs = validationState s
               unless (null $ errors vs) $ printErrors src (errors vs)
               liftIO $ putStrLn (unparse (normalise (modl s) t''))
               modify (\s -> s{validationState = vs})
 
+    handleGrammar :: String -> Repl ()
     handleGrammar src = do
       s <- get 
       case runLexer parseTypes interactivePath src of 
@@ -176,7 +200,8 @@ opts = [ ("?"         , handleHelp)
             mapM (scopeType (scopingCtx s) >=> Kinding.synth (modl s) Map.empty) ts
           of Left es -> do 
               printErrors src es
-             Right (ts', vs) -> do
+             Right ts' -> do
+              let vs = validationState s
               unless (null $ errors vs) $ printErrors src (errors vs)
               liftIO $ putStrLn (showGrammar (fromTypes (modl s) ts'))
               modify (\s -> s{validationState = vs})
@@ -187,12 +212,11 @@ printErrors src es = liftIO $ putStrLn $ showErrors (Map.singleton interactivePa
 ini :: Repl ()
 ini = liftIO $ putStrLn "STEquiv | A tool for testing type equivalence | :? for help"
 
-
 fin :: Repl ExitDecision
 fin = liftIO $ putStrLn "Come again!" >> pure Exit
 
 repl :: IO ()
-repl = flip evalStateT (ReplState emptyValidationState emptyScopingCtx M.emptyModule) $ evalRepl
+repl = flip evalStateT (ReplState emptyValidationState emptyScopingCtx M.emptyParsedModule) $ evalRepl
   (pure . (++ " ") . ("stequiv" ++) . \case SingleLine -> ">"; MultiLine -> "|")
   cmd
   opts

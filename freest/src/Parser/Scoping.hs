@@ -21,6 +21,9 @@ module Parser.Scoping
   ,scopeType
   ,scopeKind
   ,freshInternal
+  -- for FreeSTi
+  , insertTId
+  , insertDId
   )
 where
 
