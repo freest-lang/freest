@@ -72,7 +72,8 @@ extractFromRHS (global, local) rhs = do
       exp <- chooseGuard (global, local) guards
       return (exp, whereDecls)
 
--- | Check if a let decl in a module is actually a builtin
+-- | Get the corresponding builtin from a let decl's name
+-- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
 getBuiltinDecl :: KindedLetDecl -> Maybe Env
 getBuiltinDecl (E.ValDef (E.VarPat _ var) _) = do
   value <- Data.Map.lookup (B.external var) builtins
@@ -86,20 +87,17 @@ getBuiltinDecl _ = Nothing
 collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
-  -- bind builtin value declaration to corresponding value in Values.builtins
-  -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
+  -- the value declaration corresponds to a builtin value
   | isJust builtInBinding' = do
+      -- bind builtin value declaration to corresponding value in Values.builtins
     let binding = fromJust builtInBinding'
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
-    -- extract expression and where declarations from either guarded or unguarded rhs
     (exp, whereDecls) <- extractFromRHS (global, local) rhs
-    -- get bindings from where declaration
     whereBindings <- case whereDecls of
       Just whereDecls' -> collectLetDecls (global, local) whereDecls'
       Nothing -> return empty
-    -- evaluate expression
     val <- eval (global, whereBindings `union` local) exp
     -- resolve pattern matching to match variables from pattern to the value from rhs
     let patternMatchRes = resolvePatternMatching pat val
@@ -112,16 +110,15 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
   where
     builtInBinding' = getBuiltinDecl (E.ValDef pat rhs)
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
-  -- bind builtin function declaration to corresponding value in Values.builtins
-  -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
+  -- the function declaration corresponds to a builtin function
   | isJust builtInBinding' = do
+    -- bind builtin function declaration to corresponding value in Values.builtins
     let binding = fromJust builtInBinding'
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
     -- remove type arguments from clauses
     let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
-    -- create binding for function
     let binding = singleton var (compileFunctionToClosure clauses')
     remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
     return $ binding `union` remainingBindings
@@ -146,10 +143,8 @@ buildEnv m = collectLetDecls (empty, empty) letDecls
 envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
 envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 envLookup (global, local) var =
-  -- search in local context first
   case Data.Map.lookup var local of
     Just val -> val
-    -- search in global context after
     Nothing -> case Data.Map.lookup var global of
       Just val -> val
       Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
