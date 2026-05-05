@@ -125,7 +125,8 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     return $ binding `union` remainingBindings
   where
     builtinBinding = getBuiltinDecl (E.FnDef var clauses)
-collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = 
+-- TODO: handle Mutual when collecting LetDecls
+collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) =
   error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
