@@ -16,6 +16,7 @@ TODO:
 - Handling of undefined is correct?
 - Missing evaluation for E.Pack, E.Case (what about labels?), SendType, ReceiveType
 - About SendType and ReceiveType, do we need to define sending and receiving operations?
+- Handling of LetDecls Mutuals: in collectLetDecls
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
@@ -89,8 +90,8 @@ collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
   -- the value declaration corresponds to a builtin value
-  | isJust builtInBinding' = do
-    let binding = fromJust builtInBinding'
+  | isJust builtinBinding = do
+    let binding = fromJust builtinBinding
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
@@ -108,12 +109,12 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
     remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
     return $ bindings `union` remainingBindings
   where
-    builtInBinding' = getBuiltinDecl (E.ValDef pat rhs)
+    builtinBinding = getBuiltinDecl (E.ValDef pat rhs)
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
   -- the function declaration corresponds to a builtin function
-  | isJust builtInBinding' = do
+  | isJust builtinBinding = do
     -- bind builtin function declaration to corresponding value in Values.builtins
-    let binding = fromJust builtInBinding'
+    let binding = fromJust builtinBinding
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
@@ -123,8 +124,9 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
     return $ binding `union` remainingBindings
   where
-    builtInBinding' = getBuiltinDecl (E.FnDef var clauses)
-collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = error "Evaluation of E.LetDecl Mutual not implemented"
+    builtinBinding = getBuiltinDecl (E.FnDef var clauses)
+collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = 
+  error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
 getMainFunction :: M.KindedModule -> Maybe KindedLetDecl
@@ -133,7 +135,6 @@ getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var ==
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env
 buildEnv m = collectLetDecls (empty, empty) letDecls
-  -- obtain all let declarations from the module except the main function and those related to kinds / types
   where letDecls = filter (\case
           E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
           E.TypeSig _ _ -> False
@@ -146,44 +147,38 @@ envLookup (global, local) var =
     Just val -> val
     Nothing -> case Data.Map.lookup var global of
       Just val -> val
-      Nothing -> error ("Variable `" ++ show var ++ "` not found in the context." ++
-                       " This should not happen. This is a bug in the compiler")
+      Nothing -> error ("Variable `" ++ show var ++ "` not found in the context. This should not happen. This is a bug in the compiler")
 
 -- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
 handleApplication (global, local) (VCons cons vals) args = do
   return $ VCons cons $ vals ++ args
--- application of closure to arguments
 handleApplication (global, local) (VClosure pats body env) args = do
-  -- get the number of parameters and arguments
   let numParams = length pats
       numArgs = length args
-  
+
   -- if there's not enough arguments, partially apply
   if numParams > numArgs then do
-    -- extract bindings through pattern matching
-    -- use only the necessary parameters
+    -- extract bindings through pattern matching, using only the necessary parameters
     case zipWithM resolvePatternMatching (take numArgs pats) args of
-          Left _ -> error "Pattern matching failed!"
-          Right bindings ->
-            -- create a new closure with the remaining parameters
-            return $ VClosure (drop (numParams - numArgs) pats) body $ unions bindings `union` env
+      Left _ -> error "Pattern matching failed!"
+      Right bindings ->
+        -- create a new closure with the remaining parameters
+        return $ VClosure (drop (numParams - numArgs) pats) body $ unions bindings `union` env
 
   -- if numParams <= numArgs, evaluate app, return app against remaining arguments
   else do
-    -- extract bindings through pattern matching
-    -- use only the necessary arguments
+    -- extract bindings through pattern matching, using only the necessary arguments
     case zipWithM resolvePatternMatching pats (take numParams args) of
-          Left _ -> error "Pattern matching failed!"
-          Right bindings -> do
-            -- evaluate application of closure against arguments
-            func <- eval (global, unions bindings `union` env) body
-            -- the number of arguments is the same as parameters, return result of evaluation
-            if numArgs == numParams then
-              return func
-            -- otherwise, create a new application with the remaining arguments
-            else handleApplication (global, local) func (drop (numArgs - numParams) args)  
--- application of builtins to arguments
+      Left _ -> error "Pattern matching failed!"
+      Right bindings -> do
+        -- evaluate application of closure against arguments
+        func <- eval (global, unions bindings `union` env) body
+        -- the number of arguments is the same as parameters, return result of evaluation
+        if numArgs == numParams then
+          return func
+        -- otherwise, create a new application with the remaining arguments
+        else handleApplication (global, local) func (drop (numArgs - numParams) args)  
 handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
 handleApplication (global, local) VFork args =
@@ -194,7 +189,6 @@ handleApplication _ (VSelect label) args =
     [VChan chan] -> do
       chan2 <- send (VLabel label) chan
       return $ VChan chan2
-    -- otherwise
     _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
 
 -- MAIN FUNCTIONS
@@ -214,12 +208,10 @@ eval (global, local) (E.Var _ var) =
     VIO io -> io
     val -> return val
 eval (global, local) (E.App _ exp args) = do
-  -- evaluate left expression
   func <- eval (global, local) exp
   -- remove type arguments, as these are not useful during reduction
   let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
   -- handle undefined
-  -- evaluate arguments
   evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
   res <- handleApplication (global, local) func evalArgs
   case res of
@@ -248,7 +240,6 @@ eval (global, local) (E.Case _ exp alternatives) = do
     Just (alternative, bindings) -> do
       -- extract expression and where declarations from either guarded or unguarded rhs
       (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
-      -- get bindings from where declaration
       whereBindings <- case whereDecls of
         Just whereDecls' -> collectLetDecls (global, bindings `union` local) whereDecls'
         Nothing -> return empty
@@ -283,14 +274,11 @@ interpret m = do
   case getMainFunction m of
     -- main function of the form main = <exp>
     Just (E.ValDef pat rhs) -> do
-      -- extract expression and where declarations from either guarded or unguarded rhs
       (exp, whereDecls) <- extractFromRHS (m_env, empty) rhs
-      -- get bindings from where declaration
       whereBindings <- case whereDecls of
         Just whereDecls' -> collectLetDecls (m_env, empty) whereDecls'
         Nothing -> return empty
       eval (m_env, whereBindings) exp
-    -- if main function is not present, return unit
     Nothing -> do return VUnit
 
 -- OLD DEFINITIONS
