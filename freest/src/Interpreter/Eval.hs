@@ -23,6 +23,7 @@ import Data.List (find, groupBy)
 import Data.Set qualified as Set
 import Data.Map (empty, singleton, union, unions, lookup)
 import Data.Maybe (isJust, fromJust)
+import Data.Functor (($>), void)
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
 -- for debuging don't forget to remove
@@ -89,7 +90,6 @@ collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
   -- the value declaration corresponds to a builtin value
   | isJust builtInBinding' = do
-      -- bind builtin value declaration to corresponding value in Values.builtins
     let binding = fromJust builtInBinding'
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
@@ -141,7 +141,6 @@ buildEnv m = collectLetDecls (empty, empty) letDecls
 
 -- | Lookup a variable in both local and global context, in that order
 envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
-envLookup _ (B.Variable{B.varSpan=_, B.internal=_, B.external="fork"}) = VFork
 envLookup (global, local) var =
   case Data.Map.lookup var local of
     Just val -> val
@@ -188,12 +187,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
 handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
 handleApplication (global, local) VFork args =
-  error "Evaluation of application between VFork and args not implemented"
-{-     VFork -> forkIO (void $ consumeAllArgs (global, []) (head args) [VUnit]) $> VUnit
-    _ -> do res <- consumeAllArgs (global, local) left args
-            case res of
-              VIO io -> io
-              _ -> return res -}
+  forkIO (void $ handleApplication (global, empty) (head args) [VUnit]) $> VUnit
 handleApplication _ (VSelect label) args =
   case args of
     -- application of select with a channel
@@ -227,7 +221,10 @@ eval (global, local) (E.App _ exp args) = do
   -- handle undefined
   -- evaluate arguments
   evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
-  handleApplication (global, local) func evalArgs
+  res <- handleApplication (global, local) func evalArgs
+  case res of
+    VIO io -> io
+    _      -> return res
 eval (_, local) (E.Abs _ params _ body) =
   -- remove type parameters, as these are not useful during reduction
   let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params

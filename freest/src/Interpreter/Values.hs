@@ -197,13 +197,13 @@ builtins = Map.fromList
   , ("pi",            VFloat pi)
   , ("fromInteger",   VBuiltin (\(VInt x) -> VFloat (fromInteger (toInteger x))))
   -- * Concurrency
-  , ("fork",          undefined)
+  , ("fork",          VFork)
   , ("send",          VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c)))
   , ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
   , ("wait",          VBuiltin wait)
   , ("close",         VBuiltin (VIO . close))
   , ("send_",         undefined)
-  , ("receive_",         undefined)
+  , ("receive_",      undefined)
   -- * I/O
   -- ** Standard I/O
   -- *** stdin
