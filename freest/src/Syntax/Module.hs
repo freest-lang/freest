@@ -17,6 +17,7 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , emptyParsedModule
+  , emptyScopedModule
   )
 where
 
@@ -133,13 +134,24 @@ insertDef :: E.LetDecl p -> Module p -> Module p
 insertDef d m = m{definitions = d : definitions m}
 
 emptyParsedModule :: ParsedModule
-emptyParsedModule = 
+emptyParsedModule =
   Module{ name        = Nothing
         , imports     = []
         , kindSigs    = []
         , typeDecls   = []
         , dataDecls   = []
         , consDecls   = []
+        , definitions = []
+        }
+
+emptyScopedModule :: ScopedModule
+emptyScopedModule =
+  Module{ name        = Nothing
+        , imports     = []
+        , kindSigs    = Map.empty
+        , typeDecls   = Map.empty
+        , dataDecls   = Map.empty
+        , consDecls   = Map.empty
         , definitions = []
         }
 

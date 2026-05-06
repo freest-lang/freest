@@ -42,14 +42,43 @@ import System.Console.Repline
       WordCompleter )
 import System.Exit (exitSuccess)
 import System.Process (callCommand, system)
+import Utils (internalError)
+
+replVersion = "0.0.1"
+
+data ReplState = ReplState
+  { validationState :: ValidationState
+  , scopingCtx :: ScopingCtx
+  , modl :: M.ScopedModule
+  }
+
+emptyReplState :: ReplState
+emptyReplState = ReplState
+  { validationState = emptyValidationState
+  , scopingCtx = emptyScopingCtx
+  , modl = M.emptyScopedModule
+  } 
+
+repl :: IO ()
+repl = evalStateT
+  (evalRepl
+    (pure . (++ " ") . ("stequiv" ++) . \case SingleLine -> ">"; MultiLine -> "|")
+    cmd
+    opts
+    (Just optPrefix)
+    (Just "m")
+    (Prefix (wordCompleter byWord) defaultMatcher)
+    ini
+    fin)
+  emptyReplState
 
 type Repl a = HaskelineT (StateT ReplState IO) a
 
-data ReplState =
-  ReplState { validationState :: ValidationState
-            , scopingCtx :: ScopingCtx
-            , modl :: M.ScopedModule
-            }
+ini :: Repl ()
+ini = liftIO $ putStrLn $ replVersion ++ ": https://freest-lang.github.io/ :h for help"
+
+fin :: Repl ExitDecision
+fin = liftIO $ putStrLn "Come again!" >> pure Exit
 
 cmd :: String -> Repl ()
 cmd src = do
@@ -62,34 +91,34 @@ cmd src = do
             scopeType (scopingCtx s) t
             >>= Kinding.synth (modl s) Map.empty of 
         Left es -> printErrors src es
-        Right (t', vs) -> do
-          unless (null $ errors vs) $ printErrors src (errors vs)
+        Right t' -> do
+          -- unless (null $ errors vs) $ printErrors src (errors vs)
           let t'' = normalise (modl s) t'
           liftIO $ putStrLn (unparse t'' ++ " : " ++ unparse (TK.kindOf t''))
-          modify (\s -> s{validationState = vs})
+          -- modify (\s -> s{validationState = vs})
       Decls ds -> do
-        let modl' = foldr insertKindSig (modl s) ds
-            ctx' = foldr scopeEquation (scopingCtx s) ds
-        case runValidation (validationState s) (foldM (insertEquation ctx') modl' ds) of
-          Left es -> printErrors src es
-          Right (modl'', vs) -> do
-            unless (null $ errors vs) $ printErrors src (errors vs)
-            modify \s -> s{scopingCtx = ctx', modl = modl''}
+        internalError "Type declarations not yet implemented in the REPL"
+        -- let modl' = foldr insertKindSig (modl s) ds
+        --     ctx' = foldr scopeEquation (scopingCtx s) ds
+        -- case runValidation (validationState s) (foldM (insertEquation ctx') modl' ds) of
+        --   Left es -> printErrors src es
+        --   Right (modl'', vs) -> do
+        --     unless (null $ errors vs) $ printErrors src (errors vs)
+        --     modify \s -> s{scopingCtx = ctx', modl = modl''}
 
-insertKindSig :: M.KindedModule -> M.KindedModule -> M.KindedModule
-insertKindSig (i, map snd -> ks, t, k) m = 
-  m{M.kindSigs = Map.insert i (buildArrow ks k) (M.kindSigs m)}
-  where buildArrow ks k = foldr (\k k' -> K.Arrow (spanFromTo k k') k k') k ks
+-- insertKindSig :: Equation -> M.ScopedModule -> M.ScopedModule
+-- insertKindSig (i, map snd -> ks, t, k) m = 
+--   m{M.kindSigs = Map.insert i (buildArrow ks k) (M.kindSigs m)}
+--   where buildArrow ks k = foldr (\k k' -> K.Arrow (spanFromTo k k') k k') k ks
 
-scopeEquation :: M.KindedModule -> ScopingCtx -> ScopingCtx
-scopeEquation (i, _, _, _) = insertTId i
+-- scopeEquation :: Equation -> ScopingCtx -> ScopingCtx
+-- scopeEquation (i, _, _, _) = insertTId i
 
-insertEquation :: ScopingCtx -> M.KindedModule -> M.KindedModule -> Validation M.KindedModule
-insertEquation ctx modl (i, aks, t, k) = do 
-  t' <- scopeType ctx (if null aks then t else TU.Abs (spanFromTo i t) aks t)
-  t'' <- Kinding.check modl Map.empty t' (M.kindSigs modl Map.! i)
-  return modl{M.typeDecls = Map.insert i t'' (M.typeDecls modl)}
-
+-- insertEquation :: ScopingCtx -> M.KindedModule -> M.KindedModule -> Validation M.KindedModule
+-- insertEquation ctx modl (i, aks, t, k) = do 
+--   t' <- scopeType ctx (if null aks then t else TU.Abs (spanFromTo i t) aks t)
+--   t'' <- Kinding.check modl Map.empty t' (M.kindSigs modl Map.! i)
+--   return modl{M.typeDecls = Map.insert i t'' (M.typeDecls modl)}
 
 interactivePath :: String
 interactivePath = "<interactive>"
@@ -208,23 +237,6 @@ opts = [ ("?"         , handleHelp)
 
 printErrors :: String -> [Error] -> Repl ()
 printErrors src es = liftIO $ putStrLn $ showErrors (Map.singleton interactivePath (lines src)) es
-
-ini :: Repl ()
-ini = liftIO $ putStrLn "STEquiv | A tool for testing type equivalence | :? for help"
-
-fin :: Repl ExitDecision
-fin = liftIO $ putStrLn "Come again!" >> pure Exit
-
-repl :: IO ()
-repl = flip evalStateT (ReplState emptyValidationState emptyScopingCtx M.emptyParsedModule) $ evalRepl
-  (pure . (++ " ") . ("stequiv" ++) . \case SingleLine -> ">"; MultiLine -> "|")
-  cmd
-  opts
-  (Just optPrefix)
-  (Just "m")
-  (Prefix (wordCompleter byWord) defaultMatcher)
-  ini
-  fin
 
 main :: IO ()
 main = repl
