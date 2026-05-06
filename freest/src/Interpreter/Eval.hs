@@ -12,7 +12,6 @@ module Interpreter.Eval
 
 {-
 TODO:
-- Define SendType and ReceiveType as a Value, when applied to channels in handleApplication, send _something_ to simulate blocking
 - Existentials, Pack Span [Type x] (Exp x): the initial list of types should contain just one, the representation type; there's just one expression on the third argument, because it should be a record of functions. Use LetDecls for the open construct, check also pack pattern.
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
 - Handling of undefined is correct?
@@ -34,7 +33,7 @@ import Debug.Trace
 -- ends here
 
 import Interpreter.PatternMatching (compileFunctionToClosure, resolvePatternMatching)
-import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool)
+import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool, receive)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
@@ -185,11 +184,16 @@ handleApplication (global, local) VFork args =
   forkIO (void $ handleApplication (global, empty) (head args) [VUnit]) $> VUnit
 handleApplication _ (VSelect label) args =
   case args of
-    -- application of select with a channel
     [VChan chan] -> do
       chan2 <- send (VLabel label) chan
       return $ VChan chan2
     _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
+handleApplication _ VRecvType args =
+  case args of
+    [VChan chan] -> do
+      (_, chan2) <- receive chan
+      return $ VChan chan2
+    _ -> error "Too many arguments applied to ReceiveType! Type checking failed!"
 
 -- MAIN FUNCTIONS
 
@@ -258,9 +262,9 @@ eval _ (E.Channel _ _) = do
 eval ctx (E.Select _ (B.Identifier _ iden)) =
   return $ VSelect iden
 eval (global, local) (E.SendType span typ) =
-  error "Evaluation of E.SendType not implemented"
+  return VSendType
 eval (global, local) (E.ReceiveType span) = 
-  error "Evaluation of E.ReceiveType not implemented"
+  return VRecvType
 
 -- | Interprets a module and returns the result
 interpret :: M.KindedModule -> IO Value

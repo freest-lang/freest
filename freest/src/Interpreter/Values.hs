@@ -49,6 +49,8 @@ data Value
   | VFork
   | VChan ChannelEnd
   | VSelect String
+  | VSendType
+  | VRecvType
 
 instance Show Value where
   show VUnit = "()"
@@ -64,6 +66,8 @@ instance Show Value where
   show (VLabel str) = "<label> string"
   show (VChan _) = "<chan>"
   show (VSelect _) = "<select>"
+  show VSendType = "<sendType>"
+  show VRecvType = "<recvType>"
 
 showTups :: [Value] -> String
 showTups [val] = show val
