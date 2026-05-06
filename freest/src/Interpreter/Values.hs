@@ -28,12 +28,11 @@ import qualified Data.Map as Map
 import GHC.Float
 import System.IO (Handle, hPutStr, stderr, openFile, IOMode (..), hGetChar, hGetLine, hIsEOF, hClose)
 
-import qualified Syntax.Base as B
-import qualified Syntax.Expression as E
-import Syntax.Base (nullSpan)
+import Syntax.Base (Variable)
+import Syntax.Expression ( KindedExp, Pat )
 
 -- | An environment, composed of bindings from variables to values
-type Env = Map.Map B.Variable Value
+type Env = Map.Map Variable Value
 
 data Value
   = VInt Int
@@ -42,7 +41,7 @@ data Value
   | VChar Char
   | VString String
   | VCons String [Value]
-  | VClosure [E.Pat] E.KindedExp Env
+  | VClosure [Pat] KindedExp Env
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
   | VHandle Handle

@@ -18,14 +18,12 @@ TODO:
 
 import Control.Monad (zipWithM)
 import Data.Function (on)
-import Data.List (groupBy)
-import qualified Data.Set as Set
 import Data.Map (empty, singleton, unions, insert)
+import qualified Data.Set as Set
 
 import Interpreter.Values (Value(VInt, VFloat, VChar, VCons, VClosure), Env)
-import qualified Syntax.Expression as E
 import qualified Syntax.Base as B
-import Syntax.Base (nullSpan)
+import qualified Syntax.Expression as E
 
 
 -- HANDLING PATTERN MATCHING

@@ -20,13 +20,12 @@ TODO:
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
 -}
 
-import Data.List (find, groupBy)
-import Data.Set qualified as Set
-import Data.Map (empty, singleton, union, unions, lookup)
-import Data.Maybe (isJust, fromJust)
-import Data.Functor (($>), void)
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
+import Data.Functor (($>), void)
+import Data.List (find)
+import Data.Map (empty, singleton, union, unions, lookup)
+import Data.Maybe (isJust, fromJust)
 -- for debuging don't forget to remove
 import Debug.Trace
 -- ends here
@@ -36,9 +35,6 @@ import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
-
-import Syntax.Expression ( KindedLetDecl )
-import qualified Syntax.Module as N
 
 type GlobalEnv = Env
 type LocalEnv = Env
@@ -65,7 +61,7 @@ chooseCase ((pat, rhs) : alternatives) val =
     Right bindings -> Just ((pat, rhs), bindings)
 
 -- | Extract an expression and let declarations from case alternatives
-extractFromRHS :: (GlobalEnv, LocalEnv) -> E.KindedRHS -> IO (E.KindedExp, Maybe [KindedLetDecl])
+extractFromRHS :: (GlobalEnv, LocalEnv) -> E.KindedRHS -> IO (E.KindedExp, Maybe [E.KindedLetDecl])
 extractFromRHS (global, local) rhs = do
   -- extract expression and where declarations from either guarded or unguarded rhs
   case rhs of
@@ -76,7 +72,7 @@ extractFromRHS (global, local) rhs = do
 
 -- | Get the corresponding builtin from a let decl's name
 -- TODO: inefficient since it searches for all variables if it exists in builtins; try to only search those that call undefined
-getBuiltinDecl :: KindedLetDecl -> Maybe Env
+getBuiltinDecl :: E.KindedLetDecl -> Maybe Env
 getBuiltinDecl (E.ValDef (E.VarPat _ var) _) = do
   value <- Data.Map.lookup (B.external var) builtins
   return $ singleton var value
@@ -86,7 +82,7 @@ getBuiltinDecl (E.FnDef var _) = do
 getBuiltinDecl _ = Nothing
 
 -- | Collect bindings, of variables to values, from declarations
-collectLetDecls :: (GlobalEnv, LocalEnv) -> [KindedLetDecl] -> IO Env
+collectLetDecls :: (GlobalEnv, LocalEnv) -> [E.KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
   -- the value declaration corresponds to a builtin value
@@ -130,7 +126,7 @@ collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) =
   error "Evaluation of E.LetDecl Mutual not implemented"
 
 -- | Obtain the main function from a module.
-getMainFunction :: M.KindedModule -> Maybe KindedLetDecl
+getMainFunction :: M.KindedModule -> Maybe E.KindedLetDecl
 getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
 
 -- | Collect declarations from the module, and bind these to variables in an environment
