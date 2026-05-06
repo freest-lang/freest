@@ -12,7 +12,6 @@ module Interpreter.Eval
 
 {-
 TODO:
-- Use partitionLevels from Syntax.Base
 - Define SendType and ReceiveType as a Value, when applied to channels in handleApplication, send _something_ to simulate blocking
 - Existentials, Pack Span [Type x] (Exp x): the initial list of types should contain just one, the representation type; there's just one expression on the third argument, because it should be a record of functions. Use LetDecls for the open construct, check also pack pattern.
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
@@ -119,7 +118,7 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     return $ binding `union` remainingBindings
   | otherwise = do
     -- remove type arguments from clauses
-    let clauses' = map (\(params, body) -> (map (\(B.ExpLevel pat) -> pat) $ filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params, body)) clauses
+    let clauses' = map (\(params, body) -> (fst $ B.partitionLevels params, body)) clauses
     let binding = singleton var (compileFunctionToClosure clauses')
     remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
     return $ binding `union` remainingBindings
@@ -210,19 +209,15 @@ eval (global, local) (E.Var _ var) =
     val -> return val
 eval (global, local) (E.App _ exp args) = do
   func <- eval (global, local) exp
-  -- remove type arguments, as these are not useful during reduction
-  let expArgs = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) args
-  -- handle undefined
-  evalArgs <- mapM (\(B.ExpLevel exp') -> eval (global, local) exp') expArgs
+  -- TODO: handle undefined?
+  evalArgs <- mapM (eval (global, local)) $ fst $ B.partitionLevels args
   res <- handleApplication (global, local) func evalArgs
   case res of
     VIO io -> io
     _      -> return res
 eval (_, local) (E.Abs _ params _ body) =
-  -- remove type parameters, as these are not useful during reduction
-  let expParams = filter (\case B.ExpLevel a -> True; B.TypeLevel b -> False) params
   -- convert to a closure, capturing the local environment, so we don't lose bindings
-  in return $ VClosure (map (\(B.ExpLevel (pat, _)) -> pat) expParams) body local
+  return $ VClosure (map fst (fst $ B.partitionLevels params)) body local
 eval (global, local) (E.Pack span types exp) = 
   error "Evaluation of E.Pack not implemented"
 eval (global, local) (E.Asc span exp typ) =
