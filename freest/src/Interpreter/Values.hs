@@ -21,14 +21,14 @@ module Interpreter.Values
     fstToHsBool
   ) where
 
-import qualified Control.Concurrent.Chan as C (Chan, newChan, readChan, writeChan)
-import Data.Char (chr, ord)
-import Data.Functor (($>), (<&>))
+import qualified Control.Concurrent.Chan as C ( Chan, newChan, readChan, writeChan )
+import Data.Char ( chr, ord )
+import Data.Functor ( ($>), (<&>) )
 import qualified Data.Map as Map
-import GHC.Float
-import System.IO (Handle, hPutStr, stderr, openFile, IOMode (..), hGetChar, hGetLine, hIsEOF, hClose)
+import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
+import System.IO ( Handle, hPutStr, stderr, openFile, IOMode (..), hGetChar, hGetLine, hIsEOF, hClose )
 
-import Syntax.Base (Variable)
+import Syntax.Base ( Variable )
 import Syntax.Expression ( KindedExp, Pat )
 
 -- | An environment, composed of bindings from variables to values

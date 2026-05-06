@@ -12,13 +12,17 @@ module Interpreter.Eval
 
 {-
 TODO:
+- Use partitionLevels from Syntax.Base
+- Define SendType and ReceiveType as a Value, when applied to channels in handleApplication, send _something_ to simulate blocking
+- Existentials, Pack Span [Type x] (Exp x): the initial list of types should contain just one, the representation type; there's just one expression on the third argument, because it should be a record of functions. Use LetDecls for the open construct, check also pack pattern.
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
 - Handling of undefined is correct?
 - Missing evaluation for E.Pack, E.Case (what about labels?), SendType, ReceiveType
 - About SendType and ReceiveType, do we need to define sending and receiving operations?
+- Handling recursive functions
 - Handling of LetDecls Mutuals: in collectLetDecls
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
--}
+ -}
 
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
@@ -258,7 +262,7 @@ eval _ (E.Channel _ _) = do
   return $ VCons "(,)" [VChan chanL, VChan chanR]
 eval ctx (E.Select _ (B.Identifier _ iden)) =
   return $ VSelect iden
-eval (global, local) (E.SendType span typ) = 
+eval (global, local) (E.SendType span typ) =
   error "Evaluation of E.SendType not implemented"
 eval (global, local) (E.ReceiveType span) = 
   error "Evaluation of E.ReceiveType not implemented"
