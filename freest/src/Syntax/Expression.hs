@@ -79,7 +79,7 @@ stringPat s = listPat s . map (CharPat s)
 
 data LetDecl x
   = ValDef Pat      (RHS x)
-  | FnDef  Variable [([Level Pat Variable], RHS x)]
+  | FnDef  Variable [([Level Pat Variable Variable], RHS x)]
   | TypeSig [Variable] (Type x)
   | Mutual [LetDecl x {- FnDef only -}]
 
@@ -97,8 +97,8 @@ data Exp x
   | Char   Span Char
   | DCons  Span Identifier
   | Var    Span Variable
-  | App    Span (Exp x) [Level (Exp x) (Type x)]
-  | Abs    Span [Level (Pat,Type x) (Variable,Kind)] Multiplicity (Exp x)
+  | App    Span (Exp x) [Level (Exp x) (Type x) Multiplicity]
+  | Abs    Span [Level (Pat,Type x) (Variable,Kind) Variable] Multiplicity (Exp x)
   | Pack   Span [Type x] (Exp x)
   | Asc    Span (Exp x) (Type x)
   | Let    Span [LetDecl x] (Exp x)
@@ -114,7 +114,7 @@ pattern Tuple :: Span -> [Exp x] -> Exp x
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
                              e@(DCons s i@(isUnitId -> True)) -> App s e []
                              e -> e
-                      -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_)))
+                      -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es, _, _)))
   where Tuple s = \case 
           [] -> DCons s (mkTupleId 0 s)
           es -> App s (DCons s (mkTupleId (length es) s)) (map ExpLevel es)
@@ -226,7 +226,7 @@ instance Show Pat where
     WaitPat _       -> "Wait"
     InPat _ p1 p2   -> "(?" ++ show p1 ++ "; " ++ show p2 ++ ")"
     ChoicePat _ l p -> "(&"++show l++" "++show p++")"
-    TypeInPat _ (a, k) p -> "(??(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
+    TypeInPat _ (a, k) p -> "(?@(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
     AsPat _ x p     -> show x++"@"++show p
 
 instance Show (LetDecl x) where
@@ -237,6 +237,7 @@ instance Show (LetDecl x) where
         show x++" "++unwords (map showParam ps)++show rhs) psrhss
       where showParam = \case TypeLevel a -> "@"++show a
                               ExpLevel  p -> show p
+                              MultLevel φ -> "#"++show φ
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
     Mutual ds -> "mutual ⦃\n"++intercalate "⨾\n" (map show ds)++"\n⦄"
 
@@ -260,12 +261,15 @@ instance Show (Exp x) where
     DCons _ i      -> show i
     Var _ x        -> show x
     App _ f as     -> foldl (\s a -> "("++s++" "++showArg a++")") (show f) as
-                      where showArg (ExpLevel  e) = show e
-                            showArg (TypeLevel t) = "@"++show t
-    Abs _ ps m e   -> "(\\"++unwords (map showParam ps)++" "++show m++"-> "
-                      ++show e++")"
-                      where showParam (ExpLevel  (p,t)) = show p++":"++show t
-                            showParam (TypeLevel (a,k)) = show a++":"++show k
+                      where showArg = \case 
+                              ExpLevel  e -> show e
+                              TypeLevel t -> "@" ++ show t
+                              MultLevel m -> "#" ++ show m
+    Abs _ ps m e   -> "(\\"++unwords (map showParam ps)++" -"++show m++"-> "++show e++")"
+                      where showParam = \case
+                              ExpLevel  (p,t) -> "("++show p++":"++show t++")"
+                              TypeLevel (a,k) -> "@("++show a++":"++show k++")"
+                              MultLevel φ     -> "#("++show φ++")"
     Pack _ ts e    -> "(" ++ intercalate ", " (map (('@' :) . show) ts) ++ ", " ++ show e ++ ")"
     Asc _ e t      -> "(" ++ show e ++ " : " ++ show t ++ ")"
     Let _ ds e     -> "(let ⦃ "

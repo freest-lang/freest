@@ -20,6 +20,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Kinding ( runSynth, KindCtx )
+import Validation.Substitution ( subsMultType )
 import Utils ( internalError )
 import Parser.Unparser
 
@@ -32,26 +33,27 @@ import Control.Monad.State
 import Data.Map.Strict qualified as Map
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
+import GHC.Stack (HasCallStack)
 
-equivalent :: M.KindedModule -> T.KindedType -> T.KindedType -> Bool
+equivalent :: HasCallStack => M.KindedModule -> T.KindedType -> T.KindedType -> Bool
 equivalent mod t u = t == u || bisimilar ps xs ys
   where (ps, [xs, ys]) = fromTypes mod [t, u]
 
-fromTypes :: M.KindedModule -> [T.KindedType] -> (Productions, [Word])
+fromTypes :: HasCallStack => M.KindedModule -> [T.KindedType] -> (Productions, [Word])
 fromTypes mod ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
   (productions s, xss)
   where
-    (xss, s) = runState (mapM (word Map.empty) ts) (initial mod)
+    (xss, s) = runState (mapM word ts) (initial mod)
 
-word :: KindCtx -> T.KindedType -> TransState Word
-word ctx t = wasVisited t >>= \case
+word :: HasCallStack => T.KindedType -> TransState Word
+word t = wasVisited t >>= \case
   Just y -> pure [y]
-  Nothing -> word' ctx t
+  Nothing -> word' t
 
-word' :: KindCtx -> T.KindedType -> TransState Word
-word' ctx = \case
+word' :: HasCallStack => T.KindedType -> TransState Word
+word' = \case
   -- W-Skip
   T.Skip{} -> pure []
   -- W-EndVoid (1/2)
@@ -65,31 +67,41 @@ word' ctx = \case
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
   -- W-Msg _ TODO: We may need a special case for *?T and *!T
   T.AppMessage _ m p t -> do
-    w <- word ctx t
+    w <- word t
     getNonterminal $ Map.fromList
       [ (show m ++ show p, [])
       , ("1", w ++ [bottom])
       ]
   -- W-Seq
   T.AppSemi _ t u -> do
-    liftM2 (++) (word ctx t) (word ctx u)
+    liftM2 (++) (word t) (word u)
   -- W-DualVar, Dual (α T1 ··· Tm) , m >= 0
   T.AppDual s (T.AppVar _ a _ _ ts) -> do
-    words <- mapM (word ctx) ts
+    words <- mapM word ts
     getNonterminal $ Map.fromList $
       ("dual " ++ show a, []) :
       zip (map show [1..]) (map (++ [bottom]) words)
   -- *+{} and *&{}
-  t@(T.Choice _ K.Un _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
+  t@(T.Choice _ K.Un{} _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
   t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppDName t || T.isAppLinChoice t || T.isAppQuant t)-> do
-    words <- mapM (word ctx) vs
+    words <- mapM word vs
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
       zip (map show [1..]) words
+  T.ForallM _ _ [] _ -> internalError "what??"
+  t@(T.ForallM s m (φ : φs) u) -> do
+    let φ1 = Variable s "φ1" (-2)
+        φ2 = Variable s "φ2" (-3)
+        t' = if null φs then u else T.ForallM s m φs u
+        sm = case m of K.Lin{} -> "1"; K.Un{} -> "*"; K.Sup _ lvφs -> show $ List.sort lvφs
+    wtm1 <- word $ subsMultType ObjLv φ (K.VarM s ObjLv φ1) t'
+    wtm2 <- word $ subsMultType ObjLv φ (K.VarM s ObjLv φ2) t'
+    getNonterminal $ Map.fromList
+      [("∀ #m1 " ++ sm ++ "->", wtm1), ("∀ #m2 " ++ sm ++ "->", wtm2)]
   -- W_Var, α T1 ··· Tm with m >= 0 and ∆ ⊢ α: κ1 => ··· => κm => ∗
   t@(T.AppVar _ a _ _ us) | isProperType t -> do
-    words <- mapM (word ctx) us
+    words <- mapM word us
     getNonterminal $ Map.fromList $
       (show a, []) :
       zip (map show [1..]) (map (++ [bottom]) words)
@@ -104,7 +116,7 @@ word' ctx = \case
       _ -> do
         y <- nextNonterminal
         addVisited t y
-        ~(z:δ) <- word ctx u
+        ~(z:δ) <- word u
         γ <- getTransitions z
         addProductions y (Map.map (++ δ) γ)
         pure [y]
@@ -113,12 +125,12 @@ word' ctx = \case
     case T.kindOf t of
       K.Arrow _ k _ -> do
         -- W-Abs, F : k => k'
+        (internalα, internalβ) <- getKindIndices k
         let s = getSpan t -- The same span for all newly created vars & types?
-        let (internalα, internalβ) = toInt k
         let αk = Variable s ('α' : show k) internalα
         let βk = Variable s ('β' : show k) internalβ
-        wtα <- word (Map.insert αk k ctx) $ T.smartApp s t [T.fromVariable ObjLv αk k]
-        wtβ <- word (Map.insert βk k ctx) $ T.smartApp s t [T.fromVariable ObjLv βk k]
+        wtα <- word $ T.smartApp s t [T.fromVariable ObjLv αk k]
+        wtβ <- word $ T.smartApp s t [T.fromVariable ObjLv βk k]
         getNonterminal $ Map.fromList
           [ ('λ' : unparse αk, wtα)
           , ('λ' : unparse βk, wtβ)
@@ -126,7 +138,7 @@ word' ctx = \case
       _ -> do
         -- W-τ, t reduces
         modl <- gets modl
-        word ctx (reduce modl t)
+        word (reduce modl t)
 
 isProperType :: T.KindedType -> Bool
 isProperType t = case T.kindOf t of
@@ -138,9 +150,16 @@ bottom :: Nonterminal
 bottom = 0
 
 -- The negative integer associated with a kind
-toInt :: K.Kind -> (Int, Int)
-toInt k = (-n * 2, -n * 2 - 1)
-  where n = fromEnum k
+getKindIndices :: K.Kind -> TransState (Int, Int)
+getKindIndices k = do
+  mis <- gets (Map.lookup k . kindIndices)
+  case mis of
+    Just is -> return is
+    Nothing -> do
+      iα <- getNextKindIndex
+      iβ <- getNextKindIndex
+      modify \s -> s{kindIndices = Map.insert k (iα, iβ) $ kindIndices s}
+      return (iα, iβ)
 
 -- The state of the translation to grammar procedure
 
@@ -151,6 +170,8 @@ data TState = TState
   , nextIndex :: Int
   , visited :: Visited
   , modl :: M.KindedModule
+  , nextKindIndex :: Int
+  , kindIndices :: Map.Map K.Kind (Int, Int)
   }
 
 initial :: M.KindedModule -> TState
@@ -159,6 +180,8 @@ initial modl = TState
   , nextIndex = succ bottom -- 0 is for bottom
   , visited = Map.empty
   , modl = modl
+  , nextKindIndex = -2
+  , kindIndices = Map.empty
   }
 
 type TransState = State TState
@@ -168,6 +191,12 @@ nextNonterminal = do
   n <- gets nextIndex
   modify $ \s -> s { nextIndex = n + 1 }
   pure n
+
+getNextKindIndex :: TransState Int
+getNextKindIndex = do
+  i <- gets nextKindIndex
+  modify \s -> s {nextKindIndex = i - 1}
+  return i
 
 wasVisited :: T.KindedType -> TransState (Maybe Nonterminal)
 wasVisited t = do
@@ -225,7 +254,7 @@ fatTerminal = \case
   t@T.Char{}  -> Just t
   t@T.Arrow{} -> Just t
   -- Polymorphism
-  T.AppQuant s p pk aks t -> Just (T.AppQuant s p pk aks) <*> fatTerminal t
+  T.AppQuant s p pk m aks t -> Just (T.AppQuant s p pk m aks) <*> fatTerminal t
   -- Higher-order
   t@T.Var{}      -> Just t
   T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts

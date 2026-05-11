@@ -21,16 +21,23 @@ module Syntax.Base
   , mkFreshVar
   , firstInternal
   , defaultInternal
-  , VarLevel (..)
+  , VarLv (..)
   -- Level
   , Level (..)
+  , mapLevel
+  , voidLevel
   , partitionLevels
   , void
+  , Congruence(..)
   )
 where
 
+
+import Utils (internalError)
+
 import Data.Bifunctor ( Bifunctor(..) )
 import Data.List ( (\\) )
+import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Void ( Void )
 
@@ -138,8 +145,12 @@ instance Eq Variable where
   a == b = internal a == internal b
 
 instance Show Variable where 
-  show (Variable _ extl intl) = extl++"#"++show intl
-
+  show (Variable _ extl intl) = extl++subscript intl
+    where 
+      subscript = 
+        map (\case '0'->'₀'; '1'->'₁'; '2'->'₂'; '3'->'₃'; '4'->'₄'
+                   '5'->'₅'; '6'->'₆'; '7'->'₇'; '8'->'₈'; '9'->'₉'
+                   '-' -> '₋') . show
 instance Located Variable where 
   getSpan = varSpan
   setSpan s x = x{varSpan=s}
@@ -171,37 +182,63 @@ mkFreshVar s fvs = unusedVar [firstInternal..] (mkDefaultVar "_γ" s) fvs
 -- object-level variables and metavariables. The only metavariables for now are
 -- instantiation variables, used during local type inference. In the future we
 -- may have, e.g., unification variables for more general type inference.
-data VarLevel 
+data VarLv 
   = ObjLv -- ^ Object-level variable
   | InstLv -- ^ Instantiation-level variable
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 -- 4 _ Levels
 
 -- | Used to separate the syntax of different computational levels 
 -- (expressions vs. types).
-data Level a b = ExpLevel a | TypeLevel b deriving (Eq, Ord)
+data Level a b c = ExpLevel a | TypeLevel b | MultLevel c deriving (Eq, Ord)
 
-instance (Show a, Show b) => Show (Level a b) where
+instance (Show a, Show b, Show c) => Show (Level a b c) where
   show (ExpLevel  x) = show x
   show (TypeLevel x) = show x
+  show (MultLevel x) = show x
 
-instance (Located a, Located b) => Located (Level a b) where 
+instance (Located a, Located b, Located c) => Located (Level a b c) where 
   getSpan = \case 
     ExpLevel  x -> getSpan x
     TypeLevel x -> getSpan x
+    MultLevel x -> getSpan x
   setSpan s = \case
     ExpLevel  x -> ExpLevel  (setSpan s x)
     TypeLevel x -> TypeLevel (setSpan s x)
+    MultLevel x -> MultLevel (setSpan s x)
 
 -- | Similar to Either.
-instance Bifunctor Level where
-  bimap f _ (ExpLevel  e) = ExpLevel  $ f e
-  bimap _ g (TypeLevel t) = TypeLevel $ g t
+mapLevel :: (a -> a') -> (b -> b') -> (c -> c') -> Level a b c -> Level a' b' c'
+mapLevel f _ _ (ExpLevel  e) = ExpLevel  $ f e
+mapLevel _ f _ (TypeLevel t) = TypeLevel $ f t
+mapLevel _ _ f (MultLevel m) = MultLevel $ f m
+
+voidLevel :: Level a b c -> Level () () ()
+voidLevel = \case
+  ExpLevel  _ -> ExpLevel  ()
+  TypeLevel _ -> TypeLevel ()
+  MultLevel _ -> MultLevel ()
+
+-- firstLevel  :: (a -> a') -> Level a b c -> Level a' b  c
+-- secondLevel :: (b -> b') -> Level a b c -> Level a  b' c
+-- thirdLevel  :: (c -> c') -> Level a b c -> Level a  b  c'
+-- firstLevel  f = mapLevel f  id id
+-- secondLevel f = mapLevel id f  id
+-- thirdLevel    = mapLevel id id
 
 -- | The Level counterpart to @Data.Either.partitionEithers@.
-partitionLevels :: [Level a b] -> ([a],[b])
+partitionLevels :: [Level a b c] -> ([a], [b], [c])
 partitionLevels = 
-  foldr \case (ExpLevel  e) -> first  (e:) 
-              (TypeLevel t) -> second (t:)
-        ([],[])
+  foldr \case (ExpLevel  x) -> \(xs, ys, zs) -> (x : xs, ys, zs) 
+              (TypeLevel y) -> \(xs, ys, zs) -> (xs, y : ys, zs) 
+              (MultLevel z) -> \(xs, ys, zs) -> (xs, ys, z : zs) 
+        ([], [], [])
+
+class Congruence t where
+  congruent :: Map.Map Variable Variable -> t -> t -> Bool
+
+instance Congruence a => Congruence [a] where
+  congruent m ts us =
+    length ts == length us &&
+    all (uncurry (congruent m)) (zip ts us)

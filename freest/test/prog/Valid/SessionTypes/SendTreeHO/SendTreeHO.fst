@@ -22,13 +22,13 @@ type TreeC = +{
 
 -- Reading a channel end: consuming Dual TreeChannel
 
-receiveCh : forall (a : 1S). ?(?Int; Close); a -> (Int, a)
+receiveCh : forall (a : 1S) -> ?(?Int; Close); a -> (Int, a)
 receiveCh @a c =
   let (r, c) = receive c in
   let x = receiveAndClose r in
   (x, c)
 
-read : forall (a : 1S). Dual TreeC; a -> (Tree, a)
+read : forall (a : 1S) -> Dual TreeC; a -> (Tree, a)
 read @a (&LeafC c) = (Leaf, c)
 read @a (&NodeC c) =
   let (l, c) = read c in
@@ -46,14 +46,14 @@ readTree r =
 type Tree : *T
 data Tree = Leaf | Node Tree Int Tree
 
-sendCh : forall (a : 1S). Int -> !(?Int; Close); a -> a
+sendCh : forall (a : 1S) -> Int -> !(?Int; Close); a -> a
 sendCh @a x c =
   let (r, w) = channel @(?Int; Close) in
   let c = send r c in
   sendAndWait x w;
   c
 
-write : forall (a : 1S). Tree -> TreeC ; a -> a
+write : forall (a : 1S) -> Tree -> TreeC ; a -> a
 write @a Leaf c = select LeafC c
 write @a (Node l x r) c = 
   c |> select NodeC
@@ -70,4 +70,4 @@ aTree : Tree
 aTree = Node (Node Leaf 5 Leaf) 7 (Node (Node Leaf 11 Leaf) 9 (Node Leaf 15 Leaf))
 
 main : Tree
-main = forkWith (writeTree aTree) |> readTree
+main = forkWith #* (writeTree aTree) |> readTree

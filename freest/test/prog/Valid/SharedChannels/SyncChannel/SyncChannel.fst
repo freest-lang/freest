@@ -33,7 +33,7 @@ client id ch = print (- id); sync ch; print id
 forkNClients : Int -> SyncServer -> ()
 forkNClients i ch
   | i == 0    = ()
-  | otherwise = fork (\(_ : ()) 1-> client i ch); 
+  | otherwise = fork #1 (\(_ : ()) -1-> client i ch); 
                 forkNClients (i - 1) ch
 
 nServers : Int

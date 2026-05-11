@@ -44,7 +44,7 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 unOp :: E.ParsedExp -> E.ParsedExp -> E.ParsedExp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
-addArgExp :: Level E.ParsedExp T.ParsedType -> E.ParsedExp -> E.ParsedExp
+addArgExp :: Level E.ParsedExp T.ParsedType K.Multiplicity -> E.ParsedExp -> E.ParsedExp
 addArgExp a (E.App s e as) = E.App (spanFromTo s a) e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]
 

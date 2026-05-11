@@ -27,7 +27,7 @@ type TreeC a = +{LeafC: Skip, NodeC: !a; TreeC a; TreeC a; ?a}
 -- for each node in the tree reads an integer from the channel;
 -- returns a tree isomorphic to the input where each integer in nodes
 -- is read from the channel.
-transform : forall (a : *T) (b : 1S). Tree a -> TreeC a; b -> (Tree a, b)
+transform : forall (a : *T) (b : 1S) -> Tree a -> TreeC a; b -> (Tree a, b)
 transform @a @b tree c =
   case tree of
     Leaf       -> (Leaf @a, select LeafC c) -- CANNOT INFER
@@ -41,7 +41,7 @@ transform @a @b tree c =
 -- Reads a tree from a given channel;
 -- writes back on the channel the sum of the elements in the tree;
 -- returns this sum.
-treeSum : forall (a : 1S). Dual (TreeC Int); a -> (Int, a)
+treeSum : forall (a : 1S) -> Dual (TreeC Int); a -> (Int, a)
 treeSum @a c =
   case c of
     &LeafC c -> (0, c)
@@ -65,7 +65,7 @@ xs = Node 1 (Node 2 (Node 8 (Leaf @Int)  -- CANNOT INFER
 
 main =
   let (w, r) = channel @(TreeC Int; Wait) in
-  fork (\(_ : ()) 1-> treeSum r |> snd |> close);
+  fork #1 (\(_ : ()) -1-> treeSum r |> snd |> close);
   let (t, w) = transform @Int @Wait xs w in
   wait w;
   t

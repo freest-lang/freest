@@ -18,7 +18,7 @@ mathServer c =
 main : Int
 main =
   let (w,r) = channel @MathClient in
-  fork (\(_ : ()) 1-> mathServer r);
+  fork #1 (\(_ : ()) -1-> mathServer r);
   w |> select Add 
     |> send 5 
     |> send 18

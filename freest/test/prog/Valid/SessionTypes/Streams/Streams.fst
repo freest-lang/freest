@@ -22,12 +22,12 @@ type Stream = rec x. () -> (Int, x)
 -- We can define two “destructors” for streams; if s is a stream, then
 -- hd s is the first number it returns when we pass it unit.
 
-hd : forall (a : *T). Stream a -> a
+hd : forall (a : *T) -> Stream a -> a
 hd @a s = fst (s ())
 
 -- Similarly, tl s is the new stream that we obtain when we pass unit to s.
 
-tl : forall (a : *T). Stream a -> Stream a
+tl : forall (a : *T) -> Stream a -> Stream a
 tl @a s = snd (s ())
 
 -- Construct a stream

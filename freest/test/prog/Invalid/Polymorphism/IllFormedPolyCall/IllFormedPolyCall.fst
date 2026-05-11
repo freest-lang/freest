@@ -6,7 +6,7 @@ data Tree = Empty | Node Int Tree Tree
 type TreeC : 1S
 type TreeC = +{EmptyC: Skip, NodeC: !Int; TreeC; TreeC}
 
-sendTree : forall (a : 1S). Tree -> TreeC; a -> a
+sendTree : forall (a : 1S) -> Tree -> TreeC; a -> a
 sendTree @a t c =
   case t of
     Empty ->

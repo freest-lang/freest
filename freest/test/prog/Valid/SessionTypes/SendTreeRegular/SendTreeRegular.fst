@@ -27,13 +27,13 @@ write : Tree -> Dual TreeC -> ()
 write Leaf         c = c |> select LeafC |> close
 write (Node l x r) c =
   c |> select NodeC
-    |> send (forkWith (write l))
+    |> send (forkWith #* (write l))
     |> send x
-    |> send (forkWith (write r))
+    |> send (forkWith #* (write r))
     |> close
 
 main : Tree
-main = forkWith (write xs) |> read
+main = forkWith #* (write xs) |> read
   where xs = Node (Node Leaf 
                         5 
                         Leaf) 

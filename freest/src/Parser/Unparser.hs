@@ -55,9 +55,16 @@ class Unparse t where
   unparse :: t -> String
   unparse = snd . fragment
 
+instance Unparse K.Multiplicity where
+  fragment = \case
+    K.Lin _ -> (maxRator, "1")
+    K.Un  _ -> (maxRator, "*")
+    K.VarM _ lv φ -> (maxRator, unparse φ)
+    K.Sup _ lvφs -> (minRator, List.intercalate " + " (map (unparse . snd) lvφs))
+
 instance Unparse K.Kind where
   fragment = \case
-    K.Proper _ m pk -> (maxRator, show m ++ show pk)
+    K.Proper _ m pk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ " " ++ show pk)
     K.Arrow _ k1 k2 -> (arrowRator, l ++ " -> " ++ r)
       where
         l = bracket (fragment k1) LeftAssoc arrowRator
@@ -65,21 +72,21 @@ instance Unparse K.Kind where
     K.Var _ τ       -> (maxRator, show τ)
 
 instance Unparse Variable where
-  fragment a = (maxRator, external a ++ "#" ++ show (internal a))
-  
+  fragment a = (maxRator, show a)
 instance Unparse (T.Type x) where
   fragment = \case 
     T.Int  _ _ -> (maxRator, "Int")
     T.Float _ _ -> (maxRator, "Float")
     T.Char _ _ -> (maxRator, "Char")
-    T.Arrow _ _ m -> (maxRator, "(" ++ arrow m ++ ")")
-    T.Quant _ _ p pk -> (maxRator, "(" ++ quant True p pk ++ ")")
+    T.Arrow _ _ m -> (maxRator, "(" ++ multArrow m ++ ")")
+    T.Quant _ _ p pk m -> (maxRator, "(" ++ quant True p pk m ++ ")")
+    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ concatMap (('#':) . show) φs ++ " -" ++ show m ++ "-> " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
     T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
                                         T.In  -> "Wait")
-    T.Message _ _ m p -> (maxRator, "(" ++ multiplicity m ++ polarity p ++ ")")
+    T.Message _ _ m p -> (maxRator, "(" ++ msgMultiplicity m ++ polarity p ++ ")")
     T.Choice _ _ m p is -> 
-      (maxRator, multiplicity m ++ view p ++ "{" ++ fields ++ "}")
+      (maxRator, msgMultiplicity m ++ view p ++ "{" ++ fields ++ "}")
       where 
         fields = List.intercalate ", " (map show is)
     T.Semi _ _ -> (maxRator, "(;)")
@@ -91,20 +98,18 @@ instance Unparse (T.Type x) where
         r = bracket (fragment k) RightAssoc appRator
     T.Var  _ _ _ a -> fragment a
     T.Abs _ _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
-    T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
+    T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ multArrow m ++ " " ++ r)
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
-    T.AppQuant _ _ _ _ p pk aks t -> 
-      (dotRator, quant False p pk ++ bindings aks ++ ". " ++ unparse t)
+    T.AppQuant _ _ _ _ p pk m aks t -> 
+      (dotRator, quant False p pk m ++ bindings aks ++ quantSep p pk m ++ unparse t)
     T.Tuple _ _ _ ts -> 
       (maxRator, "(" ++ List.intercalate ", " (map unparse ts) ++ ")")
     T.List _ _ _ t -> 
       (maxRator, "[" ++ unparse t ++ "]")
     T.AppMessage _ _ _ m p t -> 
-      (msgRator, multiplicity m ++ polarity p ++ bracket (fragment t) RightAssoc msgRator)
-    T.AppQuantS _ _ _ _ p a k t ->
-      (dotRator, polarity p ++ polarity p ++ bindings [(a, k)] ++ ". " ++ unparse t)
+      (msgRator, msgMultiplicity m ++ polarity p ++ bracket (fragment t) RightAssoc msgRator)
     T.AppLinChoice _ _ _ p lts ->
       (maxRator, view p ++ "{" ++ fields lts ++ "}")
       where 
@@ -122,23 +127,21 @@ instance Unparse (T.Type x) where
         r = bracket (fragment (last ts)) RightAssoc appRator
     where
       quant prefix = \cases
-        T.In  K.Top     -> "forall" ++ if prefix then "" else " "
-        T.Out K.Top     -> "exists" ++ if prefix then "" else " "
-        T.In  K.Session -> "??"
-        T.Out K.Session -> "!!"
-      arrow = \case 
-        K.Lin    -> "1->"
-        K.Un     -> "->"
-        K.VarM _ φ -> external φ ++ "->"
-      multiplicity = \case
-        K.Lin    -> ""
-        K.Un     -> "*"
-        K.VarM _ φ -> external φ
+        T.In  K.Top     m -> "forall" ++ if prefix then "#" ++ show m else " "
+        T.Out K.Top     m -> "exists" ++ if prefix then "" else " "
+        p     K.Session m -> polarity p ++ "type "
+      quantSep = \cases
+        T.In K.Top m -> " -" ++ show m ++ "-> "
+        _    _     _ -> ". "
+      multArrow m = "-" ++ filter (/= ' ') (unparse m) ++ "->"
+      msgMultiplicity = \case
+        K.Lin{}    -> ""
+        K.Un{}     -> "*"
       polarity = \case
         T.In  -> "?"
         T.Out -> "!"
       bindings = 
-        unwords . map \(a, k) -> "(" ++ external a ++ " : " ++ unparse k ++ ")"
+        unwords . map \(a, k) -> "(" ++ show a ++ " : " ++ unparse k ++ ")"
       view = \case
         T.In  -> "&"
         T.Out -> "+"

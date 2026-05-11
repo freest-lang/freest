@@ -12,7 +12,7 @@ f1 c = case c of &B c -> receive c
 main : Bool
 main =
   let (w, r) = channel @(&{B: !Bool};Close) in
-  fork (\(_ : ()) 1-> f w);
+  fork #1 (\(_ : ()) -1-> f w);
   let (x, c) = f1 r in
   wait c;
   x

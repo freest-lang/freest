@@ -10,7 +10,7 @@ type IntCell = *?IntCellSession
 type IntCellSession : 1C
 type IntCellSession = +{Read: ?Int, Write: !Int} ; Close
 
-write: Int -> IntCell 1-> ()
+write: Int -> IntCell -1-> ()
 write n s = receive_ s |> select Write |> sendAndClose n 
 
 read: IntCell -> Int
@@ -29,11 +29,11 @@ sleep n = sleep (n - 1)
 -- Expect 0, 5 or 6
 main: Int
 main =
-  let c = forkWith (cell 0) in
+  let c = forkWith #* (cell 0) in
   let (r, w) = channel @*?IntCellSession in
-  fork (\(_ : ()) 1-> read c);
-  fork (\(_ : ()) 1-> read c);
-  fork (\(_ : ()) 1-> write 5 c); 
-  fork (\(_ : ()) 1-> write 6 c); 
+  fork #1 (\(_ : ()) -1-> read c);
+  fork #1 (\(_ : ()) -1-> read c);
+  fork #1 (\(_ : ()) -1-> write 5 c); 
+  fork #1 (\(_ : ()) -1-> write 6 c); 
   sleep 10000;
   read c

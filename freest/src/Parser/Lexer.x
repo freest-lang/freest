@@ -72,12 +72,13 @@ $upper = [ A-Z ]
 -- Punctuation
 <0> "\"    { token TkBackslash }
 <0> "->"   { token TkArrow }
-<0> "*->"  { token TkUnArrow }
-<0> "1->"  { token TkLinArrow}
+<0> "-{"   { token TkArrowButt }
+<0> "}->"  { token TkArrowHead }
 <0> "="    { token TkEqual }
 <0> ":"    { token TkColon }
 <0> "."    { token TkDot }
 <0> "@"    { token TkAt }
+<0> "#"    { token TkHash }
 <0> ","    { token TkComma }
 <0> "("    { token TkLParen }
 <0> ")"    { token TkRParen }
@@ -128,14 +129,6 @@ $upper = [ A-Z ]
 <0> \!      { token TkBang }
 <0> \?      { token TkQuestion }
 <0> \&      { token TkAmp }
-
--- Kinds
-<0> "1T" { token TkLinTopKind }
-<0> "*T" { token TkUnTopKind }
-<0> "1S" { token TkLinSessionKind }
-<0> "*S" { token TkUnSessionKind }
-<0> "1C" { token TkLinChannelKind }
-<0> "*C" { token TkUnChannelKind }
 
 -- Literals
 <0> @intLit    { emit TkIntLit }

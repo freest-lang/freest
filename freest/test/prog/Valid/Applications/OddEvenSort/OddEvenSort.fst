@@ -13,7 +13,7 @@ exchangeRight x right =
 -- channel to the right and the channel where to announce the result
 -- once done. First is an odd process, hence it controls when sorting
 -- is completed.
-first : Int -> Int -> Sorter -> (!Int; Close) 1-> ()
+first : Int -> Int -> Sorter -> (!Int; Close) -1-> ()
 first n x right collect' =
   if n == 0
   then select Done right |> close ; 
@@ -48,14 +48,14 @@ consume' c =
 -- from the left the announcement that sorting is completed (Done).
 
 mutual
-  oddProcess : Int -> Int -> Dual Sorter -> Sorter 1-> (!Int; Close) 1-> ()
+  oddProcess : Int -> Int -> Dual Sorter -> Sorter -1-> (!Int; Close) -1-> ()
   oddProcess n x left right collect' =
     if n == 0
     then select Done right |> close ; consume' left ; send x collect' |> close
     else let (min, right) = exchangeRight x right in
         evenProcess (n - 1) min left right collect'
 
-  evenProcess : Int -> Int -> Dual Sorter -> Sorter 1-> (!Int; Close) 1-> ()
+  evenProcess : Int -> Int -> Dual Sorter -> Sorter -1-> (!Int; Close) -1-> ()
   evenProcess n x left right collect' =
     case left of
       &Done left -> wait left; select Done right |> close ; send x collect' |> close
@@ -65,7 +65,7 @@ mutual
 -- last accepts the value in the node, the channel to the left and the
 -- channel where to announce the result once done. last receives from
 -- the left the announcement that sorting is completed (Done).
-last : Int -> Dual Sorter -> (!Int; Close) 1-> ()
+last : Int -> Dual Sorter -> (!Int; Close) -1-> ()
 last x left collect' =
   case left of
     &Done left -> wait left; send x collect' |> close
@@ -92,13 +92,13 @@ main =
       (cw6, cr6) = channel @(!Int; Close)
       (cw7, cr7) = channel @(!Int; Close) in
   -- the various sorting nodes
-  fork (\(_ : ()) 1-> first       (p / 2)     99    l1 cw1);
-  fork (\(_ : ()) 1-> evenProcess (p / 2)     88 r1 l2 cw2);
-  fork (\(_ : ()) 1-> oddProcess  (p / 2 - 1) 33 r2 l3 cw3);
-  fork (\(_ : ()) 1-> evenProcess (p / 2)     11 r3 l4 cw4);
-  fork (\(_ : ()) 1-> oddProcess  (p / 2 - 1) 55 r4 l5 cw5);
-  fork (\(_ : ()) 1-> evenProcess (p / 2)     44 r5 l6 cw6);
-  fork (\(_ : ()) 1-> last                    77 r6    cw7);
+  fork #1 (\(_ : ()) -1-> first       (p / 2)     99    l1 cw1);
+  fork #1 (\(_ : ()) -1-> evenProcess (p / 2)     88 r1 l2 cw2);
+  fork #1 (\(_ : ()) -1-> oddProcess  (p / 2 - 1) 33 r2 l3 cw3);
+  fork #1 (\(_ : ()) -1-> evenProcess (p / 2)     11 r3 l4 cw4);
+  fork #1 (\(_ : ()) -1-> oddProcess  (p / 2 - 1) 55 r4 l5 cw5);
+  fork #1 (\(_ : ()) -1-> evenProcess (p / 2)     44 r5 l6 cw6);
+  fork #1 (\(_ : ()) -1-> last                    77 r6    cw7);
   -- collect' and print results
   print (receiveAndWait cr1);
   print (receiveAndWait cr2);

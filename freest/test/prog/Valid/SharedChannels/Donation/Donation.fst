@@ -61,7 +61,7 @@ helpSavingTheWolf d =
   of
     &Accepted d ->
       let p = receiveAndClose d in 
-      fork (\(_ : ()) 1-> donate p "Benefactor1" "2345" 5);
+      fork #1 (\(_ : ()) -1-> donate p "Benefactor1" "2345" 5);
       donate p "Benefactor3" "1004" 10
     &Denied d ->
       putStrLn $ receiveAndClose d
@@ -84,7 +84,7 @@ wrongYear d =
 -- 3. The bank that charges credit cards
 charge : CreditCard -> Amount -> ()
 charge ccard amount =
-  putStrLn $ "Charging " ++ show amount ++ " euros on card " ++ ccard
+  putStrLn $ (++) #* "Charging " ((++) #* (show amount) ((++) #* " euros on card " ccard))
 
 
 -- 4. The Online Donation Server
@@ -115,13 +115,13 @@ server k n fj p ds
   | k == 0    = waitFor n (snd fj)
   | otherwise =
     let d = accept ds in
-    fork (\(_ : ()) 1-> setup "<default>" 0000 (fst fj) p d);
+    fork #1 (\(_ : ()) -1-> setup "<default>" 0000 (fst fj) p d);
     server (k - 1) n fj p ds
 
 donationServer : Int -> Int -> DonationS -> ()
 donationServer noOfClients noOfDonations ds =
   let (f, j) = channel @Fork in
-  let p = forkWith (promotion noOfDonations f) in
+  let p = forkWith #* (promotion noOfDonations f) in
   server noOfClients noOfClients (channel @Fork) p ds;
   case j of &Over _ -> ()
 
@@ -131,7 +131,7 @@ main =
   let (ds, dc) = channel @DonationS in
   let noOfClients = 3 in
   let noOfDonations = 4 in
-  fork (\(_ : ()) 1-> helpSavingTheWolf dc);
-  fork (\(_ : ()) 1-> wrongYear dc);
-  fork (\(_ : ()) 1-> helpSavingTheWolf dc);
+  fork #1 (\(_ : ()) -1-> helpSavingTheWolf dc);
+  fork #1 (\(_ : ()) -1-> wrongYear dc);
+  fork #1 (\(_ : ()) -1-> helpSavingTheWolf dc);
   donationServer noOfClients noOfDonations ds

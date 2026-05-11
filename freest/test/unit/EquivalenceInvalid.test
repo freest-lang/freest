@@ -7,9 +7,9 @@ where
   type Void' : *S
   type Void' = Void'
 
-case !!(a : 1S). (Void @*S) ; Wait ; a == !!(b : 1S). Wait : 1S
+case !type (a : 1S). (Void @*S) ; Wait ; a == !type (b : 1S). Wait : 1S
 
-case !!(a : 1S). Void' ; Wait ; a == !!(b : 1S). Wait : 1S
+case !type (a : 1S). Void' ; Wait ; a == !type (b : 1S). Wait : 1S
 where
   type Void' : *S
   type Void' = Void'
@@ -28,14 +28,34 @@ case (\(a : *T) -> \(a : *T) -> a) == (\(a : *T) -> \(b : *T) -> a) : *T -> *T -
 
 -- These two types are isomorphic, https://wiki.haskell.org/Existential_type, but not equivalent
 case
-  forall (t:*T -> *T). forall (r:*T). (forall (a:*T). (t a -> r))
+  forall (t:*T -> *T) -> forall (r:*T) -> (forall (a:*T) -> (t a -> r))
   ==
-  forall (t:*T -> *T). forall (r:*T). ((exists (a:*T). t a) -> r)
+  forall (t:*T -> *T) -> forall (r:*T) -> ((exists (a:*T), t a) -> r)
   : *T
 
 case
-  forall (a:*T) (b:1S) . ?a ; b -> (?a ; b, a)
+  forall (a:*T) (b:1S) -> ?a ; b -> (?a ; b, a)
   ==
-  forall (a:*T) (b:1S) . ?a ; b -> (a, ?a ; b)
+  forall (a:*T) (b:1S) -> ?a ; b -> (a, ?a ; b)
   :
   *T
+
+case forall #m #n -*-> Int -m-> Int -n-> Int
+  == forall #m #n -*-> Int -n-> Int -m-> Int 
+   : *T
+
+case forall #m #n -*-> Int -m-> Int -n-> Int
+  == forall #n #m -*-> Int -m-> Int -n-> Int
+   : *T
+
+case forall #m -*-> Int -m-> Int
+  == forall #m -*-> Int -*-> Int
+   : *T
+
+case forall #m -*-> Int -m-> Int
+  == forall #m -1-> Int -m-> Int
+   : 1T
+
+case forall #m -*-> Int -m-> Int
+  == forall #m -*-> Int -1-> Int
+   : *T

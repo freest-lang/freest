@@ -12,12 +12,12 @@ channel or with asynchronous channels. In a typical synchronous
 
 module CrissCross where
 
-writer : !Char;Close -> !Bool;Close 1-> ()
+writer : !Char;Close -> !Bool;Close -1-> ()
 writer w1 w2 =
   w1 |> send 'c' |> close; 
   w2 |> send False |> close 
 
-reader : ?Char;Wait -> ?Bool;Wait 1-> Bool
+reader : ?Char;Wait -> ?Bool;Wait -1-> Bool
 reader r1 r2 =
   receiveAndWait r1;
   receiveAndWait r2 
@@ -26,5 +26,5 @@ main : Bool
 main =
   let (w1, r1) = channel @(!Char;Close) in
   let (w2, r2) = channel @(!Bool;Close) in
-  fork (\(_ : ()) 1-> writer w1 w2);
+  fork #1 (\(_ : ()) -1-> writer w1 w2);
   reader r1 r2

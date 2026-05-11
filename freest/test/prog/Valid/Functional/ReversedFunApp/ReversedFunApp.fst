@@ -1,8 +1,7 @@
 module ReversedFunApp where
 
-f : forall (a b : *T). a -> (a -> b) -> b -- ∀a:*T. ∀b:*T. a -> (a -> b) -> b
+f : forall #m #n (a : m T) (b : 1T) -> a -> (a -n-> b) -m-> b
 f = (|>)
 
 main : Int
-main = f 5 (\(x : Int) -> x)
-
+main = f #* #* 5 (\(x : Int) -> x)

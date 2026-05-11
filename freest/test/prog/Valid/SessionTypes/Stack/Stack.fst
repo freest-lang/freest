@@ -14,13 +14,13 @@ type EStack, NEStack : 1S
 type EStack  = &{Push: ?Int; NEStack; EStack , Stop: Skip}
 type NEStack = &{Push: ?Int; NEStack; NEStack, Pop : !Int}
 
-neStack : forall (a : 1S). Int -> NEStack; a -> a
+neStack : forall (a : 1S) -> Int -> NEStack; a -> a
 neStack @a x c =
   case c of
     &Push c -> let (y, c) = receive c in neStack x (neStack y c)
     &Pop  c -> send x c
 
-eStack : forall (b : 1S). EStack; b -> b
+eStack : forall (b : 1S) -> EStack; b -> b
 eStack @a c =
   case c of 
     &Push c -> let (x, c) = receive c in eStack (neStack x c)
@@ -46,6 +46,6 @@ aStackClient c =
 main : Int
 main =
   let (r, w) = channel @(EStack; Wait) in
-  fork (\(_ : ()) 1-> r |> eStack |> wait);
+  fork #1 (\(_ : ()) -1-> r |> eStack |> wait);
   aStackClient w
     

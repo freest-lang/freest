@@ -54,7 +54,7 @@ applySubs (Θ ivtms) t =
       t -> t
 
     subsm iv m = \case
-      T.Arrow s (K.VarM InstLv iv') | iv == iv' -> T.Arrow s m
+      T.Arrow s (K.VarM _ InstLv iv') | iv == iv' -> T.Arrow s m
       T.Abs s aks u -> T.Abs s aks $ subsm iv m u
       T.App s u us -> T.App s (subsm iv m u) (map (subsm iv m) us)
 
@@ -110,8 +110,8 @@ match e modl = match' e modl Set.empty Set.empty
         -> do
         θ1 <- match' e modl bindings visited t11 t21
         θ2 <- case m1 of
-          K.Lin -> match' e modl bindings visited t12 (T.Skip s)
-          K.Un  -> return $ isubsAbsorbed (fiv t12)
+          K.Lin{} -> match' e modl bindings visited t12 (T.Skip s)
+          K.Un{}  -> return $ isubsAbsorbed (fiv t12)
         return $ θ2 <> θ1
       -- M-MsgSeqR
       (T.AppMessage s m1 p1 t11, T.AppSemi _ (T.AppMessage _ m2 p2 t21) t22)
@@ -119,8 +119,8 @@ match e modl = match' e modl Set.empty Set.empty
         -> do
         θ1 <- match' e modl bindings visited t11 t21
         θ2 <- case m2 of
-          K.Lin -> match' e modl bindings visited t22 (T.Skip s)
-          K.Un  -> return $ isubsAbsorbed (fiv t22)
+          K.Lin{} -> match' e modl bindings visited t22 (T.Skip s)
+          K.Un{}  -> return $ isubsAbsorbed (fiv t22)
         return $ θ2 <> θ1
       -- M-Msg
       (T.AppMessage s m1 p1 t1', T.AppMessage _ m2 p2 t2')
@@ -132,8 +132,8 @@ match e modl = match' e modl Set.empty Set.empty
         -> do
         θ1 <- match' e modl bindings visited t11 t21
         θ2 <- case m1 of
-          K.Lin -> match' e modl bindings visited t12 t22
-          K.Un  -> return $ isubsAbsorbed (fiv t12)
+          K.Lin{} -> match' e modl bindings visited t12 t22
+          K.Un{}  -> return $ isubsAbsorbed (fiv t12)
         return $ θ2 <> θ1
       -- M-DualVar
       (T.AppDual _ (T.AppVar _ a1 k1 ObjLv t1s), T.AppDual _ (T.AppVar _ a2 k2 ObjLv t2s))
@@ -154,16 +154,16 @@ match e modl = match' e modl Set.empty Set.empty
         -> do
         θ <- case (t1', t2') of
           (T.Arrow _ m1, T.Arrow _ m2) -> case (m1, m2) of
-            (K.VarM InstLv iv, m2) -> return $ subsMult iv m2
-            (m1, K.VarM InstLv iv) -> return $ subsMult iv m1
+            (K.VarM _ InstLv iv, m2) -> return $ subsMult iv m2
+            (m1, K.VarM _ InstLv iv) -> return $ subsMult iv m1
             (_, _) -> return emptySubs
           _ -> return emptySubs
         foldMatch e modl bindings visited θ t1s t2s
       -- M-Quant
-      (T.AppQuant s1 p1 pk1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 pk2 ((a2, k2) : aks2) t2')
+      (T.AppQuant s1 p1 pk1 m1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 pk2 m2 ((a2, k2) : aks2) t2')
         | p1 == p2 && pk1 == pk2
         -> match' e modl (Set.insert (a1, a2) bindings) visited
-            (T.AppQuant s1 p1 pk1 aks1 t1') (T.AppQuant s2 p2 pk2 aks2 t2')
+            (T.AppQuant s1 p1 pk1 m1 aks1 t1') (T.AppQuant s2 p2 pk2 m2 aks2 t2')
       -- M-Var
       (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
@@ -192,7 +192,7 @@ match e modl = match' e modl Set.empty Set.empty
   isubsAbsorbed =
     foldl (\θ -> \case
         Left  iv -> subsType iv (T.Void (getSpan iv) (K.uc (getSpan iv))) <> θ
-        Right iv -> subsMult iv K.Un <> θ)
+        Right iv -> subsMult iv (K.Un (getSpan iv)) <> θ)
       emptySubs
 
   foldMatch e modl bindings visited θ t1s t2s = do
@@ -203,7 +203,7 @@ match e modl = match' e modl Set.empty Set.empty
 fiv :: T.KindedType -> Set.Set (Either Variable Variable)
 fiv = \case
   T.Var _ _ InstLv iv -> Set.singleton (Left iv)
-  T.Arrow _ (K.VarM InstLv iv) -> Set.singleton (Right iv)
+  T.Arrow _ (K.VarM _ InstLv iv) -> Set.singleton (Right iv)
   T.Abs _ _ t -> fiv t
   T.App _ t ts -> Set.unions (fiv t : map fiv ts)
   _ -> Set.empty
@@ -218,4 +218,4 @@ freshInstVarT s k = do
 freshInstVarM :: Span -> Validation K.Multiplicity
 freshInstVarM s = do
   i <- incCounter 
-  return $ K.VarM InstLv (Variable s ("_m" ++ show i) i)
+  return $ K.VarM s InstLv (Variable s ("_m" ++ show i) i)

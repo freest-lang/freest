@@ -28,5 +28,5 @@ rcvInt acc c =
 main : Int
 main =
   let (w, r) = channel @DD in
-  fork (\(_ : ()) 1-> sendInt 0 w); 
+  fork #1 (\(_ : ()) -1-> sendInt 0 w); 
   rcvInt 0 r

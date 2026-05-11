@@ -230,7 +230,7 @@ type ListIslandChannel : 1T
 data ListIslandChannel = Nil () | Cons IslandChannel ListIslandChannel
 
 -- Fold function over a list of IslandChannels
-foldIslands : forall (a : *T) . (a -> IslandChannel -> (a, IslandChannel)) -> a -> ListIslandChannel -> (a, ListIslandChannel)
+foldIslands : forall (a : *T) -> (a -> IslandChannel -> (a, IslandChannel)) -> a -> ListIslandChannel -> (a, ListIslandChannel)
 foldIslands @a f x chs =
   case chs of
     Nil _ ->
@@ -258,7 +258,7 @@ sendFittest fittest channels0 = snd $ foldIslands sendFittestF fittest channels0
 
 
 -- Auxiliary function that performs the getFittest-sendFittest loop
-masterLoop : ListIslandChannel -> Int 1-> ListIslandChannel
+masterLoop : ListIslandChannel -> Int -1-> ListIslandChannel
 masterLoop channels nIterG =
   if nIterG == 0
   then
@@ -285,7 +285,7 @@ endIslands cs =
 
 -- Run the master process that coordinates all the islands
 --   and then sends the result to the client
-runMasterServer : Dual ResultChannel -> ListIslandChannel 1-> Int 1-> ()
+runMasterServer : Dual ResultChannel -> ListIslandChannel -1-> Int -1-> ()
 runMasterServer c channels nIterG =
   -- Apply nIterG global iterations
   let channels = masterLoop channels nIterG in
@@ -298,7 +298,7 @@ runMasterServer c channels nIterG =
 
 -- Run an island instance that holds a population an performs
 --   the GA on demand (by the master)
-runIsland : Dual IslandChannel -> Int 1-> Int 1-> Population 1-> ()
+runIsland : Dual IslandChannel -> Int -1-> Int -1-> Population -1-> ()
 runIsland master seed nIterI pop =
   case master of
     &Fittest master ->
@@ -323,23 +323,23 @@ runIsland master seed nIterI pop =
       -- Stop (get some help  -Michael Jordan)
       wait master
 
-initIslands_ : ListIslandChannel -> Int 1-> Int 1-> Int 1-> Int 1-> Int 1-> ResultChannel
+initIslands_ : ListIslandChannel -> Int -1-> Int -1-> Int -1-> Int -1-> Int -1-> ResultChannel
 initIslands_ channels seed islands popSize nIterI nIterG =
   if islands == 0
   then
     let (client, server) = channel @ResultChannel in
-    fork (\(_ : ()) 1-> runMasterServer server channels nIterG);
+    fork #1 (\(_ : ()) -1-> runMasterServer server channels nIterG);
     client
   else
     let (master, island) = channel @IslandChannel in
     let (seed, pop) = generatePopulation seed popSize in
-    fork (\(_ : ()) 1-> runIsland island seed nIterI pop);
+    fork #1 (\(_ : ()) -1-> runIsland island seed nIterI pop);
     initIslands_ (Cons master channels) seed (islands - 1) popSize nIterI nIterG
 
 
 -- Initialize all needed processes (islands + master) and return a
 --   ResultChannel for the client to request the result
-initIslands : Int 1-> Int 1-> Int 1-> Int 1-> Int 1-> ResultChannel
+initIslands : Int -1-> Int -1-> Int -1-> Int -1-> Int -1-> ResultChannel
 initIslands = initIslands_ $ Nil ()
 
 -- ===== MAIN =====

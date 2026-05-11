@@ -1,4 +1,4 @@
 module ReceiveOnOutChannelPat where
 
 foo : !Int -> ()
-foo (??x. _) = ()
+foo (?@x. _) = ()

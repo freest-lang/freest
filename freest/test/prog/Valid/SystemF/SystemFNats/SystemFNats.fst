@@ -9,7 +9,7 @@ Church Encoding _ Natural Numbers
 module SystemFNats where
 
 type Nat : *T
-type Nat = forall (a : *T) . (a -> a) -> a -> a
+type Nat = forall (a : *T) -> (a -> a) -> a -> a
 
 zero : Nat 
 zero = \@(a : *T) (s : a -> a) (z : a) -> z

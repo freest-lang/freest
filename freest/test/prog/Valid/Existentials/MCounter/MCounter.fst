@@ -18,7 +18,7 @@ read : IntRef -> Int
 read r = r |> receive_ |> select Read |> receiveAndClose
 
 intRef : Int -> IntRef
-intRef x = forkWith (handle x)
+intRef x = forkWith #* (handle x)
   where
     handle : Int -> Dual IntRef -> ()
     handle x r = case accept r of
@@ -26,7 +26,7 @@ intRef x = forkWith (handle x)
       &Read  s -> sendAndWait x s; handle x r
 
 type MCounter : *T
-type MCounter = exists (a : *T) . (() -> a, a -> Int, a -> ())
+type MCounter = (exists (a : *T), (() -> a, a -> Int, a -> ()))
 
 mCounterADT : MCounter
 mCounterADT = (@IntRef, ( \(_ : ())     -> intRef 0                -- new
