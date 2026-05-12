@@ -264,7 +264,7 @@ eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
-eval ctx (E.Select _ (B.Identifier _ iden)) =
+eval _ (E.Select _ (B.Identifier _ iden)) =
   let (Just (VBuiltin selectBuiltin)) = Data.Map.lookup "select" builtins
   in return $ selectBuiltin (VString iden)
   {- return $ VSelect iden -}

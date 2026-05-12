@@ -18,12 +18,14 @@ TODO:
 
 import Control.Monad (zipWithM)
 import Data.Function (on)
-import Data.Map (empty, singleton, unions, insert)
+import Data.Map (empty, singleton, union, unions, insert)
 import qualified Data.Set as Set
 
-import Interpreter.Values (Value(VUnit, VInt, VFloat, VChar, VCons, VClosure, VChan, VPack), Env)
+import Interpreter.Values (Value(VUnit, VInt, VFloat, VChar, VCons, VClosure, VChan, VPack), Env, receive)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
+import Control.Concurrent (getChanContents)
+import GHC.IO (unsafePerformIO)
 
 
 -- HANDLING PATTERN MATCHING
@@ -79,7 +81,22 @@ resolvePatternMatching (E.WaitPat s) val =
   case val of
     VChan c -> Right empty
     _ -> Left (E.WaitPat s, val)
-resolvePatternMatching (E.InPat _ pat1 pat2) val = undefined
+resolvePatternMatching (E.InPat s pat1 pat2) val = do
+  case val of
+    VChan c -> do
+      let chanContents = unsafePerformIO $ getChanContents $ fst c
+      let msg = head chanContents
+      let binding = resolvePatternMatching pat1 msg
+      case binding of
+        Left _ -> Left (pat1, msg)
+        Right bindings -> do
+          -- TODO: must remove head from channel, how to??
+          -- TODO: receive creates a new copy of the channel? Immutability or mutability?
+          let binding' = resolvePatternMatching pat2 (VChan c)
+          case binding' of
+            Left _ -> Left (E.InPat s pat1 pat2, val)
+            Right bindings' -> Right $ union bindings bindings'
+    _ -> Left (E.InPat s pat1 pat2, val)
 resolvePatternMatching (E.ChoicePat _ iden pat) val = undefined
 -- check against select 
 resolvePatternMatching (E.TypeInPat _ (var, kind) pat) val = undefined
