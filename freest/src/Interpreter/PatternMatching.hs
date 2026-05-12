@@ -33,11 +33,11 @@ resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) Env
 resolvePatternMatching (E.IntPat s i) val =
   case val of
     VInt i' -> if i == i' then Right empty else Left (E.IntPat s i, val)
-    otherVal -> Left (E.IntPat s i, otherVal)
+    _ -> Left (E.IntPat s i, val)
 resolvePatternMatching (E.FloatPat s f) val =
   case val of
     VFloat f' -> if f == f' then Right empty else Left (E.FloatPat s f, val)
-    otherVal -> Left (E.FloatPat s f, otherVal)
+    _ -> Left (E.FloatPat s f, val)
 resolvePatternMatching (E.CharPat s c) val =
   case val of
     VChar c' -> if c == c' then Right empty else Left (E.CharPat s c, val)
@@ -45,13 +45,13 @@ resolvePatternMatching (E.CharPat s c) val =
 resolvePatternMatching (E.WildPat _ _) _ = Right empty
 resolvePatternMatching (E.VarPat _ var) val = Right $ singleton var val
 resolvePatternMatching (E.PackPat s vars pat) val =
-  resolvePatternMatching pat val
-{-   case val of
+  case val of
     VPack _ exp -> do
-      let binding = resolvePatternMatching pat val
+      let binding = resolvePatternMatching pat exp
       case binding of
-        Left _ -> Left (E.PackPat s vars pat, val)
-        Right bindings -> Right bindings -}
+        Left _ -> Left (pat, exp)
+        Right bindings -> Right bindings
+    _ -> Left (E.PackPat s vars pat, val)
 resolvePatternMatching (E.DConsPat s iden pats) val = do
   let (B.Identifier s' patIden) = iden
   case val of
@@ -73,12 +73,12 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
           Left _ -> Left (E.DConsPat s iden pats, val)
           Right bindings -> Right $ concat bindings
       else Left (E.DConsPat s iden pats, val) -}
-    otherVal -> Left (E.DConsPat s iden pats, val)
+    _ -> Left (E.DConsPat s iden pats, val)
 -- TODO: Do we need to check contents of channel? getChanContents to get contents, check if head is VUnit? Label?
 resolvePatternMatching (E.WaitPat s) val =
   case val of
     VChan c -> Right empty
-    otherVal -> Left (E.WaitPat s, otherVal)
+    _ -> Left (E.WaitPat s, val)
 resolvePatternMatching (E.InPat _ pat1 pat2) val = undefined
 resolvePatternMatching (E.ChoicePat _ iden pat) val = undefined
 -- check against select 

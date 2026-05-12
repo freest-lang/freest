@@ -226,10 +226,9 @@ eval (global, local) (E.App _ exp args) = do
 eval (_, local) (E.Abs _ params _ body) =
   -- convert to a closure, capturing the local environment, so we don't lose bindings
   return $ VClosure (map fst (fst $ B.partitionLevels params)) body local
-eval (global, local) (E.Pack span types exp) = eval (global, local) exp
-  {- do
+eval (global, local) (E.Pack span types exp) = do
   val <- eval (global, local) exp
-  return $ VPack types val -}
+  return $ VPack types val
 eval (global, local) (E.Asc span exp typ) = do
   eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
