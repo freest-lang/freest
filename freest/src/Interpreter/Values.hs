@@ -30,6 +30,7 @@ import System.IO ( Handle, hPutStr, stderr, openFile, IOMode (..), hGetChar, hGe
 
 import Syntax.Base ( Variable )
 import Syntax.Expression ( KindedExp, Pat )
+import Syntax.Type.Kinded (KindedType)
 
 -- | An environment, composed of bindings from variables to values
 type Env = Map.Map Variable Value
@@ -48,6 +49,7 @@ data Value
   | VLabel String
   | VFork
   | VChan ChannelEnd
+  | VPack [KindedType] Value
 {-   | VSelect String
   | VSendType
   | VRecvType -}

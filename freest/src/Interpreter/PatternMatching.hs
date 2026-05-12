@@ -21,7 +21,7 @@ import Data.Function (on)
 import Data.Map (empty, singleton, unions, insert)
 import qualified Data.Set as Set
 
-import Interpreter.Values (Value(VInt, VFloat, VChar, VCons, VClosure), Env)
+import Interpreter.Values (Value(VUnit, VInt, VFloat, VChar, VCons, VClosure, VChan, VPack), Env)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 
@@ -44,7 +44,14 @@ resolvePatternMatching (E.CharPat s c) val =
     otherVal -> Left (E.CharPat s c, otherVal)
 resolvePatternMatching (E.WildPat _ _) _ = Right empty
 resolvePatternMatching (E.VarPat _ var) val = Right $ singleton var val
-resolvePatternMatching (E.PackPat _ vars pat) val = resolvePatternMatching pat val
+resolvePatternMatching (E.PackPat s vars pat) val =
+  resolvePatternMatching pat val
+{-   case val of
+    VPack _ exp -> do
+      let binding = resolvePatternMatching pat val
+      case binding of
+        Left _ -> Left (E.PackPat s vars pat, val)
+        Right bindings -> Right bindings -}
 resolvePatternMatching (E.DConsPat s iden pats) val = do
   let (B.Identifier s' patIden) = iden
   case val of
@@ -67,7 +74,11 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
           Right bindings -> Right $ concat bindings
       else Left (E.DConsPat s iden pats, val) -}
     otherVal -> Left (E.DConsPat s iden pats, val)
-resolvePatternMatching (E.WaitPat _) val = undefined
+-- TODO: Do we need to check contents of channel? getChanContents to get contents, check if head is VUnit? Label?
+resolvePatternMatching (E.WaitPat s) val =
+  case val of
+    VChan c -> Right empty
+    otherVal -> Left (E.WaitPat s, otherVal)
 resolvePatternMatching (E.InPat _ pat1 pat2) val = undefined
 resolvePatternMatching (E.ChoicePat _ iden pat) val = undefined
 -- check against select 
