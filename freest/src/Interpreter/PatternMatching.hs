@@ -67,7 +67,11 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
           Right bindings -> Right $ concat bindings
       else Left (E.DConsPat s iden pats, val) -}
     otherVal -> Left (E.DConsPat s iden pats, val)
+resolvePatternMatching (E.WaitPat _) val = undefined
+resolvePatternMatching (E.InPat _ pat1 pat2) val = undefined
 resolvePatternMatching (E.ChoicePat _ iden pat) val = undefined
+-- check against select 
+resolvePatternMatching (E.TypeInPat _ (var, kind) pat) val = undefined
 resolvePatternMatching (E.AsPat s var pat) val = do
   let binding = resolvePatternMatching pat val
   case binding of

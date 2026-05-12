@@ -14,8 +14,7 @@ module Interpreter.Eval
 TODO:
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
 - Handling of undefined is correct?
-- Missing evaluation for E.Case (what about labels?), SendType, ReceiveType
-- About SendType and ReceiveType, do we need to define sending and receiving operations?
+- Missing evaluation for E.Case (what about labels?)
 - Handling recursive functions
 - Handling of LetDecls Mutuals: in collectLetDecls
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
@@ -181,18 +180,24 @@ handleApplication (global, local) (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
 handleApplication (global, local) VFork args =
   forkIO (void $ handleApplication (global, empty) (head args) [VUnit]) $> VUnit
-handleApplication _ (VSelect label) args =
+{- handleApplication (global, local) (VSelect label) args =
   case args of
     [VChan chan] -> do
       chan2 <- send (VLabel label) chan
       return $ VChan chan2
-    _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!"
-handleApplication _ VRecvType args =
+    _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!" -}
+{- handleApplication _ VSendType args =
+  case args of
+    [VChan chan] -> do
+      chan2 <- send VUnit chan
+      return $ VChan chan2
+    _ -> error "Too many arguments applied to SendType! Type checking failed!" -}
+{- handleApplication _ VRecvType args =
   case args of
     [VChan chan] -> do
       (_, chan2) <- receive chan
       return $ VChan chan2
-    _ -> error "Too many arguments applied to ReceiveType! Type checking failed!"
+    _ -> error "Too many arguments applied to ReceiveType! Type checking failed!" -}
 
 -- MAIN FUNCTIONS
 
@@ -258,15 +263,20 @@ eval _ (E.Channel _ _) = do
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
 eval ctx (E.Select _ (B.Identifier _ iden)) =
-  return $ VSelect iden
-eval (global, local) (E.SendType span typ) =
-  return VSendType
-eval (global, local) (E.ReceiveType span) = 
-  return VRecvType
+  let (Just (VBuiltin selectBuiltin)) = Data.Map.lookup "select" builtins
+  in return $ selectBuiltin (VString iden)
+  {- return $ VSelect iden -}
+eval (global, local) (E.SendType _ _) =
+  return $ fromJust $ Data.Map.lookup "sendType" builtins
+  {- return VSendType -}
+eval (global, local) (E.ReceiveType _) =
+  return $ fromJust $ Data.Map.lookup "receiveType" builtins
+  {- return VRecvType -}
 
 -- | Interprets a module and returns the result
 interpret :: M.KindedModule -> IO Value
 interpret m = do
+  mapM_ print m.definitions
   -- collect module declarations, forming the initial environment
   m_env <- buildEnv m
   case getMainFunction m of

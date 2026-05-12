@@ -48,9 +48,9 @@ data Value
   | VLabel String
   | VFork
   | VChan ChannelEnd
-  | VSelect String
+{-   | VSelect String
   | VSendType
-  | VRecvType
+  | VRecvType -}
 
 instance Show Value where
   show VUnit = "()"
@@ -65,9 +65,6 @@ instance Show Value where
   show (VHandle _) = "<handle>"
   show (VLabel str) = "<label> string"
   show (VChan _) = "<chan>"
-  show (VSelect _) = "<select>"
-  show VSendType = "<sendType>"
-  show VRecvType = "<recvType>"
 
 showTups :: [Value] -> String
 showTups [val] = show val
@@ -236,4 +233,10 @@ builtins = Map.fromList
   , ("readFileLine",  VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hGetLine handle <&> VString))
   , ("isEOF",         VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hIsEOF handle <&> hsToFstBool))
   , ("closeFile",     VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hClose handle $> VUnit)) -}
+  
+
+  -- * Other Expressions
+  , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send (VLabel label) c)))
+  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
+  , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VChan c))
   ]
