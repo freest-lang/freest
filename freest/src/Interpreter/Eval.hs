@@ -12,10 +12,9 @@ module Interpreter.Eval
 
 {-
 TODO:
-- Existentials, Pack Span [Type x] (Exp x): the initial list of types should contain just one, the representation type; there's just one expression on the third argument, because it should be a record of functions. Use LetDecls for the open construct, check also pack pattern.
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
 - Handling of undefined is correct?
-- Missing evaluation for E.Pack, E.Case (what about labels?), SendType, ReceiveType
+- Missing evaluation for E.Case (what about labels?), SendType, ReceiveType
 - About SendType and ReceiveType, do we need to define sending and receiving operations?
 - Handling recursive functions
 - Handling of LetDecls Mutuals: in collectLetDecls
@@ -222,8 +221,7 @@ eval (global, local) (E.App _ exp args) = do
 eval (_, local) (E.Abs _ params _ body) =
   -- convert to a closure, capturing the local environment, so we don't lose bindings
   return $ VClosure (map fst (fst $ B.partitionLevels params)) body local
-eval (global, local) (E.Pack span types exp) = 
-  error "Evaluation of E.Pack not implemented"
+eval (global, local) (E.Pack span types exp) = eval (global, local) exp
 eval (global, local) (E.Asc span exp typ) =
   eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do

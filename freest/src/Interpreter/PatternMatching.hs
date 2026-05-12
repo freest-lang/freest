@@ -44,7 +44,7 @@ resolvePatternMatching (E.CharPat s c) val =
     otherVal -> Left (E.CharPat s c, otherVal)
 resolvePatternMatching (E.WildPat _ _) _ = Right empty
 resolvePatternMatching (E.VarPat _ var) val = Right $ singleton var val
-resolvePatternMatching (E.PackPat _ vars pat) val = undefined
+resolvePatternMatching (E.PackPat _ vars pat) val = resolvePatternMatching pat val
 resolvePatternMatching (E.DConsPat s iden pats) val = do
   let (B.Identifier s' patIden) = iden
   case val of
