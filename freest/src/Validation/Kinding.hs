@@ -16,7 +16,7 @@ module Validation.Kinding
   , checkPrekind
   , checkSession
   , checkChannel
-  , isStrictlyLin
+  , isRestricted
   , isStrictlySession
   , isStrictlyChannel
   , KindCtx
@@ -202,11 +202,11 @@ checkSubkindOf' :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf' t k' k = unless (k' <: k) $
      throwE (KindMismatch (getSpan t) k' t)
 
-isStrictlyLin, isStrictlyChannel, isStrictlySession :: TK.KindedType -> Bool
+isRestricted, isStrictlyChannel, isStrictlySession :: TK.KindedType -> Bool
 
-isStrictlyLin t = case TK.kindOf t of
-  (Proper _ Lin{} _) -> True
-  _ -> False
+isRestricted t = case TK.kindOf t of
+  (Proper _ Un{} _) -> False
+  _ -> True
 
 isStrictlyChannel t = case TK.kindOf t of
   (Proper _ _ Channel) -> True

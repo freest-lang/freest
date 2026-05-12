@@ -70,7 +70,7 @@ main =
     let queue   = initQueue in
     let counter = initCounter in
     -- writer-reader concurrency, no writter-writer nor reader-reader concurrency
-    parallel #1 maxSize (\(_ : ()) -1-> enqueue (receive_ counter) queue);
+    parallel maxSize (\(_ : ()) -> enqueue (receive_ counter) queue);
     repeat maxSize $ (\(_ : ()) -> print (dequeue queue))
     -- writer-reader, writter-writer and reader-reader concurrency
     -- parallel @() 10 $ (\(_ : ()) -> enqueue (receiveUn @Int counter) queue);

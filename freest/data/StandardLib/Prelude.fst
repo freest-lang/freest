@@ -189,7 +189,7 @@ const @a @b x _ = x
 (.) : forall #m #n (a : 1T) (b : 1T) (c : 1T) -> (b -m-> c) -> (a -n-> b) -m-> a -m+n-> c
 (.) #m #n @a @b @c f g x = f (g x)
 
-flip : forall #m #n #o (a : 1T) (b : m T) (c : 1T) -> (a -n-> b -o-> c) -> b -> a -m+n-> c
+flip : forall #m #n #o (a : 1T) (b : m T) (c : 1T) -> (a -n-> b -o-> c) -> b -n-> a -m+n-> c
 flip #m #n # o @a @b @c f x y = f y x
 
 ($) : forall #m (a : 1T) (b : 1T) -> (a -m-> b) -> a -m-> b
@@ -398,8 +398,8 @@ repeat @a n thunk =
 --   -- print "Hello!" 5 times in parallel
 --   parallel @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
-parallel : forall #m (a : *T) -> Int -> (() -m-> a) -> ()
-parallel #m @a n thunk = repeat @() n (\(_ : ()) -> fork #m @a thunk)
+parallel : forall (a : *T) -> Int -> (() -> a) -> ()
+parallel @a n thunk = repeat @() n (\(_ : ()) -> fork #* @a thunk)
 
 -- * I/O
 

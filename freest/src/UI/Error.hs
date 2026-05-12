@@ -34,8 +34,12 @@ import Data.Char qualified as Char
 
 -- | The errors that can be found in a FreeST program.
 data Error
-  = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
-    K.Multiplicity K.Multiplicity
+  = ArrowMultMismatch 
+      Span 
+      (Either Variable E.KindedExp) 
+      Int
+      K.Multiplicity 
+      K.Multiplicity
   | CannotInferHigherKindedTypeApp Span K.Kind
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesiseReceiveType Span
@@ -55,7 +59,12 @@ data Error
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) TK.KindedType (Either Variable E.KindedExp)
+  | LinConsumedInUnFun 
+      Span 
+      (Either Variable Identifier) 
+      TK.KindedType 
+      Span 
+      K.Multiplicity
   | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
     (Either (Either Variable E.Pat) E.KindedExp)
   | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
@@ -81,11 +90,19 @@ data Error
   | TypeMismatchSendType Span TK.KindedType
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind ()) (Level E.KindedExp TK.KindedType K.Multiplicity)
+  | UnexpectedArg 
+      Span
+      Int
+      (Level (Maybe TK.KindedType) K.Kind ())
+      (Level E.KindedExp TK.KindedType K.Multiplicity)
   | UnexpectedParam Span Int (Level TK.KindedType K.Kind ()) (Level () () ())
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  | PolymorphicTypeRecursion Span Identifier [Variable] (Either K.Kind TK.KindedType)
+  | PolymorphicTypeRecursion
+      Span
+      Identifier
+      [Variable]
+      (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
 
 -- | Errors can be tracked to the source code.
@@ -115,7 +132,7 @@ instance Located Error where
     LexicalError s _ -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
-    LinConsumedInUnFun s _ _ _ -> s
+    LinConsumedInUnFun s _ _ _ _ -> s
     MultipleConsDecls s _ -> s
     MultipleFieldDecls s _ -> s
     MultipleKindSigs s _ -> s
@@ -285,15 +302,24 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
-    ("Linear variable " ++ prettyVarCons xi ++ " was not consumed")
-  LinConsumedInUnFun s xi t fe -> errorHeader s ++ "\n" ++
-    ("Linear " ++ prettyVarCons xi
-      ++ " of type " ++ unparse t ++ ", bound at\n"
+    ("Linear " ++ prettyVarCons xi ++ " was not consumed")
+  LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
+      ++ ((case m' of 
+        K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+      ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
-      ++ " was consumed in body of an unrestricted function\n"
-      ++ snippet src fe True)
+      ++ " was consumed in body of "
+      ++ (case m of 
+        K.Un{} -> "an unrestricted function"
+        _      -> "a function with multiplicity " ++ bt (unparse m))
+      ++ "\n" ++ snippet src fe True)
     ++ "(This would allow duplicating or discarding it. "
-    ++ "Consider using a linear function instead.)"
+    ++ "Consider using a restricted function instead.)"
+    where 
+      m' = case TK.kindOf t of 
+        K.Proper _ m _ -> m
+        _ -> internalError "Non-proper type for expression variable"
   MultipleConsDecls s is -> makeError src s
     ("Multiple declarations of constructor " ++ bt (show (head is)))
     ++ "Duplicate declarations at:\n"
@@ -317,7 +343,10 @@ toMessage src = \case
   MultVarOutOfScope s φ -> makeError src s
     ("Multiplicity variable out of scope: " ++ external φ)
   NonLinPat s p t -> makeError src s
-    ("Non-linear pattern for linear type " ++ bt (unparse t))
+    ("Non-linear pattern for" ++ case TK.kindOf t of
+      K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
+      K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
+      _ -> internalError "Pattern with non-proper type")
   ParseError s (_, [x]) -> makeError src s
     "Parse error"
     ++ "(" ++ x ++ " expected)"

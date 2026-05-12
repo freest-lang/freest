@@ -7,7 +7,7 @@ map @a @b f (x :: xs) = f x :: map f xs
 
 pmap @a @b f xs =
   map (receiveAndWait @b) $ -- CANNOT INFER
-    map (\(x : a) -> forkWith1 (sendAndClose (f x))) xs
+    map (\(x : a) -> forkWith #1 (sendAndClose (f x))) xs
 
 -- pmap f =
 --   map receiveAndWait . map (\x -> forkWith (sendAndClose (f x)))

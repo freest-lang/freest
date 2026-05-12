@@ -70,7 +70,7 @@ lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier
            -> Validation (T.KindedType, TypeCtx)
 lookupType kctx tctx xi = case tctx Map.!? xi of
   Just t -> do
-    return (t, if Kinding.isStrictlyLin t then Map.delete xi tctx else tctx)
+    return (t, if Kinding.isRestricted t then Map.delete xi tctx else tctx)
   Nothing -> case xi of
     Left  x -> throwE (VarOutOfScope (getSpan x) x)
     Right i -> throwE (ConsOutOfScope (getSpan i) i)
@@ -89,7 +89,7 @@ typeCtxDifference :: KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
 typeCtxDifference kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just t  -> do
-        when (Kinding.isStrictlyLin t) $
+        when (Kinding.isRestricted t) do
           throwE (LinVarAtEndOfScope (getSpan x) x t)
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
@@ -160,11 +160,11 @@ synth modl kctx tctx = \case
           (kctxi', tctxp) <- checkPat modl kctxi pi ti
           (ti', tctxi') <- synthAbs kctxi' (Map.union tctxp tctxi) ps'
           tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
-          checkEquivTypeCtxsFun m tctxi'' tctxi (Right e)
+          checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
           return (T.AppArrow (spanFromTo pi e') m ti ti', tctxi'')
         TypeLevel (ai, ki) : ps' -> do
           (ti', tctxi') <- synthAbs (Map.insert ai ki kctxi) tctxi ps'
-          checkEquivTypeCtxsFun m tctxi' tctxi (Right e)
+          checkEquivTypeCtxsFun m tctxi' tctxi (getSpan e)
           let ti'' = case ti' of
                 T.AppForall s m aks ti' ->
                   T.AppForall (spanFromTo ai e') m ((ai,ki) : aks) ti'
@@ -173,7 +173,7 @@ synth modl kctx tctx = \case
           return (ti'', tctxi')
         MultLevel φi : ps' -> do
           (ti', tctxi') <- synthAbs kctxi tctxi ps'
-          checkEquivTypeCtxsFun m tctxi' tctxi (Right e)
+          checkEquivTypeCtxsFun m tctxi' tctxi (getSpan e)
           let ti'' = case ti' of
                 T.ForallM s m φs ti' ->
                   T.ForallM (spanFromTo φi e') m (φi : φs) ti'
@@ -188,7 +188,7 @@ synth modl kctx tctx = \case
     (t,) <$> typeCtxDifference kctx' tctxe tctxds
   e@(E.Semi s e1 e2) -> do
     (t, tctx') <- synth modl kctx tctx e1
-    when (Kinding.isStrictlyLin t) do
+    when (Kinding.isRestricted t) do
       throwE (KindMismatch s (K.ut se1) t)
     synth modl kctx tctx' e2
     where se1 = getSpan e1
@@ -547,7 +547,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Nothing -> return ()
           tctxi' <- checkFun' (i + 1) (Map.insert ai ki kctxi) tctxi ps''
             (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv ai ki) u)
-          checkEquivTypeCtxsFun m tctxi' tctxi fe
+          checkEquivTypeCtxsFun m tctxi' tctxi (spanFromTo ai rhs)
           return tctxi'
         (ExpLevel  (pi, mti) : ps'', t''@(T.AppArrow s' m u v)) -> do
           case mti of
@@ -563,7 +563,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           let kctxi' = Map.union kctxp kctxi
           tctxi' <- checkFun' (i + 1) kctxi' (Map.union tctxp tctxi) ps'' v
           tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
-          checkEquivTypeCtxsFun m tctxi'' tctxi fe
+          checkEquivTypeCtxsFun m tctxi'' tctxi (spanFromTo pi rhs)
           return tctxi''
         (MultLevel φi : ps'', T.ForallM s' m (φ : φs) u) -> do
           case mm of
@@ -573,7 +573,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           tctxi' <- checkFun' (i + 1) kctxi tctxi ps''
             ((if null φs then id else T.ForallM s' m φs) $ 
               subsMultType ObjLv φ (K.VarM (getSpan φi) ObjLv φi) u)       
-          checkEquivTypeCtxsFun m tctxi' tctxi fe
+          checkEquivTypeCtxsFun m tctxi' tctxi (spanFromTo φi rhs)
           return tctxi'
         -- anomalous cases
         (pi : ps'', T.AppArrow _ _ u _) ->
@@ -653,7 +653,7 @@ checkPat modl kctx p t = case p of
           Kinding.checkK (T.fromVariable ObjLv a k) k'
           checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
   E.WildPat  s _    -> do
-    when (Kinding.isStrictlyLin t) (throwE (NonLinPat s p t))
+    when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
     return (kctx, Map.empty)
   -- []
   E.NilPat s        ->
@@ -711,6 +711,7 @@ checkPat modl kctx p t = case p of
   -- ?@a. p
   E.TypeInPat s (a, k) p' -> do
     (b, k', t') <- Expose.typeInput modl (Left p) t
+    Kinding.checkSubkindOf (T.fromVariable ObjLv a k) k k'
     checkPat modl (Map.insert a k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
   -- (&C p)
   E.ChoicePat s i p' -> do
@@ -718,7 +719,7 @@ checkPat modl kctx p t = case p of
     checkPat modl kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
-    when (Kinding.isStrictlyLin t) (throwE (NonLinPat s p t))
+    when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
     second (Map.insert (Left x) t) <$> checkPat modl kctx p' t
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
@@ -784,12 +785,15 @@ checkEquivTypeCtxsFun
   :: K.Multiplicity
   -> TypeCtx
   -> TypeCtx
-  -> Either Variable E.KindedExp
+  -> Span
   -> Validation ()
-checkEquivTypeCtxsFun m tctx1 tctx2 fe =
-   unless (K.isLin m) do 
-     forM_ (Map.assocs (tctx2 `Map.difference` tctx1)) \(xa, t) -> do
-      throwE (LinConsumedInUnFun (getSpan xa) xa t fe)
+checkEquivTypeCtxsFun m tctx1 tctx2 s = do
+  let tctxδ = Map.assocs (tctx2 `Map.difference` tctx1) 
+  forM_ tctxδ \(xa, t) ->
+    case T.kindOf t of
+      K.Proper _ m' _ -> unless (m' K.<: m) do
+        throwE (LinConsumedInUnFun (getSpan xa) xa t s m)
+      _ -> internalError "Non-proper type in type context" -- TODO: what about kind variables?
 
 instantiate :: Int
             -> M.KindedModule
@@ -930,7 +934,7 @@ typeModule modl = do
             buildArrow kctx aks k = \case
               []       -> pure (returnType aks k)
               (t : ts) -> do
-                u <- (if Kinding.isStrictlyLin t
+                u <- (if Kinding.isRestricted t
                   then buildLinArrow
                   else buildArrow) kctx aks k ts
                 let s = spanFromTo t u

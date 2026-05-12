@@ -87,9 +87,9 @@ instance Congruence Multiplicity where
     _ _ -> False
 
 instance Subsort Multiplicity where
-  Un{} <: _     = True
-  _    <: Lin{} = True
-  m1   <: m2    = m1 == m2
+  _           <: Lin{}       = True
+  Sup _ lvφs1 <: Sup _ lvφs2 = Set.fromList lvφs1 `Set.isSubsetOf` Set.fromList lvφs2
+  m1          <: m2          = m1 == m2
 instance Join Multiplicity where
   join = \cases
     (Lin s)         m           -> Lin s
@@ -104,7 +104,6 @@ instance Subsort Prekind where
   Channel <: Top     = True
   Channel <: Session = True
   pk1     <: pk2     = pk1 == pk2
-
 instance Join Prekind where  
   join ψ@VarPK{} _  = internalError ("join of prekind variable "++show ψ)
   join _ ψ@VarPK{}  = internalError ("join of prekind variable "++show ψ)
@@ -113,8 +112,6 @@ instance Join Prekind where
   join Channel Session = Session
   join Session Channel = Session  
   join _       _       = Top
-
-
 instance Meet Prekind where
   meet ψ@VarPK{} _  = internalError ("meet of prekind variable "++show ψ)
   meet _ ψ@VarPK{}  = internalError ("meet of prekind variable "++show ψ)

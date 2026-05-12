@@ -77,7 +77,7 @@ init : Int -> Dual FTP -> Void @*T
 init n pid =
   let (r, w) = channel @(Dual FTPThread) in
   let state  = channel @*?File in
-  parallel #* n (\(_ : ()) -> ftpThread state w);
+  parallel n (\(_ : ()) -> ftpThread state w);
   ftpd pid r
 
 -- Sample clients
