@@ -9,6 +9,7 @@ homepage:   https://freest-lang.github.io/
 category:   Session types
 
 default-extensions:
+  - DuplicateRecordFields
   - FlexibleInstances
   - LambdaCase
   - TupleSections

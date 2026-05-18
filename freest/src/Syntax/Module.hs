@@ -38,7 +38,7 @@ type KindedModule = Module Kinded
 type TypedModule  = Module Typed
 
 data Module p
-  = Module { name        :: Maybe [String]
+  = Module { name        :: Maybe [String] -- TODO: why do we need the Nothing case? Shouldn't all modules have a name? and do I need a List of Strings instead of just a String?
            , imports     :: [[String]]
            , kindSigs    :: KindSigs  p
            , typeDecls   :: TypeDecls p

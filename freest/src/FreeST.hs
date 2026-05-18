@@ -5,27 +5,13 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 The entry point of the FreeST compiler.
 -}
-module FreeST where
+module FreeST ( main, freest ) where
 
-import Parser.LexerUtils
-import Parser.Lexer
-import Parser.Token
-import Paths_freest ( getDataFileName )
-import Control.Monad.RWS
-import UI.CLI
-import UI.Error
-import Parser.Parser
-import Syntax.Module qualified as M
-import Parser.Scoping ( runScopeModule, scopeModule, emptyScopingCtx )
-import Validation.Base
-import Validation.Kinding
-import Validation.Typing
+import Load ( loadModule, loadPreludeAndModule )
+import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 
-import Control.Monad.State ( runState )
-import Data.Function ( (&) )
-import Data.Map qualified as Map
-import Options.Applicative
-import System.Exit ( exitFailure, exitSuccess )
+import Options.Applicative ( execParser )
+import System.Exit ( exitSuccess, exitFailure )
 
 -- | The entry point of the FreeST compiler. Parses the command line options
 -- and passes them to the compiler pipeline.
@@ -35,26 +21,12 @@ main = do
 
 -- | The FreeST compiler pipeline.
 freest :: RunOpts -> IO ()
-freest RunOpts{file=programPath, noImplicitPrelude} = do
-  -- Read the source code of the Prelude and the program.
-  preludeSrc <- getDataFileName preludePath >>= readFile
-  programSrc <- readFile programPath
-  let src = Map.fromList [ (programPath, lines programSrc)
-                         , (preludePath, lines preludeSrc) ]
-
-  case  -- Parse the source code of both the Prelude and the program
-        -- and join them in a single module (unless noImplicitPrelude).
-        -- TODO: why do we parse the Prelude when noImplicitPrelude?
-    do  programModule  <- runParseModule programPath programSrc
-        preludeModule  <- runParseModule preludePath preludeSrc
-        let finalModule = if noImplicitPrelude then programModule
-                         else mappend preludeModule programModule
-        -- Scope the final module.
-        runValidation emptyValidationState do
-          scopeModule emptyScopingCtx finalModule >>= kindModule >>= typeModule
-    of Left es -> printErrors src es >> exitFailure
-       Right m -> exitSuccess
-
--- | The path to the source code of the Prelude.
-preludePath :: FilePath
-preludePath = "StandardLib/Prelude.fst"
+freest RunOpts{filePath = Nothing} =
+  putStrLn (version ++ "\n" ++ noModuleLoaded) >>
+  exitSuccess
+freest RunOpts{filePath = Just programPath, implicitPrelude = True} =
+  loadPreludeAndModule programPath >>=
+  maybe exitFailure (const exitSuccess)
+freest RunOpts{filePath = Just programPath, implicitPrelude = False} =
+  loadModule programPath >>=
+  maybe exitFailure (const exitSuccess)

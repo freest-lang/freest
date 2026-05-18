@@ -50,6 +50,7 @@ library:
     - happy
   exposed-modules:
     - FreeST
+    - Load  # for FreeSTi
     - Parser.LexerUtils
     - Parser.Parser
     - Parser.Scoping

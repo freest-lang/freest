@@ -3,10 +3,8 @@ Module      :  UI.Error
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Errors. A work in progress.
+Errors. A work in progress -- Life is a work in progress
 -}
-{-# LANGUAGE LambdaCase #-}
-
 
 module UI.Error
   ( Error(..)
@@ -28,7 +26,6 @@ import Utils
 
 import Data.List (intercalate,nub)
 import Data.Map.Strict qualified as Map
-import Syntax.Expression
 import Data.List qualified as List
 import Data.Char qualified as Char
 
