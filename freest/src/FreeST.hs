@@ -24,9 +24,9 @@ freest :: RunOpts -> IO ()
 freest RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
-freest RunOpts{filePath = Just programPath, implicitPrelude = True} =
-  loadPreludeAndModule programPath >>=
-  maybe exitFailure (const exitSuccess)
 freest RunOpts{filePath = Just programPath, implicitPrelude = False} =
   loadModule programPath >>=
+  maybe exitFailure (const exitSuccess)
+freest RunOpts{filePath = Just programPath, implicitPrelude = True} =
+  loadPreludeAndModule programPath >>=
   maybe exitFailure (const exitSuccess)

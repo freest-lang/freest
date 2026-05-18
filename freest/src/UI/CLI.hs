@@ -17,6 +17,7 @@ module UI.CLI
   , moduleLoaded
   , noModuleLoaded
   , failedToLoadModule
+  ,comeAgain
   ) where
 
 import qualified Paths_freest as Paths
@@ -43,6 +44,9 @@ noModuleLoaded = "Ok, no modules loaded."
 
 failedToLoadModule :: String
 failedToLoadModule = "Failed, no modules loaded."
+
+comeAgain :: String
+comeAgain = "Come again!"
 
 -- | The command line options accepted by the FreeST compiler.
 data RunOpts = RunOpts

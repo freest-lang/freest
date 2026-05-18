@@ -7,7 +7,16 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module implements a layout-sensitive parser for FreeST.
 If further includes support for parsing FreeSTi commands and test cases.
 -}
-module Parser.Parser where
+module Parser.Parser
+  ( runParseModule
+  , parseType
+  , parseExp
+  , parseTwoTypes
+  , parseTypes
+  , parseCommand
+  , parseEquivalenceTests
+  , parseKindingTests
+  ) where
 
 import Parser.Lexer ( scan )
 import Parser.Token
@@ -35,6 +44,7 @@ import Data.List ( sortBy )
 -- Parser entry points for FreeSTi commands
 %name parseCommand Command
 %name parseType Type
+%name parseExp Exp
 %name parseTwoTypes TwoTypes
 %name parseTypes TypePrimaryListWS
 -- Parser entry points for test cases

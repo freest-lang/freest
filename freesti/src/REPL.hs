@@ -17,19 +17,21 @@ import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
+import Syntax.Expression qualified as E
 import Parser.Lexer ( layoutSC )
 import Parser.LexerUtils ( runLexer, pushStartCode )
-import Parser.Parser ( parseType, parseTwoTypes, parseTypes, parseCommand, runParseModule )
+import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseCommand, runParseModule )
 import Parser.Scoping
-  ( ScopingCtx, scopeModule, emptyScopingCtx, scopeType, freshInternal, insertTId, insertDId )
+  ( ScopingCtx, scopeModule, emptyScopingCtx, scopeType, scopeExp, freshInternal, insertTId, insertDId )
 import Parser.Unparser ( unparse )
 import Validation.Base ( Validation, ValidationState (..), emptyValidationState, runValidation )
 import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
+import Validation.Typing qualified as Typing
 import Load qualified
 import UI.Error ( showErrors, Error(..), Source )
-import UI.CLI ( version, preludePath, freeSTiPrompt, moduleLoaded, noModuleLoaded )
+import UI.CLI ( version, preludePath, freeSTiPrompt, moduleLoaded, noModuleLoaded, comeAgain )
 import Utils (internalError)
 import Paths_freest ( getDataFileName )
 
@@ -100,9 +102,18 @@ type Repl a = HaskelineT (StateT ReplState IO) a
 ini :: Repl ()
 ini = do
   liftIO $ putStrLn $ version ++ ", :h for help"
+  s <- get
+  case filePath s of
+    Just path -> loadFromPath path
+    Nothing
+      | implicitPrelude s -> do
+          liftIO Load.loadPrelude >>= \case
+            Just scoped -> modify (\s' -> s'{modl = scoped})
+            Nothing     -> pure ()
+      | otherwise -> liftIO $ putStrLn noModuleLoaded
 
 fin :: Repl ExitDecision
-fin = liftIO $ putStrLn "Come again!" >> pure Exit
+fin = liftIO $ putStrLn comeAgain >> pure Exit
 
 cmd :: String -> Repl ()
 cmd src = do
@@ -165,6 +176,7 @@ replOpts = [ ("?"          , handleHelp)
        , ("load"       , handleLoad)
        , ("reload"     , handleReload)
        , ("kind"       , handleKind)
+       , ("type"       , handleType)
        , ("equivalent" , handleEquivalent)
        , ("normalise"  , handleNormalise)
        , ("grammar"    , handleGrammar)
@@ -198,59 +210,62 @@ replOpts = [ ("?"          , handleHelp)
     where ind = ("  " ++)
 
   -- TODO: handle relative paths
-  handleLoad :: FilePath -> Repl ()
-  handleLoad path = do
-    modify (\s -> s{filePath = Just path})
-    s <- get
-    let loader = if implicitPrelude s then Load.loadPreludeAndModule else Load.loadModule
-    traceM $ "Loading module from " ++ path ++ " with implicitPrelude = " ++ show (implicitPrelude s)
-    liftIO (loader path) >>= \case
-      Nothing           -> pure ()
-      Just scopedModule -> modify (\s -> s{modl = scopedModule})
+  handleLoad :: FilePath -> Repl () -- freesti> :l <file>
+  handleLoad = loadFromPath
 
-  handleReload :: FilePath -> Repl ()
+  handleReload :: FilePath -> Repl () -- freesti> :r
   handleReload _ = do
     s <- get
     case filePath s of
       Nothing   -> liftIO $ putStrLn noModuleLoaded
-      Just path -> handleLoad path
+      Just path -> loadFromPath path
 
-  handleKind :: String -> Repl ()
+  handleKind :: String -> Repl () -- freesti> :k <type>
   handleKind src = do
     s <- get
     case runLexer parseType interactivePath src of
       Left es -> printErrors src es -- Lexer/parser errors
       Right t ->
-        case runValidation (validationState s) do
-          t' <- scopeType (scopingCtx s) t
-          Kinding.synth (modl s) Map.empty t'
-        of Left es -> printErrors src es -- Validation errors
-           Right t'' -> do
+        case runValidation (validationState s) (kindAType s t) of
+          Left es -> printErrors src es -- Scopping/kinding errors
+          Right t'' -> do
             let vs = validationState s
             unless (null $ errors vs) $ printErrors src (errors vs)
             liftIO $ putStrLn (src ++ " : " ++ unparse (TK.kindOf t''))
             modify (\s -> s{validationState = vs})
 
-  handleEquivalent :: String -> Repl ()
+  handleType :: String -> Repl () -- freesti> :t <exp>
+  handleType src = do
+    s <- get
+    case runLexer parseExp interactivePath src of
+      Left es -> printErrors src es -- Lexer/parser errors
+      Right e ->
+        case runValidation (validationState s) (typeAnExp s e) of
+          Left es -> printErrors src es -- Scopping/kinding/typing errors
+          Right t -> do
+            let vs = validationState s
+            unless (null $ errors vs) $ printErrors src (errors vs)
+            liftIO $ putStrLn (src ++ " : " ++ show t)
+            modify (\s -> s{validationState = vs})
+
+  handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
   handleEquivalent src = do
     s <- get
     case runLexer parseTwoTypes interactivePath src of
-      Left es -> printErrors src es
+      Left es -> printErrors src es -- Lexer/parser errors
       Right (t, u) ->
         case runValidation (validationState s) do
           kmodl <- Kinding.kindModule (modl s) -- TODO: cache in ReplState?
-          tu' <- bimapM (scopeType (scopingCtx s) >=> Kinding.synth (modl s) Map.empty)
-                        (scopeType (scopingCtx s) >=> Kinding.synth (modl s) Map.empty)
-                        (t, u)
+          tu' <- bimapM (kindAType s) (kindAType s) (t, u)
           pure (kmodl, tu')
-        of Left es -> printErrors src es
+        of Left es -> printErrors src es -- Scopping/kinding errors
            Right (kmodl, (t', u')) -> do
             let vs = validationState s
             unless (null $ errors vs) $ printErrors src (errors vs) -- TODO: why? Have we not tested for errors before?
             liftIO $ print (equivalent kmodl t' u')
             modify (\s -> s{validationState = vs}) -- TODO: What are the expected modifications?
 
-  handleNormalise :: String -> Repl ()
+  handleNormalise :: String -> Repl () -- freesti> :n <type>
   handleNormalise src = do
     s <- get
     case runLexer parseType interactivePath src of
@@ -258,23 +273,23 @@ replOpts = [ ("?"          , handleHelp)
       Right t ->
         case runValidation (validationState s) do
           kmodl <- Kinding.kindModule (modl s) -- TODO: cache in ReplState?
-          t'' <- scopeType (scopingCtx s) t >>= Kinding.synth (modl s) Map.empty
-          pure (kmodl, t'')
+          t'    <- kindAType s t
+          pure (kmodl, t')
         of Left es -> printErrors src es
-           Right (kmodl, t'') -> do
+           Right (kmodl, t') -> do
             let vs = validationState s
             unless (null $ errors vs) $ printErrors src (errors vs)
-            liftIO $ putStrLn (unparse (normalise kmodl t''))
+            liftIO $ putStrLn (unparse (normalise kmodl t'))
             modify (\s -> s{validationState = vs})
 
-  handleGrammar :: String -> Repl ()
+  handleGrammar :: String -> Repl () -- freesti> :g <types>
   handleGrammar src = do
     s <- get
     case runLexer parseTypes interactivePath src of
       Left es -> printErrors src es
       Right ts -> case runValidation (validationState s) do
           kmodl <- Kinding.kindModule (modl s) -- TODO: cache in ReplState?
-          ts' <- mapM (scopeType (scopingCtx s) >=> Kinding.synth (modl s) Map.empty) ts
+          ts' <- mapM (kindAType s) ts
           pure (kmodl, ts')
         of Left es -> printErrors src es
            Right (kmodl, ts') -> do
@@ -283,41 +298,30 @@ replOpts = [ ("?"          , handleHelp)
             liftIO $ putStrLn (showGrammar (fromTypes kmodl ts'))
             modify (\s -> s{validationState = vs})
 
-printErrorsIO :: FilePath -> [Error] -> IO ()
-printErrorsIO src es = putStrLn $ showErrors (Map.singleton interactivePath (lines src)) es
+-- | Scope and kind-synthesize a parsed type.
+kindAType :: ReplState -> TU.ParsedType -> Validation TK.KindedType
+kindAType s = scopeType (scopingCtx s) >=> Kinding.synth (modl s) Map.empty
 
+-- | Scope, kind and type-synthesize a parsed expression.
+typeAnExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
+typeAnExp s = scopeExp (scopingCtx s) >=> kindExp
+  where
+    kindExp :: E.ScopedExp -> Validation TK.KindedType
+    kindExp = undefined -- TODO: needs Kinding.kindExp exposed (currently nested in kindModule's where clause)
+
+-- | Load a module from the given path, with or without the Prelude
+-- depending on the current 'implicitPrelude' flag, and update the REPL
+-- state on success. Errors and load status are printed by the Load module.
+loadFromPath :: FilePath -> Repl ()
+loadFromPath path = do
+  modify (\s -> s{filePath = Just path})
+  s <- get
+  let loader = if implicitPrelude s then Load.loadPreludeAndModule else Load.loadModule
+  liftIO (loader path) >>= \case
+    Nothing           -> pure ()
+    Just scopedModule -> modify (\s' -> s'{modl = scopedModule})
+
+-- | Print a list of errors against the interactive source line(s).
 printErrors :: FilePath -> [Error] -> Repl ()
-printErrors src es = liftIO $ printErrorsIO src es
-
--- | Load the Prelude and, if a program path is given, join it with the
--- program before scoping and kinding.
-loadModule :: Maybe FilePath -> ValidationState
-           -> IO (Either (Source, [Error]) M.ScopedModule)
-loadModule mPath vs = do
-  preludeFile <- getDataFileName preludePath
-  preludeSrc  <- readFile preludeFile
-  case mPath of
-    Nothing -> do
-      let srcs = Map.singleton preludeFile (lines preludeSrc)
-      pure $ case do
-            scoped <- runParseModule preludeFile preludeSrc
-                      >>= runValidation vs . scopeModule emptyScopingCtx
-            _ <- runValidation vs (Kinding.kindModule scoped)
-            pure scoped
-        of Left es -> Left (srcs, es)
-           Right scoped -> Right scoped
-    Just path -> do
-      programSrc <- readFile path
-      let srcs = Map.fromList [ (path, lines programSrc)
-                              , (preludeFile, lines preludeSrc)
-                              ]
-      pure $ case  -- Parse the Prelude and the program, join them in a
-                   -- single module, then scope and kind it.
-        do  preludeModule <- runParseModule preludeFile preludeSrc
-            programModule <- runParseModule path programSrc
-            let composedModule = mappend preludeModule programModule
-            scoped <- runValidation vs (scopeModule emptyScopingCtx composedModule)
-            _ <- runValidation vs (Kinding.kindModule scoped)
-            pure scoped
-        of Left es -> Left (srcs, es)
-           Right scoped -> Right scoped
+printErrors src es =
+  liftIO $ putStrLn $ showErrors (Map.singleton interactivePath (lines src)) es

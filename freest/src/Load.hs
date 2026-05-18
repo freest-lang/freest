@@ -19,21 +19,27 @@ import Parser.Scoping ( scopeModule, emptyScopingCtx )
 import Validation.Base ( emptyValidationState, runValidation )
 import Validation.Kinding ( kindModule )
 import Validation.Typing ( typeModule )
-import UI.CLI ( preludePath, moduleLoaded, failedToLoadModule )
+import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded,failedToLoadModule )
 import UI.Error ( printErrors, Error )
 import Paths_freest ( getDataFileName )
 
 import Data.Map qualified as Map
 
--- | Load just the Prelude.
-loadPrelude :: IO (Maybe M.ScopedModule)
-loadPrelude = getDataFileName preludePath >>= loadModule
-
 -- | Load a program module on its own (no Prelude). Returns the scoped
 -- module after successful kinding and typing, or 'Nothing' if errors
 -- were found (in which case they are printed).
 loadModule :: FilePath -> IO (Maybe M.ScopedModule)
-loadModule programPath = do
+loadModule = loadM moduleLoaded
+
+-- | Load just the Prelude.
+loadPrelude :: IO (Maybe M.ScopedModule)
+loadPrelude = getDataFileName preludePath >>= loadM noModuleLoaded
+
+-- | Load a program module on its own or else the Prelude. Returns the scoped
+-- module after successful kinding and typing, or 'Nothing' if errors
+-- were found (in which case they are printed).
+loadM :: String -> FilePath -> IO (Maybe M.ScopedModule)
+loadM moduleMessage programPath = do
   programSrc <- readFile programPath
   case  -- Parse the program, then scope, kind and type it.
     do  programModule <- runParseModule programPath programSrc
@@ -47,7 +53,7 @@ loadModule programPath = do
         putStrLn failedToLoadModule
         pure Nothing
        Right scoped -> do
-        putStrLn moduleLoaded
+        putStrLn moduleMessage
         pure (Just scoped)
 
 -- | Load a program module joined with the Prelude. Returns the scoped
