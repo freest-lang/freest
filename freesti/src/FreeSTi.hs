@@ -21,4 +21,4 @@ main = execParser opts >>= freesti
 -- options; module loading and the banner are handled by 'REPL.ini'.
 freesti :: RunOpts -> IO ()
 freesti RunOpts{filePath = mPath, implicitPrelude = ip} =
-  repl $ emptyReplState{filePath = mPath,implicitPrelude = ip}
+  repl $ emptyReplState{filePath = mPath, implicitPrelude = ip}

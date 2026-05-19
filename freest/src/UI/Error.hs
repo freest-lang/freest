@@ -10,7 +10,7 @@ module UI.Error
   ( Error(..)
   , Source
   , toMessage
-  , showErrors
+  , showErrors -- for testing
   , printErrors
   )
 where
@@ -23,11 +23,13 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Utils
+import UI.CLI ( interactivePath )
 
-import Data.List (intercalate,nub)
+import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
 import Data.Char qualified as Char
+import Debug.Trace ( traceM )
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -143,6 +145,10 @@ instance Located Error where
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
+-- | The source code of a FreeST program, represented as a mapping from file paths
+-- to the lines of code in those files. This is used to extract snippets of code
+-- to display in error messages.
+-- The list of lines of code may be empty, when parsing from an interactive prompt.
 type Source = Map.Map FilePath [String]
 
 getFromSpan :: Located a => Source -> a -> String
@@ -152,6 +158,10 @@ getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
 getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
   (src Map.! fp) !! (sl - 1)
+
+-- | True when the source comes from the interactive REPL.
+isInteractive :: Source -> Bool
+isInteractive src = Map.keys src == [interactivePath]
 
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
@@ -327,6 +337,10 @@ toMessage src = \case
     ++ unlines (map (("  " ++) . show . getSpan) xs)
   NonLinPat s p t -> makeError src s
     ("Non-linear pattern for linear type " ++ bt (unparse t))
+  ParseError _ (_, ss) | isInteractive src ->
+    -- The list of lines of code is empty in this case, so we can't show a snippet. 
+    -- Just show the expected tokens.
+    "Parse error\n(Expected one of: " ++ intercalate ", " ss ++ ")"
   ParseError s (_, [x]) -> makeError src s
     "Parse error"
     ++ "(" ++ x ++ " expected)"

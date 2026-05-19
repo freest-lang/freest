@@ -17,7 +17,9 @@ module UI.CLI
   , moduleLoaded
   , noModuleLoaded
   , failedToLoadModule
+  , notASourceFile
   ,comeAgain
+  , interactivePath
   ) where
 
 import qualified Paths_freest as Paths
@@ -47,6 +49,12 @@ failedToLoadModule = "Failed, no modules loaded."
 
 comeAgain :: String
 comeAgain = "Come again!"
+
+interactivePath :: String
+interactivePath = "<interactive>"
+
+notASourceFile :: FilePath -> String
+notASourceFile file = "target ‘" ++ file ++ "’ is not a source file"
 
 -- | The command line options accepted by the FreeST compiler.
 data RunOpts = RunOpts
