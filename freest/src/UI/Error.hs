@@ -23,7 +23,6 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Utils
-import UI.CLI ( interactivePath )
 
 import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
@@ -159,10 +158,6 @@ getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
   (src Map.! fp) !! (sl - 1)
 
--- | True when the source comes from the interactive REPL.
-isInteractive :: Source -> Bool
-isInteractive src = Map.keys src == [interactivePath]
-
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
   unlines ([ spaces (n + 1) ++ show s | showSpan ] ++
@@ -176,7 +171,8 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
     sep = " | "
     n = length (show el)
     srcf = src Map.! fp
-    l = srcf !! (min (length srcf) sl - 1)
+    l | null srcf = []
+      | otherwise = srcf !! (min (length srcf) sl - 1)
     spaces x = replicate x ' '
     carets x = replicate x '^'
 
@@ -337,13 +333,9 @@ toMessage src = \case
     ++ unlines (map (("  " ++) . show . getSpan) xs)
   NonLinPat s p t -> makeError src s
     ("Non-linear pattern for linear type " ++ bt (unparse t))
-  ParseError _ (_, ss) | isInteractive src ->
-    -- The list of lines of code is empty in this case, so we can't show a snippet. 
-    -- Just show the expected tokens.
-    "Parse error\n(Expected one of: " ++ intercalate ", " ss ++ ")"
   ParseError s (_, [x]) -> makeError src s
     "Parse error"
-    ++ "(" ++ x ++ " expected)"
+    ++ "(Expected " ++ x ++ ")"
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
