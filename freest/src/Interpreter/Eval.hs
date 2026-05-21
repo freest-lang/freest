@@ -121,6 +121,8 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     return $ binding `union` remainingBindings
   where
     builtinBinding = getBuiltinDecl (E.FnDef var clauses)
+collectLetDecls (global, local) ((E.TypeSig var typ) : letdecls) =
+  collectLetDecls (global, local) letdecls
 -- TODO: handle Mutual when collecting LetDecls
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) =
   error "Evaluation of E.LetDecl Mutual not implemented"
@@ -134,7 +136,6 @@ buildEnv :: M.KindedModule -> IO Env
 buildEnv m = collectLetDecls (empty, empty) letDecls
   where letDecls = filter (\case
           E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
-          E.TypeSig _ _ -> False
           _ -> True) (M.definitions m)
 
 -- | Lookup a variable in both local and global context, in that order
