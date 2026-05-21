@@ -274,8 +274,7 @@ toMessage src = \case
     ++ thirdPerson (m - n) ++ ")"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
-    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to "
-    ++ thirdPerson (m - n) ++ ")"
+    ++ "(A type of kind " ++ bt (unparse k) ++ " cannot be applied to further arguments)"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
   KindMismatch s k1 t -> makeError src s

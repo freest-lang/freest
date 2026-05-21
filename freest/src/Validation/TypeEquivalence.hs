@@ -37,6 +37,8 @@ equivalent :: M.KindedModule -> T.KindedType -> T.KindedType -> Bool
 equivalent mod t u = t == u || bisimilar ps xs ys
   where (ps, [xs, ys]) = fromTypes mod [t, u]
 
+-- TODO: this function generates productions for unreachable nonterminals,
+-- for example as in type T with 'type T = Int'.
 fromTypes :: M.KindedModule -> [T.KindedType] -> (Productions, [Word])
 fromTypes mod ts =
   -- trace ("\n\nTypes:   " ++ show ts ++

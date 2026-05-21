@@ -18,8 +18,9 @@ module UI.CLI
   , noModuleLoaded
   , failedToLoadModule
   , notASourceFile
-  ,comeAgain
+  , comeAgain
   , interactivePath
+  , optPrefix
   ) where
 
 import qualified Paths_freest as Paths
@@ -55,6 +56,9 @@ interactivePath = "<interactive>"
 
 notASourceFile :: FilePath -> String
 notASourceFile file = "target ‘" ++ file ++ "’ is not a source file"
+
+optPrefix :: Char
+optPrefix = ':'
 
 -- | The command line options accepted by the FreeST compiler.
 data RunOpts = RunOpts

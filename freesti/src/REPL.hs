@@ -31,7 +31,7 @@ import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Load qualified
 import UI.Error ( printErrors, Error(..), Source )
-import UI.CLI ( version, preludePath, freeSTiPrompt, moduleLoaded, noModuleLoaded, comeAgain, interactivePath )
+import UI.CLI ( version, preludePath, freeSTiPrompt, moduleLoaded, noModuleLoaded, comeAgain, interactivePath, optPrefix )
 import Utils (internalError)
 import Paths_freest ( getDataFileName )
 
@@ -156,9 +156,6 @@ cmd src = do
 --   t'' <- Kinding.check modl Map.empty t' (M.kindSigs modl Map.! i)
 --   return modl{M.typeDecls = Map.insert i t'' (M.typeDecls modl)}
 
-optPrefix :: Char
-optPrefix = ':'
-
 prefixedOpts :: [String]
 prefixedOpts = map ((optPrefix :) . fst) replOpts
 
@@ -172,16 +169,17 @@ byWord n = return $ filter (List.isPrefixOf n) prefixedOpts
 
 replOpts :: [(String, String -> Repl ())]
 replOpts =
-  [ ("?"          , handleHelp)
-  , ("help"       , handleHelp)
-  , ("load"       , handleLoad)
-  , ("reload"     , handleReload)
-  , ("kind"       , handleKind)
-  , ("type"       , handleType)
-  , ("equivalent" , handleEquivalent)
-  , ("normalise"  , handleNormalise)
-  , ("grammar"    , handleGrammar)
-  , ("quit"       , const $ liftIO exitSuccess)
+  [ ("?"         , handleHelp)
+  , ("help"      , handleHelp)
+  , ("info"      , handleInfo)
+  , ("load"      , handleLoad)
+  , ("reload"    , handleReload)
+  , ("kind"      , handleKind)
+  , ("type"      , handleType)
+  , ("equivalent", handleEquivalent)
+  , ("normalise" , handleNormalise)
+  , ("grammar"   , handleGrammar)
+  , ("quit"      , const $ liftIO exitSuccess)
   ]
 
 handleHelp :: String -> Repl ()
@@ -210,6 +208,9 @@ handleHelp args = liftIO $ putStrLn $ unlines
   ]
   where ind = ("  " ++)
 
+handleInfo :: String -> Repl () -- freesti> :i <text>
+handleInfo text = liftIO $ putStrLn "TODO: What do we want here?"
+
 -- TODO: handle relative paths
 handleLoad :: FilePath -> Repl () -- freesti> :l <file>
 handleLoad path = do
@@ -222,11 +223,13 @@ handleLoad path = do
       modify (\s' -> s'{typeCtx = tc, scopingCtx = sc, modl = sm})
 
 handleReload :: FilePath -> Repl () -- freesti> :r
-handleReload _ = do
+handleReload "" = do
   s <- get
   case filePath s of
     Nothing   -> liftIO $ putStrLn noModuleLoaded
     Just path -> handleLoad path
+handleReload _ =
+  liftIO $ putStrLn "':reload' takes no arguments, just type ':reload' to reload the current module"
 
 handleKind :: String -> Repl () -- freesti> :k <type>
 handleKind src = do
