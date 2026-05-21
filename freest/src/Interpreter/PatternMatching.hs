@@ -13,6 +13,7 @@ module Interpreter.PatternMatching
 
 {-
 TODO:
+- Improve pattern matching of functions, to also accept session-type patterns 
 - Implement more efficient compilation of function with pattern matching to closure with cases (check The Implementation of Functional Programming Languages, by Simon Peyton Jones)
 -}
 

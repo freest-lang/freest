@@ -12,6 +12,8 @@ module Interpreter.Eval
 
 {-
 TODO:
+- Allow evaluation of single expression in module (not bound to varable)
+- Change evaluation of LetDecls: we no longer collect let declarations to then use as environment to run main, instead we collect let declarations, running as we go (similar to OCaml approach)
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
 - Handling of undefined is correct?
 - Missing evaluation for E.Case (what about labels?)
