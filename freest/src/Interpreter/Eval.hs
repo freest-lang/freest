@@ -117,7 +117,7 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     -- remove type arguments from clauses
     let clauses' = map (\(params, body) -> (fst $ B.partitionLevels params, body)) clauses
     let binding = singleton var (compileFunctionToClosure clauses')
-    remainingBindings <- collectLetDecls (global, binding `union` local) letdecls
+    remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   where
     builtinBinding = getBuiltinDecl (E.FnDef var clauses)
@@ -278,7 +278,8 @@ eval (global, local) (E.ReceiveType _) =
 -- | Interprets a module and returns the result
 interpret :: M.KindedModule -> IO Value
 interpret m = do
-  mapM_ print m.definitions
+  -- putStrLn "Module:"
+  -- mapM_ print m.definitions
   -- collect module declarations, forming the initial environment
   m_env <- buildEnv m
   case getMainFunction m of
