@@ -210,10 +210,10 @@ builtins = Map.fromList
   -- ** Standard I/O
   -- *** stdin
   -- **** Internal stdin functions
-  , ("internalGetChar",       undefined)
-  , ("internalGetLine",       undefined)
-  , ("internalGetContents",   undefined)
-  , ("internalPutStrOut",     undefined)
+  , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
+  , ("internalGetLine",       VBuiltin (const $ VIO $ VString <$> getLine))
+  , ("internalGetContents",   VBuiltin (const $ VIO $ VString <$> getContents))
+  , ("internalPutStrOut",     VBuiltin (\(VString string) -> VIO $ VUnit <$ putStr string))
 
   {- -- IO operators
   , ("readBool",              VBuiltin (\(VString str) -> hsToFstBool (read str)))
