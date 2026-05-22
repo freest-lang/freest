@@ -12,12 +12,10 @@ module Interpreter.Eval
 
 {-
 TODO:
-- Allow evaluation of single expression in module (not bound to varable)
-- Change evaluation of LetDecls: we no longer collect let declarations to then use as environment to run main, instead we collect let declarations, running as we go (similar to OCaml approach)
+- Handle recursive functions
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
 - Handling of undefined is correct?
 - Missing evaluation for E.Case (what about labels?)
-- Handling recursive functions
 - Handling of LetDecls Mutuals: in collectLetDecls
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
  -}
@@ -118,7 +116,8 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
   | otherwise = do
     -- remove type arguments from clauses
     let clauses' = map (\(params, body) -> (fst $ B.partitionLevels params, body)) clauses
-    let binding = singleton var (compileFunctionToClosure clauses')
+    let compiledFunction = compileFunctionToClosure clauses'
+    let binding = singleton var compiledFunction
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   where
@@ -141,6 +140,18 @@ envLookup (global, local) var =
     Nothing -> case Data.Map.lookup var global of
       Just val -> val
       Nothing -> error ("Variable `" ++ show var ++ "` not found in the context. This should not happen. This is a bug in the compiler")
+
+-- | Lookup a variable (as a string) in both local and global context, in that order
+envLookup' :: (GlobalEnv, LocalEnv) -> String -> Maybe Value
+envLookup' (global, local) var = do
+  let binding = find (\(var', val) -> B.external var' == var) $ assocs local
+  case binding of
+    Just binding -> return $ snd binding
+    Nothing -> do
+      let binding = find (\(var', val) -> B.external var' == var) $ assocs global
+      case binding of
+        Just binding -> return $ snd binding
+        Nothing -> Nothing
 
 -- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
@@ -276,9 +287,10 @@ interpret :: M.KindedModule -> IO Value
 interpret m = do
   -- evaluate module declarations, binding results to variables
   env <- buildEnv m
-  let binding = find (\(var, val) -> B.external var == "main") $ assocs env
+  let binding = envLookup' (empty, env) "main"
+  -- let binding = find (\(var, val) -> B.external var == "main") $ assocs env
   case binding of
-    Just binding -> return $ snd binding
+    Just binding -> return binding
     Nothing -> return VUnit
  {-  case getMainFunction m of
     -- main function of the form main = <exp>
