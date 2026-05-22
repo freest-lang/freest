@@ -26,7 +26,7 @@ import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
 import Data.Functor (($>), void)
 import Data.List (find)
-import Data.Map (empty, singleton, union, unions, lookup)
+import Data.Map (empty, singleton, union, unions, lookup, assocs)
 import Data.Maybe (isJust, fromJust)
 -- for debuging don't forget to remove
 import Debug.Trace
@@ -109,7 +109,7 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
   where
     builtinBinding = getBuiltinDecl (E.ValDef pat rhs)
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
-  -- the function declaration corresponds to a builtin function
+  -- the function declaration corresponds to a builtin function i.e. undefined
   | isJust builtinBinding = do
     -- bind builtin function declaration to corresponding value in Values.builtins
     let binding = fromJust builtinBinding
@@ -129,16 +129,9 @@ collectLetDecls (global, local) ((E.TypeSig var typ) : letdecls) =
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) =
   error "Evaluation of E.LetDecl Mutual not implemented"
 
--- | Obtain the main function from a module.
-getMainFunction :: M.KindedModule -> Maybe E.KindedLetDecl
-getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m)
-
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env
-buildEnv m = collectLetDecls (empty, empty) letDecls
-  where letDecls = filter (\case
-          E.ValDef (E.VarPat _ var) _ -> B.external var /= "main"
-          _ -> True) (M.definitions m)
+buildEnv m = collectLetDecls (empty, empty) (M.definitions m)
 
 -- | Lookup a variable in both local and global context, in that order
 envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
@@ -281,11 +274,13 @@ eval (global, local) (E.ReceiveType _) =
 -- | Interprets a module and returns the result
 interpret :: M.KindedModule -> IO Value
 interpret m = do
-  -- putStrLn "Module:"
-  -- mapM_ print m.definitions
-  -- collect module declarations, forming the initial environment
-  m_env <- buildEnv m
-  case getMainFunction m of
+  -- evaluate module declarations, binding results to variables
+  env <- buildEnv m
+  let binding = find (\(var, val) -> B.external var == "main") $ assocs env
+  case binding of
+    Just binding -> return $ snd binding
+    Nothing -> return VUnit
+ {-  case getMainFunction m of
     -- main function of the form main = <exp>
     Just (E.ValDef pat rhs) -> do
       (exp, whereDecls) <- extractFromRHS (m_env, empty) rhs
@@ -294,6 +289,9 @@ interpret m = do
         Nothing -> return empty
       eval (m_env, whereBindings) exp
     Nothing -> do return VUnit
+
+    getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m) -}
+
 
 -- OLD DEFINITIONS
 
