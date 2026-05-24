@@ -13,10 +13,9 @@ module Interpreter.Eval
 {-
 TODO:
 - Handle recursive functions
-- Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body.
+- Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
 - Handling of undefined is correct?
 - Missing evaluation for E.Case (what about labels?)
-- Handling of LetDecls Mutuals: in collectLetDecls
 - Eval can fail due to non-existent patterns during pattern marching. Hence return type should Either [IOE.Error] Value.
  -}
 
@@ -124,9 +123,10 @@ collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
     builtinBinding = getBuiltinDecl (E.FnDef var clauses)
 collectLetDecls (global, local) ((E.TypeSig var typ) : letdecls) =
   collectLetDecls (global, local) letdecls
--- TODO: handle Mutual when collecting LetDecls
-collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) =
-  error "Evaluation of E.LetDecl Mutual not implemented"
+collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = do
+  mutualDefs <- mapM (\fnDef -> collectLetDecls (global, local) [fnDef]) mutualDecls
+  let mutualBindings = unions mutualDefs
+  collectLetDecls (mutualBindings `union` global, local) letdecls
 
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env

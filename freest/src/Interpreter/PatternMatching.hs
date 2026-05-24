@@ -137,9 +137,9 @@ flatNaiveClauseCompilation parameters clauses =
   E.Case B.nullSpan target alternatives
   where
     -- target is the tuple of all parameters
-    target = E.Tuple B.nullSpan (map (E.Var B.nullSpan) parameters)
+    target = if length parameters == 1 then E.Var B.nullSpan (head parameters) else E.Tuple B.nullSpan (map (E.Var B.nullSpan) parameters)
     -- choosing the correct alternative is done via case expression, that attempts pattern matching target against all tuple of all patterns in each clause
-    alternatives = map (\(lhs, rhs) -> (E.TuplePat B.nullSpan lhs, rhs)) clauses
+    alternatives = map (\(lhs, rhs) -> if length parameters == 1 then (head lhs, rhs) else (E.TuplePat B.nullSpan lhs, rhs)) clauses
 
 {- -- | Checks if two patterns are compatible, if in the context of a function, both could be matched against the expression
 -- TODO lacking remaining patterns
