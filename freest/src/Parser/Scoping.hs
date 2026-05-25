@@ -11,19 +11,17 @@ duplicate variable declarations, etc.).
 -}
 
 module Parser.Scoping
-  (ScopingCtx
-  ,emptyScopingCtx
-  ,runScoping
-  ,runScopeModule
-  ,scopeModule
-  ,scopeModule'
-  ,scopeExp
-  ,scopeType
-  ,scopeKind
-  ,freshInternal
-  -- for FreeSTi
-  , insertTId
-  , insertDId
+  ( ScopingCtx
+  , emptyScopingCtx
+  , runScoping
+  , runScopeModule
+  , scopeModule
+  , scopeModule'
+  , scopeExp
+  , scopeType
+  , scopeKind
+  , freshInternal
+  , scopeDefs -- for freesti
   )
 where
 
@@ -583,4 +581,3 @@ scopeMultiplicity = \case
     φ' <- freshInternal φ
     return $ K.VarM vl φ'{external = "φ" ++ show (internal φ')}
   m -> pure m
-

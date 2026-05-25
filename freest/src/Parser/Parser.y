@@ -9,11 +9,14 @@ If further includes support for parsing FreeSTi commands and test cases.
 -}
 module Parser.Parser
   ( runParseModule
-  , parseType
+  -- freesti
   , parseExp
+  , parsePattern
+  , parseExpAsPattern
+  , parseType
   , parseTwoTypes
   , parseTypes
-  , parseCommand
+  -- testing
   , parseEquivalenceTests
   , parseKindingTests
   ) where
@@ -29,20 +32,18 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Unkinded qualified as T 
 import Syntax.Module qualified as M
 import UI.Error
--- FreeSTi
-import Syntax.Command
 
 import Control.Monad.Except
 import Data.Bifunctor
 import Data.Function ( on )
 import Data.List ( sortBy )
--- import Data.List.NonEmpty qualified as NE
 }
 
 -- Parser entry points for FreeST modules
 %name parseModule Module
 -- Parser entry points for FreeSTi commands
-%name parseCommand Command
+%name parsePattern PatDecl 
+%name parseExpAsPattern ExpAsPat
 %name parseType Type
 %name parseExp Exp
 %name parseTwoTypes TwoTypes
@@ -215,10 +216,13 @@ KindSig :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
 
 LetDecl :: { E.ParsedLetDecl }
-  : Pat RHS('=') { E.ValDef $1 $2 }
+  : PatDecl { $1 }
   | FnDef { $1 }
   | TypeSig { $1 }
   | 'mutual' OPEN MutualDecls Close { E.Mutual $3 }
+
+PatDecl :: { E.ParsedLetDecl }
+  : Pat RHS('=') { E.ValDef $1 $2 }
 
 MutualDecls :: { [E.ParsedLetDecl] }
   : MutualDecl                  { [$1]    }
@@ -603,18 +607,10 @@ Close
 
 -- Parsing FreeSTi commands
 
-Command :: { Command }
-  : OPEN Type PIPE Close {Type $2}
-  | OPEN CmdDeclListPIPE Close { Decls $2 }
-
-CmdDeclListPIPE :: { M.ParsedModule }
-  : CmdDecl PIPE CmdDeclListPIPE { $1 $3 }
-  | CmdDecl { $1 M.emptyParsedModule }
-  | {- empty -} { M.emptyParsedModule }
-
-CmdDecl :: { M.ParsedModule -> M.ParsedModule }
-  : DataDecl { $1 }
-  | TypeDecl { $1 }
+ExpAsPat :: { E.ParsedLetDecl }
+  : Exp { let s = getSpan $1 in E.ValDef
+    (E.VarPat s (mkVarTk (TkLowerId s "it")))
+    (E.UnguardedRHS $1 Nothing) }
 
 TwoTypes :: { (T.ParsedType, T.ParsedType) }
   : TypePrimary TypePrimary { ($1, $2) }

@@ -23,6 +23,7 @@ module Validation.Kinding
   , emptyKindCtx
   , kindModule
   , kindExp
+  , kindLetDecls -- freesti
   , runKindModule
   , runSynth
   , runCheck

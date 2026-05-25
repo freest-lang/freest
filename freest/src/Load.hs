@@ -47,8 +47,8 @@ loadM moduleMessage programPath = tryRead programPath >>= \case
       do  programModule <- runParseModule programPath programSrc
           runValidation emptyValidationState do
             (scopeCtx, scopedModule) <- scopeModule' emptyScopingCtx programModule
-            kinded <- kindModule scopedModule
-            (_, typeCtx)      <- typeModule kinded
+            kmodl <- kindModule scopedModule
+            (_, typeCtx)      <- typeModule kmodl
             pure (scopeCtx, typeCtx, scopedModule)
       of Left es -> do
           printSourceErrors [(programPath, programSrc)] es
@@ -76,7 +76,7 @@ loadPreludeAndModule programPath = do
             runValidation emptyValidationState do
               (scopeCtx, scopedModule) <- scopeModule' emptyScopingCtx composedModule
               kinded <- kindModule scopedModule
-              (_, typeCtx)      <- typeModule kinded
+              (_, typeCtx) <- typeModule kinded
               pure (scopeCtx, typeCtx, scopedModule)
         of Left es -> do
             printSourceErrors [ (preludePath, preludeSrc)
