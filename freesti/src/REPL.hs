@@ -38,7 +38,7 @@ import Control.Monad.State
       evalStateT,
       MonadIO(..),
       MonadState(get),
-      StateT )
+      StateT, runState )
 import System.Console.Repline
   ( CompletionFunc,
     evalRepl,
@@ -53,6 +53,7 @@ import System.Console.Repline
 import System.Exit ( exitSuccess )
 import Debug.Trace (traceM)
 import qualified Syntax.Module as Load
+import Control.Monad.Except (runExceptT)
 
 data ReplState = ReplState
   { validationState :: ValidationState
@@ -142,10 +143,11 @@ cmd src = do
       -- print nothing
 
 validateLetDecl :: ReplState -> String -> E.ParsedLetDecl -> Repl ()
-validateLetDecl s src p = case runValidation (validationState s) (typeALetDecl s p) of
-  Left es -> printREPLErrors src es -- Scoping/kinding/typing errors
-  Right (kctx, tctx) -> do
-    modify (\s -> s{kindCtx = kctx, typeCtx = tctx})
+validateLetDecl s src p = case runState (runExceptT (typeALetDecl s p)) (validationState s) of --  TODO: refactor runValidation?
+  (Left e, ValidationState{errors}) -> printREPLErrors src (e : errors) -- Scoping/kinding/typing errors
+  (Right (sctx, kctx, tctx), vs@ValidationState{errors})
+    | null errors -> modify (\s -> s{validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx})
+    | otherwise -> printREPLErrors src errors
 
 eval :: E.ParsedLetDecl -> Repl ()
 eval _ = liftIO $ putStrLn "Evaluating..."
@@ -309,13 +311,13 @@ typeAnExp s e = do
 
 -- | Scope, kind and type-check a parsed let declaration.
 typeALetDecl :: ReplState -> E.ParsedLetDecl
-             -> Validation (Kinding.KindCtx, Typing.TypeCtx)
+             -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx)
 typeALetDecl s p = do
   kmodl <- Kinding.kindModule (modl s)
-  (_, scoped) <- Scoping.scopeDefs (scopingCtx s) [p]
-  (kindCtx, klds) <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
-  (_, kindCtx, typeCtx) <- Typing.checkDecls kmodl kindCtx (typeCtx s) klds
-  return (kindCtx, typeCtx)
+  (sctx, scoped) <- Scoping.scopeDefs (scopingCtx s) [p]
+  (kctx, klds) <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
+  (_, kctx, tctx) <- Typing.checkDecls kmodl kctx (typeCtx s) klds
+  return (sctx, kctx, tctx)
 
 -- | Print a list of errors against the interactive source line(s).
 printREPLErrors :: FilePath -> [Error] -> Repl ()
