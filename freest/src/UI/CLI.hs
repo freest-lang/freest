@@ -17,6 +17,7 @@ module UI.CLI
   , moduleLoaded
   , noModuleLoaded
   , failedToLoadModule
+  , preludeNotLoaded
   , notASourceFile
   , comeAgain
   , interactivePath
@@ -27,32 +28,20 @@ import qualified Paths_freest as Paths
 import Options.Applicative
 import Data.Version ( showVersion )
 
-homepage :: String
-homepage = "https://freest-lang.github.io/"
-
-version :: String
-version = "The FreeST Compiler, version " ++ showVersion Paths.version ++ ", " ++ homepage
+homepage, version, freeSTiPrompt, moduleLoaded, noModuleLoaded,
+  failedToLoadModule, preludeNotLoaded, comeAgain, interactivePath :: String
+homepage           = "https://freest-lang.github.io/"
+version            = "The FreeST Compiler, version " ++ showVersion Paths.version ++ ", " ++ homepage
+freeSTiPrompt      = "freesti"
+moduleLoaded       = "Ok, one module loaded."
+noModuleLoaded     = "Ok, no modules loaded."
+preludeNotLoaded   = "Ok, Prelude not loaded."
+failedToLoadModule = "Failed, no modules loaded."
+comeAgain          = "Come again!"
+interactivePath    = "<interactive>"
 
 preludePath :: FilePath
 preludePath = "StandardLib/Prelude.fst"
-
-freeSTiPrompt :: String
-freeSTiPrompt = "freesti"
-
-moduleLoaded :: String
-moduleLoaded = "Ok, one module loaded."
-
-noModuleLoaded :: String
-noModuleLoaded = "Ok, no modules loaded."
-
-failedToLoadModule :: String
-failedToLoadModule = "Failed, no modules loaded."
-
-comeAgain :: String
-comeAgain = "Come again!"
-
-interactivePath :: String
-interactivePath = "<interactive>"
 
 notASourceFile :: FilePath -> String
 notASourceFile file = "target ‘" ++ file ++ "’ is not a source file"

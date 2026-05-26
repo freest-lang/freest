@@ -17,9 +17,9 @@ import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
 import Parser.LexerUtils ( runLexer )
-import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parsePattern, parseExpAsPattern )
+import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parsePatDecl, parseItPatDecl )
 import Parser.Unparser ( unparse )
-import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
+import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
 import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Parser.Scoping     qualified as Scoping
@@ -52,6 +52,7 @@ import System.Console.Repline
   )
 import System.Exit ( exitSuccess )
 import Debug.Trace (traceM)
+import qualified Syntax.Module as Load
 
 data ReplState = ReplState
   { validationState :: ValidationState
@@ -73,6 +74,20 @@ emptyReplState = ReplState
   , implicitPrelude = False
   , filePath = Nothing
   }
+
+instance Show ReplState where
+  show s = unlines
+    [ "ReplState {"
+    , "  validationState = { errors = " ++ show (length (errors (validationState s)))
+                                ++ ", counter = " ++ show (counter (validationState s)) ++ " }"
+    , "  scopingCtx = " ++ show (scopingCtx s)
+    , "  kindCtx = " ++ show (kindCtx s)
+    , "  typeCtx = " ++ show (typeCtx s)
+    , "  modl = " ++ show (modl s)
+    , "  implicitPrelude = " ++ show (implicitPrelude s)
+    , "  filePath = " ++ show (filePath s)
+    , "}"
+    ]
 
 repl :: ReplState -> IO ()
 repl =
@@ -102,7 +117,7 @@ ini = do
             Just (scopeCtx, typeCtx, scopedModule) ->
               modify (\s' -> s'{modl = scopedModule, typeCtx = typeCtx, scopingCtx = scopeCtx})
             Nothing     -> pure ()
-      | otherwise -> liftIO $ putStrLn noModuleLoaded
+      | otherwise -> liftIO Load.loadNoModule
 
 fin :: Repl ExitDecision
 fin = liftIO $ putStrLn comeAgain >> pure Exit
@@ -111,21 +126,29 @@ cmd :: String -> Repl ()
 cmd src = do
   s <- get
   -- First try an expression
-  case runLexer parseExpAsPattern interactivePath (src ++ "\n") of
+  case runLexer parsePatDecl interactivePath (src ++ "\n") of
     Left es1 ->
       -- If that fails, try a pattern
-      case runLexer parsePattern interactivePath (src ++ "\n") of
+      case runLexer parseItPatDecl interactivePath (src ++ "\n") of
         Left es2 -> printREPLErrors src -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
-        Right p -> validateAndEval s src p
-    Right p -> validateAndEval s src p
+        Right p2 -> do
+          validateLetDecl s src p2
+          eval p2
+          liftIO $ putStrLn "Printing the value of variable 'it'"
+    Right p1 -> do
+      validateLetDecl s src p1
+      eval p1
+      -- print nothing
 
-validateAndEval :: ReplState -> String -> E.ParsedLetDecl -> Repl ()
-validateAndEval s src p = case runValidation (validationState s) (typeAPattern s p) of
+validateLetDecl :: ReplState -> String -> E.ParsedLetDecl -> Repl ()
+validateLetDecl s src p = case runValidation (validationState s) (typeALetDecl s p) of
   Left es -> printREPLErrors src es -- Scoping/kinding/typing errors
   Right (kctx, tctx) -> do
     modify (\s -> s{kindCtx = kctx, typeCtx = tctx})
-    liftIO $ putStrLn "This where freesti evaluates the pattern and prints result"
+
+eval :: E.ParsedLetDecl -> Repl ()
+eval _ = liftIO $ putStrLn "Evaluating..."
 
 prefixedOpts :: [String]
 prefixedOpts = map ((optPrefix :) . fst) replOpts
@@ -142,6 +165,7 @@ replOpts :: [(String, String -> Repl ())]
 replOpts =
   [ ("?"         , handleHelp)
   , ("help"      , handleHelp)
+  , ("state"     , handleState) -- remove when in production
   , ("info"      , handleInfo)
   , ("load"      , handleLoad)
   , ("reload"    , handleReload)
@@ -161,11 +185,13 @@ handleHelp args = liftIO $ putStrLn $ unlines
   , ind ":load <file>                  load a module from a file"
   , ind ":reload                       reload the current module"
   , ind ":kind <type>                  show the kind of <type>"
+  , ind ":info                         display not sure what"
   , ind ":normalise <type>             show the normal form of <type>"
   , ind ":equivalent <type1> <type2>   check if <type1> is equivalent to <type2>"
   , ind ":grammar <type1> ... <typen>  show the grammar for types <type1> through <typen>"
   , ind ":m                            enter multi-line mode"
   , ind ":?, :help                     display this list of commands"
+  , ind ":state                        display the current state of the interpreter"
   , "(for : commands, writing a prefix is enough, e.g., :k <type>)"
   , ""
   , "Type equations need kind information for each parameter and for the right-hand side."
@@ -182,6 +208,9 @@ handleHelp args = liftIO $ putStrLn $ unlines
 handleInfo :: String -> Repl () -- freesti> :i <text>
 handleInfo text = liftIO $ putStrLn "TODO: What do we want here?"
 
+handleState :: String -> Repl () -- freesti> :s
+handleState _ = get >>= liftIO . putStrLn . show
+
 -- TODO: handle relative paths
 handleLoad :: FilePath -> Repl () -- freesti> :l <file>
 handleLoad path = do
@@ -191,8 +220,6 @@ handleLoad path = do
   liftIO (loader path) >>= \case
     Nothing -> pure ()
     Just (sc, tc, sm) -> do
-      traceM ("scopingContext: " ++ show sc)
-      traceM ("typingContext: " ++ show tc)
       modify (\s -> s{modl = sm, scopingCtx = sc, typeCtx = tc})
 
 handleReload :: FilePath -> Repl () -- freesti> :r
@@ -278,16 +305,14 @@ typeAnExp s e = do
   scoped <- Scoping.scopeExp (scopingCtx s) e
   kmodl  <- Kinding.kindModule (modl s)
   kexp   <- Kinding.kindExp (modl s) kmodl (kindCtx s) scoped
-  -- traceM (show scoped)
-  -- traceM (show (typeCtx s))
   fst <$> Typing.synth kmodl (kindCtx s) (typeCtx s) kexp
 
--- | Scope, kind and type-check a parsed pattern.
-typeAPattern :: ReplState -> E.ParsedLetDecl
+-- | Scope, kind and type-check a parsed let declaration.
+typeALetDecl :: ReplState -> E.ParsedLetDecl
              -> Validation (Kinding.KindCtx, Typing.TypeCtx)
-typeAPattern s p = do
-  (_, scoped) <- Scoping.scopeDefs (scopingCtx s) [p]
+typeALetDecl s p = do
   kmodl <- Kinding.kindModule (modl s)
+  (_, scoped) <- Scoping.scopeDefs (scopingCtx s) [p]
   (kindCtx, klds) <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
   (_, kindCtx, typeCtx) <- Typing.checkDecls kmodl kindCtx (typeCtx s) klds
   return (kindCtx, typeCtx)

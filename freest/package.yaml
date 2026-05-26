@@ -65,7 +65,6 @@ library:
     - Syntax.Type.Internal
     - Syntax.Type.Unkinded
     - Syntax.Type.Kinded
-    - Syntax.Command  # for FreeSTi
     - UI.CLI
     - UI.Error
     - Utils
