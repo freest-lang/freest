@@ -12,7 +12,7 @@ module Interpreter.Eval
 
 {-
 TODO:
-- Handle recursive functions
+- Do we need two environments, a global and a local?
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
 - Handling of undefined is correct?
 - Missing evaluation for E.Case (what about labels?)
@@ -54,7 +54,6 @@ chooseGuard env ((guard, exp):guards) = do
 chooseCase :: [Alternative] -> Value -> Maybe (Alternative, Env)
 chooseCase [] _ = Nothing
 chooseCase ((pat, rhs) : alternatives) val =
-  -- try to match pattern and argument through pattern matching
   case resolvePatternMatching pat val of
     Left _ -> chooseCase alternatives val
     Right bindings -> Just ((pat, rhs), bindings)
@@ -62,7 +61,6 @@ chooseCase ((pat, rhs) : alternatives) val =
 -- | Extract an expression and let declarations from case alternatives
 extractFromRHS :: (GlobalEnv, LocalEnv) -> E.KindedRHS -> IO (E.KindedExp, Maybe [E.KindedLetDecl])
 extractFromRHS (global, local) rhs = do
-  -- extract expression and where declarations from either guarded or unguarded rhs
   case rhs of
     E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
     E.GuardedRHS guards whereDecls -> do
@@ -84,7 +82,6 @@ getBuiltinDecl _ = Nothing
 collectLetDecls :: (GlobalEnv, LocalEnv) -> [E.KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
 collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
-  -- the value declaration corresponds to a builtin value
   | isJust builtinBinding = do
     let binding = fromJust builtinBinding
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
@@ -95,12 +92,10 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
       Just whereDecls' -> collectLetDecls (global, local) whereDecls'
       Nothing -> return empty
     val <- eval (global, whereBindings `union` local) exp
-    -- resolve pattern matching to match variables from pattern to the value from rhs
     let patternMatchRes = resolvePatternMatching pat val
     bindings <- case patternMatchRes of
       Left _ -> error "Pattern matching failed!"
       Right bindings -> return bindings
-    -- collect the rest of the let declarations, inserting into the environment the bindings obtained from the first expression
     remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
     return $ bindings `union` remainingBindings
   where
@@ -108,12 +103,10 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
 collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
   -- the function declaration corresponds to a builtin function i.e. undefined
   | isJust builtinBinding = do
-    -- bind builtin function declaration to corresponding value in Values.builtins
     let binding = fromJust builtinBinding
     remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
     return $ binding `union` remainingBindings
   | otherwise = do
-    -- remove type arguments from clauses
     let clauses' = map (\(params, body) -> (fst $ B.partitionLevels params, body)) clauses
     let compiledFunction = compileFunctionToClosure clauses'
     let binding = singleton var compiledFunction
@@ -126,7 +119,8 @@ collectLetDecls (global, local) ((E.TypeSig var typ) : letdecls) =
 collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = do
   mutualDefs <- mapM (\fnDef -> collectLetDecls (global, local) [fnDef]) mutualDecls
   let mutualBindings = unions mutualDefs
-  collectLetDecls (mutualBindings `union` global, local) letdecls
+  remainingBindings <- collectLetDecls (mutualBindings `union` global, local) letdecls
+  return $ mutualBindings `union` remainingBindings
 
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env
@@ -229,7 +223,7 @@ eval (global, local) (E.App _ exp args) = do
   res <- handleApplication (global, local) func evalArgs
   case res of
     VIO io -> io
-    _      -> return res
+    _ -> return res
 eval (_, local) (E.Abs _ params _ body) =
   -- convert to a closure, capturing the local environment, so we don't lose bindings
   return $ VClosure (map fst (fst $ B.partitionLevels params)) body local
@@ -240,7 +234,7 @@ eval (global, local) (E.Asc span exp typ) = do
   eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
   -- remove type signature declarations
-  let expDecls = filter (\case E.TypeSig _ _ -> False; _ -> True) decls
+  let expDecls = filter (\case E.TypeSig{} -> False; _ -> True) decls
   letBindings <- collectLetDecls (global, local) expDecls
   eval (global, letBindings `union` local) exp
 eval (global, local) (E.Semi span exp1 exp2) =
@@ -250,7 +244,6 @@ eval (global, local) (E.Case _ exp alternatives) = do
   case chooseCase alternatives val of
     Nothing -> error "Non-exaustive patterns in case alternatives"
     Just (alternative, bindings) -> do
-      -- extract expression and where declarations from either guarded or unguarded rhs
       (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
       whereBindings <- case whereDecls of
         Just whereDecls' -> collectLetDecls (global, bindings `union` local) whereDecls'
@@ -264,9 +257,9 @@ eval (global, local) (E.Case _ exp alternatives) = do
     Nothing -> undefined -}
 eval env (E.If _ ifExp thenExp elseExp) = do
   ifVal <- eval env ifExp
-  thenVal <- eval env thenExp
-  elseVal <- eval env elseExp
-  if fstToHsBool ifVal then return thenVal else return elseVal
+  if fstToHsBool ifVal
+  then eval env thenExp
+  else eval env elseExp
 eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan

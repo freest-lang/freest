@@ -55,9 +55,9 @@ data Value
   | VRecvType -}
 
 instance Show Value where
-  show VUnit = "()"
   show (VInt n) = show n
   show (VFloat n) = show n
+  show (VUnit) = "()"
   show (VChar c) = show c
   show (VString str) = show str
   show (VCons str vals) = str ++ " " ++ unwords (map show vals)
@@ -65,8 +65,10 @@ instance Show Value where
   show (VBuiltin _) = "<builtin>"
   show (VIO io) = "<IO>"
   show (VHandle _) = "<handle>"
-  show (VLabel str) = "<label> string"
+  show (VLabel str) = "<label : " ++ str ++ ">"
+  show (VFork) = "<fork>"
   show (VChan _) = "<chan>"
+  show (VPack types vals) = "(*T, " ++ show vals ++ ")"
 
 showTups :: [Value] -> String
 showTups [val] = show val

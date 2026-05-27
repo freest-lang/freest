@@ -82,7 +82,8 @@ resolvePatternMatching (E.WaitPat s) val =
   case val of
     VChan c -> Right empty
     _ -> Left (E.WaitPat s, val)
-resolvePatternMatching (E.InPat s pat1 pat2) val = do
+resolvePatternMatching (E.InPat s pat1 pat2) val = Left (E.InPat s pat1 pat2, val)
+  {- do
   case val of
     VChan c -> do
       let chanContents = unsafePerformIO $ getChanContents $ fst c
@@ -97,10 +98,10 @@ resolvePatternMatching (E.InPat s pat1 pat2) val = do
           case binding' of
             Left _ -> Left (E.InPat s pat1 pat2, val)
             Right bindings' -> Right $ union bindings bindings'
-    _ -> Left (E.InPat s pat1 pat2, val)
-resolvePatternMatching (E.ChoicePat _ iden pat) val = undefined
+    _ -> Left (E.InPat s pat1 pat2, val) -}
+resolvePatternMatching (E.ChoicePat s iden pat) val = Left (E.ChoicePat s iden pat, val)
 -- check against select 
-resolvePatternMatching (E.TypeInPat _ (var, kind) pat) val = undefined
+resolvePatternMatching (E.TypeInPat s (var, kind) pat) val = Left (E.TypeInPat s (var, kind) pat, val)
 resolvePatternMatching (E.AsPat s var pat) val = do
   let binding = resolvePatternMatching pat val
   case binding of
