@@ -16,7 +16,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
-import Parser.LexerUtils ( runLexer )
+import Parser.LexerUtils ( runLexer, Lexer )
 import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parsePatDecl, parseItPatDecl )
 import Parser.Unparser ( unparse )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
@@ -31,7 +31,6 @@ import UI.CLI ( version, freeSTiPrompt, noModuleLoaded, comeAgain, interactivePa
 
 import Data.List qualified as List
 import Data.Map qualified as Map
-import Data.Bitraversable (bimapM)
 import Control.Monad.State
     ( (>=>),
       modify,
@@ -54,6 +53,8 @@ import System.Exit ( exitSuccess )
 import Debug.Trace (traceM)
 import qualified Syntax.Module as Load
 import Control.Monad.Except (runExceptT)
+
+-- The state of the REPL
 
 data ReplState = ReplState
   { validationState :: ValidationState
@@ -86,11 +87,14 @@ instance Show ReplState where
     , "  scopingCtx = " ++ show (scopingCtx s)
     , "  kindCtx = " ++ show (kindCtx s)
     , "  typeCtx = " ++ show (typeCtx s)
+    , "  valueCtx = " ++ show (valueCtx s)
     , "  modl = " ++ show (modl s)
     , "  implicitPrelude = " ++ show (implicitPrelude s)
     , "  filePath = " ++ show (filePath s)
     , "}"
     ]
+
+-- The REPL itself
 
 repl :: ReplState -> IO ()
 repl =
@@ -105,6 +109,33 @@ repl =
       ini
       fin
     )
+  where
+    prefixedOpts :: [String]
+    prefixedOpts = map ((optPrefix :) . fst) replOpts
+    -- Prefix tab completeter
+    defaultMatcher :: MonadIO m => [(String, CompletionFunc m)]
+    defaultMatcher = map (, listCompleter []) prefixedOpts
+    -- Default tab completer
+    byWord :: Monad m => WordCompleter m
+    byWord n = return $ filter (List.isPrefixOf n) prefixedOpts
+    -- The various REPL commands, mapped to their handlers
+    replOpts :: [(String, String -> Repl ())]
+    replOpts =
+      [ ("?"         , handleHelp)
+      , ("help"      , handleHelp)
+      , ("state"     , handleState) -- remove when in production
+      , ("info"      , handleInfo)
+      , ("load"      , handleLoad)
+      , ("reload"    , handleReload)
+      , ("kind"      , handleKind)
+      , ("type"      , handleType)
+      , ("equivalent", handleEquivalent)
+      , ("normalise" , handleNormalise)
+      , ("grammar"   , handleGrammar)
+      , ("quit"      , const $ liftIO exitSuccess)
+      ]
+
+-- The REPL commands
 
 type Repl a = HaskelineT (StateT ReplState IO) a
 
@@ -116,10 +147,10 @@ ini = do
     Just path -> handleLoad path
     Nothing
       | implicitPrelude s -> do
-          liftIO Load.loadPrelude >>= \case
-            Just (scopeCtx, typeCtx, scopedModule) ->
-              modify (\s' -> s'{modl = scopedModule, typeCtx = typeCtx, scopingCtx = scopeCtx})
-            Nothing     -> pure ()
+          liftIO Load.loadPrelude >>= \case -- TODO: refactor to avoid code duplication with handleLoad
+            Just (sctx, tctx, smodl) ->
+              modify (\s' -> s'{modl = smodl, typeCtx = tctx, scopingCtx = sctx})
+            Nothing -> pure ()
       | otherwise -> liftIO Load.loadNoModule
 
 fin :: Repl ExitDecision
@@ -135,46 +166,80 @@ cmd src = do
       case runLexer parseItPatDecl interactivePath (src ++ "\n") of
         Left es2 -> printREPLErrors src -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
-        Right p2 -> do
-          validateLetDecl s p2 >>= \case
-            Left errs        -> printREPLErrors src errs -- Scoping/kinding/typing errors
-            Right (s', klds) -> do
-              put s'
+        Right p2 -> handleLetDecl src s p2 (liftIO $ putStrLn "Printing the value of variable 'it'")
+    Right p1 -> handleLetDecl src s p1 (pure ())
+  where
+    -- | Validate a parsed let declaration; on success update the state and
+    -- evaluate it (running 'post' afterwards), on failure report the errors.
+    handleLetDecl :: String -> ReplState -> E.ParsedLetDecl -> Repl () -> Repl ()
+    handleLetDecl src s p post =
+      case runState (runExceptT (validateLetDecl s p)) (validationState s) of
+        (Left e, ValidationState{errors}) -> printREPLErrors src (e : errors)
+        (Right (sctx, kctx, tctx, klds), vs@ValidationState{errors})
+          | null errors -> do
+              put s{validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx}
               eval klds
-              liftIO $ putStrLn "Printing the value of variable 'it'"
-    Right p1 ->
-      validateLetDecl s p1 >>= \case
-        Left errs        -> printREPLErrors src errs -- Scoping/kinding/typing errors
-        Right (s', klds) -> do
-          put s'
-          eval klds -- print nothing
+              post
+          | otherwise   -> printREPLErrors src errors
 
-prefixedOpts :: [String]
-prefixedOpts = map ((optPrefix :) . fst) replOpts
+-- TODO: handle relative paths
+handleLoad :: FilePath -> Repl () -- freesti> :l <file>
+handleLoad path = do
+  modify (\s -> s{filePath = Just path})
+  ip <- gets implicitPrelude
+  let loader = if ip then Load.loadPreludeAndModule else Load.loadModule
+  liftIO (loader path) >>= \case
+    Nothing -> pure ()
+    Just (sctx, tctx, smodl) -> do
+      modify (\s -> s{modl = smodl, scopingCtx = sctx, typeCtx = tctx})
 
--- Prefix tab completeter
-defaultMatcher :: MonadIO m => [(String, CompletionFunc m)]
-defaultMatcher = map (, listCompleter []) prefixedOpts
+handleReload :: FilePath -> Repl () -- freesti> :r
+handleReload "" =
+  gets filePath >>= maybe (liftIO Load.loadNoModule) handleLoad
+handleReload _  =
+  liftIO $ putStrLn "':reload' takes no arguments, just type ':reload' to reload the current module"
 
--- Default tab completer
-byWord :: Monad m => WordCompleter m
-byWord n = return $ filter (List.isPrefixOf n) prefixedOpts
+-- | Parse the input, validate the result against the current state, and on
+-- success hand it to the output action. Parser and validation errors are
+-- reported against the interactive source.
+runPipeline :: String
+           -> Lexer a                           -- parse
+           -> (ReplState -> a -> Validation b)  -- validate
+           -> (b -> Repl ())                    -- output
+           -> Repl ()
+runPipeline src parse validate output =
+  case runLexer parse interactivePath src of
+    Left es -> printREPLErrors src es -- Lexer/parser errors
+    Right x -> do
+      s <- get
+      case runValidation (validationState s) (validate s x) of
+        Left es -> printREPLErrors src es -- Scopping/kinding/typing errors
+        Right y -> output y
 
-replOpts :: [(String, String -> Repl ())]
-replOpts =
-  [ ("?"         , handleHelp)
-  , ("help"      , handleHelp)
-  , ("state"     , handleState) -- remove when in production
-  , ("info"      , handleInfo)
-  , ("load"      , handleLoad)
-  , ("reload"    , handleReload)
-  , ("kind"      , handleKind)
-  , ("type"      , handleType)
-  , ("equivalent", handleEquivalent)
-  , ("normalise" , handleNormalise)
-  , ("grammar"   , handleGrammar)
-  , ("quit"      , const $ liftIO exitSuccess)
-  ]
+handleKind :: String -> Repl () -- freesti> :k <type>
+handleKind src = runPipeline src parseType
+  validateType
+  (\t' -> liftIO $ putStrLn (src ++ " : " ++ unparse (TK.kindOf t')))
+
+handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
+handleEquivalent src = runPipeline src parseTwoTypes
+  (\s (t, u) -> validateTypes s [t, u])
+  (\(kmodl, [t', u']) -> liftIO $ print (equivalent kmodl t' u'))
+
+handleNormalise :: String -> Repl () -- freesti> :n <type>
+handleNormalise src = runPipeline src parseType
+  (\s t -> validateTypes s [t])
+  (\(kmodl, [t']) -> liftIO $ putStrLn (unparse (normalise kmodl t')))
+
+handleGrammar :: String -> Repl () -- freesti> :g <types>
+handleGrammar src = runPipeline src parseTypes
+  validateTypes
+  (\(kmodl, ts') -> liftIO $ putStrLn (showGrammar (fromTypes kmodl ts')))
+
+handleType :: String -> Repl () -- freesti> :t <exp>
+handleType src = runPipeline src parseExp
+  validateExp
+  (\t -> liftIO $ putStrLn (src ++ " : " ++ unparse t))
 
 handleHelp :: String -> Repl ()
 handleHelp args = liftIO $ putStrLn $ unlines
@@ -210,96 +275,19 @@ handleInfo text = liftIO $ putStrLn "TODO: What do we want here?"
 handleState :: String -> Repl () -- freesti> :s
 handleState _ = get >>= liftIO . print
 
--- TODO: handle relative paths
-handleLoad :: FilePath -> Repl () -- freesti> :l <file>
-handleLoad path = do
-  modify (\s -> s{filePath = Just path})
-  ip <- gets implicitPrelude
-  let loader = if ip then Load.loadPreludeAndModule else Load.loadModule
-  liftIO (loader path) >>= \case
-    Nothing -> pure ()
-    Just (sctx, tctx, smodl) -> do
-      modify (\s -> s{modl = smodl, scopingCtx = sctx, typeCtx = tctx})
-
-handleReload :: FilePath -> Repl () -- freesti> :r
-handleReload "" =
-  gets filePath >>= maybe (liftIO Load.loadNoModule) handleLoad
-handleReload _  =
-  liftIO $ putStrLn "':reload' takes no arguments, just type ':reload' to reload the current module"
-
-handleKind :: String -> Repl () -- freesti> :k <type>
-handleKind src =
-  case runLexer parseType interactivePath src of
-    Left es -> do
-      printREPLErrors src es -- Lexer/parser errors
-    Right t -> do
-      s <- get
-      case runValidation (validationState s) (validateType s t) of
-        Left es -> printREPLErrors src es -- Scopping/kinding errors
-        Right t' -> do
-          liftIO $ putStrLn (src ++ " : " ++ unparse (TK.kindOf t'))
-
-handleType :: String -> Repl () -- freesti> :t <exp>
-handleType src =
-  case runLexer parseExp interactivePath src of
-    Left es -> printREPLErrors src es -- Lexer/parser errors
-    Right e -> do
-      s <- get
-      case runValidation (validationState s) (validateExp s e) of
-        Left es -> printREPLErrors src es -- Scopping/kinding/typing errors
-        Right t -> do
-          liftIO $ putStrLn (src ++ " : " ++ unparse t)
-
-handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
-handleEquivalent src =
-  case runLexer parseTwoTypes interactivePath src of
-    Left es -> printREPLErrors src es -- Lexer/parser errors
-    Right (t, u) -> do
-      s <- get
-      case runValidation (validationState s) (pipeline s) of
-        Left es -> printREPLErrors src es -- Scopping/kinding errors
-        Right (kmodl, (t', u')) ->
-          liftIO $ print (equivalent kmodl t' u')
-      where
-        pipeline s = do
-          kmodl <- Kinding.kindModule (modl s)
-          tu'   <- bimapM (validateType s) (validateType s) (t, u)
-          pure (kmodl, tu')
-
-handleNormalise :: String -> Repl () -- freesti> :n <type>
-handleNormalise src =
-  case runLexer parseType interactivePath src of
-    Left es -> printREPLErrors src es
-    Right t -> do
-      s <- get
-      case runValidation (validationState s) (pipeline s) of
-        Left es -> printREPLErrors src es
-        Right (kmodl, t') -> liftIO $ putStrLn (unparse (normalise kmodl t'))
-      where
-        pipeline s = do
-          kmodl <- Kinding.kindModule (modl s)
-          t'    <- validateType s t
-          pure (kmodl, t')
-
-handleGrammar :: String -> Repl () -- freesti> :g <types>
-handleGrammar src = do
-  s <- get
-  case runLexer parseTypes interactivePath src of
-    Left es -> printREPLErrors src es
-    Right ts -> case runValidation (validationState s) (pipeline s) of
-      Left es -> printREPLErrors src es
-      Right (kmodl, ts') -> liftIO $ putStrLn (showGrammar (fromTypes kmodl ts'))
-      where
-        pipeline s = do
-          kmodl <- Kinding.kindModule (modl s) -- TODO: cache in ReplState?
-          ts'   <- mapM (validateType s) ts
-          pure (kmodl, ts')
-
 -- Validating syntax
 
 -- | Scope and kind-synthesize a parsed type.
 validateType :: ReplState -> TU.ParsedType -> Validation TK.KindedType
 validateType s = Scoping.scopeType (scopingCtx s) >=> Kinding.synth (modl s) (kindCtx s)
+
+-- | Kind the current module and scope/kind-synthesize a list of parsed types
+-- against it. The result list has the same length and order as the input.
+validateTypes :: ReplState -> [TU.ParsedType] -> Validation (M.KindedModule, [TK.KindedType])
+validateTypes s ts = do
+  kmodl <- Kinding.kindModule (modl s)
+  ts'   <- mapM (validateType s) ts
+  pure (kmodl, ts')
 
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
@@ -309,31 +297,16 @@ validateExp s e = do
   kexp   <- Kinding.kindExp (modl s) kmodl (kindCtx s) scoped
   fst <$>   Typing.synth kmodl (kindCtx s) (typeCtx s) kexp
 
--- | Run the scoping/kinding/typing pipeline on a parsed let declaration.
--- Returns either the updated REPL state together with the kinded decls
--- (success) or the accumulated errors (failure). Pure as far as REPL state
--- goes; the caller is responsible for putting the new state and reporting
--- errors.
+-- | Scope, kind and type-check a parsed let declaration, returning the updated
+-- scoping, kind and type contexts along with the kinded declarations.
 validateLetDecl :: ReplState -> E.ParsedLetDecl
-                -> Repl (Either [Error] (ReplState, [E.KindedLetDecl]))
-validateLetDecl s p = pure $
-  case runState (runExceptT pipeline) (validationState s) of --  TODO: refactor runValidation?
-    (Left e,  ValidationState{errors}) -> Left (e : errors)
-    (Right (sctx, kctx, tctx, klds), vs@ValidationState{errors})
-      | null errors -> Right ( s { validationState = vs
-                                 , scopingCtx      = sctx
-                                 , kindCtx         = kctx
-                                 , typeCtx         = tctx
-                                 }
-                             , klds )
-      | otherwise -> Left errors
-  where
-    pipeline = do
-      kmodl           <- Kinding.kindModule (modl s)
-      (sctx, scoped)  <- Scoping.scopeDefs (scopingCtx s) [p]
-      (kctx, klds)    <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
-      (_, kctx, tctx) <- Typing.checkDecls kmodl kctx (typeCtx s) klds
-      return (sctx, kctx, tctx, klds)
+                -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, [E.KindedLetDecl])
+validateLetDecl s p = do
+  kmodl           <- Kinding.kindModule (modl s)
+  (sctx, scoped)  <- Scoping.scopeDefs (scopingCtx s) [p]
+  (kctx, klds)    <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
+  (_, kctx, tctx) <- Typing.checkDecls kmodl kctx (typeCtx s) klds
+  return (sctx, kctx, tctx, klds)
 
 -- | Print a list of errors against the interactive source line(s).
 printREPLErrors :: FilePath -> [Error] -> Repl ()
