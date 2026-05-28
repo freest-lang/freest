@@ -16,8 +16,9 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
-import Parser.LexerUtils ( runLexer, Lexer )
-import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parsePatDecl, parseItPatDecl )
+import Parser.Lexer ( layoutSC )
+import Parser.LexerUtils ( runLexer, pushStartCode, Lexer )
+import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseLetDeclBlock, parseItPatDecl )
 import Parser.Unparser ( unparse )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
 import Validation.Normalisation ( normalise )
@@ -27,7 +28,7 @@ import Validation.Kinding qualified as Kinding
 import Validation.Typing  qualified as Typing
 import Load qualified
 import UI.Error ( printErrors, Error )
-import UI.CLI ( version, freeSTiPrompt, noModuleLoaded, comeAgain, interactivePath, optPrefix )
+import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
 import Data.List qualified as List
 import Data.Map qualified as Map
@@ -50,8 +51,6 @@ import System.Console.Repline
     WordCompleter
   )
 import System.Exit ( exitSuccess )
-import Debug.Trace (traceM)
-import qualified Syntax.Module as Load
 import Control.Monad.Except (runExceptT)
 
 -- The state of the REPL
@@ -149,7 +148,7 @@ ini = do
       | implicitPrelude s -> do
           liftIO Load.loadPrelude >>= \case -- TODO: refactor to avoid code duplication with handleLoad
             Just (vs, sctx, tctx, smodl) ->
-              modify (\s' -> s'{validationState = vs, modl = smodl, typeCtx = tctx, scopingCtx = sctx})
+              put s{validationState = vs, modl = smodl, typeCtx = tctx, scopingCtx = sctx}
             Nothing -> pure ()
       | otherwise -> liftIO Load.loadNoModule
 
@@ -159,21 +158,21 @@ fin = liftIO $ putStrLn comeAgain >> pure Exit
 cmd :: String -> Repl ()
 cmd src = do
   s <- get
-  -- First try an expression
-  case runLexer parsePatDecl interactivePath (src ++ "\n") of
-    Left es1 ->
-      -- If that fails, try a pattern
-      case runLexer parseItPatDecl interactivePath (src ++ "\n") of
-        Left es2 -> printREPLErrors src -- Lexer/parser errors
+  -- First try a bare expression, bound to 'it'
+  case runLexer parseItPatDecl interactivePath (src ++ "\n") of
+    Right p   -> handleLetDecl src s [p] (liftIO $ putStrLn "Printing the value of variable 'it'")
+    Left es1  ->
+      -- Otherwise try a (possibly multi-line) block of let declarations
+      case runLexer (pushStartCode layoutSC >> parseLetDeclBlock) interactivePath (src ++ "\n") of
+        Right ds  -> handleLetDecl src s ds (pure ())
+        Left es2  -> printREPLErrors src -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
-        Right p2 -> handleLetDecl src s p2 (liftIO $ putStrLn "Printing the value of variable 'it'")
-    Right p1 -> handleLetDecl src s p1 (pure ())
   where
-    -- | Validate a parsed let declaration. On success: update the state,
-    -- evaluate the declaration, run 'post'. On failure: report the errors.
-    handleLetDecl :: String -> ReplState -> E.ParsedLetDecl -> Repl () -> Repl ()
-    handleLetDecl src s p post =
-      case runState (runExceptT (validateLetDecl s p)) (validationState s) of
+    -- | Validate parsed let declarations. On success: update the state,
+    -- evaluate them, run 'post'. On failure: report the errors.
+    handleLetDecl :: String -> ReplState -> [E.ParsedLetDecl] -> Repl () -> Repl ()
+    handleLetDecl src s ds post =
+      case runState (runExceptT (validateLetDecl s ds)) (validationState s) of
         (Left e, ValidationState{errors}) -> printREPLErrors src (e : errors)
         (Right (sctx, kctx, tctx, klds), vs@ValidationState{errors})
           | null errors -> do
@@ -297,13 +296,13 @@ validateExp s e = do
   kexp   <- Kinding.kindExp (modl s) kmodl (kindCtx s) scoped
   fst <$>   Typing.synth kmodl (kindCtx s) (typeCtx s) kexp
 
--- | Scope, kind and type-check a parsed let declaration, returning the updated
--- scoping, kind and type contexts along with the kinded declarations.
-validateLetDecl :: ReplState -> E.ParsedLetDecl
+-- | Scope, kind and type-check a block of parsed let declarations, returning
+-- the updated scoping, kind and type contexts along with the kinded decls.
+validateLetDecl :: ReplState -> [E.ParsedLetDecl]
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, [E.KindedLetDecl])
-validateLetDecl s p = do
+validateLetDecl s ds = do
   kmodl           <- Kinding.kindModule (modl s)
-  (sctx, scoped)  <- Scoping.scopeDefs (scopingCtx s) [p]
+  (sctx, scoped)  <- Scoping.scopeDefs (scopingCtx s) ds
   (kctx, klds)    <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
   (_, kctx, tctx) <- Typing.checkDecls kmodl kctx (typeCtx s) klds
   return (sctx, kctx, tctx, klds)
@@ -323,7 +322,7 @@ eval klds = do
   liftIO $ putStrLn "Evaluating..."
   s <- get
   vctx <- collectLetDecls (valueCtx s) klds
-  modify (\s -> s{valueCtx = vctx})
+  put s{valueCtx = vctx}
 
 collectLetDecls :: ValueCtx -> [E.KindedLetDecl] -> Repl ValueCtx
 collectLetDecls env _ = pure env

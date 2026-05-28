@@ -11,7 +11,7 @@ module Parser.Parser
   ( runParseModule
   -- freesti
   , parseExp
-  , parsePatDecl
+  , parseLetDeclBlock
   , parseItPatDecl
   , parseType
   , parseTwoTypes
@@ -42,7 +42,7 @@ import Data.List ( sortBy )
 -- Parser entry points for FreeST modules
 %name parseModule Module
 -- Parser entry points for FreeSTi commands
-%name parsePatDecl PatDecl 
+%name parseLetDeclBlock LetDeclBlock
 %name parseItPatDecl ItPatDecl
 %name parseType Type
 %name parseExp Exp
