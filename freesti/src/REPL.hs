@@ -148,8 +148,8 @@ ini = do
     Nothing
       | implicitPrelude s -> do
           liftIO Load.loadPrelude >>= \case -- TODO: refactor to avoid code duplication with handleLoad
-            Just (sctx, tctx, smodl) ->
-              modify (\s' -> s'{modl = smodl, typeCtx = tctx, scopingCtx = sctx})
+            Just (vs, sctx, tctx, smodl) ->
+              modify (\s' -> s'{validationState = vs, modl = smodl, typeCtx = tctx, scopingCtx = sctx})
             Nothing -> pure ()
       | otherwise -> liftIO Load.loadNoModule
 
@@ -169,8 +169,8 @@ cmd src = do
         Right p2 -> handleLetDecl src s p2 (liftIO $ putStrLn "Printing the value of variable 'it'")
     Right p1 -> handleLetDecl src s p1 (pure ())
   where
-    -- | Validate a parsed let declaration; on success update the state and
-    -- evaluate it (running 'post' afterwards), on failure report the errors.
+    -- | Validate a parsed let declaration. On success: update the state,
+    -- evaluate the declaration, run 'post'. On failure: report the errors.
     handleLetDecl :: String -> ReplState -> E.ParsedLetDecl -> Repl () -> Repl ()
     handleLetDecl src s p post =
       case runState (runExceptT (validateLetDecl s p)) (validationState s) of
@@ -190,19 +190,19 @@ handleLoad path = do
   let loader = if ip then Load.loadPreludeAndModule else Load.loadModule
   liftIO (loader path) >>= \case
     Nothing -> pure ()
-    Just (sctx, tctx, smodl) -> do
-      modify (\s -> s{modl = smodl, scopingCtx = sctx, typeCtx = tctx})
+    Just (vs, sctx, tctx, smodl) ->
+      modify (\s -> s{validationState = vs, scopingCtx = sctx, typeCtx = tctx, modl = smodl})
 
 handleReload :: FilePath -> Repl () -- freesti> :r
 handleReload "" =
   gets filePath >>= maybe (liftIO Load.loadNoModule) handleLoad
 handleReload _  =
-  liftIO $ putStrLn "':reload' takes no arguments, just type ':reload' to reload the current module"
+  liftIO $ putStrLn "'reload' takes no arguments, just type ':r' to reload the current module"
 
 -- | Parse the input, validate the result against the current state, and on
 -- success hand it to the output action. Parser and validation errors are
 -- reported against the interactive source.
-runPipeline :: String
+runPipeline :: String                           -- source code
            -> Lexer a                           -- parse
            -> (ReplState -> a -> Validation b)  -- validate
            -> (b -> Repl ())                    -- output
