@@ -35,7 +35,7 @@ runCakeStore gotCake k n cakeStore fj =
   if k == 0 then waitFor n (snd fj)
   else
     let s = accept cakeStore in
-    fork (\(_ : ()) 1-> handleClient gotCake (fst fj) s);
+    fork (\(_ : ()) -1-> handleClient gotCake (fst fj) s);
     runCakeStore False (k - 1) n cakeStore fj
 
 storeClient : String -> CakeStore -> ()
@@ -47,7 +47,7 @@ storeClient name cakeStore =
 main : ()
 main =
   let (c, s) = channel @CakeStore in
-  fork (\(_ : ()) 1-> storeClient "Ami" c);
-  fork (\(_ : ()) 1-> storeClient "Boe" c);
-  fork (\(_ : ()) 1-> storeClient "Cai" c);
+  fork (\(_ : ()) -1-> storeClient "Ami" c);
+  fork (\(_ : ()) -1-> storeClient "Boe" c);
+  fork (\(_ : ()) -1-> storeClient "Cai" c);
   runCakeStore True 3 3 s (channel @Fork)

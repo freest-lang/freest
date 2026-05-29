@@ -15,7 +15,7 @@ European Mathematical Society, 2011
 module SystemFBins where
 
 type Bin : *T
-type Bin = forall (a : *T) . a -> (a -> a) -> (a -> a) -> a
+type Bin = forall (a : *T) -> a -> (a -> a) -> (a -> a) -> a
 
 zero, zero', one, two, three, four, fifteen : Bin
 

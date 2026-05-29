@@ -22,13 +22,14 @@ import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Validation.Base ( unfold )
-import Validation.Substitution ( freeVars, subs, subsAll, betaRule )
+import Validation.Substitution ( freeTypeVars, subs, subsAll, betaRule )
 import Utils ( internalError )
 
 import Data.Bifunctor (second)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Debug.Trace ( trace )
+import GHC.Stack (HasCallStack)
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.KindedType -> Bool
@@ -38,6 +39,7 @@ isWhnf = \case
   -- W-Const1
   T.App _ t us
     | T.isConstant t && not (T.isSemi t || T.isTName t || T.isDual t || T.isVoid t) && not (null us) -> True
+  T.ForallM{} -> True
   -- W-Var
   T.AppVar{} -> True
   -- W-Dual
@@ -58,7 +60,7 @@ isWhnf = \case
 
 -- | One step type reduction (aka, the tau rules).
 --   Requires 'not (isWnhf t)'.
-reduce :: M.KindedModule -> T.KindedType -> T.KindedType
+reduce :: HasCallStack => M.KindedModule -> T.KindedType -> T.KindedType
 reduce mod = \case
   -- 1. Sequential composition, the R-S* rules
     -- R-SNeut
@@ -75,7 +77,7 @@ reduce mod = \case
     -- R-SQuantDist (We may have a simpler version if Quant is always followed by Abs)
   T.AppSemi s1 (T.App s2 q@T.QuantS{} [f]) u ->
     T.App s1 q [T.Abs s1 [(a, k)] (T.AppSemi s2 (T.App s2 f [T.fromVariable ObjLv a k]) u)]
-    where a = mkFreshVar s1 (freeVars f `Set.union` freeVars u)
+    where a = mkFreshVar s1 (freeTypeVars f `Set.union` freeTypeVars u)
           (K.Arrow _ (K.Arrow _ k _) _) = T.kindOf q
     -- R-SemiL
   T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
@@ -96,7 +98,7 @@ reduce mod = \case
     -- R-DQuant
   T.AppDual s1 (T.App s2 (T.QuantS s3 (K.Arrow _ (K.Arrow _ k _) _) p) [f]) ->
     T.AppQuantS s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable ObjLv a k]))
-    where a = mkFreshVar s1 (freeVars f)
+    where a = mkFreshVar s1 (freeTypeVars f)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->
     T.AppSemi s1 (T.AppDual s1 t1) (T.AppDual s2 t2)

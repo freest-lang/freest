@@ -29,21 +29,21 @@ type IFRepeat a b = IRepeat (&{More: a, Done: b ; Wait})     -- unfold
 --  ≃ µc.&{More: a ; c, Done: b ; Wait}
 
 -- A consumer of type IFRepeat (?a) Skip
-length : forall (a:*T) . IFRepeat (?a) Skip -> Int
+length : forall (a:*T) -> IFRepeat (?a) Skip -> Int
 length @a (&Done Wait) = 0
 length @a (&More (?_ ; c)) = 1 + length c 
 
 -- Folding a stream of heterogeneous values
 type Fold : 1S
-type Fold = ??(a:*T) . ?a ; IFRepeat (??(b:1S) . ?(a -> b -> a) ; ?b) (!a)
+type Fold = ?type (a:*T) . ?a ; IFRepeat (?type (b:1S) . ?(a -> b -> a) ; ?b) (!a)
 
 -- A consumer for type Fold
 fold : Fold -> ()
-fold (??(a:*T). (?x ; c)) = fold' x c
+fold (?type (a:*T). (?x ; c)) = fold' x c
   where
-    fold' : forall (a:*T) . a -> IFRepeat (?? (b:1S) . ?(a -> b -> a) ; ?b) (!a) -> ()
+    fold' : forall (a:*T) -> a -> IFRepeat (?type (b:1S) . ?(a -> b -> a) ; ?b) (!a) -> ()
     fold' x (&Done c) = c |> send x |> wait
-    fold' x (&More (??(b:1S). (?f ; ?y; c))) = fold' (f x y) c
+    fold' x (&More (?@(b:1S). (?f ; ?y; c))) = fold' (f x y) c
 
 -- CANNOT INFER
 showInt : Int -> String

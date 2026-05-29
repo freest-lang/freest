@@ -37,8 +37,8 @@ data Token
   | TkLParen Span | TkRParen Span | TkLSquare Span | TkRSquare Span
   | TkEqual Span | TkColon Span
   | TkBackslash Span
-  | TkArrow Span | TkUnArrow Span | TkLinArrow Span
-  | TkDot Span | TkAt Span | TkComma Span
+  | TkArrow Span | TkArrowButt Span | TkArrowHead Span
+  | TkDot Span | TkAt Span | TkHash Span | TkComma Span
   -- Operators
   | TkSemi Span | TkColonColon Span
   | TkDollar Span | TkPipeGT Span
@@ -57,11 +57,8 @@ data Token
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
   | TkVoidType Span
-  -- Kinds 
-  | TkLinTopKind Span | TkUnTopKind Span
-  | TkLinSessionKind Span | TkUnSessionKind Span
-  | TkLinChannelKind Span | TkUnChannelKind Span
-
+  -- Prekinds 
+  | TkTopPrekind Span | TkSessionPrekind Span | TkChannelPrekind Span
   deriving (Eq, Show)
 
 
@@ -129,10 +126,11 @@ instance Located Token where
     TkColon s -> s
     TkBackslash s -> s
     TkArrow s -> s
-    TkUnArrow s -> s
-    TkLinArrow s -> s
+    TkArrowButt s -> s
+    TkArrowHead s -> s
     TkDot s -> s
     TkAt s -> s
+    TkHash s -> s
     TkComma s -> s
     -- Operators
     TkSemi s -> s
@@ -172,12 +170,9 @@ instance Located Token where
     TkDualType s -> s
     TkVoidType s -> s
     -- Kinds
-    TkLinTopKind s -> s
-    TkUnTopKind s -> s
-    TkLinSessionKind s -> s
-    TkUnSessionKind s -> s
-    TkLinChannelKind s -> s
-    TkUnChannelKind s -> s
+    TkTopPrekind s -> s
+    TkSessionPrekind s -> s
+    TkChannelPrekind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
@@ -224,10 +219,11 @@ instance Located Token where
     TkColon _ -> TkColon s
     TkBackslash _ -> TkBackslash s
     TkArrow _ -> TkArrow s
-    TkUnArrow _ -> TkUnArrow s
-    TkLinArrow _ -> TkLinArrow s
+    TkArrowButt _ -> TkArrowButt s
+    TkArrowHead _ -> TkArrowHead s
     TkDot _ -> TkDot s
     TkAt _ -> TkAt s
+    TkHash _ -> TkHash s
     TkComma _ -> TkComma s
     -- Operators
     TkSemi _ -> TkSemi s
@@ -267,10 +263,7 @@ instance Located Token where
     TkWaitType _ -> TkWaitType s
     TkVoidType _ -> TkVoidType s
     -- Kinds
-    TkLinTopKind _ -> TkLinTopKind s
-    TkUnTopKind _ -> TkUnTopKind s
-    TkLinSessionKind _ -> TkLinSessionKind s
-    TkUnSessionKind _ -> TkUnSessionKind s
-    TkLinChannelKind _ -> TkLinChannelKind s
-    TkUnChannelKind _ -> TkUnChannelKind s
+    TkTopPrekind _ -> TkTopPrekind s
+    TkSessionPrekind _ -> TkSessionPrekind s
+    TkChannelPrekind _ -> TkChannelPrekind s
 

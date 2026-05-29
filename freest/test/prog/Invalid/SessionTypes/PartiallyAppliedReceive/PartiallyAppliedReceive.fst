@@ -1,4 +1,4 @@
 module PartiallyAppliedReceive where
 
-f : ?Int *-> (Int, Skip)
+f : ?Int -*-> (Int, Skip)
 f = receive

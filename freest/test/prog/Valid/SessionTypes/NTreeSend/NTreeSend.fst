@@ -22,7 +22,7 @@ type TreeListChannel = +{
 -- ===== SENDING =====
 
 mutual
-  sendTree : forall (a : 1S). Tree -> TreeChannel;a -> a
+  sendTree : forall (a : 1S) -> Tree -> TreeChannel;a -> a
   sendTree @a tree c =
     case tree of
       Empty ->
@@ -30,7 +30,7 @@ mutual
       Node i children ->
         c |> select Node |> send i |> sendTreeList children
 
-  sendTreeList : forall (a : 1S). TreeList -> TreeListChannel;a -> a
+  sendTreeList : forall (a : 1S) -> TreeList -> TreeListChannel;a -> a
   sendTreeList @a list c =
     case list of
       Nil ->
@@ -41,7 +41,7 @@ mutual
 -- ===== RECEIVING =====
 
 mutual 
-  receiveTree : forall (a : 1S). Dual TreeChannel;a -> (Tree, a)
+  receiveTree : forall (a : 1S) -> Dual TreeChannel;a -> (Tree, a)
   receiveTree @a c =
     case c of
       &Empty c ->
@@ -51,7 +51,7 @@ mutual
         let (children, c) = receiveTreeList c in
         (Node i children, c)
 
-  receiveTreeList : forall (a : 1S). Dual TreeListChannel;a -> (TreeList, a)
+  receiveTreeList : forall (a : 1S) -> Dual TreeListChannel;a -> (TreeList, a)
   receiveTreeList @a c =
     case c of
       &Nil c ->
@@ -88,7 +88,7 @@ clientSendTree c = c |> sendTree aTree |> close
 main : Tree
 main =
   let (client, server) = channel @(TreeChannel;Close) in
-  fork (\(_ : ()) 1-> clientSendTree client);
+  fork (\(_ : ()) -1-> clientSendTree client);
   let (t, server) = receiveTree server in
   wait server;
   t

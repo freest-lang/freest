@@ -1,4 +1,4 @@
 module ForkLinExp where
 
 main : ()
-main = fork (\(_ : ()) 1-> channel @Close)
+main = fork @(Close, Wait) (\(_ : ()) -1-> channel @Close)

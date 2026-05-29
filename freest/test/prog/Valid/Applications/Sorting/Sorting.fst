@@ -66,7 +66,7 @@ quicksort cmp xs =
 
 -- Receive a series of integer values; return them in ascending or
 -- descending order
-sortingServer : forall (a : 1S). IntList -> (Dual OrderingChannel; a) -> (IntList, a)
+sortingServer : forall (a : 1S) -> IntList -> (Dual OrderingChannel; a) -> (IntList, a)
 sortingServer @a xs c =
   case c of
     &Value c ->
@@ -85,5 +85,5 @@ sortingServer @a xs c =
 main : ()
 main =
   let (w, r) = channel @(OrderingChannel; Wait) in
-  fork (\(_ : ()) 1-> sortingServer Nil r |> snd |> close);
+  fork (\(_ : ()) -1-> sortingServer Nil r |> snd |> close);
   client w

@@ -18,7 +18,7 @@ where
 import GHC.Stack (HasCallStack)
 
 -- | Throw an 'error' with standard formatting.
-internalError :: forall a. HasCallStack => String -> a
+internalError :: HasCallStack => String -> a
 internalError s = error $ "(Internal error) " ++ s
 
 -- | The ordinal 'String' of an 'Integral'.
@@ -26,7 +26,7 @@ ordinal :: (Integral a, Show a) => a -> String
 ordinal i = show i ++ suffix
   where suffix | i' > 10 && i' < 20 = "th"
                | otherwise = suffix' (i' `mod` 10)
-        suffix' = \case 1->"st"; 2->"nd"; 3->"rd"; _->"th"
+        suffix' = \case 1 ->"st"; 2 ->"nd"; 3 ->"rd"; _ ->"th"
         i' = abs i 
 
 -- | From MissingH. Removes any whitespace characters that are present at the

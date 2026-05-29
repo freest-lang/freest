@@ -39,7 +39,7 @@ writeValues c = c |> send 1 |> send 2 |> writeAll 3
 average3 : Int -> Int -> Int -> Int
 average3 x y z = (x + y + z) / 3
 
-readAll : Int -> Int -> FiniteInStream -> FiniteOutStream 1-> ()
+readAll : Int -> Int -> FiniteInStream -> FiniteOutStream -1-> ()
 readAll x y from to =
   case from of
     &More from ->
@@ -49,7 +49,7 @@ readAll x y from to =
       readAll y z from
     &Enough from -> from |> wait ; to |> select Enough |> close
 
-readValues : ?Int; ?Int; FiniteInStream -> FiniteOutStream 1-> ()
+readValues : ?Int; ?Int; FiniteInStream -> FiniteOutStream -1-> ()
 readValues from to =
   let (x, from) = receive from in
   let (y, from) = receive from in
@@ -66,6 +66,6 @@ collectValues c =
 
 main : ()
 main =
-  let r1 = forkWith  writeValues in
-  let r2 = forkWith1 (readValues r1) in
+  let r1 = forkWith writeValues in
+  let r2 = forkWith (readValues r1) in
   collectValues r2

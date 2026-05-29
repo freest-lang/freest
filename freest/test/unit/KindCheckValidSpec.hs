@@ -18,5 +18,5 @@ spec = mkTypeSpec
   \src -> \case 
     (t, Nothing, m) -> expectationFailure "Ill formed test case: missing kind annotation"
     (t, Just k , m) -> case runKindModule m >> runCheck m t k of
-      Left es -> expectationFailure (showErrors src es)
+      Left es -> expectationFailure (showErrors src es ++ "\n(type parsed as `" ++ show t ++ "`)")
       _       -> return ()

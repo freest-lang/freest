@@ -40,7 +40,7 @@ type TabuadaServer = &{ TabuadaSimples: ?Int ;             TabuadaServer
 
 type TabuadaClient = Dual TabuadaServer
 
-tabuadaServer : TabuadaServer -> IntList 1-> ()
+tabuadaServer : TabuadaServer -> IntList -1-> ()
 tabuadaServer c result =
   case c of
     -- Servicos
@@ -72,7 +72,7 @@ tabuadaServer c result =
           tabuadaServer c l
     &Fim c -> wait c
 
-initTabuadaServer : TabuadaServer 1-> ()
+initTabuadaServer : TabuadaServer -1-> ()
 initTabuadaServer c = tabuadaServer c Empty
 
 -- Funcao auxiliar para iterar a lista e adicionar um elemento no fim
@@ -102,7 +102,7 @@ receiveList c = receiveListAux Empty c
 main : IntList
 main =
   let (r, w) = channel @TabuadaServer in
-  fork (\(_ : ()) 1-> initTabuadaServer r) ; 
+  fork (\(_ : ()) -1-> initTabuadaServer r) ; 
   let (result, c) = select TabuadaSimples w 
                     |> send 4 
                     |> receiveList in

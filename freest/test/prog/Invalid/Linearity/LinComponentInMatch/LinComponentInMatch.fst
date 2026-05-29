@@ -3,7 +3,7 @@ module LinComponentInMatch where
 type Server : 1C
 type Server = &{A: !Int}; Wait
 
-server : Server -> () 1-> ()
+server : Server -> () -1-> ()
 server s _ =
   case s of &A s -> () -- here
 
