@@ -569,7 +569,8 @@ checkPack modl kctx tctx e =  \cases
     check modl kctx tctx e (T.AppExists (spanFromTo a u) aks u)
   ts@(t : _) [] u ->
     check modl kctx tctx (E.Pack (spanFromTo t u) ts e) u
-  (t : ts) ((a, _) : aks) u ->
+  (t : ts) ((a, k) : aks) u -> do
+    Kinding.checkK t k
     checkPack modl kctx tctx e ts aks (subs a t u)
 
 -- | Check-against for patterns. Given a kind context, it checks whether a 
