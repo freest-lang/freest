@@ -611,7 +611,7 @@ checkPat modl kctx p t = case p of
           u' -> throwE (TypeMismatchExists (spanFromTo a p) u
             (Left $ E.PackPat (spanFromTo a p) aks p))
         ((a, k) : aks) ((b, k') : bks) -> do
-          Kinding.checkK (T.fromVariable ObjLv a k) k'
+          Kinding.checkK (T.fromVariable ObjLv a k') k
           checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
   E.WildPat  s _    -> do
     when (Kinding.isStrictlyLin t) (throwE (NonLinPat s p t))
