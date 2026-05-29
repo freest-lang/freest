@@ -18,7 +18,7 @@ read : IntRef -> Int
 read r = r |> receive_ |> select Read |> receiveAndClose
 
 intRef : Int -> IntRef
-intRef x = forkWith #* (handle x)
+intRef x = forkWith (handle x)
   where
     handle : Int -> Dual IntRef -> ()
     handle x r = case accept r of

@@ -57,9 +57,9 @@ showStream : Dual Fold -> String
 showStream c =
   let (x, c) = c |> sendType @String |> send ""
                  |> select More |> sendType @Int
-                 |> send (\(x:String) (y:Int) -> (++) #* x (showInt y)) |> send 5
+                 |> send (\(x:String) (y:Int) -> x ++ showInt y) |> send 5
                  |> select More |> sendType @Bool
-                 |> send (\(x:String) (y:Bool) -> (++) #* x (showBool y)) |> send True
+                 |> send (\(x:String) (y:Bool) -> x ++ showBool y) |> send True
                  |> select Done
                  |> receive
   in close c ; x

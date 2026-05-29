@@ -6,12 +6,12 @@ write c n =
   let c = send n c in
   print n;
   let (r, w) = channel @(!Int; Close) in
-  fork #1 (\(_ : ()) -1-> receiveAndWait w); 
+  fork (\(_ : ()) -1-> receiveAndWait w); 
   write r (n + 1);
   close c
 
 main : ()
 main =
   let (r, w) = channel @(!Int; Close) in
-  fork #1 (\(_ : ()) -1-> receiveAndWait w);
+  fork (\(_ : ()) -1-> receiveAndWait w);
   write r 0

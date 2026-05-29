@@ -122,7 +122,7 @@ mutual
 main : Object 
 main =
   let (w, r) = channel @(ObjectChannel; Close) in
-  fork #1 (\(_ : ()) -1-> writeObject json w |> close);
+  fork (\(_ : ()) -1-> writeObject json w |> close);
   let (obj, r) = readObject r in
   wait r;
   obj

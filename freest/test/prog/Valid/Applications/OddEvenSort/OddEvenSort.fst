@@ -92,13 +92,13 @@ main =
       (cw6, cr6) = channel @(!Int; Close)
       (cw7, cr7) = channel @(!Int; Close) in
   -- the various sorting nodes
-  fork #1 (\(_ : ()) -1-> first       (p / 2)     99    l1 cw1);
-  fork #1 (\(_ : ()) -1-> evenProcess (p / 2)     88 r1 l2 cw2);
-  fork #1 (\(_ : ()) -1-> oddProcess  (p / 2 - 1) 33 r2 l3 cw3);
-  fork #1 (\(_ : ()) -1-> evenProcess (p / 2)     11 r3 l4 cw4);
-  fork #1 (\(_ : ()) -1-> oddProcess  (p / 2 - 1) 55 r4 l5 cw5);
-  fork #1 (\(_ : ()) -1-> evenProcess (p / 2)     44 r5 l6 cw6);
-  fork #1 (\(_ : ()) -1-> last                    77 r6    cw7);
+  fork (\(_ : ()) -1-> first       (p / 2)     99    l1 cw1);
+  fork (\(_ : ()) -1-> evenProcess (p / 2)     88 r1 l2 cw2);
+  fork (\(_ : ()) -1-> oddProcess  (p / 2 - 1) 33 r2 l3 cw3);
+  fork (\(_ : ()) -1-> evenProcess (p / 2)     11 r3 l4 cw4);
+  fork (\(_ : ()) -1-> oddProcess  (p / 2 - 1) 55 r4 l5 cw5);
+  fork (\(_ : ()) -1-> evenProcess (p / 2)     44 r5 l6 cw6);
+  fork (\(_ : ()) -1-> last                    77 r6    cw7);
   -- collect' and print results
   print (receiveAndWait cr1);
   print (receiveAndWait cr2);

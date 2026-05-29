@@ -9,5 +9,5 @@ server s _ =
 
 main : Int
 main = let (s, c) = channel @Server in
-       fork #1 (server s);
+       fork (server s);
        c |> select A |> receiveAndClose

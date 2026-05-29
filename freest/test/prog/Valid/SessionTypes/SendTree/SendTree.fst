@@ -49,4 +49,4 @@ writeTree tree writer =
   writer |> write tree |> close
 
 main : Tree
-main = forkWith #* (writeTree aTree) |> readTree
+main = forkWith (writeTree aTree) |> readTree

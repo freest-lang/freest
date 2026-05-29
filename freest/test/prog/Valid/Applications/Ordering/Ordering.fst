@@ -125,6 +125,6 @@ descClient c =
 main : IntList
 main =
   let (w, r) = channel @(OrderingChannel; Close) in
-  let _      = fork #1 (\(_ : ()) -1-> initOrderedServer r) in
+  let _      = fork (\(_ : ()) -1-> initOrderedServer r) in
   descClient w
   --ascClient w

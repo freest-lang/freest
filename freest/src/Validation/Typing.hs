@@ -31,27 +31,28 @@ import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Kinding ( KindCtx )
 import Validation.Kinding qualified as Kinding
-import Validation.Matching qualified as Matching
+import Validation.LocalInference.Types          qualified as LTI
+import Validation.LocalInference.Multiplicities qualified as LMI
+import Validation.LocalInference.Substitution   qualified as LI
 import Validation.Normalisation ( normalise, tNameRedex, isWhnf, reduce )
 import Validation.Substitution ( subs, subsAll, subsMultType )
 import Validation.TypeEquivalence ( equivalent )
 
+import Control.Exception (assert)
 import Control.Monad
 import Control.Monad.Extra ( ifM, whenM, whileM )
 import Control.Monad.State
 import Control.Monad.Trans.Except ( catchE, throwE )
 import Data.Bifunctor
+import Data.Bitraversable (bimapM)
 import Data.Foldable ( foldrM, Foldable (fold, foldMap') )
 import Data.Function ( on )
 import Data.Functor
 import Data.List qualified as List
 import Data.List.Extra qualified as List
 import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Maybe (isJust, fromJust)
-import Control.Exception (assert)
-import Data.Bitraversable (bimapM)
-import Data.List (sort)
+import Data.Set qualified as Set
 
 
 -- The type context. It keeps track of the variables and constructors in scope
@@ -326,14 +327,17 @@ check modl kctx tctx e t = case e of
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s h args -> do
     (t', tctx') <- synth modl kctx tctx h
-    (us, t'') <- instantiate 0 modl kctx tctx t' args
-    θ <- Matching.match e modl t t''
-    checkEquivTypes modl (Left e) (Matching.applySubs θ t  )
-                                  (Matching.applySubs θ t'')
+    (mcs, us, t'') <- instantiate 0 modl kctx tctx t' args
+    (mcs', θ') <- LTI.match e modl t t''
+    θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case 
+      Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
+      Right θ''   -> return (θ'' <> θ')
+    checkEquivTypes modl (Left e) (LI.applySubs θ t  )
+                                  (LI.applySubs θ t'')
     let (es, _, _) = partitionLevels args
     assert (length es == length us) do
       foldM (\tctxi (ei, ui) -> 
-        check modl kctx tctxi ei (Matching.applySubs θ ui)) tctx' (zip es us)
+        check modl kctx tctxi ei (LI.applySubs θ ui)) tctx' (zip es us)
   E.Abs s pars m e' -> do
     checkFun modl kctx tctx (Right e) pars' (Just m) (E.UnguardedRHS e' Nothing) t
     where
@@ -507,11 +511,15 @@ checkArgsQL :: Int
             -> [Level (E.Exp Kinded) T.KindedType K.Multiplicity]
             -> Validation (T.KindedType, TypeCtx)
 checkArgsQL i modl kctx tctx t args = do
-    (us, t') <- instantiate i modl kctx tctx t args
+    (mcs, us, t') <- instantiate i modl kctx tctx t args
+    θ <- LMI.solveMultConstraints mcs >>= \case
+      Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
+      Right θ     -> return θ
+    let us' = map (LI.applySubs θ) us
     let (es, _, _) = partitionLevels args
-    tctx' <- assert (length es == length us) do
-      foldM (uncurry . check modl kctx) tctx (zip es us)
-    return (t', tctx')
+    tctx' <- assert (length es == length us') do
+      foldM (uncurry . check modl kctx) tctx (zip es us')
+    return (LI.applySubs θ t', tctx')
 
 -- | Check for functions. Simultaneously walks down a list of parameters and 
 -- the type to check the function against, collecting the variables introduced 
@@ -541,7 +549,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Just ki -> do Kinding.checkK (T.fromVariable ObjLv ai ki) k
                           return ki
             Nothing -> return k
-          case mm of                                                           -- TODO: revisit when implementing multiplicity polymorphism
+          case mm of
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo ai fe) fe i m m')
             Nothing -> return ()
@@ -555,7 +563,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
               Kinding.checkProperK ti
               checkEquivTypes modl (Right pi) ti u
             Nothing -> return ()
-          case mm of                                                           -- TODO: revisit when implementing multiplicity polymorphism
+          case mm of
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo pi fe) fe i m m')
             Nothing -> return ()
@@ -801,67 +809,76 @@ instantiate :: Int
             -> TypeCtx
             -> T.KindedType
             -> [Level E.KindedExp T.KindedType K.Multiplicity]
-            -> Validation ([T.KindedType], T.KindedType)
+            -> Validation (LMI.MultConstraints, [T.KindedType], T.KindedType)
 instantiate i modl kctx tctx t1 args = do
-  (θ, us, t2) <- instantiate' i t1 args
-  return (us, t2)
+  (mcs, kivs, θ, us, t2) <- instantiate' i t1 [] args
+  let mcs'  = flip concatMap kivs \(k, t) -> 
+                LMI.kindSubConstraints (T.kindOf (LI.applySubs θ t)) k
+      mcs'' = flip map kivs \(k, t) -> 
+                (T.kindOf (LI.applySubs θ t), k)
+  return (mcs ++ mcs', us, t2)
   where
     instantiate' :: Int
                  -> T.KindedType
+                 -> [(K.Kind, T.KindedType)]
                  -> [Level E.KindedExp T.KindedType K.Multiplicity]
-                 -> Validation (Matching.Substitution, [T.KindedType], T.KindedType)
-    instantiate' i t args = case (normalise modl t, args) of
+                 -> Validation (LMI.MultConstraints, [(K.Kind, T.KindedType)], LI.Substitution, [T.KindedType], T.KindedType)
+    instantiate' i t kivs args = case (normalise modl t, args) of
       -- I-Result
       (t', []) -> do
-        return (mempty, [], t)
-      -- I-AllExp
-      (T.AppForall s m ((a, k) : aks) t1, ExpLevel e : args') -> do
-        unless (K.isProper k) do
-          throwE (CannotInferHigherKindedTypeApp (getSpan e) k)
-        tiv <- Matching.freshInstVarT (foldl spanFromTo (getSpan e) args') k
-        instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) (ExpLevel e : args')
+        return ([], kivs, mempty, [], t)
       -- I-AllType
       (T.AppForall s m ((a, k) : aks) t1, TypeLevel t2 : args') -> do
-        Kinding.checkK t2 k
-        instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) args'
-      -- I-AllMult
+        (eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ((k, t) : kivs) args'
+        return (eqs, (k, t2) : kivs, θ, us, u)
+      -- I-AllOther
+      (T.AppForall s m ((a, k) : aks) t1, arg : args') -> do
+        unless (K.isProper k) do
+          throwE (CannotInferHigherKindedTypeApp (getSpan arg) k)
+        tiv <- LI.freshInstVarT (foldl spanFromTo (getSpan arg) args') k
+        instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ((k, tiv) : kivs) (arg : args')
+      -- I-AllMMult
       (T.ForallM s m (φ : φs) t1, MultLevel m' : args') -> do
-        instantiate' (succ i) (subsMultType ObjLv φ m' ((if null φs then id else T.ForallM s m φs) t1)) args'
+        instantiate' (succ i) (subsMultType ObjLv φ m' ((if null φs then id else T.ForallM s m φs) t1)) kivs args'
+      -- I-AllMOther
+      (T.ForallM s m (φ : φs) t1, arg : args') -> do
+        miv <- LI.freshInstVarM (foldl spanFromTo (getSpan arg) args')
+        instantiate' (succ i) (subsMultType ObjLv φ miv ((if null φs then id else T.ForallM s m φs) t1)) kivs (arg : args')
       -- I-Var
       (T.Var s k InstLv iv, ExpLevel e : args') -> do
-        t <- T.AppArrow s <$> Matching.freshInstVarM s 
-                          <*> Matching.freshInstVarT s (K.lt s)
-                          <*> Matching.freshInstVarT s (K.lt s)
-        (θ, us, u) <- instantiate' (succ i) t (ExpLevel e : args')
-        return (Matching.subsType iv t <> θ, us, u)
+        t <- T.AppArrow s <$> LI.freshInstVarM s 
+                          <*> LI.freshInstVarT s (K.lt s)
+                          <*> LI.freshInstVarT s (K.lt s)
+        (eqs, kivs', θ, us, u) <- instantiate' (succ i) t kivs (ExpLevel e : args')
+        return (eqs, kivs', LI.subsType iv t <> θ, us, u)
       -- I-Arg
       inst@(T.AppArrow s p t1 t2, ExpLevel e : args') -> do
-        θ1 <- quickLook e t1
-        (θ2, us, t₃) <- instantiate' (succ i) (Matching.applySubs θ1 t2) args'
+        (mcs1, θ1) <- quickLook e t1
+        (mcs2, kivs', θ2, us, t₃) <- instantiate' (succ i) (LI.applySubs θ1 t2) kivs args'
         let θ = θ2 <> θ1
-        return (θ, Matching.applySubs θ t1 : us, t₃)
+        return (mcs1 ++ mcs2, kivs', θ, LI.applySubs θ t1 : us, t₃)
         where
-          quickLook :: E.Exp Kinded -> T.KindedType -> Validation Matching.Substitution
+          quickLook :: E.Exp Kinded -> T.KindedType -> Validation (LMI.MultConstraints, LI.Substitution)
           quickLook = \cases
             e@E.Tuple{} _ -> do
               (t2, tctx') <- synth modl kctx tctx e
-              (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              Matching.match e modl t1 t3
+              (_, _, t3) <- instantiate 0 modl kctx tctx' t2 []
+              LTI.match e modl t1 t3
             e@E.Nil{}   _ -> do
               (t2, tctx') <- synth modl kctx tctx e
-              (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              Matching.match e modl t1 t3
+              (_, _, t3) <- instantiate 0 modl kctx tctx' t2 []
+              LTI.match e modl t1 t3
             e@E.Cons{}  _ -> do
               (t2, tctx') <- synth modl kctx tctx e
-              (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              Matching.match e modl t1 t3
+              (_, _, t3) <- instantiate 0 modl kctx tctx' t2 []
+              LTI.match e modl t1 t3
             e@(E.App s f@(E.Select s' i) args) t1 -> case args of
               [] -> throwE (CannotSynthesiseSelect s' i)
               (ExpLevel  e : args') -> do
                 (u1, tctx') <- synth modl kctx tctx e
                 t2 <- Expose.internalChoice modl e u1 i
-                (_, t3) <- instantiate 1 modl kctx tctx' t2 args'
-                Matching.match e modl t1 t3
+                (_, _, t3) <- instantiate 1 modl kctx tctx' t2 args'
+                LTI.match e modl t1 t3
               (arg : _) -> 
                 throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App s h@(E.SendType s' t0) args) t1 -> 
@@ -870,8 +887,8 @@ instantiate i modl kctx tctx t1 args = do
                 (ExpLevel e : args') -> do
                   (u1, tctx') <- synth modl kctx tctx e
                   (a, _, t2) <- Expose.typeOutput modl e u1
-                  (_, t3) <- instantiate 1 modl kctx tctx' (subs a t0 t2) args'
-                  Matching.match e modl t1 t3
+                  (_, _, t3) <- instantiate 1 modl kctx tctx' (subs a t0 t2) args'
+                  LTI.match e modl t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App s f@(E.ReceiveType s') args) t2 ->
@@ -881,31 +898,31 @@ instantiate i modl kctx tctx t1 args = do
                   (u1, tctx') <- synth modl kctx tctx e
                   (a, k, t2') <- Expose.typeInput modl (Right e) u1
                   let t2 = T.AppExists (spanFromTo f e) [(a, k)] t2
-                  (_, t3) <- instantiate 1 modl kctx tctx' t2 args'
-                  Matching.match e modl t1 t3
+                  (_, _, t3) <- instantiate 1 modl kctx tctx' t2 args'
+                  LTI.match e modl t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App _ h args) t1 -> do
               (t2, tctx') <- synth modl kctx tctx h
-              (us , t3   ) <- instantiate 0 modl kctx tctx' t2 args
-              Matching.match e modl t1 t3
+              (_, us, t3) <- instantiate 0 modl kctx tctx' t2 args
+              LTI.match e modl t1 t3
             h@(E.Var _ x) t1 -> do
               (t2, tctx') <- synth modl kctx tctx h
-              (us , t3   ) <- instantiate 0 modl kctx tctx' t2 []
-              Matching.match e modl t1 t3
+              (_, us, t3) <- instantiate 0 modl kctx tctx' t2 []
+              LTI.match e modl t1 t3
             e (T.Var _ _ InstLv iv) -> do
               (t2, _) <- synth modl kctx tctx e
-              return $ Matching.subsType iv t2
+              return ([], LI.subsType iv t2)
             e t1 -> do
               (t2, tctx') <- synth modl kctx tctx e
-              (_, t3) <- instantiate 0 modl kctx tctx' t2 []
-              Matching.match e modl t1 t3
+              (_, _, t3) <- instantiate 0 modl kctx tctx' t2 []
+              LTI.match e modl t1 t3
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)
-      (T.AppForall _ _ ((_, k) : _) _, arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 0 (TypeLevel k) arg)
-      (T.ForallM{}, arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 0 (MultLevel ()) arg)
+      -- (T.AppForall _ _ ((_, k) : _) _, arg : _) ->
+      --   throwE (UnexpectedArg (getSpan arg) 0 (TypeLevel k) arg)
+      -- (T.ForallM{}, arg : _) ->
+      --   throwE (UnexpectedArg (getSpan arg) 0 (MultLevel ()) arg)
       (t, as) -> 
         throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
 

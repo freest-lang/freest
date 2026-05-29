@@ -58,7 +58,7 @@ semaphore n queue sem =
 -- | Launch a semaphore for a given number of resources. Returns a channel end
 -- to be used by clients. This is the only function exported by this "module".
 launchSemServer : Int -> Semaphore
-launchSemServer n = forkWith #1 (semaphore n (Empty ()))
+launchSemServer n = forkWith (semaphore n (Empty ()))
 
 -- End of module Semaphore
 
@@ -79,9 +79,9 @@ client : Int -> Semaphore -> Join -> () -1-> ()
 client pid sem join _ = 
   case sem |> receive_ |> select SemWait of
     &Go s ->
-      putStrLn ((++) #* (show pid) " is entering critical region");
+      putStrLn (show pid ++ " is entering critical region");
       wait s;
-      putStrLn ((++) #* (show pid) " is leaving critical region");
+      putStrLn (show pid ++ " is leaving critical region");
       receive_ sem |> select SemSignal |> wait;
       select Join join;
       ()
@@ -91,7 +91,7 @@ main : ()
 main =
   let semClient = launchSemServer 2 in
   let (fork_, join) = channel @(Dual Join) in
-  fork #1 (client 1 semClient join);
-  fork #1 (client 2 semClient join);
-  fork #1 (client 3 semClient join);
+  fork (client 1 semClient join);
+  fork (client 2 semClient join);
+  fork (client 3 semClient join);
   waitFor 3 fork_

@@ -32,7 +32,7 @@ hello = Cons 'H' (Cons 'e' (Cons 'l' (Cons 'l' (Cons 'o' Nil))))
 
 main = 
   let (c, s) = channel @(OutCharStream; Close) in
-  fork #1 (\(_ : ()) -1-> c |> client hello |> close);
+  fork (\(_ : ()) -1-> c |> client hello |> close);
   let (res, c) = server s in
   wait c;
   res

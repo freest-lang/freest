@@ -85,5 +85,5 @@ sortingServer @a xs c =
 main : ()
 main =
   let (w, r) = channel @(OrderingChannel; Wait) in
-  fork #1 (\(_ : ()) -1-> sortingServer Nil r |> snd |> close);
+  fork (\(_ : ()) -1-> sortingServer Nil r |> snd |> close);
   client w

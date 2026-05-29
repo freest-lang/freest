@@ -6,5 +6,5 @@ typeAbs #m c x = send x c |> close
 main : ()
 main =
   let (o, i) = channel @(!Int; Close)
-      closure = typeAbs #* o
-  in fork #1 (\(_ : ()) -1-> receiveAndWait i); closure 1; closure 2
+      closure = typeAbs o
+  in fork (\(_ : ()) -1-> receiveAndWait i); closure 1; closure 2

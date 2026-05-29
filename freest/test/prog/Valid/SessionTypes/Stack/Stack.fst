@@ -46,6 +46,6 @@ aStackClient c =
 main : Int
 main =
   let (r, w) = channel @(EStack; Wait) in
-  fork #1 (\(_ : ()) -1-> r |> eStack |> wait);
+  fork (\(_ : ()) -1-> r |> eStack |> wait);
   aStackClient w
     

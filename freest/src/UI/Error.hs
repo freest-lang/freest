@@ -41,6 +41,7 @@ data Error
       K.Multiplicity 
       K.Multiplicity
   | CannotInferHigherKindedTypeApp Span K.Kind
+  | CannotSatisfyMultConstraint Span K.Multiplicity K.Multiplicity
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
@@ -112,6 +113,7 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
+    CannotSatisfyMultConstraint s _ _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
@@ -235,6 +237,9 @@ toMessage src = \case
   CannotInferHigherKindedTypeApp s k -> makeError src s
     ("Cannot infer type application for a type of kind " ++ bt (unparse k))
     ++ "Please provide all type arguments before this one"
+  CannotSatisfyMultConstraint s m1 m2 -> makeError src s
+    "Cannot satisfy multiplicity constraints"
+    ++ "(Cannot unify " ++ bt (unparse m1) ++ " with " ++ bt (unparse m2) ++ ")"
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesiseReceiveType s -> makeError src s

@@ -32,7 +32,7 @@ readIntStream = consumeStream @Int (readInt' @(Dual (Stream Int)))
 mainIntStream : ()
 mainIntStream =
   let (w, r) = channel @(Stream Int) in
-  fork #1 (\(_ : ()) -1-> writeIntStream w);
+  fork (\(_ : ()) -1-> writeIntStream w);
   readIntStream r
 
 -- 2 _ Stream of out-char-in-bool values
@@ -55,7 +55,7 @@ writeIntStream1 = produceStream  @Int (\(c : Stream Int) -> send 7 c)
 mainCharBoolStream : ()
 mainCharBoolStream =
   let (w, r) = channel @OutCharInBoolStream in
-  fork #1 (\(_ : ()) -1-> writeCharReadBoolStream w);
+  fork (\(_ : ()) -1-> writeCharReadBoolStream w);
   readCharWriteBoolStream r
 
 main : ()

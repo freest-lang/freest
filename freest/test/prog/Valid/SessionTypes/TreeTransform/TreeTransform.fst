@@ -65,7 +65,7 @@ xs = Node 1 (Node 2 (Node 8 (Leaf @Int)  -- CANNOT INFER
 
 main =
   let (w, r) = channel @(TreeC Int; Wait) in
-  fork #1 (\(_ : ()) -1-> treeSum r |> snd |> close);
+  fork (\(_ : ()) -1-> treeSum r |> snd |> close);
   let (t, w) = transform @Int @Wait xs w in
   wait w;
   t

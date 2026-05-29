@@ -22,7 +22,7 @@ reconstruct @a c =
 main : [Int]
 main =
   let (w, r) = channel @(SendList;Close) in
-  fork #1 (\(_ : ()) -1-> flatten ([5, 7, 2, 6, 3] @Int) w |> close);
+  fork (\(_ : ()) -1-> flatten ([5, 7, 2, 6, 3] @Int) w |> close);
   let (l, c) = reconstruct r in 
   wait c;
   l

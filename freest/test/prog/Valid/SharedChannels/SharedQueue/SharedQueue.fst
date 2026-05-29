@@ -21,7 +21,7 @@ runTailNode : Dual Internal -> Dual Tail -1-> ()
 runTailNode next tail =
     let i = receive_ tail in
     let (prev', next') = channel @Internal in
-    fork #1 (\(_ : ()) -1-> send i next |> send prev' |> wait);
+    fork (\(_ : ()) -1-> send i next |> send prev' |> wait);
     runTailNode next' tail
     -- Internal error at Validation.Rename.rename: Dual
     -- runTailNode (fork_ @Internal (\(c : Dual Internal) -> send c (send i next))) tail
@@ -34,8 +34,8 @@ type Queue = (Head, Tail)
 initQueue : Queue
 initQueue =
     let (internalC, internalS) = channel @Internal in
-    (forkWith #1 (runHeadNode internalC),
-     forkWith #1 (runTailNode internalS))
+    (forkWith (runHeadNode internalC),
+     forkWith (runTailNode internalS))
 
 enqueue : Int -> Queue -> ()
 enqueue i queue = 
@@ -57,7 +57,7 @@ runCounter i counter =
 initCounter : Counter
 initCounter = 
     let (counterC, counterS) = channel @Counter in
-    fork #1 (\(_ : ()) -1-> runCounter 0 counterS);
+    fork (\(_ : ()) -1-> runCounter 0 counterS);
     counterC
 
 -- main

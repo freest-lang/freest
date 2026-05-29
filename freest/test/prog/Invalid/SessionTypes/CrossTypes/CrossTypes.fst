@@ -30,7 +30,7 @@ aList = Cons 2 (Cons 3 (Cons 4 (Cons 5 Nil)))
 main : List
 main =
   let (x, y) = channel @(ListOut; Close) in
-  fork #1 (\(_ : ()) -1-> sendList y aList |> close); -- STRANGE ERROR
+  fork (\(_ : ()) -1-> sendList y aList |> close); -- STRANGE ERROR
   let (list, x) = rcvList x in
   wait x;
   list

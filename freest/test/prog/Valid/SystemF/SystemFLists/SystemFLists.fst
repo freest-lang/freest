@@ -60,7 +60,7 @@ mainChars = head' @Char twoChars -- null  @Char (nil  @Char)
 
 -- Converting to String
 toString : forall (a:*T) -> List a -> String
-toString @a xs = xs @String (\(x:a) -> \(s:String) -> (++) #* @Char ((++) #* @Char (show @a x) "::") s) "[]"
+toString @a xs = xs @String (\(x:a) (s:String) -> show x ++ "::" ++ s) "[]"
 
 -- Pairs in preparation for the tail function
 

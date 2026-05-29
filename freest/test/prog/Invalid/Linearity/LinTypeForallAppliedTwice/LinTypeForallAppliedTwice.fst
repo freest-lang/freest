@@ -9,4 +9,4 @@ main : Int
 main = 
   let (w, r) = channel @(!Int; Close) 
       closure = typeAbs r
-  in fork #1 (\(_ : ()) -1-> close $ send 42 w); closure @Int; closure @Int
+  in fork (\(_ : ()) -1-> close $ send 42 w); closure @Int; closure @Int

@@ -6,4 +6,4 @@ foo x #m f = f x
 main : Int
 main = 
   let closure = foo 1
-  in closure #* succ; closure #* succ
+  in closure succ; closure succ

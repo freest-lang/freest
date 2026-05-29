@@ -19,7 +19,7 @@ main : Int
 main =
   let (tw, tr) = channel @Bool' in
   let (fw, fr) = channel @Bool' in
-  fork #1 (\(_ : ()) -1-> true' tw);
-  fork #1 (\(_ : ()) -1-> false' fw);
+  fork (\(_ : ()) -1-> true' tw);
+  fork (\(_ : ()) -1-> false' fw);
   cond tr 1 2 + cond fr 3 4
   -- 1

@@ -21,7 +21,7 @@ sendList @a (x :: xs) c = c |> select Cons |> send x |> sendList xs
 main : [Int]
 main =
   let (x, y) = channel @(ListOut; Close) in
-  fork #1 (\(_ : ()) -1-> sendList x aList |> close);
+  fork (\(_ : ()) -1-> sendList x aList |> close);
   let (list, y) = rcvList y in
   wait y; 
   list

@@ -13,5 +13,5 @@ setupStore bank =
   -- buy
   let buyQueue = initQueue @() () in -- CANNOT INFER
   let stockMap = fst (channel @*?()) in
-  fork #1 (\(_ : ()) -1-> buyWorker buyQueue stockMap bank)
+  fork (\(_ : ()) -1-> buyWorker buyQueue stockMap bank)
 

@@ -88,7 +88,7 @@ clientSendTree c = c |> sendTree aTree |> close
 main : Tree
 main =
   let (client, server) = channel @(TreeChannel;Close) in
-  fork #1 (\(_ : ()) -1-> clientSendTree client);
+  fork (\(_ : ()) -1-> clientSendTree client);
   let (t, server) = receiveTree server in
   wait server;
   t

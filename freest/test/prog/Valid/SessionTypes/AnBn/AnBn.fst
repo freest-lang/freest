@@ -45,5 +45,5 @@ server c = case c of &A c -> c |> server' |> wait
 main : ()
 main =
   let (w, r) = channel @(S0;Close) in
-  fork #1 (\(_ : ()) -1-> w |> client 25);
+  fork (\(_ : ()) -1-> w |> client 25);
   server r

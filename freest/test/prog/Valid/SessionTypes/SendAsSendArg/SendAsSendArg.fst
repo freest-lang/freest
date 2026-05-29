@@ -11,4 +11,4 @@ f2 c = x1 + x2
 main : Int
 main =
   let (c1, c2) = channel @(!Int; !Int; Close)
-  in fork #1 (\(_ : ()) -1-> f1 c1); f2 c2
+  in fork (\(_ : ()) -1-> f1 c1); f2 c2

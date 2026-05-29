@@ -17,5 +17,5 @@ mathServer c =
 main : Int
 main =
   let (r,w) = channel @MathServer in
-  fork #1 (\(_ : ()) -1-> mathServer r);
+  fork (\(_ : ()) -1-> mathServer r);
   w |> select Negate |> send 5 |> receiveAndClose

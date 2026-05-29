@@ -6,5 +6,5 @@ apply f = f
 main : ()
 main =
     let (r, w) = channel @(?Int;Wait) in
-    fork #1 (\(_ : ()) -1-> r |> apply (receive @Int @Wait {- CANNOT INFER -}) |> snd |> wait);
+    fork (\(_ : ()) -1-> r |> apply (receive @Int @Wait {- CANNOT INFER -}) |> snd |> wait);
     w |> send 5 |> close

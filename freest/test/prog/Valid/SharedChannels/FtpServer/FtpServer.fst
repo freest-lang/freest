@@ -113,11 +113,11 @@ main : Void @*T
 main =
   let (ftpc, ftps) = channel @FTP in
   -- A few clients
-  fork #1 (\(_ : ()) -1-> putClient ftpc 27);
-  fork #1 (\(_ : ()) -1-> getClient ftpc);
-  fork #1 (\(_ : ()) -1-> getClient ftpc);
-  fork #1 (\(_ : ()) -1-> putClient' ftpc 93 66);
-  fork #1 (\(_ : ()) -1-> putgetClient ftpc 14);
-  fork #1 (\(_ : ()) -1-> putClient ftpc 59);
+  fork (\(_ : ()) -1-> putClient ftpc 27);
+  fork (\(_ : ()) -1-> getClient ftpc);
+  fork (\(_ : ()) -1-> getClient ftpc);
+  fork (\(_ : ()) -1-> putClient' ftpc 93 66);
+  fork (\(_ : ()) -1-> putgetClient ftpc 14);
+  fork (\(_ : ()) -1-> putClient ftpc 59);
   -- A server with three threads
   init 3 ftps

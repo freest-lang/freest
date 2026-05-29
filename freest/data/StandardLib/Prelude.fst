@@ -272,7 +272,7 @@ sendAndClose @a x c = c |> send x |> close
 -- |   -- create channel endpoints
 -- |   let (c, s) = new @(?String ; Wait) () in
 -- |   -- fork a thread that prints the received value (and closes the channel)
--- |   fork #1 (\(_ : ()) -1-> c |> receiveAndWait @String |> putStrLn);
+-- |   fork (\(_ : ()) -1-> c |> receiveAndWait @String |> putStrLn);
 -- |   -- send a string through the channel (and close it)
 -- |   s |> send "Hello!" |> close
 -- | ```
@@ -299,7 +299,7 @@ receiveAndClose @a c =
 -- |   -- create channel endpoints
 -- |   let (c, s) = new @(?String ; Wait) () in
 -- |   -- fork a thread that prints the received value (and closes the channel)
--- |   fork #1 (\_:() -1-> c |> readApply @String @End putStrLn |> wait);
+-- |   fork (\_:() -1-> c |> readApply @String @End putStrLn |> wait);
 -- |   -- send a string through the channel (and close it)
 -- |   s |> send "Hello!" |> close
 -- | ```
@@ -333,14 +333,14 @@ accept @a c =
 -- main : ()
 -- main =
 --   -- fork a thread that receives a string and prints
---   let c = forkWith #1 @(!String ; Wait) @() (\s:(?String ; End) -1-> s |> receiveAndWait @String |> putStrLn) in
+--   let c = forkWith @(!String ; Wait) @() (\s:(?String ; End) -1-> s |> receiveAndWait @String |> putStrLn) in
 --   -- send the string to be printed
 --   c |> send "Hello!" |> wait
 -- ```
 forkWith : forall #m (a : 1C) (b : *T) -> (Dual a -m-> b) -> a
 forkWith #m @a @b f =
   let (x, y) = channel @a in
-  fork #1 (\(_ : ()) -1-> f y);
+  fork (\(_ : ()) -1-> f y);
   x
 
 -- | Runs an infinite shared server thread given a function to serve a client (a
@@ -399,7 +399,7 @@ repeat @a n thunk =
 --   parallel @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
 parallel : forall (a : *T) -> Int -> (() -> a) -> ()
-parallel @a n thunk = repeat @() n (\(_ : ()) -> fork #* @a thunk)
+parallel @a n thunk = repeat @() n (\(_ : ()) -> fork @a thunk)
 
 -- * I/O
 
@@ -454,7 +454,7 @@ hGetContent c =
   else 
     let (line, c) = hGetLine c in 
     let (contents, c) = hGetContent c in
-    ((++) #* line ((++) #* "\n" contents), c)
+    ((++) line ((++) "\n" contents), c)
 
 hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> InStreamProvider -> a
 hGenericGet_ @a getF inp = 
@@ -594,7 +594,7 @@ runReader _ (&IsEOF   reader) = runReader () $ send False                reader 
 runReader _ (&SWait   reader) = close reader
 
 runStdin : ()
-runStdin = fork #1 (\(_ : ()) -1-> runServer runReader () dualStdin)
+runStdin = fork (\(_ : ()) -1-> runServer runReader () dualStdin)
 
 -- *** stdout
 
@@ -642,10 +642,10 @@ runPrinter _ (&PutStr printer) =
   readApply internalPutStrOut printer 
     |> runPrinter ()
 runPrinter _ (&PutStrLn printer) = 
-  readApply (\(s : String) -> internalPutStrOut ((++) #* s "\n")) printer 
+  readApply (\(s : String) -> internalPutStrOut (s ++ "\n")) printer 
     |> runPrinter ()
 runPrinter _ (&SWait printer) = 
   close printer
 
 runStdout  : ()
-runStdout = fork #1 (\(_ : ()) -1-> runServer runPrinter () dualStdout)
+runStdout = fork (\(_ : ()) -1-> runServer runPrinter () dualStdout)

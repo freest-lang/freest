@@ -66,6 +66,6 @@ collectValues c =
 
 main : ()
 main =
-  let r1 = forkWith #* writeValues in
-  let r2 = forkWith #1 (readValues r1) in
+  let r1 = forkWith writeValues in
+  let r2 = forkWith (readValues r1) in
   collectValues r2
