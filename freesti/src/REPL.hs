@@ -188,7 +188,7 @@ handleLoad path = do
   let loader = if ip then Load.loadPreludeAndModule else Load.loadModule
   runLoader (loader path)
 
-handleReload :: FilePath -> Repl () -- freesti> :r
+handleReload :: String -> Repl () -- freesti> :r
 handleReload "" =
   gets filePath >>= maybe (liftIO Load.loadNoModule) handleLoad
 handleReload _  =
@@ -308,7 +308,7 @@ validateExp s e = do
 validateModule :: ReplState -> M.ParsedModule
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.ScopedModule)
 validateModule s m = do
-  (sctx, merged, tctx) <- Load.validateModule (scopingCtx s) (modl s) m
+  (sctx, tctx, merged) <- Load.validateModule (scopingCtx s) (modl s) m
   pure (sctx, kindCtx s, tctx, merged)
 
 -- | Print a list of errors against the interactive source line(s).

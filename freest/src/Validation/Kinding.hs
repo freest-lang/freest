@@ -152,7 +152,7 @@ foldCheckProperJoin modl ctx m = foldM checkProperJoin (m, [])
 -- and prekind. Otherwise, throw an error.
 checkProper :: M.ScopedModule -> KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
 checkProper modl ctx t = synth modl ctx t >>= \t' -> case TK.kindOf t' of
-    Proper _ mult pk ->  pure (mult, pk, t')
+    Proper _ mult pk -> pure (mult, pk, t')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 

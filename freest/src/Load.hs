@@ -54,7 +54,7 @@ loadM moduleMessage programPath = tryRead programPath >>= \case
     case  -- Parse the program, then scope, kind and type it.
       do  programModule <- runParseModule programPath programSrc
           runValidation emptyValidationState do
-            (sctx, smodl, tctx) <- validateModule emptyScopingCtx M.emptyScopedModule programModule
+            (sctx, tctx, smodl) <- validateModule emptyScopingCtx M.emptyScopedModule programModule
             vs                  <- get
             pure (vs, sctx, tctx, smodl)
       of Left es -> do
@@ -81,7 +81,7 @@ loadPreludeAndModule programPath = do
             programModule <- runParseModule programPath programSrc
             let merged = preludeModule <> programModule
             runValidation emptyValidationState do
-              (sctx, smodl, tctx) <- validateModule emptyScopingCtx M.emptyScopedModule merged
+              (sctx, tctx, smodl) <- validateModule emptyScopingCtx M.emptyScopedModule merged
               vs                  <- get
               pure (vs, sctx, tctx, smodl)
         of Left es -> do
@@ -98,13 +98,13 @@ loadPreludeAndModule programPath = do
 -- | Scope a parsed module against an existing scoping context, merge with an
 -- existing scoped module, then kind and type the merged whole.
 validateModule :: ScopingCtx -> M.ScopedModule -> M.ParsedModule
-               -> Validation (ScopingCtx, M.ScopedModule, TypeCtx)
+               -> Validation (ScopingCtx, TypeCtx, M.ScopedModule)
 validateModule sctx existing m = do
   (sctx', sm) <- scopeModule' sctx m
-  let merged = existing <> sm
+  let merged  = existing <> sm
   kmodl       <- kindModule merged
   (_, tctx)   <- typeModule kmodl
-  pure (sctx', merged, tctx)
+  pure (sctx', tctx, merged)
 
 -- | Try to read a file; on IO failure print 'notASourceFile' and return
 -- 'Nothing', otherwise return the file contents wrapped in 'Just'.
