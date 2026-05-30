@@ -166,8 +166,22 @@ instance Semigroup ParsedModule where
           , definitions = definitions m1 ++ definitions m2
           }
 
-instance Monoid ParsedModule where 
+instance Monoid ParsedModule where
   mempty = emptyParsedModule
+
+instance Semigroup ScopedModule where
+  m1 <> m2 =
+    Module{ name        = name m2
+          , imports     = imports     m1 ++          imports     m2
+          , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
+          , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
+          , dataDecls   = dataDecls   m1 `Map.union` dataDecls   m2
+          , consDecls   = consDecls   m1 `Map.union` consDecls   m2
+          , definitions = definitions m1 ++          definitions m2
+          }
+
+instance Monoid ScopedModule where
+  mempty = emptyScopedModule
 
 instance Show ParsedModule where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =

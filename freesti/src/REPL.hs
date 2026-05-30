@@ -18,12 +18,12 @@ import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
 import Parser.Lexer ( layoutSC )
 import Parser.LexerUtils ( runLexer, pushStartCode, Lexer )
-import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseLetDeclBlock, parseItPatDecl )
+import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDeclList, parseItDecl )
+import Parser.Scoping qualified as Scoping
 import Parser.Unparser ( unparse )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
 import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
-import Parser.Scoping     qualified as Scoping
 import Validation.Kinding qualified as Kinding
 import Validation.Typing  qualified as Typing
 import Load qualified
@@ -56,40 +56,40 @@ import Control.Monad.Except (runExceptT)
 -- The state of the REPL
 
 data ReplState = ReplState
-  { validationState :: ValidationState
-  , scopingCtx :: Scoping.ScopingCtx
-  , kindCtx :: Kinding.KindCtx
-  , typeCtx :: Typing.TypeCtx
-  , valueCtx :: ValueCtx
-  , modl :: M.ScopedModule
-  , implicitPrelude :: Bool
-  , filePath :: Maybe FilePath
+  { implicitPrelude :: Bool
+  , filePath        :: Maybe FilePath
+  , validationState :: ValidationState
+  , scopingCtx      :: Scoping.ScopingCtx
+  , kindCtx         :: Kinding.KindCtx
+  , typeCtx         :: Typing.TypeCtx
+  , modl            :: M.ScopedModule
+  , valueCtx        :: ValueCtx
   }
 
 emptyReplState :: ReplState
 emptyReplState = ReplState
-  { validationState = emptyValidationState
-  , scopingCtx = Scoping.emptyScopingCtx
-  , kindCtx = Kinding.emptyKindCtx
-  , typeCtx = Typing.emptyTypeCtx
-  , valueCtx = Map.empty
-  , modl = M.emptyScopedModule
-  , implicitPrelude = False
-  , filePath = Nothing
+  { implicitPrelude = False
+  , filePath        = Nothing
+  , validationState = emptyValidationState
+  , scopingCtx      = Scoping.emptyScopingCtx
+  , kindCtx         = Kinding.emptyKindCtx
+  , typeCtx         = Typing.emptyTypeCtx
+  , modl            = M.emptyScopedModule
+  , valueCtx        = Map.empty
   }
 
 instance Show ReplState where
   show s = unlines
     [ "ReplState {"
+    , "  implicitPrelude = " ++ show (implicitPrelude s)
+    , "  filePath = " ++ show (filePath s)
     , "  validationState = { errors = " ++ show (length (errors (validationState s)))
-                                ++ ", counter = " ++ show (counter (validationState s)) ++ " }"
+                             ++ ", counter = " ++ show (counter (validationState s)) ++ " }"
     , "  scopingCtx = " ++ show (scopingCtx s)
     , "  kindCtx = " ++ show (kindCtx s)
     , "  typeCtx = " ++ show (typeCtx s)
-    , "  valueCtx = " ++ show (valueCtx s)
     , "  modl = " ++ show (modl s)
-    , "  implicitPrelude = " ++ show (implicitPrelude s)
-    , "  filePath = " ++ show (filePath s)
+    , "  valueCtx = " ++ show (valueCtx s)
     , "}"
     ]
 
@@ -159,25 +159,25 @@ cmd :: String -> Repl ()
 cmd src = do
   s <- get
   -- First try a bare expression, bound to 'it'
-  case runLexer parseItPatDecl interactivePath (src ++ "\n") of
-    Right p   -> handleLetDecl src s [p] (liftIO $ putStrLn "Printing the value of variable 'it'")
-    Left es1  ->
+  case runLexer parseItDecl interactivePath (src ++ "\n") of
+    Right m1 -> handleModule src s m1 (liftIO $ putStrLn "Printing the value of variable 'it'")
+    Left es1 ->
       -- Otherwise try a (possibly multi-line) block of let declarations
-      case runLexer (pushStartCode layoutSC >> parseLetDeclBlock) interactivePath (src ++ "\n") of
-        Right ds  -> handleLetDecl src s ds (pure ())
-        Left es2  -> printREPLErrors src -- Lexer/parser errors
+      case runLexer (pushStartCode layoutSC >> parseDeclList) interactivePath (src ++ "\n") of
+        Right m2 -> handleModule src s m2 (pure ())
+        Left es2 -> printREPLErrors src -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
   where
-    -- | Validate parsed let declarations. On success: update the state,
+    -- | Validate parsed declarations. On success: update the state,
     -- evaluate them, run 'post'. On failure: report the errors.
-    handleLetDecl :: String -> ReplState -> [E.ParsedLetDecl] -> Repl () -> Repl ()
-    handleLetDecl src s ds post =
-      case runState (runExceptT (validateLetDecl s ds)) (validationState s) of
+    handleModule :: String -> ReplState -> M.ParsedModule -> Repl () -> Repl ()
+    handleModule src s m post =
+      case runState (runExceptT (validateModule s m)) (validationState s) of
         (Left e, ValidationState{errors}) -> printREPLErrors src (e : errors)
-        (Right (sctx, kctx, tctx, klds), vs@ValidationState{errors})
+        (Right (sctx, kctx, tctx, merged), vs@ValidationState{errors})
           | null errors -> do
-              put s{validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx}
-              eval klds
+              put s{validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = merged}
+              eval merged
               post
           | otherwise   -> printREPLErrors src errors
 
@@ -298,14 +298,14 @@ validateExp s e = do
 
 -- | Scope, kind and type-check a block of parsed let declarations, returning
 -- the updated scoping, kind and type contexts along with the kinded decls.
-validateLetDecl :: ReplState -> [E.ParsedLetDecl]
-                -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, [E.KindedLetDecl])
-validateLetDecl s ds = do
-  kmodl           <- Kinding.kindModule (modl s)
-  (sctx, scoped)  <- Scoping.scopeDefs (scopingCtx s) ds
-  (kctx, klds)    <- Kinding.kindLetDecls (modl s) kmodl (kindCtx s) scoped
-  (_, kctx, tctx) <- Typing.checkDecls kmodl kctx (typeCtx s) klds
-  return (sctx, kctx, tctx, klds)
+validateModule :: ReplState -> M.ParsedModule
+                -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.ScopedModule)
+validateModule s m = do
+  (sctx, sm) <- Scoping.scopeModule' (scopingCtx s) m
+  let merged = modl s <> sm
+  kmodl      <- Kinding.kindModule merged
+  (_, tctx)  <- Typing.typeModule kmodl
+  return (sctx, kindCtx s, tctx, merged)
 
 -- | Print a list of errors against the interactive source line(s).
 printREPLErrors :: FilePath -> [Error] -> Repl ()
@@ -317,12 +317,12 @@ printREPLErrors src es =
 type Value = ()
 type ValueCtx = Map.Map Variable Value
 
-eval :: [E.KindedLetDecl] -> Repl ()
-eval klds = do
+eval :: M.ScopedModule -> Repl ()
+eval m = do
   liftIO $ putStrLn "Evaluating..."
   s <- get
-  vctx <- collectLetDecls (valueCtx s) klds
+  vctx <- collectLetDecls (valueCtx s) m
   put s{valueCtx = vctx}
 
-collectLetDecls :: ValueCtx -> [E.KindedLetDecl] -> Repl ValueCtx
+collectLetDecls :: ValueCtx -> M.ScopedModule -> Repl ValueCtx
 collectLetDecls env _ = pure env

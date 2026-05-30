@@ -11,8 +11,8 @@ module Parser.Parser
   ( runParseModule
   -- freesti
   , parseExp
-  , parseLetDeclBlock
-  , parseItPatDecl
+  , parseDeclList
+  , parseItDecl
   , parseType
   , parseTwoTypes
   , parseTypes
@@ -42,8 +42,8 @@ import Data.List ( sortBy )
 -- Parser entry points for FreeST modules
 %name parseModule Module
 -- Parser entry points for FreeSTi commands
-%name parseLetDeclBlock LetDeclBlock
-%name parseItPatDecl ItPatDecl
+%name parseDeclList DeclList
+%name parseItDecl ItDecl
 %name parseType Type
 %name parseExp Exp
 %name parseTwoTypes TwoTypes
@@ -607,10 +607,14 @@ Close
 
 -- Parsing FreeSTi commands
 
-ItPatDecl :: { E.ParsedLetDecl }
-  : Exp { let s = getSpan $1 in E.ValDef
-    (E.VarPat s (mkVarTk (TkLowerId s "it")))
-    (E.UnguardedRHS $1 Nothing) }
+ItDecl :: { M.ParsedModule }
+  : Exp { let s = getSpan $1 in
+          M.insertDef (E.ValDef
+            (E.VarPat s (mkVarTk (TkLowerId s "it")))
+            (E.UnguardedRHS $1 Nothing)) M.emptyParsedModule }
+
+DeclList :: { M.ParsedModule }
+  : OPEN ModuleDeclListPIPE Close { $2 }
 
 TwoTypes :: { (T.ParsedType, T.ParsedType) }
   : TypePrimary TypePrimary { ($1, $2) }
