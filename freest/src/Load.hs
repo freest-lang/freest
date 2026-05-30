@@ -12,12 +12,13 @@ module Load
   , loadModule
   , loadPreludeAndModule
   , loadNoModule
+  , validateModule
   ) where
 
 import Syntax.Module qualified as M
 import Parser.Parser ( runParseModule )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
-import Validation.Base ( ValidationState, emptyValidationState, runValidation )
+import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
 import Validation.Kinding ( kindModule )
 import Validation.Typing ( typeModule, TypeCtx )
 import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, failedToLoadModule, notASourceFile )
@@ -28,15 +29,15 @@ import Control.Exception ( IOException, try )
 import Control.Monad.State ( get )
 import Data.Map qualified as Map
 
+-- | Load just the Prelude.
+loadPrelude :: IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadPrelude = getDataFileName preludePath >>= loadM noModuleLoaded
+
 -- | Load a program module on its own (no Prelude). Returns the scoped
 -- module after successful kinding and typing, or 'Nothing' if errors
 -- were found (in which case they are printed).
 loadModule :: FilePath -> IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
 loadModule fp = putStrLn preludeNotLoaded >> loadM moduleLoaded fp
-
--- | Load just the Prelude.
-loadPrelude :: IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
-loadPrelude = getDataFileName preludePath >>= loadM noModuleLoaded
 
 -- | Load no module at all, just print a message to that effect,
 -- thus centralising all module loading messages in this module.
@@ -53,11 +54,9 @@ loadM moduleMessage programPath = tryRead programPath >>= \case
     case  -- Parse the program, then scope, kind and type it.
       do  programModule <- runParseModule programPath programSrc
           runValidation emptyValidationState do
-            (scopeCtx, scopedModule) <- scopeModule' emptyScopingCtx programModule
-            kmodl                    <- kindModule scopedModule
-            (_, typeCtx)             <- typeModule kmodl
-            vs                       <- get
-            pure (vs, scopeCtx, typeCtx, scopedModule)
+            (sctx, smodl, tctx) <- validateModule emptyScopingCtx M.emptyScopedModule programModule
+            vs                  <- get
+            pure (vs, sctx, tctx, smodl)
       of Left es -> do
           printSourceErrors [(programPath, programSrc)] es
           putStrLn failedToLoadModule
@@ -82,11 +81,9 @@ loadPreludeAndModule programPath = do
             programModule <- runParseModule programPath programSrc
             let merged = preludeModule <> programModule
             runValidation emptyValidationState do
-              (scopeCtx, scopedModule) <- scopeModule' emptyScopingCtx merged
-              kinded <- kindModule scopedModule
-              (_, typeCtx) <- typeModule kinded
-              vs <- get
-              pure (vs, scopeCtx, typeCtx, scopedModule)
+              (sctx, smodl, tctx) <- validateModule emptyScopingCtx M.emptyScopedModule merged
+              vs                  <- get
+              pure (vs, sctx, tctx, smodl)
         of Left es -> do
             printSourceErrors [ (preludePath, preludeSrc)
                               , (programPath, programSrc)
@@ -97,6 +94,17 @@ loadPreludeAndModule programPath = do
             putStrLn moduleLoaded
             pure (Just result)
     _ -> pure Nothing -- notASourceFile already printed for missing file(s)
+
+-- | Scope a parsed module against an existing scoping context, merge with an
+-- existing scoped module, then kind and type the merged whole.
+validateModule :: ScopingCtx -> M.ScopedModule -> M.ParsedModule
+               -> Validation (ScopingCtx, M.ScopedModule, TypeCtx)
+validateModule sctx existing m = do
+  (sctx', sm) <- scopeModule' sctx m
+  let merged = existing <> sm
+  kmodl       <- kindModule merged
+  (_, tctx)   <- typeModule kmodl
+  pure (sctx', merged, tctx)
 
 -- | Try to read a file; on IO failure print 'notASourceFile' and return
 -- 'Nothing', otherwise return the file contents wrapped in 'Just'.
