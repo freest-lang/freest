@@ -103,7 +103,7 @@ validateModule sctx existing m = do
   (sctx', sm) <- scopeModule' sctx m
   let merged  = existing <> sm
   kmodl       <- kindModule merged
-  (_, tctx)   <- typeModule kmodl
+  tctx        <- typeModule kmodl
   pure (sctx', tctx, merged)
 
 -- | Try to read a file; on IO failure print 'notASourceFile' and return
