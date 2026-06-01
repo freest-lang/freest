@@ -312,8 +312,11 @@ freeVarsDecls = \case
   ValDef pat rhs    -> freeVarsRHS rhs
   FnDef var clauses -> Set.unions 
                         (map (\(params, rhs) -> 
-                          let (pats, vars) = B.partitionLevels params 
-                          in freeVarsRHS rhs Set.\\ Set.union (Set.unions $ map allVarsPat pats) (Set.unions $ map Set.singleton vars)) 
+                          let (pats, tvars, mvars) = B.partitionLevels params 
+                          in freeVarsRHS rhs Set.\\ Set.unions ( Set.fromList tvars
+                                                               : Set.fromList mvars
+                                                               : map allVarsPat pats
+                                                               ))
                         clauses) Set.\\ Set.singleton var
   TypeSig vars _    -> Set.empty
   Mutual letdecls   -> let boundVars = Set.unions $ map boundVarsDecls letdecls
@@ -346,10 +349,12 @@ freeVarsRHS = \case
 freeVars :: Exp x -> Set.Set Variable
 freeVars = \case
   Var _ var                   -> Set.singleton var
-  App _ f args                -> freeVars f `Set.union` Set.unions (map freeVars $ fst $ B.partitionLevels args)
-  Abs _ params _ body         -> let (pats, vars) = B.partitionLevels params
-                                     (pats', vars') = (Set.unions $ map (allVarsPat . fst) pats, Set.fromList $ map fst vars)
-                                 in freeVars body Set.\\ Set.union pats' vars'
+  App _ f args                -> freeVars f `Set.union` Set.unions ((\(exps, _, _) -> map freeVars exps) $ B.partitionLevels args)
+  Abs _ params _ body         -> let (map fst -> pats, map fst -> tvars, mvars) = B.partitionLevels params
+                                 in freeVars body Set.\\ Set.unions [ Set.unions $ map allVarsPat pats
+                                                                    , Set.fromList tvars
+                                                                    , Set.fromList mvars
+                                                                    ]
   Pack _ _ exp                -> freeVars exp
   Asc _ exp _                 -> freeVars exp
   Let _ decls exp             -> let (free, bound) = collectVarsLet decls in free `Set.union` (freeVars exp Set.\\ bound)
