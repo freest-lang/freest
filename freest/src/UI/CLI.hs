@@ -29,7 +29,7 @@ import Options.Applicative
 import Data.Version ( showVersion )
 
 homepage, version, freeSTiPrompt, moduleLoaded, noModuleLoaded,
-  failedToLoadModule, preludeNotLoaded, comeAgain, interactivePath :: String
+  failedToLoadModule, preludeNotLoaded, comeAgain :: String
 homepage           = "https://freest-lang.github.io/"
 version            = "The FreeST Compiler, version " ++ showVersion Paths.version ++ ", " ++ homepage
 freeSTiPrompt      = "freesti"
@@ -38,7 +38,9 @@ noModuleLoaded     = "Ok, no modules loaded."
 preludeNotLoaded   = "Ok, Prelude not loaded."
 failedToLoadModule = "Failed, no modules loaded."
 comeAgain          = "Come again!"
-interactivePath    = "<interactive>"
+
+interactivePath :: Show a => a -> [Char]
+interactivePath n   = "<interactive" ++ show n ++ ">"
 
 preludePath :: FilePath
 preludePath = "StandardLib/Prelude.fst"

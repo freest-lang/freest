@@ -27,7 +27,7 @@ import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Load qualified
-import UI.Error ( printErrors, Error )
+import UI.Error ( printErrors, Error, Source )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
 import Data.List qualified as List
@@ -58,6 +58,8 @@ import Control.Monad.Except (runExceptT)
 data ReplState = ReplState
   { implicitPrelude :: Bool
   , filePath        :: Maybe FilePath
+  , source          :: Source
+  , interactiveNo   :: Int
   , validationState :: ValidationState
   , scopingCtx      :: Scoping.ScopingCtx
   , kindCtx         :: Kinding.KindCtx
@@ -70,6 +72,8 @@ emptyReplState :: ReplState
 emptyReplState = ReplState
   { implicitPrelude = False
   , filePath        = Nothing
+  , source          = Map.empty
+  , interactiveNo   = 0
   , validationState = emptyValidationState
   , scopingCtx      = Scoping.emptyScopingCtx
   , kindCtx         = Kinding.emptyKindCtx
@@ -83,6 +87,8 @@ instance Show ReplState where
     [ "ReplState {"
     , "  implicitPrelude = " ++ show (implicitPrelude s)
     , "  filePath = " ++ show (filePath s)
+    , "  source = " ++ show (source s)
+    , "  interactiveNo = " ++ show (interactiveNo s)
     , "  validationState = { errors = " ++ show (length (errors (validationState s)))
                              ++ ", counter = " ++ show (counter (validationState s)) ++ " }"
     , "  scopingCtx = " ++ show (scopingCtx s)
@@ -149,26 +155,27 @@ ini = do
 
 -- | Run a loader action and, on success, replace the validation/scoping/type
 -- contexts and module in the REPL state with whatever the loader produced.
-runLoader :: IO (Maybe (ValidationState, Scoping.ScopingCtx, Typing.TypeCtx, M.ScopedModule)) -> Repl ()
+runLoader :: IO (Maybe (Source, ValidationState, Scoping.ScopingCtx, Typing.TypeCtx, M.ScopedModule)) -> Repl ()
 runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
-    Just (vs, sctx, tctx, smodl) ->
-      modify (\s -> s{validationState = vs, scopingCtx = sctx, typeCtx = tctx, modl = smodl})
+    Just (src, vs, sctx, tctx, smodl) ->
+      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, typeCtx = tctx, modl = smodl})
 
 fin :: Repl ExitDecision
 fin = liftIO $ putStrLn comeAgain >> pure Exit
 
 cmd :: String -> Repl ()
-cmd src =
+cmd src = do
+  n <- gets interactiveNo
   -- First try a bare expression, bound to 'it'
-  case runLexer parseItDecl interactivePath (src ++ "\n") of
+  case runLexer parseItDecl (interactivePath n) (src ++ "\n") of
     Right m1 -> handleModule m1 (liftIO $ putStrLn "Printing the value of variable 'it'")
     Left es1 ->
       -- Otherwise try a (possibly multi-line) block of let declarations
-      case runLexer (pushStartCode layoutSC >> parseDeclList) interactivePath (src ++ "\n") of
+      case runLexer (pushStartCode layoutSC >> parseDeclList) (interactivePath n) (src ++ "\n") of
         Right m2 -> handleModule m2 (pure ())
-        Left es2 -> printREPLErrors src -- Lexer/parser errors
+        Left es2 -> printREPLErrors -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
   where
     -- | Validate parsed declarations. On success: update the remaining state
@@ -176,7 +183,13 @@ cmd src =
     handleModule :: M.ParsedModule -> Repl () -> Repl ()
     handleModule m post =
       runValidate src validateModule m \(sctx, kctx, tctx, merged) -> do
-        modify (\s -> s{scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = merged})
+        modify (\s -> s
+          { source = Map.insert (interactivePath (interactiveNo s)) (lines src) (source s)
+          , scopingCtx = sctx
+          , interactiveNo = interactiveNo s + 1
+          , kindCtx = kctx
+          , typeCtx = tctx
+          , modl = merged})
         eval merged
         post
 
@@ -201,9 +214,11 @@ runPipeline :: String                           -- source code
            -> (ReplState -> a -> Validation b)  -- validate
            -> (b -> Repl ())                    -- output
            -> Repl ()
-runPipeline src parse validate output =
-  case runLexer parse interactivePath src of
-    Left es -> printREPLErrors src es -- Lexer/parser errors
+runPipeline src parse validate output = do
+  n <- gets interactiveNo
+  modify (\s -> s{source = Map.insert (interactivePath n) (lines src) (source s), interactiveNo = n + 1})
+  case runLexer parse (interactivePath n) src of
+    Left es -> printREPLErrors es -- Lexer/parser errors
     Right x -> runValidate src validate x output
 
 -- | Run the validation, threading the validation state forward; on success
@@ -217,10 +232,10 @@ runValidate :: String                            -- source code (for error repor
 runValidate src validate x output = do
   s <- get
   case runState (runExceptT (validate s x)) (validationState s) of
-    (Left e,  ValidationState{errors}) -> printREPLErrors src (e : errors)
+    (Left e,  ValidationState{errors}) -> printREPLErrors (e : errors)
     (Right y, vs@ValidationState{errors})
       | null errors -> modify (\s' -> s'{validationState = vs}) >> output y
-      | otherwise   -> printREPLErrors src errors
+      | otherwise   -> printREPLErrors errors
 
 handleKind :: String -> Repl () -- freesti> :k <type>
 handleKind src = runPipeline src parseType
@@ -312,10 +327,10 @@ validateModule s m = do
   pure (sctx, kindCtx s, tctx, merged)
 
 -- | Print a list of errors against the interactive source line(s).
-printREPLErrors :: FilePath -> [Error] -> Repl ()
-printREPLErrors src es =
-  liftIO $ printErrors (Map.singleton interactivePath (lines src)) es
-
+printREPLErrors :: [Error] -> Repl ()
+printREPLErrors es = do
+  source <- gets source
+  liftIO $ printErrors source es
 -- Evaluation; interface with module Eval
 
 type Value = ()

@@ -22,7 +22,7 @@ import Validation.Base ( Validation, ValidationState, emptyValidationState, runV
 import Validation.Kinding ( kindModule )
 import Validation.Typing ( typeModule, TypeCtx )
 import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, failedToLoadModule, notASourceFile )
-import UI.Error ( printErrors, Error )
+import UI.Error ( printErrors, Error, Source )
 import Paths_freest ( getDataFileName )
 
 import Control.Exception ( IOException, try )
@@ -30,13 +30,13 @@ import Control.Monad.State ( get )
 import Data.Map qualified as Map
 
 -- | Load just the Prelude.
-loadPrelude :: IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadPrelude :: IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
 loadPrelude = getDataFileName preludePath >>= loadM noModuleLoaded
 
 -- | Load a program module on its own (no Prelude). Returns the scoped
 -- module after successful kinding and typing, or 'Nothing' if errors
 -- were found (in which case they are printed).
-loadModule :: FilePath -> IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
 loadModule fp = putStrLn preludeNotLoaded >> loadM moduleLoaded fp
 
 -- | Load no module at all, just print a message to that effect,
@@ -47,7 +47,7 @@ loadNoModule = putStrLn preludeNotLoaded >> putStrLn noModuleLoaded
 -- | Load a program module on its own or else the Prelude. Returns the scoped
 -- module after successful kinding and typing, or 'Nothing' if errors
 -- were found (in which case they are printed).
-loadM :: String -> FilePath -> IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadM :: String -> FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
 loadM moduleMessage programPath = tryRead programPath >>= \case
   Nothing -> pure Nothing -- notASourceFile already printed
   Just programSrc ->
@@ -56,7 +56,7 @@ loadM moduleMessage programPath = tryRead programPath >>= \case
           runValidation emptyValidationState do
             (sctx, tctx, smodl) <- validateModule emptyScopingCtx M.emptyScopedModule programModule
             vs                  <- get
-            pure (vs, sctx, tctx, smodl)
+            pure (Map.singleton programPath (lines programSrc), vs, sctx, tctx, smodl)
       of Left es -> do
           printSourceErrors [(programPath, programSrc)] es
           putStrLn failedToLoadModule
@@ -68,7 +68,7 @@ loadM moduleMessage programPath = tryRead programPath >>= \case
 -- | Load a program module joined with the Prelude. Returns the scoped
 -- composed module after successful kinding and typing, or 'Nothing' if
 -- errors were found (in which case they are printed).
-loadPreludeAndModule :: FilePath -> IO (Maybe (ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadPreludeAndModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
 loadPreludeAndModule programPath = do
   preludeFile <- getDataFileName preludePath
   mPreludeSrc <- tryRead preludeFile
@@ -83,7 +83,7 @@ loadPreludeAndModule programPath = do
             runValidation emptyValidationState do
               (sctx, tctx, smodl) <- validateModule emptyScopingCtx M.emptyScopedModule merged
               vs                  <- get
-              pure (vs, sctx, tctx, smodl)
+              pure (Map.fromList [(preludePath, lines preludeSrc), (programPath, lines programSrc)], vs, sctx, tctx, smodl)
         of Left es -> do
             printSourceErrors [ (preludePath, preludeSrc)
                               , (programPath, programSrc)

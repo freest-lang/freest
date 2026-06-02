@@ -28,6 +28,7 @@ import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
 import Data.Char qualified as Char
+import Data.Maybe ( fromMaybe )
 import Debug.Trace ( traceM )
 
 -- | The errors that can be found in a FreeST program.
@@ -172,11 +173,16 @@ type Source = Map.Map FilePath [String]
 
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
-  take (ec - sc) . drop (sc - 1) $ (src Map.! fp) !! (sl - 1)
+  take (ec - sc) . drop (sc - 1) $ lookupSrc src fp !! (sl - 1)
 
 getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
-  (src Map.! fp) !! (sl - 1)
+  lookupSrc src fp !! (sl - 1)
+
+lookupSrc :: Source -> FilePath -> [String]
+lookupSrc src fp = fromMaybe
+  (internalError $ "UI.Error.lookupSrc: file not in source map: " ++ fp)
+  (src Map.!? fp)
 
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
@@ -190,7 +196,7 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
   where
     sep = " | "
     n = length (show el)
-    srcf = src Map.! fp
+    srcf = lookupSrc src fp
     l | null srcf = []
       | otherwise = srcf !! (min (length srcf) sl - 1)
     spaces x = replicate x ' '
@@ -202,7 +208,7 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
   where
     n = length (show el)
     sep = " | "
-    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ src Map.! fp
+    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ lookupSrc src fp
     spaces x = replicate x ' '
     lineCarets i li =
       rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep
