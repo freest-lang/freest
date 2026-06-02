@@ -927,12 +927,12 @@ instantiate i modl kctx tctx t1 args = do
       (t, as) -> 
         throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
 
-typeModule :: M.KindedModule -> Validation (M.KindedModule, TypeCtx)
+typeModule :: M.KindedModule -> Validation TypeCtx
 typeModule modl = do
   tctx <- buildDConsCtx
   (tctxds, kctx', tctx') <- checkDecls modl Map.empty tctx (M.definitions modl)
-  tctx'' <- typeCtxDifference kctx' tctxds tctx'
-  return (modl, tctxds)
+  _ <- typeCtxDifference kctx' tctxds tctx'
+  return (tctx `Map.union` tctxds)
   where
     buildDConsCtx :: Validation TypeCtx
     buildDConsCtx = do
@@ -947,7 +947,7 @@ typeModule modl = do
               t <- buildArrow (Map.fromList aks) aks k ts
               let (K.Proper _ m _) = T.kindOf t
               return (Right ic, T.AppForall (getSpan ic) m aks t)
-            _ -> internalError $ "Identifier `"++show it++"` has no kind signature."
+            _ -> internalError $ "Identifier `" ++ show it ++ "` has no kind signature."
           where
             buildArrow kctx aks k = \case
               []       -> pure (returnType aks k)
@@ -961,6 +961,6 @@ typeModule modl = do
               (\t u -> let s = spanFromTo t u in pure $ T.AppArrow s (K.Lin s) t u) (returnType aks k)
             returnType aks k = T.AppDName (getSpan it) k it (map (uncurry $ T.fromVariable ObjLv) aks)
 
-runValidate :: M.ScopedModule -> Either [Error] (M.KindedModule, TypeCtx)
+runValidate :: M.ScopedModule -> Either [Error] TypeCtx
 runValidate modl =
   runValidation emptyValidationState (Kinding.kindModule modl >>= typeModule)

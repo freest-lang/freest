@@ -9,7 +9,7 @@ the tokens output by the lexer.
 -}
 module Parser.Token where 
 
-import Syntax.Base
+import Syntax.Base  
 import Data.List ( intercalate )
 
 data Token

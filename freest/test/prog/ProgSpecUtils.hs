@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 {- |
 Module      :  ProgSpecUtils
 Copyright   :  © The FreeST Team
@@ -6,15 +5,18 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 Utilities for program tests.
 -}
-module ProgSpecUtils where
+module ProgSpecUtils
+  ( specTest
+  , specTest'
+  , getSource
+  , safeRead
+  ) where
 
 import Control.Monad ( forM_ )
-import Control.Monad.Extra
+import Control.Monad.Extra  ( ifM, whenM )
 import System.Directory ( getCurrentDirectory, listDirectory, doesFileExist )
--- import System.Exit ( ExitCode (ExitSuccess) )
-import System.FilePath -- ( takeExtension )
-import Test.Hspec -- ( Spec, runIO, describe, parallel )
-
+import System.FilePath ( (-<.>), isExtensionOf, joinPath, splitDirectories )
+import Test.Hspec ( before, describe, it, parallel, runIO, Spec, Expectation )
 
 getSource :: [String] -> String
 getSource [] = ""
@@ -36,7 +38,6 @@ specTest' desc dir f = do
             before (beforeHandle d) $
             it (last (splitDirectories testDir) -<.> "fst") $ f d
 
-
 specTest :: String -> String -> (String -> String -> Spec) -> Spec
 specTest desc dir f = do
   baseDir <- runIO getCurrentDirectory
@@ -51,16 +52,13 @@ specTest desc dir f = do
                \testDir ->
                   f baseDir (group ++ "/" ++ testDir)
 
-
 directoryContents :: FilePath -> IO [FilePath]
 directoryContents dir =
   filter (('.' /=) . head) <$> listDirectory dir
 
-
 safeRead :: FilePath -> IO (Maybe String)
 safeRead f =
   ifM (doesFileExist f) (fmap Just (readFile f)) (pure Nothing)
-
 
 beforeHandle :: FilePath -> IO (FilePath, String)
 beforeHandle d = do

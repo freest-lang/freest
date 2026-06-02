@@ -9,6 +9,7 @@ homepage:   https://freest-lang.github.io/
 category:   Session types
 
 default-extensions:
+  - DuplicateRecordFields
   - FlexibleInstances
   - LambdaCase
   - TupleSections
@@ -32,6 +33,8 @@ dependencies:
   - mtl >= 2.2.1
   - optparse-applicative >= 0.16.1.0
   - haskeline
+  - process
+  - repline
   
 library:
   source-dirs: src

@@ -11,16 +11,17 @@ duplicate variable declarations, etc.).
 -}
 
 module Parser.Scoping
-  (ScopingCtx
-  ,emptyScopingCtx
-  ,runScoping
-  ,runScopeModule
-  ,scopeModule
-  ,scopeModule'
-  ,scopeExp
-  ,scopeType
-  ,scopeKind
-  ,freshInternal
+  ( ScopingCtx
+  , emptyScopingCtx
+  , runScoping
+  , runScopeModule
+  , scopeModule
+  , scopeModule'
+  , scopeExp
+  , scopeType
+  , scopeKind
+  , freshInternal
+  , scopeDefs -- for freesti
   )
 where
 
@@ -609,4 +610,3 @@ scopeMultiplicity ctx = \case
       Just φ' -> return $ (lv, φ{internal = internal φ'}) : lvφs')
     [] lvφs
   m -> pure m
-

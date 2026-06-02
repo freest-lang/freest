@@ -61,7 +61,7 @@ testOne file = hCapture [stdout, stderr] $
 
   runTest :: IO TestResult
   runTest = do
-    res <- timeout timeInMicro (freest defaultRunOpts{file})
+    res <- timeout timeInMicro (freest defaultRunOpts{filePath = Just file})
     case res of Just _  -> pure Passed
                 Nothing -> pure Timeout
 

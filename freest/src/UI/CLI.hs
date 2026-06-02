@@ -6,39 +6,74 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module defines the command line options accepted by FreeST along with
 their parser.
 -}
-module UI.CLI where
+module UI.CLI
+  ( RunOpts(..)
+  , defaultRunOpts
+  , opts
+  , homepage
+  , version
+  , preludePath
+  , freeSTiPrompt
+  , moduleLoaded
+  , noModuleLoaded
+  , failedToLoadModule
+  , preludeNotLoaded
+  , notASourceFile
+  , comeAgain
+  , interactivePath
+  , optPrefix
+  ) where
 
+import qualified Paths_freest as Paths
 import Options.Applicative
+import Data.Version ( showVersion )
+
+homepage, version, freeSTiPrompt, moduleLoaded, noModuleLoaded,
+  failedToLoadModule, preludeNotLoaded, comeAgain, interactivePath :: String
+homepage           = "https://freest-lang.github.io/"
+version            = "The FreeST Compiler, version " ++ showVersion Paths.version ++ ", " ++ homepage
+freeSTiPrompt      = "freesti"
+moduleLoaded       = "Ok, one module loaded."
+noModuleLoaded     = "Ok, no modules loaded."
+preludeNotLoaded   = "Ok, Prelude not loaded."
+failedToLoadModule = "Failed, no modules loaded."
+comeAgain          = "Come again!"
+interactivePath    = "<interactive>"
+
+preludePath :: FilePath
+preludePath = "StandardLib/Prelude.fst"
+
+notASourceFile :: FilePath -> String
+notASourceFile file = "target ‘" ++ file ++ "’ is not a source file"
+
+optPrefix :: Char
+optPrefix = ':'
 
 -- | The command line options accepted by the FreeST compiler.
-data RunOpts 
-  =  RunOpts { file :: FilePath
-             , noImplicitPrelude :: Bool
-             }
+data RunOpts = RunOpts
+  { filePath :: Maybe FilePath
+  , implicitPrelude :: Bool
+  }
 
 defaultRunOpts :: RunOpts
-defaultRunOpts
-  =  RunOpts { file = "" 
-             , noImplicitPrelude = False
-             }
+defaultRunOpts = RunOpts
+  { filePath = Nothing
+  , implicitPrelude = True
+  }
 
 -- | The parser for the command line options.
 freestOpts :: Parser RunOpts
 freestOpts = RunOpts
-  <$> strArgument
-     ( help "FreeST (.fst) file"
-    <> metavar "FILEPATH")
-  <*> switch
-     (long "no-implicit-prelude" 
-    <> help "Turn off implicit import of the Prelude")
+  <$> optional (strArgument
+        ( help "FreeST (.fst) file"
+       <> metavar "FILEPATH"))
+  <*> (not <$> switch
+        ( long "no-implicit-prelude"
+       <> help "Turn off implicit import of the Prelude"))
 
-version :: String
-version = "5.0"
-
--- | The man page of the FreeST compiler.
 opts :: ParserInfo RunOpts
-opts = info (freestOpts <**> helper <**> simpleVersioner ("The FreeST Compiler, version" ++ version))
+opts = info (freestOpts <**> helper <**> simpleVersioner version)
      ( fullDesc
-     <> progDesc ("The FreeST Compiler, version " ++ version)
+     <> progDesc version
      <> header "Nothing here yet!"
      )

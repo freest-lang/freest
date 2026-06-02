@@ -28,8 +28,6 @@ import Utils ( internalError )
 import Data.Bifunctor (second)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
-import Debug.Trace ( trace )
-import GHC.Stack (HasCallStack)
 
 -- | Is a given type a weak head normal form?
 isWhnf :: T.KindedType -> Bool
@@ -60,7 +58,7 @@ isWhnf = \case
 
 -- | One step type reduction (aka, the tau rules).
 --   Requires 'not (isWnhf t)'.
-reduce :: HasCallStack => M.KindedModule -> T.KindedType -> T.KindedType
+reduce :: M.KindedModule -> T.KindedType -> T.KindedType
 reduce mod = \case
   -- 1. Sequential composition, the R-S* rules
     -- R-SNeut
