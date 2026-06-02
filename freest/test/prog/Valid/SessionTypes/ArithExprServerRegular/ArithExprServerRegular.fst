@@ -40,7 +40,7 @@ client c = c |> select Const
   with any stream, independent of the fact that it may or may not
   represent a well formed arithmetic expression.
 -}
-size : StreamServer -> Int 1-> ()
+size : StreamServer -> Int -1-> ()
 size s n =
   case s of
     &Add s   -> size s (n + 1)
@@ -53,5 +53,5 @@ size s n =
 main : Int
 main =
   let (c, s) = channel @StreamClient in
-  fork (\(_:()) 1-> size s 0);
+  fork (\(_:()) -1-> size s 0);
   client c

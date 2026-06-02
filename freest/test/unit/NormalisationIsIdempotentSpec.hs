@@ -24,6 +24,6 @@ spec = mkTypeSpec
             t' <- runSynthOrCheck m t mk
             return (m', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> normalisationIsIdempotent `shouldBe` True
+       Right (m', t') -> if normalisationIsIdempotent then return () else expectationFailure (show (normalise m' t') ++ "\n/=\n" ++ show (normalise m' (normalise m' t')))-- `shouldBe` True
         where normalisationIsIdempotent = 
                 normalise m' t' == normalise m' (normalise m' t')

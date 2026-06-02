@@ -43,5 +43,5 @@ reader c =
 main : ()
 main =
   let (w, r) = channel @T in
-  fork (\(_ : ()) 1-> writer 0 w);
+  fork (\(_ : ()) -1-> writer 0 w);
   reader r

@@ -27,5 +27,5 @@ main : Value
 main =
   let (x, y) = channel @(!Int; Close) () in   
   let aTriple = (x, (2, 3)) in
-  fork @() (\(_ : ()) 1-> sendValue aTriple);
+  fork @() (\(_ : ()) -1-> sendValue aTriple);
   let (x, c) = receive y in wait c; x     

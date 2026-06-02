@@ -11,15 +11,15 @@ Church Encoding _ Lists
 module SystemFLists where
 
 type List : *T -> *T
-type List a = forall (r : *T) . (a -> r -> r) -> r -> r
+type List a = forall (r : *T) -> (a -> r -> r) -> r -> r
 
 -- The empty list constructor
-nil : forall (a : *T). List a
+nil : forall (a : *T) -> List a
 nil @a @r c n = n
 -- nil = \@(a : *T) @(r : *T) (c : a -> r -> r) (n : r) -> n   -- extended version
 
 -- The cons list constructor
-cons : forall (a : *T). a -> List a -> List a
+cons : forall (a : *T) -> a -> List a -> List a
 cons @a hd tl @r c n = c hd (tl @r c n)
 -- cons = \@(a : *T) (hd : a) (tl : List a) ->
 --   \@(r : *T) (c : a -> r -> r) (n : r) -> c hd (tl @r c n) -- extended version
@@ -37,15 +37,15 @@ anIntlist : List Int
 anIntlist = cons @Int 5 $ cons @Int 9 $ cons @Int 2 $ cons @Int 8 $ cons @Int 9 $ cons @Int 4 $ cons @Int 5 $ nil @Int
 
 -- Function head' takes the head of a non-empty list and diverges otherwise
-head' : forall (a : *T). List a -> a
+head' : forall (a : *T) -> List a -> a
 head' @a l = (l @(() -> a) (\(hd : a) (tl : () -> a) (_ : ()) -> hd) (diverge @a)) ()
 -- head' = \(a : *T) (l : List a) ->
 --        (l @(() -> a) (\(hd : a) (tl : () -> a) (_ : ()) -> hd) (diverge @a)) () -- extended version
-  where diverge : forall (a : *T). () -> a
+  where diverge : forall (a : *T) -> () -> a
         diverge @a x = diverge @a x
 
 -- The null predicate: is the list empty?
-null : forall (a : *T). List a -> Bool
+null : forall (a : *T) -> List a -> Bool
 null @a l = l @Bool (\(hd : a) (tl : Bool) -> False) True
 -- null = \@(a : *T) (l : List a) -> l @Bool (\(hd : a) (tl : Bool) -> False) True -- extended version
 
@@ -59,25 +59,25 @@ mainChars : Char
 mainChars = head' @Char twoChars -- null  @Char (nil  @Char)
 
 -- Converting to String
-toString : forall (a:*T) . List a -> String
-toString @a xs = xs @String (\(x:a) -> \(s:String) -> (++) @Char ((++) @Char (show @a x) "::") s) "[]"
+toString : forall (a:*T) -> List a -> String
+toString @a xs = xs @String (\(x:a) (s:String) -> show x ++ "::" ++ s) "[]"
 
 -- Pairs in preparation for the tail function
 
 type Pair : *T -> *T -> *T
-type Pair a b = forall (c : *T) . (a -> b -> c) -> c
+type Pair a b = forall (c : *T) -> (a -> b -> c) -> c
 
-pair : forall (a b : *T). a -> b -> Pair a b
+pair : forall (a : *T) (b : *T) -> a -> b -> Pair a b
 pair @a @b x y = \@(c : *T) (f : a -> b -> c) -> f x y
 
-fst'  : forall (a b : *T). Pair a b -> a
+fst'  : forall (a : *T) (b : *T) -> Pair a b -> a
 fst' @a @b p = p @a (\(f : a) (s : b) -> f)
 
-snd'  : forall (a b : *T). Pair a b -> b
+snd'  : forall (a : *T) (b : *T) -> Pair a b -> b
 snd' @a @b p = p @b (\(f : a) (s : b) -> s)
 
 -- Function tail' takes the tail of a non-empty list.
-tail' : forall (a : *T). List a -> List a
+tail' : forall (a : *T) -> List a -> List a
 tail' @a l = (fst' @(List a) @(List a) (
             l @(Pair (List a) (List a))
               (\(h : a) (t : Pair (List a) (List a)) ->
@@ -90,7 +90,7 @@ mainTail : Char
 mainTail = head' @Char $ tail'  @Char twoChars
 
 -- The length of a list, given as a primitive Int
-length' : forall (a : *T). List a -> Int
+length' : forall (a : *T) -> List a -> Int
 length' @a l = l  @Int (\(_ : a) -> succ) 0
 
 mainLength : Int
@@ -98,7 +98,7 @@ mainLength = length' @Char twoChars
 
 -- Natural numbers
 type Nat : *T
-type Nat = forall (a : *T). (a -> a) -> a -> a
+type Nat = forall (a : *T) -> (a -> a) -> a -> a
 
 -- Some nats
 zero, one, four : Nat
@@ -109,7 +109,7 @@ one @a s z = s z
 four @a s z = s $ s $ s $ s z
 
 -- replicate n x is a list of length n with x the value of every element
-replicate' : forall (a : *T). Nat -> a -> List a
+replicate' : forall (a : *T) -> Nat -> a -> List a
 replicate' @a n val = n @(List a) (cons @a val) (nil @a)
 
 main : Int

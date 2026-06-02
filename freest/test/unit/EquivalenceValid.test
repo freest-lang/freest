@@ -12,52 +12,52 @@ case () == () : *T
 
 -- Polymorphism
 
-case forall (a : *T). a -> a -> a
-  == forall (b : *T). b -> b -> b
+case forall (a : *T) ->  a -> a -> a
+  == forall (b : *T) ->  b -> b -> b
    : *T
 
-case forall (a : *T). (a -> a) -> a -> a
-  == forall (b : *T). (b -> b) -> b -> b
+case forall (a : *T) ->  (a -> a) -> a -> a
+  == forall (b : *T) ->  (b -> b) -> b -> b
    : *T
 
-case (forall (b : *T). (b -> b) -> b -> b) 
+case (forall (b : *T) ->  (b -> b) -> b -> b) 
   == Nat 
    : *T
 where
   type Nat : *T
-  type Nat = forall (a : *T). (a -> a) -> a -> a
+  type Nat = forall (a : *T) ->  (a -> a) -> a -> a
 
-case forall (b : *T). b -> b -> b
+case forall (b : *T) ->  b -> b -> b
   == Bool
    : *T
 where
   type Bool : *T
-  type Bool = forall (b : *T). b -> b -> b
+  type Bool = forall (b : *T) ->  b -> b -> b
 
-case exists (a : *T). (a, a -> Int, a -> a)
-  == exists (b : *T). (b, b -> Int, b -> b)
+case (exists (a : *T),  (a, a -> Int, a -> a))
+  == (exists (b : *T),  (b, b -> Int, b -> b))
    : *T
 
-case exists (a : *T). (a, a -> Bool, a -> a, a -> a)
-  == exists (b : *T). (b, b -> Bool, b -> b, b -> b)
+case (exists (a : *T),  (a, a -> Bool, a -> a, a -> a))
+  == (exists (b : *T),  (b, b -> Bool, b -> b, b -> b))
    : *T
 where
   type Bool : *T
   data Bool = True | False
 
-case (exists (b : *T). (b -> b) -> b -> b) 
+case (exists (b : *T),  (b -> b) -> b -> b) 
   == Nat 
    : *T
 where
   type Nat : *T
-  type Nat = exists (a : *T). (a -> a) -> a -> a
+  type Nat = (exists (a : *T), (a -> a) -> a -> a)
 
-case exists (b : *T). b -> b -> b
+case (exists (b : *T), b -> b -> b)
   == Bool
    : *T
 where
   type Bool : *T
-  type Bool = exists (b : *T). b -> b -> b
+  type Bool = (exists (b : *T), b -> b -> b)
 
 -- Session types
 
@@ -148,14 +148,14 @@ case !(!Int;Close)
 
 -- Polymorphic sessions
 
-case !!(a : 1S). Close ; a ; !Int 
-  == !!(a : 1S). (Close ; a) ; Skip : 1C
+case !type (a : 1S). Close ; a ; !Int 
+  == !type (a : 1S). (Close ; a) ; Skip : 1C
 
-case !!(a : 1S). Close;a;!Int 
-  == !!(b : 1S). (Close;b);Skip : 1C
+case !type (a : 1S). Close;a;!Int 
+  == !type (b : 1S). (Close;b);Skip : 1C
 
-case !!(a : 1S). T a
-  == !!(b : 1S). U b : 1S
+case !type (a : 1S). T a
+  == !type (b : 1S). U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -166,14 +166,16 @@ where
   type U' : 1S -> 1S
   type U' b = +{A: !b;U' b, B: b;Close;!(U' b)}
 
-case ??(a : 1S). Close ; a ; !Int 
-  == ??(a : 1S). (Close ; a) ; Skip : 1C
+case ?type (a : 1S). Close ; a ; !Int 
+  == ?type (a : 1S). (Close ; a) ; Skip 
+   : 1C
 
-case ??(a : 1S). Close;a;!Int 
-  == ??(b : 1S). (Close;b);Skip : 1C
+case ?type (a : 1S). Close;a;!Int 
+  == ?type (b : 1S). (Close;b);Skip 
+   : 1C
 
-case ??(a : 1S). T a
-  == ??(b : 1S). U b : 1S
+case ?type (a : 1S). T a
+  == ?type (b : 1S). U b : 1S
 where
   type T : 1S -> 1S
   type T a = !(T' a;!Int);?(T a;!(Close);Close)
@@ -188,28 +190,28 @@ where
 
 case Dual (Dual !Int) == !Int : 1S
 
-case Dual (?? (a : 1S). a) 
-  == !! (b : 1S). (Dual b) 
+case Dual (?type (a : 1S). a) 
+  == !type  (b : 1S). (Dual b) 
    : 1S
 
-case ??(a : 1S). ??(b : 1S). Dual (a ; b) 
-  == ??(a : 1S). ??(b : 1S). Dual a ; Dual b 
+case ?type (a : 1S). ?type (b : 1S). Dual (a ; b) 
+  == ?type (a : 1S). ?type (b : 1S). Dual a ; Dual b 
    : 1S
 
-case Dual(??(a : 1S). ??(b : 1S). a ; b) 
-  == !!(a : 1S). !!(b : 1S). Dual a ; Dual b 
+case Dual(?type (a : 1S). ?type (b : 1S). a ; b) 
+  == !type (a : 1S). !type (b : 1S). Dual a ; Dual b 
    : 1S
 
-case Dual (??(a : 1S). ??(b : 1S). a ; b) 
-  == !!(a : 1S). Dual (??(b : 1S). a ; b) 
+case Dual (?type (a : 1S). ?type (b : 1S). a ; b) 
+  == !type (a : 1S). Dual (?type (b : 1S). a ; b) 
    : 1S
 
-case Dual (??(a : 1S). ??(b : 1S). a ; b) 
-  == !!(a : 1S). Dual (??(b : 1S). a ; b) 
+case Dual (?type (a : 1S). ?type (b : 1S). a ; b) 
+  == !type (a : 1S). Dual (?type (b : 1S). a ; b) 
    : 1S
 
-case Dual (??(a : 1S). Dual a) 
-  == !!(b : 1S). b 
+case Dual (?type (a : 1S). Dual a) 
+  == !type (b : 1S). b 
    : 1S
 
 case InCharStream ; Wait == Dual (OutCharStream ; Close) : 1C
@@ -249,7 +251,7 @@ where
 
 -- The below types are not (yet?) syntactically valid
 
--- case ??(Dual Skip) == Dual (!!(Dual Skip)) : 1S
+-- case ?type (Dual Skip) == Dual (!type (Dual Skip)) : 1S
 
 -- Unrestricted sessions
 
@@ -277,7 +279,7 @@ case *&{A, B} ; !Int == *&{B, A} : *S
 
 case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
 
-case (?Char ; *&{A, B} ; !Int) 1-> Char == (?Char ; *&{A, B}) 1-> Char : 1T
+case (?Char ; *&{A, B} ; !Int) -1-> Char == (?Char ; *&{A, B}) -1-> Char : 1T
 
 -- When there is (unreachable) life past noncontractive (rec) types
 
@@ -314,8 +316,8 @@ where
   type Maybe : 1S -> 1T
   data Maybe a = Nothing | Just a
 
-case forall (a : 1S). Maybe a 
-  == forall (b : 1S). Maybe b 
+case forall (a : 1S) ->  Maybe a 
+  == forall (b : 1S) ->  Maybe b 
    : 1T
 where
   type Maybe : 1S -> 1T
@@ -336,117 +338,117 @@ where
 
 -- Unreachable type vars
 
-case !!(a : 1S). Wait ; a 
-  == !!(b : 1S). Wait 
+case !type (a : 1S). Wait ; a 
+  == !type (b : 1S). Wait 
    : 1S
 
-case !Int ; !!(a : 1S). Wait ; a 
-  == !Int ; !!(b : 1S). Wait 
+case !Int ; !type (a : 1S). Wait ; a 
+  == !Int ; !type (b : 1S). Wait 
    : 1S
 
-case !!(a : 1S). ?Char ; Wait ; a 
-  == !!(b : 1S). ?Char ; Wait 
+case !type (a : 1S). ?Char ; Wait ; a 
+  == !type (b : 1S). ?Char ; Wait 
    : 1S
 
-case !!(a : 1S). Wait ; a 
-  == !!(b : 1S) . Dual Close 
+case !type (a : 1S). Wait ; a 
+  == !type (b : 1S) . Dual Close 
    : 1S
 
-case !!(a : 1S). !!(b : 1S). Wait ; a ; b 
-  == !!(a : 1S). !!(b : 1S). Wait 
+case !type (a : 1S). !type (b : 1S). Wait ; a ; b 
+  == !type (a : 1S). !type (b : 1S). Wait 
    : 1S
 
-case !!(a : 1S). !!(b : *T). !b ; Wait ; a 
-  == !!(a : 1S). !!(c : *T). !c ; Wait 
+case !type (a : 1S). !type (b : *T). !b ; Wait ; a 
+  == !type (a : 1S). !type (c : *T). !c ; Wait 
    : 1S
 
-case ?(!!(a : 1S). Wait ; a) 
-  == ?(!!(b : 1S). Wait) 
+case ?(!type (a : 1S). Wait ; a) 
+  == ?(!type (b : 1S). Wait) 
    : 1S
 
-case (!!(a : 1S). Wait ; a) -> Char 
-  == (!!(b : 1S). Wait)     -> Char 
+case (!type (a : 1S). Wait ; a) -> Char 
+  == (!type (b : 1S). Wait)     -> Char 
    : *T
 
-case (!!(a : 1S). Wait ; a) -> (!!(b : 1S). Wait    ) 
-  == (!!(b : 1S). Wait    ) -> (!!(a : 1S). Wait ; a) 
+case (!type (a : 1S). Wait ; a) -> (!type (b : 1S). Wait    ) 
+  == (!type (b : 1S). Wait    ) -> (!type (a : 1S). Wait ; a) 
    : *T
 
-case &{A: !!(a : 1S). Wait ; a, B: Skip} 
-  == &{A: !!(b : 1S). Wait, B: Skip} 
+case &{A: !type (a : 1S). Wait ; a, B: Skip} 
+  == &{A: !type (b : 1S). Wait, B: Skip} 
    : 1S
 
-case +{A: !!(a : 1S). Wait ; a, B: !!(b : 1S). Wait    } 
-  == +{A: !!(b : 1S). Wait,     B: !!(a : 1S). Wait ; a} 
+case +{A: !type (a : 1S). Wait ; a, B: !type (b : 1S). Wait    } 
+  == +{A: !type (b : 1S). Wait,     B: !type (a : 1S). Wait ; a} 
    : 1S
 
-case !!(a : 1S). Wait ; !!(b : 1S). a ; b 
-  == !!(b : 1S). Wait 
+case !type (a : 1S). Wait; !type (b : 1S). a ; b 
+  == !type (b : 1S). Wait 
    : 1S
 
-case !!(a : 1S). Wait ; Close ; a 
-  == !!(b : 1S). Wait 
+case !type (a : 1S). Wait ; Close ; a 
+  == !type (b : 1S). Wait 
   : 1S
 
-case !!(a : 1S). Wait ; !Int ; Close ; a 
-  == !!(b : 1S). Wait 
+case !type (a : 1S). Wait ; !Int ; Close ; a 
+  == !type (b : 1S). Wait 
    : 1S
 
-case !!(a : 1S). !!(b : 1S). Wait ; a ;!Int ; Close ; b 
-  == !!(a : 1S). !!(a : 1S). Wait 
+case !type (a : 1S). !type (b : 1S). Wait ; a ;!Int ; Close ; b 
+  == !type (a : 1S). !type (a : 1S). Wait 
    : 1S
 
-case !!(a : 1S). *!Int ; a 
-  == !!(b : 1S). *!Int 
+case !type (a : 1S). *!Int ; a 
+  == !type (b : 1S). *!Int 
    : 1S
 
-case !!(a : 1S). *+{A,B} ; a 
-  == !!(b : 1S). *+{B,A} 
+case !type (a : 1S). *+{A,B} ; a 
+  == !type (b : 1S). *+{B,A} 
    : 1S
 
-case !!(a : 1S). T ; a 
-  == !!(b : 1S). T ; !Int 
+case !type (a : 1S). T ; a 
+  == !type (b : 1S). T ; !Int 
    : 1S
 where
   type T : 1S
   type T = !Int ; T
 
-case !!(a : 1S). T ; a 
-  == !!(b : 1S). T ; !Int 
+case !type (a : 1S). T ; a 
+  == !type (b : 1S). T ; !Int 
    : 1S
 where
   type T, U : 1S
   type T = !Int ; U
   type U = ?Char ; T
 
-case !!(a : 1S). T ; a 
-  == !!(b : 1S). T ; !Int 
+case !type (a : 1S). T ; a 
+  == !type (b : 1S). T ; !Int 
    : 1S
 where
   type T, U : 1S
   type T = !Int ; U
   type U = ?Char ; U
 
-case ??(a : *S). T a ; a 
-  == ??(b : *S). T b ; !Int ; T Skip 
+case ?type (a : *S). T a ; a 
+  == ?type (b : *S). T b ; !Int ; T Skip 
    : 1S
 where
   type T : *S -> 1S
   type T c = !c ; T c
 
-case ??(a : *S). T a ; a 
-  == ??(b : *S). T b ; !Int ; T Skip 
+case ?type (a : *S). T a ; a 
+  == ?type (b : *S). T b ; !Int ; T Skip 
    : 1S
 where
   type T : *S -> 1S
   type T c = !c ; T c
 
-case ??(a : 1S). Dual Close ; a 
-  == ??(a : 1S). Dual Close 
+case ?type (a : 1S). Dual Close ; a 
+  == ?type (a : 1S). Dual Close 
    : 1S
 
-case ??(a : 1S). Dual Close ; a 
-  == ??(a : 1S). Wait 
+case ?type (a : 1S). Dual Close ; a 
+  == ?type (a : 1S). Wait 
    : 1S
 
 case W == Skip ; W : 1S -- Recursion on the argument of a type constructor
@@ -494,9 +496,9 @@ where
 case OutStream == Dual InStream : 1C
 where
   type OutStream : 1C
-  type OutStream = ??(a : *T). !a ; OutStream
+  type OutStream = ?type (a : *T). !a ; OutStream
   type InStream : 1C
-  type InStream = !!(a : *T). ?a ; InStream
+  type InStream = !type (a : *T). ?a ; InStream
 
 case Stream Skip == Stream (Skip; Skip) : 1S
 where
@@ -549,55 +551,63 @@ where
 
 -- Troublesome with reachable/unreachable vars
 
-case !!(a : 1S) . !!(b : 1S) . (Void @1S) ; a ; b == !!(a : 1S) . !!(a : 1S) . (Void @1S) : 1S
+case !type (a : 1S) . !type (b : 1S) . (Void @1S) ; a ; b 
+  == !type (a : 1S) . !type (a : 1S) . (Void @1S) 
+   : 1S
 
-case !!(a : 1S) . !!(b : 1S) . Void' ; a ; b == !!(a : 1S) . !!(b : 1S) . Void' : 1S
+case !type (a : 1S) . !type (b : 1S) . Void' ; a ; b 
+  == !type (a : 1S) . !type (b : 1S) . Void' 
+   : 1S
 where
   type Void' : 1S
   type Void' = Void'
 
-case !!(a : 1S) . !!(b : 1S) . (Void @1S) ; a ; b == !!(a : 1S) . !!(b : 1S) . (Void @1S) : 1S
+case !type (a : 1S) . !type (b : 1S) . (Void @1S) ; a ; b 
+  == !type (a : 1S) . !type (b : 1S) . (Void @1S) 
+   : 1S
 
-case !!(a : 1S) . !!(b : 1S) . Void' ; a ; b == !!(a : 1S) . !!(b : 1S) . Void' : 1S
+case !type (a : 1S) . !type (b : 1S) . Void' ; a ; b 
+  == !type (a : 1S) . !type (b : 1S) . Void' 
+   : 1S
 where
   type Void' : 1S
   type Void' = Void'
 
 -- Forall and parameterised types
 
-case (forall (c : *T). (Int -> c) -> (Bool -> c) -> c)
-  -- == (forall (a b : *T). forall (c : *T). (a -> c) -> (b -> c) -> c) Int Bool
+case (forall (c : *T) ->  (Int -> c) -> (Bool -> c) -> c)
+  -- == (forall (a : *T) (b : *T) ->  forall (c : *T) ->  (a -> c) -> (b -> c) -> c) Int Bool
   == Sum Int Bool
    : *T
 where
   type Bool : *T
   data Bool = True | False
   type Sum : *T -> *T -> *T
-  type Sum a b = forall (c : *T). (a -> c) -> (b -> c) -> c
+  type Sum a b = forall (c : *T) ->  (a -> c) -> (b -> c) -> c
 
-case forall (a : *T). (forall (c : *T). (List a -> List a -> c) -> c)
-  == forall (a : *T). ((Pair (List a)) (List a))
+case forall (a : *T) ->  (forall (c : *T) ->  (List a -> List a -> c) -> c)
+  == forall (a : *T) ->  ((Pair (List a)) (List a))
    : *T
 where
   type Pair : *T -> *T -> *T
-  type Pair a b = forall (c : *T). (a -> b -> c) -> c
+  type Pair a b = forall (c : *T) -> (a -> b -> c) -> c
   type List : *T -> *T
-  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
+  type List a = forall (r : *T) -> (a -> r -> r) -> r -> r
 
 
-case (forall (c : *T). (List Int -> List Int -> c) -> c)
+case (forall (c : *T) ->  (List Int -> List Int -> c) -> c)
   == ((Pair (List Int)) (List Int))
    : *T
 where
   type Pair : *T -> *T -> *T
-  type Pair a b = forall (c : *T). (a -> b -> c) -> c
+  type Pair a b = forall (c : *T) -> (a -> b -> c) -> c
   type List : *T -> *T
-  type List a = forall (r : *T) . (a -> r -> r) -> r -> r
+  type List a = forall (r : *T) -> (a -> r -> r) -> r -> r
 
-case Two Int == forall (b: *T) . (Int, b) : *T
+case Two Int == forall (b: *T) -> (Int, b) : *T
 where
   type Two : *T -> *T
-  type Two a = forall (b: *T) . (a, b)
+  type Two a = forall (b: *T) -> (a, b)
 
 case Void @1C == Void @1C ; Skip : 1C
 
@@ -755,9 +765,15 @@ where
   type IFRepeat : 1S -> 1S -> 1S
   type IFRepeat a b = IRepeat (&{More: a, Done: b ; Wait})
   type Fold : 1S
-  type Fold = ??(a:*T) . ?a ; IFRepeat (??(b:1S) . ?(a -> b -> a) ; ?b) (!a)
+  type Fold = ?type (a:*T). ?a; IFRepeat (?type (b:1S). ?(a -> b -> a); ?b) (!a)
 
   type FoldExpanded : 1S
-  type FoldExpanded = ??(a:*T) . ?a ; FE a
-  type FE : *T -> 1S
-  type FE a = &{More: ??(b:1S) . ?(a -> b -> a) ; ?b ; FE a, Done: !a ; Wait}
+  type FoldExpanded = ?type (a:*T) . ?a ; FE
+  type FE : 1S
+  type FE = &{More: ?type (b:1S) . ?(a -> b -> a) ; ?b, Done: !a ; Wait}
+
+case forall #m -*-> Int -m-> Int  == forall #n -*-> Int -n-> Int : *T
+
+case forall #m #n -*-> Int -m+n-> Int  == forall #m #n -*-> Int -n+m-> Int : *T
+
+case forall #m #n -*-> Int -m+n-> Int  == forall #n #m -*-> Int -m+n-> Int : *T

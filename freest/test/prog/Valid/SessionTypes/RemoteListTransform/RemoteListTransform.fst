@@ -6,7 +6,7 @@ data IntList = Nil | Cons Int IntList
 type IntListC = +{NilC: Skip, ConsC: !Int;IntListC;?Int}
 type IntListS = &{NilC: Skip, ConsC: ?Int;IntListS;!Int}
 
-transform : forall (a : 1S). IntList -> (IntListC; a) -> (IntList, a)
+transform : forall (a : 1S) -> IntList -> (IntListC; a) -> (IntList, a)
 transform @a list c =
     case list of
         Nil ->
@@ -19,7 +19,7 @@ transform @a list c =
             (Cons y rest, c)
 
 
-listSum : forall (a : 1S). (IntListS; a) -> (Int, a)
+listSum : forall (a : 1S) -> (IntListS; a) -> (Int, a)
 listSum @a c =
     case c of
         &NilC c ->
@@ -36,7 +36,7 @@ aCons = Cons 5 (Cons 4 (Cons 3 (Cons 2 (Cons 1 Nil))))
 
 main =
     let (w, r) = channel @(IntListC;Close) in
-    fork (\(_ : ()) 1-> r |> listSum |> snd |> wait);
+    fork (\(_ : ()) -1-> r |> listSum |> snd |> wait);
     let (l, c) = transform aCons w in
     close c;
     l

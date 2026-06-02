@@ -1,6 +1,6 @@
 module LinUsedTwice where
 
-f : Int 1-> Int
+f : Int -1-> Int
 f x = x
 
 main : Int

@@ -29,7 +29,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
-import Validation.Substitution ( freeVars )
+import Validation.Substitution ( freeTypeVars )
 import Validation.Base
 import Syntax.Type.Unkinded qualified as T
 import UI.Error ( Error(..) )
@@ -55,9 +55,10 @@ import Data.Set qualified as Set
 
 -- | Keys that keep track of variable names.
 data VarKey
-  = TVar String -- ^ Key for type variable names.
-  | EVar String -- ^ Key for expression variable names.
-  deriving (Eq,Ord,Show)
+  = TVar String -- ^ Key for type variable names
+  | EVar String -- ^ Key for expression variable names
+  | MVar String -- ^ Key for multiplicity variable names
+  deriving (Eq, Ord, Show)
 
 -- | The part of the context that keeps track of variable names.
 type VarCtx = Map.Map VarKey Variable
@@ -68,7 +69,7 @@ data IdKey
   | DId String  -- ^ Key for @data@ names
   | CId String  -- ^ Key for @data@ constructor names
   | KSig String -- ^ Key for kind signatures
-  deriving (Eq,Ord,Show)
+  deriving (Eq, Ord, Show)
 
 -- | The part of the context that keeps track of identifier names.
 type IdCtx = Map.Map IdKey Identifier
@@ -89,12 +90,14 @@ union (ictx1, vctx1) (ictx2, vctx2) =
   (Map.union ictx1 ictx2, Map.union vctx1 vctx2)
 
 -- | Lookup the name of a variable in the context. Use
---     * 'lookupTVar' for type variables;
---     * 'lookupEVar' for expression variables.
-lookupTVar, lookupEVar
+--     * 'lookupTVar' for type variables
+--     * 'lookupEVar' for expression variables
+--     * 'lookupMVar' for multiplicity variables
+lookupTVar, lookupEVar, lookupMVar
   :: Variable -> ScopingCtx -> Maybe Variable
 lookupTVar a = Map.lookup (TVar $ external a) . snd
 lookupEVar x = Map.lookup (EVar $ external x) . snd
+lookupMVar x = Map.lookup (MVar $ external x) . snd
 
 -- | Is a given identifier name in the context? Use
 --
@@ -113,10 +116,11 @@ memberKSig (Identifier _ s) ctx = KSig s `Map.member` fst ctx
 -- 
 --     * 'fromTVarList' for type variables;
 --     * 'fromEVarList' for expression variables.
-fromTVarList, fromEVarList
+fromTVarList, fromEVarList, fromMVarList
   :: [Variable] -> ScopingCtx
 fromTVarList = (Map.empty,) . Map.fromList . map (\a -> (TVar $ external a, a))
 fromEVarList = (Map.empty,) . Map.fromList . map (\x -> (EVar $ external x, x))
+fromMVarList = (Map.empty,) . Map.fromList . map (\x -> (MVar $ external x, x))
 
 -- | Convert to a list of expression variables.
 toEVarList :: ScopingCtx -> [Variable]
@@ -127,21 +131,27 @@ toTVarList :: ScopingCtx -> [Variable]
 toTVarList (_, vctx) = 
   Map.elems $ Map.filterWithKey (\cases TVar{} _ -> True ; _ _ -> False) vctx
 
+toMVarList :: ScopingCtx -> [Variable]
+toMVarList (_, vctx) = 
+  Map.elems $ Map.filterWithKey (\cases MVar{} _ -> True ; _ _ -> False) vctx
+
 -- | Insert a variable name in the context. Use
 -- 
 --     * 'insertTVar' for type variables
 --     * 'insertEVar' for expression variables
-insertTVar, insertEVar :: Variable -> ScopingCtx -> ScopingCtx
+insertTVar, insertEVar, insertMVar :: Variable -> ScopingCtx -> ScopingCtx
 insertTVar a = second $ Map.insert (TVar $ external a) a
 insertEVar x = second $ Map.insert (EVar $ external x) x
+insertMVar x = second $ Map.insert (MVar $ external x) x
 
 -- | Delete a variable name from the context. Use
 -- 
 --     * 'deleteTVar' for type variables;
 --     * 'deleteEVar' for expression variables.
-deleteTVar, deleteEVar :: Variable -> ScopingCtx -> ScopingCtx
+deleteTVar, deleteEVar, deleteMVar :: Variable -> ScopingCtx -> ScopingCtx
 deleteTVar a = second $ Map.delete (TVar $ external a)
 deleteEVar x = second $ Map.delete (EVar $ external x)
+deleteMVar x = second $ Map.delete (MVar $ external x)
 
 -- | Insert an identifier name in the context. Use
 --
@@ -266,7 +276,7 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
         unless (ti `memberKSig` ctx) do
           throwE (LacksKindSig (getSpan ti) ti)
         as'  <- mapM freshInternal as 
-        ks'  <- mapM scopeKind ks
+        ks'  <- mapM (scopeKind ctx) ks
         return (ctx', Map.insert ti (zip as' ks', cis) dds')
     scopeConsDecls ctx = foldM (scopeConsDecl ctx) Map.empty
       where
@@ -318,18 +328,23 @@ scopeDefs ctx ds = do
         let ctx' = insertEVar x' ctx
         psrhss' <- forM psrhss \(pars, rhs) -> do
           checkConflictingDefs (ExpLevel (E.VarPat (getSpan x') x') : pars)
-          (ctx'', pars') <- foldM scopeParam (ctx',[]) pars
+          (ctx'', pars') <- foldM scopeFnDefParam (ctx',[]) pars
           (pars',) <$> scopeRHS ctx'' rhs
         second (E.FnDef x' psrhss' :) <$> scopeDefs' isMutual ctx' ictx' ds
         where
-          scopeParam (ctx',pars') (ExpLevel  p) = do
-            (_, p') <- scopePat ctx' emptyScopingCtx p
-            let ctx'' = insertPatVars p' ctx'
-            return (ctx'', pars'++[ExpLevel p'])
-          scopeParam (ctx',pars') (TypeLevel a) = do
-            a' <- freshInternal a
-            let ctx'' = insertTVar a' ctx'
-            return (ctx'', pars'++[TypeLevel a'])
+          scopeFnDefParam (ctx', pars') = \case 
+            (ExpLevel  p) -> do
+              (_, p') <- scopePat ctx' emptyScopingCtx p
+              let ctx'' = insertPatVars p' ctx'
+              return (ctx'', pars'++[ExpLevel p'])
+            (TypeLevel a) -> do
+              a' <- freshInternal a
+              let ctx'' = insertTVar a' ctx'
+              return (ctx'', pars'++[TypeLevel a'])
+            (MultLevel φ) -> do
+              φ' <- freshInternal φ
+              let ctx'' = insertMVar φ' ctx'
+              return (ctx'', pars'++[MultLevel φ'])
       (E.TypeSig xs t : ds) -> do
         checkConflictingDefs $ map (\x -> ExpLevel $ E.VarPat (getSpan x) x) xs
         (ictx', xs') <- foldM (\(ictx'', xs'') x -> do 
@@ -380,23 +395,28 @@ scopeExp ctx = \case
     E.App s <$> scopeExp ctx e
             <*> forM args (\case 
                   ExpLevel  e -> ExpLevel  <$> scopeExp ctx e
-                  TypeLevel t -> TypeLevel <$> scopeType ctx t)
+                  TypeLevel t -> TypeLevel <$> scopeType ctx t
+                  MultLevel m -> MultLevel <$> scopeMultiplicity ctx m)
   E.Abs s pars m e -> do
-    checkConflictingDefs (map (bimap fst fst) pars)
-    let (ps, ts) = (bimap (map fst) (map fst) . partitionLevels) pars
-    (ctx',pars') <- foldM scopeTypedParam (ctx,[]) pars
-    E.Abs s pars' m <$> scopeExp ctx' e
+    checkConflictingDefs (map (mapLevel fst fst id) pars)
+    (ctx', pars') <- foldM scopeAbsParam (ctx,[]) pars
+    E.Abs s pars' <$> scopeMultiplicity ctx m <*> scopeExp ctx' e
     where
-      scopeTypedParam (ctx',pars') (ExpLevel  (p,t)) = do
-        (_, p') <- scopePat ctx' emptyScopingCtx p
-        t' <- scopeType ctx' t
-        let ctx'' = insertPatVars p' ctx'
-        return (ctx'', pars'++[ExpLevel (p',t')])
-      scopeTypedParam (ctx',pars') (TypeLevel (a,k)) = do
-        a' <- freshInternal a
-        k' <- scopeKind k
-        let ctx'' = insertTVar a' ctx'
-        return (ctx'', pars'++[TypeLevel (a',k')])
+      scopeAbsParam = \cases 
+        (ctx', pars') (ExpLevel  (p, t)) -> do
+          (_, p') <- scopePat ctx' emptyScopingCtx p
+          t' <- scopeType ctx' t
+          let ctx'' = insertPatVars p' ctx'
+          return (ctx'', pars' ++ [ExpLevel (p', t')])
+        (ctx', pars') (TypeLevel (a, k)) -> do
+          a' <- freshInternal a
+          k' <- scopeKind ctx k
+          let ctx'' = insertTVar a' ctx'
+          return (ctx'', pars' ++ [TypeLevel (a', k')])
+        (ctx', pars') (MultLevel φ) -> do
+          φ' <- freshInternal φ
+          let ctx'' = insertMVar φ' ctx'
+          return (ctx'', pars' ++ [MultLevel φ'])
   E.Pack s ts e ->
     E.Pack s <$> mapM (scopeType ctx) ts <*> scopeExp ctx e
   E.Asc s e t ->
@@ -440,7 +460,7 @@ scopePat ctx ictx = \case
     Nothing -> (ictx,) . E.VarPat s <$> freshInternal x
   E.PackPat s aks p -> do 
     as' <- mapM (freshInternal . fst) aks
-    ks' <- mapM (scopeKind     . snd) aks  
+    ks' <- mapM (scopeKind ctx . snd) aks  
     (ictx', p') <- scopePat (foldr insertTVar ctx as') ictx p
     return (ictx', E.PackPat s (zip as' ks') p')
   E.DConsPat s c ps -> do
@@ -455,7 +475,7 @@ scopePat ctx ictx = \case
     return (ictx'', E.InPat s p1' p2')
   E.TypeInPat s (a, k) p -> do
     a' <- freshInternal a
-    k' <- scopeKind k
+    k' <- scopeKind ctx k
     (ictx', p') <- scopePat (insertTVar a' ctx) ictx p
     return (ictx', E.TypeInPat s (a', k') p')
   E.ChoicePat s c p -> do
@@ -469,15 +489,16 @@ scopePat ctx ictx = \case
   p -> pure (ictx, p)
 
 -- | Check conflicting definitions for bindings.
-checkConflictingDefs :: [Level E.Pat Variable] -> Validation ()
-checkConflictingDefs (partitionLevels -> (ps, as)) = do
+checkConflictingDefs :: [Level E.Pat Variable Variable] -> Validation ()
+checkConflictingDefs (partitionLevels -> (ps, as, φs)) = do
   let evos = Map.unionsWith (++) (map patVarOccurs ps)
-      tvos = varOccurs as
-  forM_ (Map.assocs $ Map.union evos tvos) \(xa, ss) -> 
+      tvos = varOccurs TypeLevel as
+      mvos = varOccurs MultLevel φs
+  forM_ (Map.assocs $ Map.unions [evos, tvos, mvos]) \(xa, ss) -> 
     when (length ss > 1) $ insertError (ConflictingDefs (ss !! 1) xa ss)
   where
-    varOccurs = foldr (\a occs -> 
-        Map.insertWith (++) (TypeLevel $ external a) [getSpan a] occs) 
+    varOccurs lv = foldr (\v occs -> 
+        Map.insertWith (++) (lv $ external v) [getSpan v] occs) 
       Map.empty
     patVarOccurs = \case
       E.VarPat s x      -> Map.singleton (ExpLevel $ external x) [getSpan x]
@@ -491,10 +512,11 @@ checkConflictingDefs (partitionLevels -> (ps, as)) = do
 -- TODO: can we do this in one pass with scopePat?
 insertPatVars :: E.Pat -> ScopingCtx -> ScopingCtx
 insertPatVars p ctx = 
-  foldr (\case (ExpLevel  x) -> insertEVar x
-               (TypeLevel a) -> insertTVar a) ctx (patVars p)
+  foldr (\case ExpLevel  x -> insertEVar x
+               TypeLevel a -> insertTVar a
+               MultLevel φ -> insertMVar φ) ctx (patVars p)
   where
-    patVars :: E.Pat -> Set.Set (Level Variable Variable)
+    patVars :: E.Pat -> Set.Set (Level Variable Variable Variable)
     patVars = \case
       E.VarPat _ x      -> Set.singleton (ExpLevel x)
       E.PackPat _ aks p -> Set.fromList (map (TypeLevel . fst) aks) `Set.union` patVars p
@@ -517,14 +539,19 @@ scopeType ctx = \case
   T.Int s -> pure $ T.Int s
   T.Float s -> pure $ T.Float s
   T.Char s -> pure $ T.Char s
-  T.Arrow s m -> T.Arrow s <$> scopeMultiplicity m
-  T.Quant s p pk -> pure $ T.Quant s p pk
-  T.Void s k -> T.Void s <$> scopeKind k
+  T.Arrow s m -> T.Arrow s <$> scopeMultiplicity ctx m
+  T.Quant s p pk m -> pure $ T.Quant s p pk m
+  T.ForallM s m φs t -> do
+    φs' <- mapM freshInternal φs
+    T.ForallM s <$> scopeMultiplicity ctx m
+                <*> pure φs'
+                <*> scopeType (fromMVarList φs' `union` ctx) t
+  T.Void s k -> T.Void s <$> scopeKind ctx k
   T.Skip s -> pure $ T.Skip s
   T.End s p -> pure $ T.End s p
-  T.Message s m p -> T.Message s <$> scopeMultiplicity m <*> pure p
+  T.Message s m p -> T.Message s <$> scopeMultiplicity ctx m <*> pure p
   T.Choice  s m p ls -> do
-    m' <- scopeMultiplicity m
+    m' <- scopeMultiplicity ctx m
     let ds = foldr (\i -> Map.insertWith (++) i [i]) Map.empty ls
     forM_ ds \ids -> when (length ids > 1) $
       insertError (MultipleFieldDecls (getSpan (head ids)) ids)
@@ -541,7 +568,7 @@ scopeType ctx = \case
       Nothing -> T.Var s <$> freshInternal a
   T.Abs s (unzip -> (as, ks)) t -> do
     as' <- mapM freshInternal as
-    ks' <- mapM scopeKind ks
+    ks' <- mapM (scopeKind ctx) ks
     T.Abs s (zip as' ks') <$> scopeType (fromTVarList as' `union` ctx) t
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
@@ -551,19 +578,19 @@ scopeType ctx = \case
 scopeAndQuantifyType :: ScopingCtx -> T.ParsedType -> Validation T.ScopedType
 scopeAndQuantifyType ctx t = do
   t' <- scopeType ctx t
-  let fvt' = Set.toList (freeVars t' Set.\\ Set.fromList (toTVarList ctx))        
+  let fvt' = Set.toList (freeTypeVars t' Set.\\ Set.fromList (toTVarList ctx))        
   if null fvt'
     then return t'
     else do
       aks <- mapM (\a -> (a,) <$> freshKVar a) 
         $ List.sortBy (compare `on` getSpan) fvt'
-      scopeType ctx $ T.AppForall (getSpan t) aks t
+      scopeType ctx $ T.AppForall (getSpan t) (K.Un $ getSpan t) aks t
 
 -- | Scope a kind.
-scopeKind :: K.Kind -> Validation K.Kind
-scopeKind = \case
-    K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind k1 <*> scopeKind k2
-    K.Proper s m pk -> K.Proper s <$> scopeMultiplicity m  <*> scopePrekind pk
+scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
+scopeKind ctx = \case
+    K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind ctx k1 <*> scopeKind ctx k2
+    K.Proper s m pk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopePrekind pk
     K.Var s τ       -> K.Var s    <$> scopeKVar τ
   where
     scopePrekind (K.VarPK ψ) = do
@@ -575,9 +602,11 @@ scopeKind = \case
       return $ τ'{external = "τ" ++ show (internal τ')}
 
 -- | Scope a multiplicity.
-scopeMultiplicity :: K.Multiplicity -> Validation K.Multiplicity
-scopeMultiplicity = \case
-  K.VarM vl φ -> do
-    φ' <- freshInternal φ
-    return $ K.VarM vl φ'{external = "φ" ++ show (internal φ')}
+scopeMultiplicity :: ScopingCtx -> K.Multiplicity -> Validation K.Multiplicity
+scopeMultiplicity ctx = \case
+  K.Sup s lvφs -> K.Sup s . List.nub <$> foldrM (\(lv, φ) lvφs' -> do 
+    case lookupMVar φ ctx of 
+      Nothing -> throwE (MultVarOutOfScope (getSpan φ) φ)
+      Just φ' -> return $ (lv, φ{internal = internal φ'}) : lvφs')
+    [] lvφs
   m -> pure m

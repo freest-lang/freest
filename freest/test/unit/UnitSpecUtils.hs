@@ -38,7 +38,7 @@ mkTypeSpec testPaths testDesc failHandler testHandler = do
     scopeKindingTest ctx (t, k, m) = do
       (ctx,m') <- scopeModule' ctx m
       t' <- scopeType ctx t
-      k' <- mapM scopeKind k
+      k' <- mapM (scopeKind ctx) k
       return (t', k', m')
 
 errorsAreFailures, errorsAreSuccesses :: Source -> [Error] -> Expectation
@@ -67,7 +67,7 @@ mkEquivalenceSpec testPaths testDesc testFun = do
       (ctx',m') <- scopeModule' ctx m
       t' <- scopeType ctx' t
       u' <- scopeType ctx' u
-      k' <- scopeKind k
+      k' <- scopeKind ctx' k
       return (t', u', k', m')
 
 runSynthOrCheck :: M.ScopedModule -> TU.ScopedType -> Maybe K.Kind -> Either [Error] TK.KindedType

@@ -3,7 +3,7 @@ module FiniteStreamEnd where
 type FiniteStream : 1S
 type FiniteStream = &{Done: Skip, More: ?Int;FiniteStream}
 
-ints : forall (c : 1S). Int -> Dual FiniteStream;c -> c
+ints : forall (c : 1S) -> Int -> Dual FiniteStream;c -> c
 ints @c n c = 
     if n < 0
     then select Done c
@@ -25,5 +25,5 @@ foldServer sum c =
 main : Int
 main = 
     let (s, c) = channel @Fold in
-    fork (\(_ : ()) 1-> foldServer 0 s);
+    fork (\(_ : ()) -1-> foldServer 0 s);
     foldClient 4 c

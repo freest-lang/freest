@@ -7,6 +7,7 @@ module Syntax.Type.Unkinded
   , pattern Char
   , pattern Arrow
   , pattern Quant
+  , pattern ForallM
   , pattern Void
   , pattern Skip
   , pattern End
@@ -54,6 +55,7 @@ module Syntax.Type.Unkinded
   , T.isAppQuant
   , T.isAppDName
   , T.fromVariable
+  , T.existsMult
   )
 where
 
@@ -69,7 +71,6 @@ type ParsedType = T.Type Parsed
 type instance T.XType Scoped = Void
 
 type ScopedType = T.Type Scoped
-
 
 type Unkinded x = (T.XType x ~ Void)
 
@@ -89,9 +90,13 @@ pattern Arrow :: Unkinded x => Span -> K.Multiplicity -> T.Type x
 pattern Arrow s m <- T.Arrow s _ m
   where Arrow s m = T.Arrow s void m
 
-pattern Quant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> T.Type x
-pattern Quant s p pk <- T.Quant s _ p pk
-  where Quant s p pk = T.Quant s void p pk
+pattern Quant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> T.Type x
+pattern Quant s p pk m <- T.Quant s _ p pk m
+  where Quant s p pk m = T.Quant s void p pk m
+
+pattern ForallM :: Unkinded x => Span -> K.Multiplicity -> [Variable] -> T.Type x -> T.Type x
+pattern ForallM s m φs t <- T.ForallM s _ m φs t
+  where ForallM s m φs t =  T.ForallM s void m φs t
 
 pattern Void :: Unkinded x => Span -> K.Kind -> T.Type x
 pattern Void s k <- T.Void s _ k
@@ -141,13 +146,13 @@ pattern App :: Unkinded x => Span -> T.Type x -> [T.Type x] -> T.Type x
 pattern App s t ts <- T.App s _ t ts
   where App s t ts = T.App s void t ts
 
-pattern AppQuant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
-pattern AppQuant s p pk aks t <- T.AppQuant s _ _ _ p pk aks t
-  where AppQuant s p pk aks t  = T.AppQuant s void void void p pk aks t
+pattern AppQuant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
+pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
+  where AppQuant s p pk m aks t  = T.AppQuant s void void void p pk m aks t
 
-pattern AppForall :: Unkinded x => Span -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
-pattern AppForall s aks t <- T.AppForall s _ _ _ aks t
-  where AppForall s aks t =  T.AppForall s void void void aks t
+pattern AppForall :: Unkinded x => Span -> K.Multiplicity -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
+pattern AppForall s m aks t <- T.AppForall s _ _ _ m aks t
+  where AppForall s m aks t =  T.AppForall s void void void m aks t
 
 pattern AppExists :: Unkinded x => Span -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
 pattern AppExists s aks t <- T.AppExists s _ _ _ aks t

@@ -1,6 +1,6 @@
 module NegativePats where
 
-foo : &{A: ??(a : *T). ?Bool; ?a, B: Skip} -> ()
-foo (&A (??a. ?True ; ?x; _)) = ()
-foo (&A (??a. ?False; ?x; _)) = ()
+foo : &{A: ?type (a : *T). ?Bool; ?a, B: Skip} -> ()
+foo (&A (?@(a : *T). ?True ; ?x; _)) = ()
+foo (&A (?@(a : *T). ?False; ?x; _)) = ()
 foo (&B _)             = ()

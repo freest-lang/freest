@@ -32,14 +32,19 @@ import Debug.Trace ( traceM )
 
 -- | The errors that can be found in a FreeST program.
 data Error
-  = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
-    K.Multiplicity K.Multiplicity
+  = ArrowMultMismatch 
+      Span 
+      (Either Variable E.KindedExp) 
+      Int
+      K.Multiplicity 
+      K.Multiplicity
   | CannotInferHigherKindedTypeApp Span K.Kind
+  | CannotSatisfyMultConstraint Span K.Multiplicity K.Multiplicity
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
   | CannotSynthesiseSendType Span
-  | ConflictingDefs Span (Level String String) [Span]
+  | ConflictingDefs Span (Level String String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
   | ExpectsTooManyArgs Span TK.KindedType Int Int
@@ -53,7 +58,12 @@ data Error
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) TK.KindedType (Either Variable E.KindedExp)
+  | LinConsumedInUnFun 
+      Span 
+      (Either Variable Identifier) 
+      TK.KindedType 
+      Span 
+      K.Multiplicity
   | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
     (Either (Either Variable E.Pat) E.KindedExp)
   | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
@@ -62,6 +72,7 @@ data Error
   | MultipleKindSigs Span [Identifier]
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
+  | MultVarOutOfScope Span Variable
   | NonLinPat Span E.Pat TK.KindedType
   | ParseError Span (Token, [String])
   | PartiallyAppliedSelect Span Identifier
@@ -78,12 +89,19 @@ data Error
   | TypeMismatchSendType Span TK.KindedType
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind) (Level E.KindedExp TK.KindedType)
-  | UnexpectedParam Span Int (Level TK.KindedType K.Kind)
-    (Level E.Pat Variable)
+  | UnexpectedArg 
+      Span
+      Int
+      (Level (Maybe TK.KindedType) K.Kind ())
+      (Level E.KindedExp TK.KindedType K.Multiplicity)
+  | UnexpectedParam Span Int (Level TK.KindedType K.Kind ()) (Level () () ())
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  | PolymorphicTypeRecursion Span Identifier [Variable] (Either K.Kind TK.KindedType)
+  | PolymorphicTypeRecursion
+      Span
+      Identifier
+      [Variable]
+      (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
 
 -- | Errors can be tracked to the source code.
@@ -93,6 +111,7 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
+    CannotSatisfyMultConstraint s _ _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
@@ -113,12 +132,13 @@ instance Located Error where
     LexicalError s _ -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
-    LinConsumedInUnFun s _ _ _ -> s
+    LinConsumedInUnFun s _ _ _ _ -> s
     MultipleConsDecls s _ -> s
     MultipleFieldDecls s _ -> s
     MultipleKindSigs s _ -> s
     MultipleTypeDecls s _ -> s
     MultipleVarDecls s _ ->  s
+    MultVarOutOfScope s _ -> s
     NonLinPat s _ _ -> s
     ParseError s _ -> s
     PrekindMismatch s _ _ _ -> s
@@ -202,27 +222,11 @@ makeError :: Located a => Source -> a -> String -> String
 makeError src (getSpan -> s) msg =
   errorHeader s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
 
-prettyKind :: K.Kind -> String
-prettyKind = \case
-  K.Proper _ m pk -> prettyMulti m ++ prettyPre pk
-  K.Arrow _ k1 k2 -> prettyKind k1 ++ " -> " ++ prettyKind k2
-  K.Var _ τ       -> "kind variable " ++ external τ
-  where
-    prettyMulti = \case
-      K.Lin -> "a linear"
-      K.Un -> "an unrestricted"
-      K.VarM _ φ -> "a multiplicity variable " ++ external φ
-    prettyPre = \case
-      K.Top -> ""
-      K.Session -> " session"
-      K.Channel -> " channel"
-      K.VarPK ψ -> " prekind variable " ++ external ψ
-
 toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m m' -> makeError src s
-    ("Expected " ++ showMult m ++ " function, but got " ++ showMult m'
-      ++ " one instead"
+    ("Expected " ++ showMult m ++ ", but got " ++ showMult m'
+      ++ " instead"
       ++ (if i > 0
           then " (on the " ++ ordinal (i + 1) ++ " parameter of this "
             ++ (case xe of Left _ -> "function definition" -- should not occur
@@ -230,12 +234,15 @@ toMessage src = \case
           else ""))
     where
       showMult = \case
-        K.Lin    -> "a linear"
-        K.Un     -> "an unrestricted"
-        K.VarM _ x -> "a multiplicity" ++ external x
+        K.Lin{}   -> "a linear function"
+        K.Un{}    -> "an unrestricted function"
+        m@K.Sup{} -> "a function with multiplicity " ++ bt (unparse m)
   CannotInferHigherKindedTypeApp s k -> makeError src s
     ("Cannot infer type application for a type of kind " ++ bt (unparse k))
     ++ "Please provide all type arguments before this one"
+  CannotSatisfyMultConstraint s m1 m2 -> makeError src s
+    "Cannot satisfy multiplicity constraints"
+    ++ "(Cannot unify " ++ bt (unparse m1) ++ " with " ++ bt (unparse m2) ++ ")"
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesiseReceiveType s -> makeError src s
@@ -246,8 +253,9 @@ toMessage src = \case
     "Could not infer a type for this `sendType` expression"
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
-      ExpLevel x -> "variable " ++ x
-      TypeLevel a -> "type variable " ++ bt a)
+      ExpLevel x -> "variable " ++ bt x
+      TypeLevel a -> "type variable " ++ bt a
+      MultLevel φ -> "multiplicity variable " ++ bt φ)
     ++ "Conflicting definitions at:\n" ++ unlines (map show ss)
   ConsOutOfScope s i -> makeError src s
     ("Constructor out of scope: " ++ bt (show i))
@@ -301,15 +309,24 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
-    ("Linear variable " ++ prettyVarCons xi ++ " was not consumed")
-  LinConsumedInUnFun s xi t fe -> errorHeader s ++ "\n" ++
-    ("Linear " ++ prettyVarCons xi
-      ++ " of type " ++ unparse t ++ ", bound at\n"
+    ("Linear " ++ prettyVarCons xi ++ " was not consumed")
+  LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
+      ++ ((case m' of 
+        K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+      ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
-      ++ " was consumed in body of an unrestricted function\n"
-      ++ snippet src fe True)
+      ++ " was consumed in body of "
+      ++ (case m of 
+        K.Un{} -> "an unrestricted function"
+        _      -> "a function with multiplicity " ++ bt (unparse m))
+      ++ "\n" ++ snippet src fe True)
     ++ "(This would allow duplicating or discarding it. "
-    ++ "Consider using a linear function instead.)"
+    ++ "Consider using a restricted function instead.)"
+    where 
+      m' = case TK.kindOf t of 
+        K.Proper _ m _ -> m
+        _ -> internalError "Non-proper type for expression variable"
   MultipleConsDecls s is -> makeError src s
     ("Multiple declarations of constructor " ++ bt (show (head is)))
     ++ "Duplicate declarations at:\n"
@@ -330,8 +347,13 @@ toMessage src = \case
     ("Multiple declarations of variable " ++ bt (external (head xs)))
     ++ "Duplicate declarations at:\n"
     ++ unlines (map (("  " ++) . show . getSpan) xs)
+  MultVarOutOfScope s φ -> makeError src s
+    ("Multiplicity variable out of scope: " ++ external φ)
   NonLinPat s p t -> makeError src s
-    ("Non-linear pattern for linear type " ++ bt (unparse t))
+    ("Non-linear pattern for" ++ case TK.kindOf t of
+      K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
+      K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
+      _ -> internalError "Pattern with non-proper type")
   ParseError s (_, [x]) -> makeError src s
     "Parse error"
     ++ "(Expected " ++ x ++ ")"
@@ -396,21 +418,28 @@ toMessage src = \case
                     m -> "a " ++ show m ++ "-tuple pattern"))
   TypeVarOutOfScope s a -> makeError src s
     ("Type variable out of scope: " ++ external a)
-  UnexpectedArg s n a1 a2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
-    (case (a1, a2) of
-      (TypeLevel k, ExpLevel e) ->
-        "Expected a type argument of kind " ++ bt (unparse k)
-        ++ ", but got a value argument"
-      (ExpLevel  t, TypeLevel u) ->
-        "Expected a value argument "
-        ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t
-        ++ ", but got type argument")
+  UnexpectedArg s n arg1 arg2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
+    ("Expected " ++ expected ++ ", but got " ++ got)
+    where
+      expected = case arg1 of
+        ExpLevel mt -> "a value argument" ++ maybe "" ((" of type "++) . bt . unparse) mt
+        TypeLevel k -> "a type argument of kind " ++ bt (unparse k)
+        MultLevel _ -> "a multiplicity argument"
+      got = case arg2 of
+        ExpLevel _ -> "a value argument"
+        TypeLevel _ -> "a type argument"
+        MultLevel _ -> "a multiplicity argument"
   UnexpectedParam s n p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
-    (case (p1, p2) of
-      (TypeLevel k, ExpLevel p ) ->
-        "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
-      (ExpLevel  t, TypeLevel a) ->
-        "Expected a pattern of type " ++ bt (unparse t) ++ ", but got a type parameter")
+    ("Expected " ++ expected ++ ", but got " ++ got)
+    where
+      expected = case p1 of
+        ExpLevel t -> "a pattern of type " ++ bt (unparse t)
+        TypeLevel k -> "a type parameter of kind " ++ bt (unparse k)
+        MultLevel _ -> "a multiplicity parameter"
+      got = case p2 of
+        ExpLevel _ -> "a pattern"
+        TypeLevel _ -> "a type parameter"
+        MultLevel _ -> "a multiplicity parameter"
   UnsupportedError s msg1 msg2 -> makeError src s
     ("Unsupported feature: " ++ msg1)
     ++ msg2

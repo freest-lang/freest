@@ -26,7 +26,7 @@ intRef x = forkWith (handle x)
       &Read  s -> sendAndWait x s; handle x r
 
 type MCounter : *T
-type MCounter = exists (a : *T) . (() -> a, a -> Int, a -> ())
+type MCounter = (exists (a : *T), (() -> a, a -> Int, a -> ()))
 
 mCounterADT : MCounter
 mCounterADT = (@IntRef, ( \(_ : ())     -> intRef 0                -- new

@@ -7,7 +7,7 @@ f : c -> Int
 f c = f @c c
 
 -- explicit type abstraction
-trueC : forall (a : *T). a -> a -> a
+trueC : forall (a : *T) -> a -> a -> a
 trueC = \@a (a : a) (b : a) -> a
 
 main : Int 

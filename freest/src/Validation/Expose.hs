@@ -36,7 +36,7 @@ function :: M.KindedModule -> E.KindedExp -> T.KindedType -> Validation T.Kinded
 function mod e t = do
   case normalise mod t of
     t'@(T.AppArrow s m u v) -> pure t'
-    t'@(T.AppForall s aks u) -> pure t'
+    t'@(T.AppForall s m aks u) -> pure t'
     _ -> throwE (ExposeError (getSpan e) (Right e) "a function" t)
 
 arrow :: M.KindedModule -> E.KindedExp -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
@@ -90,10 +90,10 @@ message :: M.KindedModule -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedT
         -> Validation (T.KindedType, T.KindedType)
 message mod p pe t = do
   case normalise mod t of
-    T.AppMessage s K.Lin p' u                    | p == p' -> return (u, T.Skip s)
-    t'@(T.AppMessage s K.Un  p' u)               | p == p' -> return (u, t')
-    T.AppSemi _    (T.AppMessage _ K.Lin p' u) v | p == p' -> return (u, v)
-    T.AppSemi _ t'@(T.AppMessage _ K.Un  p' u) v | p == p' -> return (u, t')
+    T.AppMessage s K.Lin{} p' u                    | p == p' -> return (u, T.Skip s)
+    t'@(T.AppMessage s K.Un{}  p' u)               | p == p' -> return (u, t')
+    T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> return (u, v)
+    T.AppSemi _ t'@(T.AppMessage _ K.Un{}  p' u) v | p == p' -> return (u, t')
     _ -> throwE (ExposeError (getSpan pe) pe msg t)
   where msg = "an " ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
 
