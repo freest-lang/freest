@@ -62,7 +62,6 @@ import Data.Function ( on )
 import Data.List ( intercalate, sort, sortBy )
 import Data.Map.Strict qualified as M
 import Data.Void (Void)
-import GHC.Stack (HasCallStack)
 
 type family XType x
 
@@ -127,7 +126,7 @@ pattern AppExists :: Span -> XType x -> XType x -> XType x -> [(Variable, K.Kind
 pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out K.Top _ aks t
   where AppExists s x1 x2 x3 aks t =  AppQuant s x1 x2 x3 Out K.Top existsMult aks t
 
-existsMult :: HasCallStack => K.Multiplicity
+existsMult :: K.Multiplicity
 existsMult = internalError "attempted to evaluate multiplicity of an `exists`"
 
 pattern AppArrow :: Span -> XType x -> XType x -> K.Multiplicity -> Type x -> Type x -> Type x

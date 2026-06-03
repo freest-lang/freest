@@ -42,7 +42,7 @@ testDir baseDir invalidTest = do
 testInvalid :: String -> FilePath -> Spec
 testInvalid test file = do
   b <- runIO $ hSilence [stdout, stderr] $ catches
-    (  freest defaultRunOpts{file = test}
+    (  freest defaultRunOpts{filePath = Just test}
     >> return (Just errorExpected)
     )
     [ Handler (\(e :: ExitCode) -> return $ exitProgram e)

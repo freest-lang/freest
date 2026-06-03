@@ -3,16 +3,14 @@ Module      :  UI.Error
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Errors. A work in progress.
+Errors. A work in progress -- Life is a work in progress
 -}
-{-# LANGUAGE LambdaCase #-}
-
 
 module UI.Error
   ( Error(..)
   , Source
   , toMessage
-  , showErrors
+  , showErrors -- for testing
   , printErrors
   )
 where
@@ -26,11 +24,12 @@ import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Utils
 
-import Data.List (intercalate,nub)
+import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
-import Syntax.Expression
 import Data.List qualified as List
 import Data.Char qualified as Char
+import Data.Maybe ( fromMaybe )
+import Debug.Trace ( traceM )
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -166,15 +165,24 @@ instance Located Error where
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
+-- | The source code of a FreeST program, represented as a mapping from file paths
+-- to the lines of code in those files. This is used to extract snippets of code
+-- to display in error messages.
+-- The list of lines of code may be empty, when parsing from an interactive prompt.
 type Source = Map.Map FilePath [String]
 
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
-  take (ec - sc) . drop (sc - 1) $ (src Map.! fp) !! (sl - 1)
+  take (ec - sc) . drop (sc - 1) $ lookupSrc src fp !! (sl - 1)
 
 getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
-  (src Map.! fp) !! (sl - 1)
+  lookupSrc src fp !! (sl - 1)
+
+lookupSrc :: Source -> FilePath -> [String]
+lookupSrc src fp = fromMaybe
+  (internalError $ "UI.Error.lookupSrc: file not in source map: " ++ fp)
+  (src Map.!? fp)
 
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
@@ -188,8 +196,9 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
   where
     sep = " | "
     n = length (show el)
-    srcf = src Map.! fp
-    l = srcf !! (min (length srcf) sl - 1)
+    srcf = lookupSrc src fp
+    l | null srcf = []
+      | otherwise = srcf !! (min (length srcf) sl - 1)
     spaces x = replicate x ' '
     carets x = replicate x '^'
 
@@ -199,7 +208,7 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
   where
     n = length (show el)
     sep = " | "
-    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ src Map.! fp
+    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ lookupSrc src fp
     spaces x = replicate x ' '
     lineCarets i li =
       rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep
@@ -279,8 +288,7 @@ toMessage src = \case
     ++ thirdPerson (m - n) ++ ")"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
-    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to "
-    ++ thirdPerson (m - n) ++ ")"
+    ++ "(A type of kind " ++ bt (unparse k) ++ " cannot be applied to further arguments)"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
   KindMismatch s k1 t -> makeError src s
@@ -354,7 +362,7 @@ toMessage src = \case
       _ -> internalError "Pattern with non-proper type")
   ParseError s (_, [x]) -> makeError src s
     "Parse error"
-    ++ "(" ++ x ++ " expected)"
+    ++ "(Expected " ++ x ++ ")"
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"

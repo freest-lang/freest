@@ -33,13 +33,14 @@ import Control.Monad.State
 import Data.Map.Strict qualified as Map
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
-import GHC.Stack (HasCallStack)
 
-equivalent :: HasCallStack => M.KindedModule -> T.KindedType -> T.KindedType -> Bool
+equivalent :: M.KindedModule -> T.KindedType -> T.KindedType -> Bool
 equivalent mod t u = t == u || bisimilar ps xs ys
   where (ps, [xs, ys]) = fromTypes mod [t, u]
 
-fromTypes :: HasCallStack => M.KindedModule -> [T.KindedType] -> (Productions, [Word])
+-- TODO: this function generates productions for unreachable nonterminals,
+-- for example as in type T with 'type T = Int'.
+fromTypes :: M.KindedModule -> [T.KindedType] -> (Productions, [Word])
 fromTypes mod ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
@@ -47,12 +48,12 @@ fromTypes mod ts =
   where
     (xss, s) = runState (mapM word ts) (initial mod)
 
-word :: HasCallStack => T.KindedType -> TransState Word
+word :: T.KindedType -> TransState Word
 word t = wasVisited t >>= \case
   Just y -> pure [y]
   Nothing -> word' t
 
-word' :: HasCallStack => T.KindedType -> TransState Word
+word' :: T.KindedType -> TransState Word
 word' = \case
   -- W-Skip
   T.Skip{} -> pure []
