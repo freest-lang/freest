@@ -12,7 +12,6 @@ module Interpreter.Eval
 
 {-
 TODO:
-- Improve error reporting
 - Implement channels for case: check https://github.com/freest-lang/freest3/blob/dev/FreeST/src/Interpreter/Eval.hs, evalCase
 - Do we need two environments, a global and a local?
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
@@ -36,6 +35,7 @@ import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool, re
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
+import Utils (internalError)
 
 type GlobalEnv = Env
 type LocalEnv = Env
@@ -47,7 +47,7 @@ type Alternative = (E.Pat, E.KindedRHS)
 
 -- | Choose the correct guard via evaluation
 chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.KindedExp, E.KindedExp)] -> IO E.KindedExp
-chooseGuard _ [] = error "Non-exaustive guards!"
+chooseGuard _ [] = internalError "Non-exaustive guards!"
 chooseGuard env ((guard, exp):guards) = do
   val <- eval env guard
   if fstToHsBool val then return exp else chooseGuard env guards
@@ -96,7 +96,7 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
     val <- eval (global, whereBindings `union` local) exp
     let patternMatchRes = resolvePatternMatching val pat
     bindings <- case patternMatchRes of
-      Left _ -> error "Pattern matching failed!"
+      Left _ -> internalError "Pattern matching failed!"
       Right bindings -> return bindings
     remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
     return $ bindings `union` remainingBindings
@@ -135,7 +135,7 @@ envLookup (global, local) var =
     Just val -> val
     Nothing -> case Data.Map.lookup var global of
       Just val -> val
-      Nothing -> error ("Variable `" ++ show var ++ "` not found in the context. This should not happen. This is a bug in the compiler")
+      Nothing -> internalError $ "Variable `" ++ show var ++ "` not found in the context."
 
 -- | Lookup a variable (as a string) in both local and global context, in that order
 envLookup' :: (GlobalEnv, LocalEnv) -> String -> Maybe Value
@@ -161,7 +161,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
   if numParams > numArgs then do
     -- extract bindings through pattern matching, using only the necessary parameters
     case zipWithM resolvePatternMatching args (take numArgs pats) of
-      Left _ -> error "Pattern matching failed!"
+      Left _ -> internalError "Pattern matching failed!"
       Right bindings ->
         -- create a new closure with the remaining parameters
         return $ VClosure (drop (numParams - numArgs) pats) body $ unions bindings `union` env
@@ -170,7 +170,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
   else do
     -- extract bindings through pattern matching, using only the necessary arguments
     case zipWithM resolvePatternMatching (take numParams args) pats of
-      Left _ -> error "Pattern matching failed!"
+      Left _ -> internalError "Pattern matching failed!"
       Right bindings -> do
         -- evaluate application of closure against arguments
         func <- eval (global, unions bindings `union` env) body
@@ -188,19 +188,19 @@ handleApplication (global, local) VFork args =
     [VChan chan] -> do
       chan2 <- send (VLabel label) chan
       return $ VChan chan2
-    _ -> error $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!" -}
+    _ -> internalError $ "Too many arguments applied to Select " ++ label ++ "! Type checking failed!" -}
 {- handleApplication _ VSendType args =
   case args of
     [VChan chan] -> do
       chan2 <- send VUnit chan
       return $ VChan chan2
-    _ -> error "Too many arguments applied to SendType! Type checking failed!" -}
+    _ -> internalError "Too many arguments applied to SendType! Type checking failed!" -}
 {- handleApplication _ VRecvType args =
   case args of
     [VChan chan] -> do
       (_, chan2) <- receive chan
       return $ VChan chan2
-    _ -> error "Too many arguments applied to ReceiveType! Type checking failed!" -}
+    _ -> internalError "Too many arguments applied to ReceiveType! Type checking failed!" -}
 
 -- MAIN FUNCTIONS
 
@@ -244,7 +244,7 @@ eval (global, local) (E.Semi span exp1 exp2) =
 eval (global, local) (E.Case _ exp alternatives) = do
   val <- eval (global, local) exp
   case chooseCase alternatives val of
-    Nothing -> error "Non-exaustive patterns in case alternatives"
+    Nothing -> internalError "Non-exaustive patterns in case alternatives"
     Just (alternative, bindings) -> do
       (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
       whereBindings <- case whereDecls of
