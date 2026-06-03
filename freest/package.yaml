@@ -11,6 +11,7 @@ category:   Session types
 default-extensions:
   - BangPatterns
   - BlockArguments
+  - DuplicateRecordFields
   - FlexibleContexts
   - FlexibleInstances
   - ImportQualifiedPost
@@ -25,6 +26,7 @@ default-extensions:
   - ViewPatterns
 
 data-dir: data
+
 data-files:
   - StandardLib/Prelude.fst
 
@@ -40,6 +42,7 @@ dependencies:
   - filepath >= 1.4.2
   - mtl >= 2.2.1
   - optparse-applicative >= 0.16.1.0
+  - repline
   - sgbisim
   - transformers >= 0.5.6.2
 
@@ -50,13 +53,14 @@ library:
     - happy
   exposed-modules:
     - FreeST
-    - Load  # for FreeSTi
+    - Load
     - Parser.LexerUtils
     - Parser.Parser
     - Parser.Scoping
     - Parser.Unparser
-    - Parser.Lexer  # for FreeSTi
+    - Parser.Lexer
     - Paths_freest
+    - REPL
     - Syntax.Base
     - Syntax.Expression
     - Syntax.Kind
@@ -76,17 +80,16 @@ library:
     - Validation.Substitution
     - Validation.TypeEquivalence
     - Validation.Typing
+
 executables:
   freest:
-    main:        FreeST.hs
-    source-dirs: src
-    build-tools:
-      - alex
-      - happy
-    ghc-options: 
-      - -main-is FreeST 
-      - -threaded 
-      - -rtsopts 
+    main:        Main.hs
+    source-dirs: app
+    dependencies:
+      - freest
+    ghc-options:
+      - -threaded
+      - -rtsopts
       - -with-rtsopts=-N
 
 tests:
