@@ -12,6 +12,7 @@ module Interpreter.Eval
 
 {-
 TODO:
+- Improve error reporting
 - Implement channels for case: check https://github.com/freest-lang/freest3/blob/dev/FreeST/src/Interpreter/Eval.hs, evalCase
 - Do we need two environments, a global and a local?
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
@@ -55,7 +56,7 @@ chooseGuard env ((guard, exp):guards) = do
 chooseCase :: [Alternative] -> Value -> Maybe (Alternative, Env)
 chooseCase [] _ = Nothing
 chooseCase ((pat, rhs) : alternatives) val =
-  case resolvePatternMatching pat val of
+  case resolvePatternMatching val pat of
     Left _ -> chooseCase alternatives val
     Right bindings -> Just ((pat, rhs), bindings)
 
@@ -93,7 +94,7 @@ collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
       Just whereDecls' -> collectLetDecls (global, local) whereDecls'
       Nothing -> return empty
     val <- eval (global, whereBindings `union` local) exp
-    let patternMatchRes = resolvePatternMatching pat val
+    let patternMatchRes = resolvePatternMatching val pat
     bindings <- case patternMatchRes of
       Left _ -> error "Pattern matching failed!"
       Right bindings -> return bindings
@@ -159,7 +160,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
   -- if there's not enough arguments, partially apply
   if numParams > numArgs then do
     -- extract bindings through pattern matching, using only the necessary parameters
-    case zipWithM resolvePatternMatching (take numArgs pats) args of
+    case zipWithM resolvePatternMatching args (take numArgs pats) of
       Left _ -> error "Pattern matching failed!"
       Right bindings ->
         -- create a new closure with the remaining parameters
@@ -168,7 +169,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
   -- if numParams <= numArgs, evaluate app, return app against remaining arguments
   else do
     -- extract bindings through pattern matching, using only the necessary arguments
-    case zipWithM resolvePatternMatching pats (take numParams args) of
+    case zipWithM resolvePatternMatching (take numParams args) pats of
       Left _ -> error "Pattern matching failed!"
       Right bindings -> do
         -- evaluate application of closure against arguments

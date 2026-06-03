@@ -13,6 +13,7 @@ module Interpreter.PatternMatching
 
 {-
 TODO:
+- Change resolvePatternMatching, switch value argument with Pattern
 - Improve pattern matching of functions, to also accept session-type patterns 
 - Implement more efficient compilation of function with pattern matching to closure with cases (check The Implementation of Functional Programming Languages, by Simon Peyton Jones)
 -}
@@ -32,30 +33,30 @@ import GHC.IO (unsafePerformIO)
 -- HANDLING PATTERN MATCHING
 
 -- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
-resolvePatternMatching :: E.Pat -> Value -> Either (E.Pat, Value) Env
-resolvePatternMatching (E.IntPat s i) val =
+resolvePatternMatching :: Value -> E.Pat -> Either (E.Pat, Value) Env
+resolvePatternMatching val (E.IntPat s i) =
   case val of
     VInt i' -> if i == i' then Right empty else Left (E.IntPat s i, val)
     _ -> Left (E.IntPat s i, val)
-resolvePatternMatching (E.FloatPat s f) val =
+resolvePatternMatching val (E.FloatPat s f) =
   case val of
     VFloat f' -> if f == f' then Right empty else Left (E.FloatPat s f, val)
     _ -> Left (E.FloatPat s f, val)
-resolvePatternMatching (E.CharPat s c) val =
+resolvePatternMatching val (E.CharPat s c) =
   case val of
     VChar c' -> if c == c' then Right empty else Left (E.CharPat s c, val)
     otherVal -> Left (E.CharPat s c, otherVal)
-resolvePatternMatching (E.WildPat _ _) _ = Right empty
-resolvePatternMatching (E.VarPat _ var) val = Right $ singleton var val
-resolvePatternMatching (E.PackPat s vars pat) val =
+resolvePatternMatching _ (E.WildPat _ _) = Right empty
+resolvePatternMatching val (E.VarPat _ var) = Right $ singleton var val
+resolvePatternMatching val (E.PackPat s vars pat) =
   case val of
     VPack _ exp -> do
-      let binding = resolvePatternMatching pat exp
+      let binding = resolvePatternMatching exp pat
       case binding of
         Left _ -> Left (pat, exp)
         Right bindings -> Right bindings
     _ -> Left (E.PackPat s vars pat, val)
-resolvePatternMatching (E.DConsPat s iden pats) val = do
+resolvePatternMatching val (E.DConsPat s iden pats) = do
   let (B.Identifier s' patIden) = iden
   case val of
     VCons iden' vals' -> do
@@ -63,7 +64,7 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
       if patIden == iden' then do
         -- TODO: check if arity of data constructors matches number of patters/arguments
         -- get results from pattern matching underlying patterns and terms
-        let binding = zipWithM resolvePatternMatching pats vals'
+        let binding = zipWithM resolvePatternMatching vals' pats
         case binding of
           Left _ -> Left (E.DConsPat s iden pats, val)
           Right bindings -> Right $ unions bindings
@@ -78,11 +79,11 @@ resolvePatternMatching (E.DConsPat s iden pats) val = do
       else Left (E.DConsPat s iden pats, val) -}
     _ -> Left (E.DConsPat s iden pats, val)
 -- TODO: Do we need to check contents of channel? getChanContents to get contents, check if head is VUnit? Label?
-resolvePatternMatching (E.WaitPat s) val =
+resolvePatternMatching val (E.WaitPat s) =
   case val of
     VChan c -> Right empty
     _ -> Left (E.WaitPat s, val)
-resolvePatternMatching (E.InPat s pat1 pat2) val = Left (E.InPat s pat1 pat2, val)
+resolvePatternMatching val (E.InPat s pat1 pat2) = Left (E.InPat s pat1 pat2, val)
   {- do
   case val of
     VChan c -> do
@@ -99,11 +100,11 @@ resolvePatternMatching (E.InPat s pat1 pat2) val = Left (E.InPat s pat1 pat2, va
             Left _ -> Left (E.InPat s pat1 pat2, val)
             Right bindings' -> Right $ union bindings bindings'
     _ -> Left (E.InPat s pat1 pat2, val) -}
-resolvePatternMatching (E.ChoicePat s iden pat) val = Left (E.ChoicePat s iden pat, val)
+resolvePatternMatching val (E.ChoicePat s iden pat) = Left (E.ChoicePat s iden pat, val)
 -- check against select 
-resolvePatternMatching (E.TypeInPat s (var, kind) pat) val = Left (E.TypeInPat s (var, kind) pat, val)
-resolvePatternMatching (E.AsPat s var pat) val = do
-  let binding = resolvePatternMatching pat val
+resolvePatternMatching val (E.TypeInPat s (var, kind) pat) = Left (E.TypeInPat s (var, kind) pat, val)
+resolvePatternMatching val (E.AsPat s var pat) = do
+  let binding = resolvePatternMatching val pat
   case binding of
     Left _ -> Left (E.AsPat s var pat, val)
     Right bindings -> Right $ insert var val  bindings
