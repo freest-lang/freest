@@ -12,6 +12,7 @@ module Interpreter.Eval
 
 {-
 TODO:
+- Implement channels for case: check https://github.com/freest-lang/freest3/blob/dev/FreeST/src/Interpreter/Eval.hs, evalCase
 - Do we need two environments, a global and a local?
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
 - Handling of undefined is correct?
