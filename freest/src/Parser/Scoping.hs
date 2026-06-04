@@ -166,6 +166,12 @@ insertDId  i@(Identifier _ s) = first $ Map.insert (DId  s) i
 insertCId  i@(Identifier _ s) = first $ Map.insert (CId  s) i
 insertKSig i@(Identifier _ s) = first $ Map.insert (KSig s) i
 
+tIdElems, dIdElems, cIdElems, kSigElems :: ScopingCtx -> [Identifier]
+tIdElems  = Map.elems . Map.filterWithKey (\cases TId{}  _ -> True; _ _ -> False) . fst
+dIdElems  = Map.elems . Map.filterWithKey (\cases DId{}  _ -> True; _ _ -> False) . fst
+cIdElems  = Map.elems . Map.filterWithKey (\cases CId{}  _ -> True; _ _ -> False) . fst
+kSigElems = Map.elems . Map.filterWithKey (\cases KSig{} _ -> True; _ _ -> False) . fst
+
 -- | Run a scoping procedure on a given value, returning either:
 -- 
 --     * a list of errors, if any was encountered;
@@ -218,8 +224,9 @@ scopeModule ctx m = snd <$> scopeModule' ctx m
 scopeKindSigs :: ScopingCtx -> M.KindSigs Parsed 
                  -> Validation (ScopingCtx, M.KindSigs Scoped)
 scopeKindSigs ctx kss = do
-  let (es, ctx') = foldr scopeKindSig (Map.empty, ctx) kss
-  forM_ es (\is -> when (length is > 1) do
+  let es = Map.fromList [(i, [i]) | i <- kSigElems ctx]
+      (es', ctx') = foldr scopeKindSig (es, ctx) kss
+  forM_ es' (\is -> when (length is > 1) do
     throwE (MultipleKindSigs (getSpan (head is)) is))
   return (ctx', Map.fromList kss)
   where
@@ -232,13 +239,14 @@ scopeTypeDataDecls :: ScopingCtx
                    -> M.DataDecls Parsed
                    -> Validation (ScopingCtx, M.TypeDecls Scoped, M.DataDecls Scoped)
 scopeTypeDataDecls ctx tds dds = do
-  let (es , ctx' ) = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
+  let es = Map.fromList [(i, [i]) | i <- tIdElems ctx ++ dIdElems ctx]
+      (es' , ctx' ) = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
                                               (insertTId ti)) 
-                           (Map.empty, ctx) tds
-      (es', ctx'') = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
+                           (es, ctx) tds
+      (es'', ctx'') = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
                                               (insertDId ti)) 
-                           (es, ctx') dds
-  forM_ es' \is -> when (length is > 1) $
+                           (es', ctx') dds
+  forM_ es'' \is -> when (length is > 1) $
     throwE (MultipleTypeDecls (getSpan (head is)) is)
   (ctx''' , tds') <- scopeTypeDecls ctx''  tds
   (ctx'''', dds') <- scopeDataDecls ctx''' dds
@@ -249,10 +257,11 @@ scopeConsDecls :: ScopingCtx
                -> M.ConsDecls Parsed 
                -> Validation (ScopingCtx, M.ConsDecls Scoped)
 scopeConsDecls ctx dds cds = do
-  let (es , ctx') = foldr 
+  let es = Map.fromList [(i, [i]) | i <- cIdElems ctx]
+      (es' , ctx') = foldr 
         (\(ci, _) -> bimap (Map.insertWith (++) ci [ci]) (insertCId ci))
-        (Map.empty, ctx) cds
-  forM_ es \is -> when (length is > 1) $
+        (es, ctx) cds
+  forM_ es' \is -> when (length is > 1) $
     throwE (MultipleConsDecls (getSpan (head is)) is)
   (ctx',) <$> foldM (scopeConsDecl ctx') Map.empty cds
   where
