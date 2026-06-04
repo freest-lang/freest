@@ -168,6 +168,10 @@ fin = liftIO $ putStrLn comeAgain >> pure Exit
 cmd :: String -> Repl ()
 cmd src = do
   n <- gets interactiveNo
+  modify \s -> 
+    s{ source = Map.insert (interactivePath n) (lines src) (source s)
+     , interactiveNo = interactiveNo s + 1
+     }
   -- First try a bare expression, bound to 'it'
   case runLexer parseItDecl (interactivePath n) (src ++ "\n") of
     Right m1 -> handleModule m1 (liftIO $ putStrLn "Printing the value of variable 'it'")
@@ -184,9 +188,7 @@ cmd src = do
     handleModule m post =
       runValidate src validateModule m \(sctx, kctx, tctx, merged) -> do
         modify (\s -> s
-          { source = Map.insert (interactivePath (interactiveNo s)) (lines src) (source s)
-          , scopingCtx = sctx
-          , interactiveNo = interactiveNo s + 1
+          { scopingCtx = sctx
           , kindCtx = kctx
           , typeCtx = tctx
           , modl = merged})
