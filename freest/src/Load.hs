@@ -12,6 +12,7 @@ module Load
   , loadModule
   , loadPreludeAndModule
   , loadNoModule
+  , loadM
   , validateModule
   ) where
 
@@ -31,24 +32,25 @@ import Data.Map qualified as Map
 
 -- | Load just the Prelude.
 loadPrelude :: IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
-loadPrelude = getDataFileName preludePath >>= loadM noModuleLoaded
+loadPrelude = getDataFileName preludePath >>= loadM (putStrLn noModuleLoaded)
 
 -- | Load a program module on its own (no Prelude). Returns the scoped
 -- module after successful kinding and typing, or 'Nothing' if errors
 -- were found (in which case they are printed).
 loadModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
-loadModule fp = putStrLn preludeNotLoaded >> loadM moduleLoaded fp
+loadModule fp = putStrLn preludeNotLoaded >> loadM (putStrLn moduleLoaded) fp
 
 -- | Load no module at all, just print a message to that effect,
 -- thus centralising all module loading messages in this module.
 loadNoModule :: IO ()
 loadNoModule = putStrLn preludeNotLoaded >> putStrLn noModuleLoaded
-  
--- | Load a program module on its own or else the Prelude. Returns the scoped
--- module after successful kinding and typing, or 'Nothing' if errors
--- were found (in which case they are printed).
-loadM :: String -> FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
-loadM moduleMessage programPath = tryRead programPath >>= \case
+
+-- | Load a program module on its own or else the Prelude. The 'post' action
+-- is run on successful load (e.g. to print a status message; pass 'pure ()'
+-- to remain silent). Returns the scoped module after successful kinding and
+-- typing, or 'Nothing' if errors were found (in which case they are printed).
+loadM :: IO () -> FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadM post programPath = tryRead programPath >>= \case
   Nothing -> pure Nothing -- notASourceFile already printed
   Just programSrc ->
     case  -- Parse the program, then scope, kind and type it.
@@ -62,7 +64,7 @@ loadM moduleMessage programPath = tryRead programPath >>= \case
           putStrLn failedToLoadModule
           pure Nothing
          Right result -> do
-          putStrLn moduleMessage
+          post
           pure (Just result)
 
 -- | Load a program module joined with the Prelude. Returns the scoped
