@@ -97,14 +97,19 @@ receive c = do
   v <- C.readChan (fst c)
   return (v, c)
 
-receiveLabel :: ChannelEnd -> IO String
+receiveLabel :: ChannelEnd -> IO (String, ChannelEnd)
 receiveLabel c = do
-  VLabel val <- C.readChan (fst c)
-  return val
+  (VLabel s, _) <- receive c
+  return (s, c)
 
 send :: Value -> ChannelEnd -> IO ChannelEnd
 send v c = do
   C.writeChan (snd c) v
+  return c
+
+sendLabel :: String -> ChannelEnd -> IO ChannelEnd
+sendLabel s c = do
+  send (VLabel s) c
   return c
 
 wait :: Value -> Value
@@ -240,7 +245,7 @@ builtins = Map.fromList
   
 
   -- * Other Expressions
-  , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send (VLabel label) c)))
+  , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
   , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
   , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VChan c))
   ]

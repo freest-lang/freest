@@ -31,7 +31,7 @@ import Debug.Trace
 -- ends here
 
 import Interpreter.PatternMatching (compileFunctionToClosure, resolvePatternMatching)
-import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool, receive)
+import Interpreter.Values (Env, Value(..), chan, send, builtins, fstToHsBool, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
@@ -151,6 +151,7 @@ envLookup' (global, local) var = do
 
 -- | Evaluate application expressions
 handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
+handleApplication _ func [] = return func
 handleApplication (global, local) (VCons cons vals) args = do
   return $ VCons cons $ vals ++ args
 handleApplication (global, local) (VClosure pats body env) args = do
@@ -220,8 +221,9 @@ eval (global, local) (E.Var _ var) =
     val -> return val
 eval (global, local) (E.App _ exp args) = do
   func <- eval (global, local) exp
+  let termArgs = fst $ B.partitionLevels args
   -- TODO: handle undefined?
-  evalArgs <- mapM (eval (global, local)) $ fst $ B.partitionLevels args
+  evalArgs <- mapM (eval (global, local)) termArgs
   res <- handleApplication (global, local) func evalArgs
   case res of
     VIO io -> io
@@ -235,22 +237,25 @@ eval (global, local) (E.Pack span types exp) = do
 eval (global, local) (E.Asc span exp typ) = do
   eval (global, local) exp
 eval (global, local) (E.Let _ decls exp) = do
-  -- remove type signature declarations
-  let expDecls = filter (\case E.TypeSig{} -> False; _ -> True) decls
-  letBindings <- collectLetDecls (global, local) expDecls
+  letBindings <- collectLetDecls (global, local) decls
   eval (global, letBindings `union` local) exp
 eval (global, local) (E.Semi span exp1 exp2) =
   eval (global, local) exp1 >> eval (global, local) exp2
 eval (global, local) (E.Case _ exp alternatives) = do
   val <- eval (global, local) exp
-  case chooseCase alternatives val of
-    Nothing -> internalError "Non-exaustive patterns in case alternatives"
-    Just (alternative, bindings) -> do
-      (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
-      whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (global, bindings `union` local) whereDecls'
-        Nothing -> return empty
-      eval (global, whereBindings `union` bindings `union` local) exp'      
+  case val of
+    VChan c -> do
+      (label, c) <- receiveLabel c
+      undefined
+    val -> do
+      case chooseCase alternatives val of
+        Nothing -> internalError "Non-exaustive patterns in case alternatives"
+        Just (alternative, bindings) -> do
+          (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
+          whereBindings <- case whereDecls of
+            Just whereDecls' -> collectLetDecls (global, bindings `union` local) whereDecls'
+            Nothing -> return empty
+          eval (global, whereBindings `union` bindings `union` local) exp'
   {- do
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
   case chooseCase pats val labels of
@@ -266,9 +271,9 @@ eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
-eval _ (E.Select _ (B.Identifier _ iden)) =
+eval _ (E.Select _ (B.Identifier _ iden)) = do
   let (Just (VBuiltin selectBuiltin)) = Data.Map.lookup "select" builtins
-  in return $ selectBuiltin (VString iden)
+  return $ selectBuiltin (VLabel iden)
   {- return $ VSelect iden -}
 eval (global, local) (E.SendType _ _) =
   return $ fromJust $ Data.Map.lookup "sendType" builtins
