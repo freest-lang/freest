@@ -13,6 +13,7 @@ module Interpreter.PatternMatching
 
 {-
 TODO:
+- When introducing closures, capture only free variables in the environment, and not the whole env
 - Change resolvePatternMatching, switch value argument with Pattern
 - Improve pattern matching of functions, to also accept session-type patterns 
 - Implement more efficient compilation of function with pattern matching to closure with cases (check The Implementation of Functional Programming Languages, by Simon Peyton Jones)
@@ -115,8 +116,8 @@ resolvePatternMatching val (E.AsPat s var pat) = do
 type Clause = ([E.Pat], E.KindedRHS)
 
 -- | Compile function definitions with pattern matching into a closure with case-expressions
-compileFunctionToClosure :: [Clause] -> Value
-compileFunctionToClosure clauses = do
+compileFunctionToClosure :: Env -> [Clause] -> Value
+compileFunctionToClosure env clauses = do
   let arity = length $ fst $ head clauses
       -- TODO improve transformations from sets to lists
       freeVars = Set.toList $ Set.unions 
@@ -130,7 +131,8 @@ compileFunctionToClosure clauses = do
       -- generate case expressions to serve as body of the closure
       body = flatNaiveClauseCompilation params clauses
   -- attach closures
-  VClosure [E.VarPat B.nullSpan param | param <- params] body empty
+  -- TODO: could be interesting to capture only the free variables
+  VClosure [E.VarPat B.nullSpan param | param <- params] body env
 
 -- simple, naive compilation of clauses into cases by adding a single case expression that checks pattern matching for all parameters
 flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.KindedExp

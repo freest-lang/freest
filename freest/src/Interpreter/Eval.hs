@@ -13,7 +13,7 @@ module Interpreter.Eval
 {-
 TODO:
 - Implement channels for case: check https://github.com/freest-lang/freest3/blob/dev/FreeST/src/Interpreter/Eval.hs, evalCase
-- Do we need two environments, a global and a local?
+- When introducing closures, capture only free variables in the environment, and not the whole env
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
 - Handling of undefined is correct?
 - Missing evaluation for E.Case (what about labels?)
@@ -37,16 +37,13 @@ import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
 import Utils (internalError)
 
-type GlobalEnv = Env
-type LocalEnv = Env
-
 -- | An alternative of a case expression
 type Alternative = (E.Pat, E.KindedRHS)
 
 -- AUXILIARY FUNCTIONS
 
 -- | Choose the correct guard via evaluation
-chooseGuard :: (GlobalEnv, LocalEnv) -> [(E.KindedExp, E.KindedExp)] -> IO E.KindedExp
+chooseGuard :: Env -> [(E.KindedExp, E.KindedExp)] -> IO E.KindedExp
 chooseGuard _ [] = internalError "Non-exaustive guards!"
 chooseGuard env ((guard, exp):guards) = do
   val <- eval env guard
@@ -61,12 +58,12 @@ chooseCase ((pat, rhs) : alternatives) val =
     Right bindings -> Just ((pat, rhs), bindings)
 
 -- | Extract an expression and let declarations from case alternatives
-extractFromRHS :: (GlobalEnv, LocalEnv) -> E.KindedRHS -> IO (E.KindedExp, Maybe [E.KindedLetDecl])
-extractFromRHS (global, local) rhs = do
+extractFromRHS :: Env -> E.KindedRHS -> IO (E.KindedExp, Maybe [E.KindedLetDecl])
+extractFromRHS env rhs = do
   case rhs of
     E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
     E.GuardedRHS guards whereDecls -> do
-      exp <- chooseGuard (global, local) guards
+      exp <- chooseGuard env guards
       return (exp, whereDecls)
 
 -- | Get the corresponding builtin from a let decl's name
@@ -81,80 +78,74 @@ getBuiltinDecl (E.FnDef var _) = do
 getBuiltinDecl _ = Nothing
 
 -- | Collect bindings, of variables to values, from declarations
-collectLetDecls :: (GlobalEnv, LocalEnv) -> [E.KindedLetDecl] -> IO Env
+collectLetDecls :: Env -> [E.KindedLetDecl] -> IO Env
 collectLetDecls _ [] = return empty
-collectLetDecls (global, local) ((E.ValDef pat rhs) : letdecls)
+collectLetDecls env ((E.ValDef pat rhs) : letdecls)
   | isJust builtinBinding = do
     let binding = fromJust builtinBinding
-    remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
-    return $ binding `union` remainingBindings
+    remainingBindings <- collectLetDecls (binding `union` env) letdecls
+    return $ remainingBindings `union` binding
   | otherwise = do
-    (exp, whereDecls) <- extractFromRHS (global, local) rhs
+    (exp, whereDecls) <- extractFromRHS env rhs
     whereBindings <- case whereDecls of
-      Just whereDecls' -> collectLetDecls (global, local) whereDecls'
+      Just whereDecls' -> collectLetDecls env whereDecls'
       Nothing -> return empty
-    val <- eval (global, whereBindings `union` local) exp
+    val <- eval (whereBindings `union` env) exp
     let patternMatchRes = resolvePatternMatching val pat
     bindings <- case patternMatchRes of
       Left _ -> internalError "Pattern matching failed!"
       Right bindings -> return bindings
-    remainingBindings <- collectLetDecls (global, bindings `union` local) letdecls
-    return $ bindings `union` remainingBindings
+    remainingBindings <- collectLetDecls (bindings `union` env) letdecls
+    return $ remainingBindings `union` bindings
   where
     builtinBinding = getBuiltinDecl (E.ValDef pat rhs)
-collectLetDecls (global, local) ((E.FnDef var clauses) : letdecls)
+collectLetDecls env ((E.FnDef var clauses) : letdecls)
   -- the function declaration corresponds to a builtin function i.e. undefined
   | isJust builtinBinding = do
     let binding = fromJust builtinBinding
-    remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
-    return $ binding `union` remainingBindings
+    remainingBindings <- collectLetDecls (binding `union` env) letdecls
+    return $ remainingBindings `union` binding
   | otherwise = do
     let clauses' = map (\(params, body) -> (fst $ B.partitionLevels params, body)) clauses
-    let compiledFunction = compileFunctionToClosure clauses'
+    let compiledFunction = compileFunctionToClosure env clauses'
     let binding = singleton var compiledFunction
-    remainingBindings <- collectLetDecls (binding `union` global, local) letdecls
-    return $ binding `union` remainingBindings
+    remainingBindings <- collectLetDecls (binding `union` env) letdecls
+    return $ remainingBindings `union` binding
   where
     builtinBinding = getBuiltinDecl (E.FnDef var clauses)
-collectLetDecls (global, local) ((E.TypeSig var typ) : letdecls) =
-  collectLetDecls (global, local) letdecls
-collectLetDecls (global, local) ((E.Mutual mutualDecls) : letdecls) = do
-  mutualDefs <- mapM (\fnDef -> collectLetDecls (global, local) [fnDef]) mutualDecls
+collectLetDecls env ((E.TypeSig var typ) : letdecls) =
+  collectLetDecls env letdecls
+collectLetDecls env ((E.Mutual mutualDecls) : letdecls) = do
+  mutualDefs <- mapM (\fnDef -> collectLetDecls env [fnDef]) mutualDecls
   let mutualBindings = unions mutualDefs
-  remainingBindings <- collectLetDecls (mutualBindings `union` global, local) letdecls
-  return $ mutualBindings `union` remainingBindings
+  remainingBindings <- collectLetDecls (mutualBindings `union` env) letdecls
+  return $ remainingBindings `union` mutualBindings
 
 -- | Collect declarations from the module, and bind these to variables in an environment
 buildEnv :: M.KindedModule -> IO Env
-buildEnv m = collectLetDecls (empty, empty) (M.definitions m)
+buildEnv m = collectLetDecls empty (M.definitions m)
 
--- | Lookup a variable in both local and global context, in that order
-envLookup :: (GlobalEnv, LocalEnv) -> B.Variable -> Value
-envLookup (global, local) var =
-  case Data.Map.lookup var local of
+-- | Lookup a variable in the context
+envLookup :: Env -> B.Variable -> Value
+envLookup env var =
+  case Data.Map.lookup var env of
     Just val -> val
-    Nothing -> case Data.Map.lookup var global of
-      Just val -> val
-      Nothing -> internalError $ "Variable `" ++ show var ++ "` not found in the context."
+    Nothing -> internalError $ "Variable `" ++ show var ++ "` not found in the context."
 
--- | Lookup a variable (as a string) in both local and global context, in that order
-envLookup' :: (GlobalEnv, LocalEnv) -> String -> Maybe Value
-envLookup' (global, local) var = do
-  let binding = find (\(var', val) -> B.external var' == var) $ assocs local
+-- | Lookup a variable (as a string) in the context
+envLookup' :: Env -> String -> Maybe Value
+envLookup' env var = do
+  let binding = find (\(var', val) -> B.external var' == var) $ assocs env
   case binding of
     Just binding -> return $ snd binding
-    Nothing -> do
-      let binding = find (\(var', val) -> B.external var' == var) $ assocs global
-      case binding of
-        Just binding -> return $ snd binding
-        Nothing -> Nothing
+    Nothing -> Nothing
 
 -- | Evaluate application expressions
-handleApplication :: (GlobalEnv, LocalEnv) -> Value -> [Value] -> IO Value
+handleApplication :: Env -> Value -> [Value] -> IO Value
 handleApplication _ func [] = return func
-handleApplication (global, local) (VCons cons vals) args = do
+handleApplication _ (VCons cons vals) args = do
   return $ VCons cons $ vals ++ args
-handleApplication (global, local) (VClosure pats body env) args = do
+handleApplication env (VClosure pats body cenv) args = do
   let numParams = length pats
       numArgs = length args
 
@@ -165,7 +156,7 @@ handleApplication (global, local) (VClosure pats body env) args = do
       Left _ -> internalError "Pattern matching failed!"
       Right bindings ->
         -- create a new closure with the remaining parameters
-        return $ VClosure (drop (numParams - numArgs) pats) body $ unions bindings `union` env
+        return $ VClosure (drop (numParams - numArgs) pats) body $ unions bindings `union` cenv
 
   -- if numParams <= numArgs, evaluate app, return app against remaining arguments
   else do
@@ -174,16 +165,16 @@ handleApplication (global, local) (VClosure pats body env) args = do
       Left _ -> internalError "Pattern matching failed!"
       Right bindings -> do
         -- evaluate application of closure against arguments
-        func <- eval (global, unions bindings `union` env) body
+        func <- eval (unions bindings `union` cenv `union` env) body
         -- the number of arguments is the same as parameters, return result of evaluation
         if numArgs == numParams then
           return func
         -- otherwise, create a new application with the remaining arguments
-        else handleApplication (global, local) func (drop (numArgs - numParams) args)  
-handleApplication (global, local) (VBuiltin builtin) args =
+        else handleApplication env func (drop (numArgs - numParams) args)  
+handleApplication _ (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-handleApplication (global, local) VFork args =
-  forkIO (void $ handleApplication (global, empty) (head args) [VUnit]) $> VUnit
+handleApplication env VFork args =
+  forkIO (void $ handleApplication env (head args) [VUnit]) $> VUnit
 {- handleApplication (global, local) (VSelect label) args =
   case args of
     [VChan chan] -> do
@@ -206,7 +197,7 @@ handleApplication (global, local) VFork args =
 -- MAIN FUNCTIONS
 
 -- | Evaluate expressions, encoded as Syntax.Expression.Exp
-eval :: (GlobalEnv, LocalEnv) -> E.KindedExp -> IO Value
+eval :: Env -> E.KindedExp -> IO Value
 eval _ (E.Int _ i) =
   return $ VInt i
 eval _ (E.Float _ f) =
@@ -215,34 +206,35 @@ eval _ (E.Char _ c) =
   return $ VChar c
 eval _ (E.DCons _ (B.Identifier _ str)) =
   return $ VCons str []
-eval (global, local) (E.Var _ var) =
-  case envLookup (global, local) var of
+eval env (E.Var _ var) =
+  case envLookup env var of
     VIO io -> io
     val -> return val
-eval (global, local) (E.App _ exp args) = do
-  func <- eval (global, local) exp
+eval env (E.App _ exp args) = do
+  func <- eval env exp
   let termArgs = fst $ B.partitionLevels args
   -- TODO: handle undefined?
-  evalArgs <- mapM (eval (global, local)) termArgs
-  res <- handleApplication (global, local) func evalArgs
+  evalArgs <- mapM (eval env) termArgs
+  res <- handleApplication env func evalArgs
   case res of
     VIO io -> io
     _ -> return res
-eval (_, local) (E.Abs _ params _ body) =
-  -- convert to a closure, capturing the local environment, so we don't lose bindings
-  return $ VClosure (map fst (fst $ B.partitionLevels params)) body local
-eval (global, local) (E.Pack span types exp) = do
-  val <- eval (global, local) exp
+eval env (E.Abs _ params _ body) =
+  -- convert to a closure, capturing the environment, so we don't lose bindings
+  -- TODO: could be interesting to capture only the free variables
+  return $ VClosure (map fst (fst $ B.partitionLevels params)) body env
+eval env (E.Pack span types exp) = do
+  val <- eval env exp
   return $ VPack types val
-eval (global, local) (E.Asc span exp typ) = do
-  eval (global, local) exp
-eval (global, local) (E.Let _ decls exp) = do
-  letBindings <- collectLetDecls (global, local) decls
-  eval (global, letBindings `union` local) exp
-eval (global, local) (E.Semi span exp1 exp2) =
-  eval (global, local) exp1 >> eval (global, local) exp2
-eval (global, local) (E.Case _ exp alternatives) = do
-  val <- eval (global, local) exp
+eval env (E.Asc span exp typ) = do
+  eval env exp
+eval env (E.Let _ decls exp) = do
+  letBindings <- collectLetDecls env decls
+  eval (env `union` letBindings) exp
+eval env (E.Semi span exp1 exp2) =
+  eval env exp1 >> eval env exp2
+eval env (E.Case _ exp alternatives) = do
+  val <- eval env exp
   case val of
     VChan c -> do
       (label, c) <- receiveLabel c
@@ -251,11 +243,11 @@ eval (global, local) (E.Case _ exp alternatives) = do
       case chooseCase alternatives val of
         Nothing -> internalError "Non-exaustive patterns in case alternatives"
         Just (alternative, bindings) -> do
-          (exp', whereDecls) <- extractFromRHS (global, bindings `union` local) (snd alternative)
+          (exp', whereDecls) <- extractFromRHS (bindings `union` env) (snd alternative)
           whereBindings <- case whereDecls of
-            Just whereDecls' -> collectLetDecls (global, bindings `union` local) whereDecls'
+            Just whereDecls' -> collectLetDecls (bindings `union` env) whereDecls'
             Nothing -> return empty
-          eval (global, whereBindings `union` bindings `union` local) exp'
+          eval (whereBindings `union` bindings `union` env) exp'
   {- do
   labels <- mapM receiveLabel $ getInternalChoiceChannels [fst $ head pats] [val]
   case chooseCase pats val labels of
@@ -275,10 +267,10 @@ eval _ (E.Select _ (B.Identifier _ iden)) = do
   let (Just (VBuiltin selectBuiltin)) = Data.Map.lookup "select" builtins
   return $ selectBuiltin (VLabel iden)
   {- return $ VSelect iden -}
-eval (global, local) (E.SendType _ _) =
+eval _ (E.SendType _ _) =
   return $ fromJust $ Data.Map.lookup "sendType" builtins
   {- return VSendType -}
-eval (global, local) (E.ReceiveType _) =
+eval _ (E.ReceiveType _) =
   return $ fromJust $ Data.Map.lookup "receiveType" builtins
   {- return VRecvType -}
 
@@ -287,7 +279,7 @@ interpret :: M.KindedModule -> IO Value
 interpret m = do
   -- evaluate module declarations, binding results to variables
   env <- buildEnv m
-  let binding = envLookup' (empty, env) "main"
+  let binding = envLookup' env "main"
   -- let binding = find (\(var, val) -> B.external var == "main") $ assocs env
   case binding of
     Just binding -> return binding
