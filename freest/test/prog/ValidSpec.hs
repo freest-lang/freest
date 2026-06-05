@@ -3,12 +3,16 @@ Module      :  ValidSpec
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-The module specifies how to conduct valid program tests.
+Hspec driver for the positive test suite. Runs each program under
+@test/prog/Valid/@ through the FreeST compiler within a 3-second timeout
+and expects it to compile and exit cleanly. Outcomes are reported as
+@Passed@, @Failed@, or @Timeout@; expectations starting with @\<pending\>@
+mark a test as pending.
 -}
 module ValidSpec where
 
+import FreeST ( runFreeST )
 import UI.CLI
-import FreeST
 import ProgSpecUtils
 
 import Control.Exception
@@ -22,10 +26,10 @@ import Test.Hspec
 import Test.HUnit ( assertFailure )
 
 
-data TestResult = Timeout | Passed | Failed
-
 baseDir :: String
 baseDir = "/test/prog/Valid/"
+
+data TestResult = Timeout | Passed | Failed
 
 spec :: Spec
 spec = specTest' "valid" baseDir test
@@ -61,7 +65,7 @@ testOne file = hCapture [stdout, stderr] $
 
   runTest :: IO TestResult
   runTest = do
-    res <- timeout timeInMicro (freest defaultRunOpts{filePath = Just file})
+    res <- timeout timeInMicro (runFreeST defaultRunOpts{filePath = Just file})
     case res of Just _  -> pure Passed
                 Nothing -> pure Timeout
 

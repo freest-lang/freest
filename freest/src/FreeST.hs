@@ -5,28 +5,30 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 The entry point of the FreeST compiler.
 -}
-module FreeST ( main, freest ) where
+module FreeST ( freest, runFreeST ) where
 
-import Load ( loadModule, loadPreludeAndModule )
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
+import REPL ( ReplState(..), emptyReplState, repl )
+import Load ( loadModule, loadPreludeAndModule )
 
 import Options.Applicative ( execParser )
 import System.Exit ( exitSuccess, exitFailure )
 
 -- | The entry point of the FreeST compiler. Parses the command line options
--- and passes them to the compiler pipeline.
-main :: IO ()
-main = do
-  execParser opts >>= freest
+-- and runs the compiler pipeline or else calls the REPL.
+freest :: IO ()
+freest = execParser opts >>= runFreeST
 
--- | The FreeST compiler pipeline.
-freest :: RunOpts -> IO ()
-freest RunOpts{filePath = Nothing} =
+-- | Dispatch on the parsed command line options.
+runFreeST :: RunOpts -> IO ()
+runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip} =
+  repl emptyReplState{filePath = mPath, implicitPrelude = ip}
+runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
-freest RunOpts{filePath = Just programPath, implicitPrelude = False} =
+runFreeST RunOpts{filePath = Just programPath, implicitPrelude = False} =
   loadModule programPath >>=
   maybe exitFailure (const exitSuccess)
-freest RunOpts{filePath = Just programPath, implicitPrelude = True} =
+runFreeST RunOpts{filePath = Just programPath, implicitPrelude = True} =
   loadPreludeAndModule programPath >>=
   maybe exitFailure (const exitSuccess)

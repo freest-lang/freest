@@ -343,7 +343,7 @@ toMessage src = \case
     ++ unlines (map (("  " ++) . show . getSpan) is)
   MultipleKindSigs s is -> makeError src s
     ("Multiple kind signatures for type " ++ bt (show (head is)))
-    ++ "Duplicate signatures  at:\n"
+    ++ "Duplicate signatures at:\n"
     ++ unlines (map (("  " ++) . show . getSpan) is)
   MultipleTypeDecls s is -> makeError src s
     ("Multiple declarations of type " ++ bt (show (head is)))
@@ -360,12 +360,12 @@ toMessage src = \case
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
       _ -> internalError "Pattern with non-proper type")
-  ParseError s (_, [x]) -> makeError src s
-    "Parse error"
-    ++ "(Expected " ++ x ++ ")"
   ParseError s (_, ss) -> makeError src s
     "Parse error"
-    ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
+    ++ case ss of
+      [] -> ""
+      [x] -> "(Expected " ++ x ++ ")"
+      ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
   PrekindMismatch s pk t k -> makeError src s
     ("Expected a " ++ prettyPk pk ++ ", but got " ++
       (case k of
