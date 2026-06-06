@@ -24,8 +24,9 @@ import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM)
 import Data.Functor (($>), void)
 import Data.List (find)
-import Data.Map (empty, singleton, union, unions, lookup, assocs)
+import Data.Map (empty, singleton, union, unions, lookup, assocs, filterWithKey)
 import Data.Maybe (isJust, fromJust)
+import qualified Data.Set as Set
 -- for debuging don't forget to remove
 import Debug.Trace
 -- ends here
@@ -173,8 +174,16 @@ handleApplication env (VClosure pats body cenv) args = do
         else handleApplication env func (drop (numArgs - numParams) args)  
 handleApplication _ (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-handleApplication env VFork args =
-  forkIO (void $ handleApplication env (head args) [VUnit]) $> VUnit
+handleApplication env VFork [fun] = {- do
+  _ <- forkIO $ do
+    putStrLn $ "fork started"
+    v <- handleApplication env fun [VUnit]
+    putStrLn "application handled"
+    print v
+    putStrLn "value forced"
+    pure ()
+  pure VUnit -}
+  forkIO (void $ handleApplication env fun [VUnit]) $> VUnit
 {- handleApplication (global, local) (VSelect label) args =
   case args of
     [VChan chan] -> do
@@ -219,10 +228,12 @@ eval env (E.App _ exp args) = do
   case res of
     VIO io -> io
     _ -> return res
-eval env (E.Abs _ params _ body) =
-  -- convert to a closure, capturing the environment, so we don't lose bindings
-  -- TODO: could be interesting to capture only the free variables
-  return $ VClosure (map fst (fst $ B.partitionLevels params)) body env
+eval env (E.Abs _ params _ body) = do
+  let expParams = map fst $ fst $ B.partitionLevels params
+  -- capture only the free variables
+  let fv = E.freeVars body Set.\\ Set.unions (map E.allVarsPat expParams)
+  let cenv = filterWithKey (\k _ -> Set.member k fv) env
+  return $ VClosure expParams body cenv
 eval env (E.Pack span types exp) = do
   val <- eval env exp
   return $ VPack types val
@@ -236,7 +247,7 @@ eval env (E.Semi span exp1 exp2) =
 eval env (E.Case _ exp alternatives) = do
   val <- eval env exp
   case val of
-    VChan c -> do
+    VChan c | False -> do
       (label, c) <- receiveLabel c
       undefined
     val -> do

@@ -21,7 +21,7 @@ TODO:
 
 import Control.Monad (zipWithM)
 import Data.Function (on)
-import Data.Map (empty, singleton, union, unions, insert)
+import Data.Map (empty, singleton, union, unions, insert, filterWithKey)
 import qualified Data.Set as Set
 
 import Interpreter.Values (Value(VUnit, VInt, VFloat, VChar, VCons, VClosure, VChan, VPack), Env, receive)
@@ -120,16 +120,17 @@ compileFunctionToClosure :: Env -> [Clause] -> Value
 compileFunctionToClosure env clauses = do
   let arity = length $ fst $ head clauses
       -- TODO improve transformations from sets to lists
-      freeVars = Set.toList $ Set.unions 
+      freeVars = Set.unions 
         (map (\(pats, rhs) -> E.freeVarsRHS rhs Set.\\ Set.unions (map E.allVarsPat pats))
         clauses)
       -- generate list of fresh variables to be used as parameters to the closure (take into account previously generated vars with foldr and accumulator)
       params = snd $ foldl
         (\(freeVars', acc) _ -> (freeVars' ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')], acc ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')]))
-        (freeVars, [])
+        (Set.toList freeVars, [])
         [1..arity]
       -- generate case expressions to serve as body of the closure
       body = flatNaiveClauseCompilation params clauses
+      cenv = filterWithKey (\k _ -> Set.member k freeVars) env
   -- attach closures
   -- TODO: could be interesting to capture only the free variables
   VClosure [E.VarPat B.nullSpan param | param <- params] body env
