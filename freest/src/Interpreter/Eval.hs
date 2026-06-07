@@ -58,6 +58,15 @@ chooseCase ((pat, rhs) : alternatives) val =
     Left _ -> chooseCase alternatives val
     Right bindings -> Just ((pat, rhs), bindings)
 
+chooseChoice :: Value -> [Alternative] -> String -> Maybe (Alternative, Env)
+chooseChoice _ [] _ = Nothing
+chooseChoice chan ((pat@(E.ChoicePat s (B.Identifier _ iden) (E.VarPat s' var)), rhs) : alternatives) label =
+  if label == iden then
+    case resolvePatternMatching chan (E.VarPat s' var) of
+      Left{} -> Nothing
+      Right bindings -> Just ((pat, rhs), bindings)
+  else chooseChoice chan alternatives label
+
 -- | Extract an expression and let declarations from case alternatives
 extractFromRHS :: Env -> E.KindedRHS -> IO (E.KindedExp, Maybe [E.KindedLetDecl])
 extractFromRHS env rhs = do
@@ -247,9 +256,16 @@ eval env (E.Semi span exp1 exp2) =
 eval env (E.Case _ exp alternatives) = do
   val <- eval env exp
   case val of
-    VChan c | False -> do
+    VChan c | isSTPat $ fst $ head alternatives -> do
       (label, c) <- receiveLabel c
-      undefined
+      case chooseChoice (VChan c) alternatives label of
+        Nothing -> internalError "Non-exaustive patterns in choice pattern in case"
+        Just (alternative, bindings) -> do
+          (exp', whereDecls) <- extractFromRHS (bindings `union` env) (snd alternative)
+          whereBindings <- case whereDecls of
+            Just whereDecls' -> collectLetDecls (bindings `union` env) whereDecls'
+            Nothing -> return empty
+          eval (whereBindings `union` bindings `union` env) exp'
     val -> do
       case chooseCase alternatives val of
         Nothing -> internalError "Non-exaustive patterns in case alternatives"
@@ -265,6 +281,13 @@ eval env (E.Case _ exp alternatives) = do
     Just (exp, matched) -> eval (global, matched ++ local) exp 
   -- TODO: use freeST error handling to tell the user that that pattern mathcing was not exhautive
     Nothing -> undefined -}
+    where
+      isSTPat :: E.Pat -> Bool
+      isSTPat E.WaitPat{} = True
+      isSTPat E.InPat{} = True
+      isSTPat E.ChoicePat{} = True
+      isSTPat E.TypeInPat{} = True
+      isSTPat _ = False
 eval env (E.If _ ifExp thenExp elseExp) = do
   ifVal <- eval env ifExp
   if fstToHsBool ifVal
