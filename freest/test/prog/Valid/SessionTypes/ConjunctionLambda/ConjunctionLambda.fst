@@ -4,16 +4,20 @@ type BoolC : 1C
 type BoolC = &{True: Wait, False: Wait}
 
 andc' : BoolC -> BoolC -1-> Dual BoolC -1-> ()
-andc' c1 c2 c =
-    case c1 of
+andc' =
+    \(c1 : BoolC) -> case c1 of
         &True  c1 ->
-            case c2 of
-                &True  c2 -> c |> select True  |> close ; wait c1 ; wait c2
-                &False c2 -> c |> select False |> close ; wait c1 ; wait c2
+            \(c2 : BoolC) -1-> case c2 of
+                &True  c2 ->
+                    \(c : Dual BoolC) -1-> c |> select True  |> close ; wait c1 ; wait c2
+                &False c2 ->
+                    \(c : Dual BoolC) -1->  c |> select False |> close ; wait c1 ; wait c2
         &False c1 ->
-            case c2 of
-                &True  c2 -> c |> select False |> close ; wait c1 ; wait c2
-                &False c2 -> c |> select False |> close ; wait c1 ; wait c2
+            \(c2 : BoolC) -1-> case c2 of
+                &True  c2 ->
+                    \(c : Dual BoolC) -1->  c |> select False |> close ; wait c1 ; wait c2
+                &False c2 ->
+                    \(c : Dual BoolC) -1->  c |> select False |> close ; wait c1 ; wait c2
 
 trueC, falseC : Dual BoolC -> ()
 trueC  c = c |> select True  |> close

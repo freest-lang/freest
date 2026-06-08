@@ -13,9 +13,9 @@ trueC, falseC : Dual BoolC -> ()
 trueC  c = c |> select True  |> close
 falseC c = c |> select False |> close
 
-printBool : BoolC -> ()
-printBool (&True  c) = print "True"  ; wait c
-printBool (&False c) = print "False" ; wait c
+toBool : BoolC -> String
+toBool (&True  Wait) = "True"
+toBool (&False Wait) = "False"
 
 falseAndTrue : ()
 falseAndTrue =
@@ -25,4 +25,4 @@ falseAndTrue =
     in fork @() (\(_:()) -1-> trueC  c1w) ;
        fork @() (\(_:()) -1-> falseC c2w) ;
        fork @() (\(_:()) -1-> andc c1r c2r cw) ;
-       printBool cr
+       print $ toBool cr
