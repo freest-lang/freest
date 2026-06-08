@@ -52,11 +52,6 @@ collectInRHS = \case
 
 collectInExp :: E.KindedExp -> [Error]
 collectInExp = \case
-  E.Int{}          -> []
-  E.Float{}        -> []
-  E.Char{}         -> []
-  E.DCons{}        -> []
-  E.Var{}          -> []
   E.App _ e args   -> collectInExp e ++ concatMap collectInArg args
   E.Abs _ _ _ body -> collectInExp body
   E.Pack _ _ e     -> collectInExp e
@@ -66,16 +61,12 @@ collectInExp = \case
   E.Case s _ cs    ->
     checkPatColumn (Just s) (map fst cs) ++ concatMap (collectInRHS . snd) cs
   E.If _ a b c     -> collectInExp a ++ collectInExp b ++ collectInExp c
-  E.Channel{}      -> []
-  E.Select{}       -> []
-  E.SendType{}     -> []
-  E.ReceiveType{}  -> []
+  _                -> []
 
 collectInArg :: Level E.KindedExp t m -> [Error]
 collectInArg = \case
-  ExpLevel  e -> collectInExp e
-  TypeLevel _ -> []
-  MultLevel _ -> []
+  ExpLevel e -> collectInExp e
+  _          -> []
 
 -- | Recursively check a column of patterns (i.e., the patterns at a single
 -- position across several clauses or case branches) for a mix of session and
@@ -104,6 +95,7 @@ checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subCol
     subColumns = concatMap (List.transpose . map subPats) sameShape
 
 -- | Immediate sub-patterns of a 'Pat'. Empty for leaves and variables.
+-- 'AsPat' is transparent: @x\@p@ has the sub-patterns of @p@.
 subPats :: E.Pat -> [E.Pat]
 subPats = \case
   E.InPat _ p1 p2   -> [p1, p2]
@@ -111,11 +103,12 @@ subPats = \case
   E.TypeInPat _ _ p -> [p]
   E.PackPat _ _ p   -> [p]
   E.DConsPat _ _ ps -> ps
-  E.AsPat _ _ p     -> [p]
+  E.AsPat _ _ p     -> subPats p
   _                 -> []
 
 -- | A key identifying patterns with the same outer shape, so they have
--- comparable sub-positions.
+-- comparable sub-positions. 'AsPat' is transparent: @x\@p@ shares its key
+-- with @p@.
 shapeKey :: E.Pat -> String
 shapeKey = \case
   E.InPat{}         -> "In"
@@ -123,7 +116,7 @@ shapeKey = \case
   E.TypeInPat{}     -> "TypeIn"
   E.DConsPat _ i _  -> "DCons:" ++ show i
   E.PackPat{}       -> "Pack"
-  E.AsPat{}         -> "As"
+  E.AsPat _ _ p     -> shapeKey p
   _                 -> "leaf"
 
 groupBySession :: [E.Pat] -> [[E.Pat]]
@@ -156,23 +149,28 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
 
     choiceId :: E.Pat -> Identifier
     choiceId (E.ChoicePat _ i _) = i
+    choiceId (E.AsPat _ _ p)     = choiceId p
     choiceId _                   = internalError "Validation.SessionPattern.groupBySession.choiceId: not a ChoicePat"
 
 containsVarPat, containsSessionPat :: [E.Pat] -> Bool
 containsVarPat = any isVar
 containsSessionPat = any isSessionPat
 
+-- | 'AsPat' is transparent in all three predicates: @x\@p@ is classified by @p@.
 isSessionPat, isChoicePat, isVar :: E.Pat -> Bool
 
-isSessionPat E.WaitPat{}   = True
-isSessionPat E.InPat{}     = True
-isSessionPat E.ChoicePat{} = True
-isSessionPat E.TypeInPat{} = True
-isSessionPat _             = False
+isSessionPat (E.AsPat _ _ p) = isSessionPat p
+isSessionPat E.WaitPat{}     = True
+isSessionPat E.InPat{}       = True
+isSessionPat E.ChoicePat{}   = True
+isSessionPat E.TypeInPat{}   = True
+isSessionPat _               = False
 
-isChoicePat E.ChoicePat{} = True
-isChoicePat _             = False
+isChoicePat (E.AsPat _ _ p) = isChoicePat p
+isChoicePat E.ChoicePat{}   = True
+isChoicePat _               = False
 
-isVar E.VarPat{}  = True
-isVar E.WildPat{} = True
-isVar _           = False
+isVar (E.AsPat _ _ p) = isVar p
+isVar E.VarPat{}      = True
+isVar E.WildPat{}     = True
+isVar _               = False
