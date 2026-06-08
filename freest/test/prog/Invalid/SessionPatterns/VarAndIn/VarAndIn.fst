@@ -1,4 +1,4 @@
-module VarAndReceive where
+module VarAndIn where
 
 f : ?Int -> Skip
 f c = snd (receive c)
