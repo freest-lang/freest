@@ -9,7 +9,7 @@ module FreeST ( freest, runFreeST ) where
 
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import REPL ( ReplState(..), emptyReplState, repl )
-import Load ( loadModule, loadPreludeAndModule )
+import Pipeline ( loadModule, loadPreludeAndModule )
 
 import Options.Applicative ( execParser )
 import System.Exit ( exitSuccess, exitFailure )

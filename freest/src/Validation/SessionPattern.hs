@@ -6,7 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module looks for invalid patterns in function or case declarations.
 -}
 
-module Validation.SessionPattern ( checkVarsInSessionPatterns ) where
+module Validation.SessionPattern ( checkNoVarsInSessionPatterns ) where
 
 import Syntax.Base ( Identifier, Level(..), Located(getSpan), Span )
 import Syntax.Expression qualified as E
@@ -23,8 +23,8 @@ import Data.List qualified as List
 -- | Walk every 'Case' expression in the module's definitions and emit a
 -- 'MixedSessionVarPats' error whenever a group from 'groupBySession' contains
 -- a variable pattern.
-checkVarsInSessionPatterns :: M.KindedModule -> Validation ()
-checkVarsInSessionPatterns modl =
+checkNoVarsInSessionPatterns :: M.KindedModule -> Validation ()
+checkNoVarsInSessionPatterns modl =
   modify $ \s -> s{errors = errors s ++ concatMap collectInLetDecl (M.definitions modl)}
 
 collectInLetDecl :: E.KindedLetDecl -> [Error]
@@ -80,12 +80,11 @@ checkPatColumn :: Maybe Span -> [E.Pat] -> [Error]
 checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subColumns
   where
     groups = groupBySession col
-    mixed g = containsVarPat g && containsSessionPat g
-    topErr = case (col, any mixed groups) of
-      (_,     False) -> []
-      (_,     True ) | Just s <- topSpan -> [MixedSessionVarPats s]
-      (p : _, True ) -> [MixedSessionVarPats (getSpan p)]
-      ([],    True ) -> []  -- unreachable: an empty column can't contain a mix
+    topErr = case (any isMixedPat groups, col) of
+      (False, _    ) -> []
+      (True,  _    ) | Just s <- topSpan -> [MixedSessionVarPats s]
+      (True,  p : _) -> [MixedSessionVarPats (getSpan p)]
+      (True,  []   ) -> internalError "Validation.SessionPattern.checkPatColumn: an empty column cannot contain a mix"
     -- Same-shape groups: ChoicePats with the same identifier, DConsPats with
     -- the same identifier, plus each non-Choice/DCons constructor.
     sameShape  = List.groupBy ((==) `on` shapeKey)
@@ -109,15 +108,24 @@ subPats = \case
 -- | A key identifying patterns with the same outer shape, so they have
 -- comparable sub-positions. 'AsPat' is transparent: @x\@p@ shares its key
 -- with @p@.
-shapeKey :: E.Pat -> String
+data ShapeKey
+  = InShape
+  | ChoiceShape Identifier
+  | TypeInShape
+  | DConsShape Identifier
+  | PackShape
+  | LeafShape
+  deriving (Eq, Ord)
+
+shapeKey :: E.Pat -> ShapeKey
 shapeKey = \case
-  E.InPat{}         -> "In"
-  E.ChoicePat _ i _ -> "Choice:" ++ show i
-  E.TypeInPat{}     -> "TypeIn"
-  E.DConsPat _ i _  -> "DCons:" ++ show i
-  E.PackPat{}       -> "Pack"
+  E.InPat{}         -> InShape
+  E.ChoicePat _ i _ -> ChoiceShape i
+  E.TypeInPat{}     -> TypeInShape
+  E.DConsPat _ i _  -> DConsShape i
+  E.PackPat{}       -> PackShape
   E.AsPat _ _ p     -> shapeKey p
-  _                 -> "leaf"
+  _                 -> LeafShape
 
 groupBySession :: [E.Pat] -> [[E.Pat]]
 groupBySession pats = choiceGroups ++ otherSessionGroup
@@ -125,7 +133,6 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     -- Choice patterns, non-Choice session patterns, variables.
     -- Other patterns (data constructors, literals, ...) are ignored.
     (choices, nonChoiceSessions, vars) = partition3 pats
-
     -- Choice patterns grouped by identifier, plus all variables.
     choiceGroups      = map (++ vars)
                       . List.groupBy ((==) `on` choiceId)
@@ -133,7 +140,6 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
                       $ choices
     -- Non-Choice session patterns plus all variables.
     otherSessionGroup = nonEmpty (nonChoiceSessions ++ vars)
-
     -- Split into (Choices, non-Choice sessions, variables); drop the rest.
     partition3 :: [E.Pat] -> ([E.Pat], [E.Pat], [E.Pat])
     partition3 = foldr step ([], [], [])
@@ -152,9 +158,10 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     choiceId (E.AsPat _ _ p)     = choiceId p
     choiceId _                   = internalError "Validation.SessionPattern.groupBySession.choiceId: not a ChoicePat"
 
-containsVarPat, containsSessionPat :: [E.Pat] -> Bool
+containsVarPat, containsSessionPat, isMixedPat :: [E.Pat] -> Bool
 containsVarPat = any isVar
 containsSessionPat = any isSessionPat
+isMixedPat g = containsVarPat g && containsSessionPat g
 
 -- | 'AsPat' is transparent in all three predicates: @x\@p@ is classified by @p@.
 isSessionPat, isChoicePat, isVar :: E.Pat -> Bool

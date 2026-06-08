@@ -40,7 +40,6 @@ import UI.Error
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
-import Validation.HOTRecursion (checkNoHOTRec)
 import Validation.Normalisation
 import Validation.Substitution ( subs, subsMultType )
 
@@ -231,7 +230,6 @@ kindModule mod = do
                  , M.consDecls   = cds
                  , M.definitions = []
                  }
-  checkNoHOTRec mod'
   (_, lds) <- kindLetDecls mod mod' Map.empty (M.definitions mod)
   return mod'{M.definitions = lds}
   where
