@@ -80,11 +80,15 @@ checkPatColumn :: Maybe Span -> [E.Pat] -> [Error]
 checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subColumns
   where
     groups = groupBySession col
-    topErr = case (any isMixedPat groups, col) of
-      (False, _    ) -> []
-      (True,  _    ) | Just s <- topSpan -> [MixedSessionVarPats s]
-      (True,  p : _) -> [MixedSessionVarPats (getSpan p)]
-      (True,  []   ) -> internalError "Validation.SessionPattern.checkPatColumn: an empty column cannot contain a mix"
+    topErr = case filter isMixedPat groups of
+      []      -> []
+      (g : _) -> [MixedSessionVarPats spn (head (filter isSessionPat g)) (head (filter isVar g))]
+        where
+          spn = case topSpan of
+            Just s -> s
+            Nothing -> case col of
+              p : _ -> getSpan p
+              []    -> internalError "Validation.SessionPattern.checkPatColumn: an empty column cannot contain a mix"
     -- Same-shape groups: ChoicePats with the same identifier, DConsPats with
     -- the same identifier, plus each non-Choice/DCons constructor.
     sameShape  = List.groupBy ((==) `on` shapeKey)
