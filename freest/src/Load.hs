@@ -20,6 +20,7 @@ import Parser.Parser ( runParseModule )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
 import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
 import Validation.Kinding ( kindModule )
+import Validation.SessionPattern ( checkVarsInSessionPatterns )
 import Validation.Typing ( typeModule, TypeCtx )
 import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, failedToLoadModule, notASourceFile )
 import UI.Error ( printErrors, Error, Source )
@@ -104,6 +105,7 @@ validateModule sctx existing m = do
   let merged  = existing <> sm
   kmodl       <- kindModule merged
   tctx        <- typeModule kmodl
+  checkVarsInSessionPatterns kmodl
   pure (sctx', tctx, merged)
 
 -- | Try to read a file; on IO failure print 'notASourceFile' and return
