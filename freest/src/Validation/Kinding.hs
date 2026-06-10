@@ -54,6 +54,7 @@ import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
+import Validation.HOTRecursion (checkNoHOTRec)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map Variable Kind
@@ -513,7 +514,10 @@ kindExp smodl kmodl kctx = \case
 --     * a list of errors, if any was encountered;
 --     * the given module, otherwise.
 runKindModule :: M.ScopedModule -> Either [Error] M.KindedModule
-runKindModule modl = runValidation emptyValidationState (kindModule modl)
+runKindModule modl = runValidation emptyValidationState do 
+  modl' <- kindModule modl
+  checkNoHOTRec modl'
+  return modl'
 
 -- | Run synthesis on type, building the initial validation state from a given
 -- module. This returns either:
