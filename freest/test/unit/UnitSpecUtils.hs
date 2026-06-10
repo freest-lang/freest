@@ -9,7 +9,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import UI.Error (Error, Source, showErrors, printErrors)
-import Validation.Kinding ( runKindModule, runSynth, runCheck )
+import Validation.Kinding ( KindCtx, runKindModule, runSynth, runCheck )
 
 import Control.Monad ( forM, forM_ )
 import Control.Monad.Extra ( concatMapM )
@@ -57,9 +57,10 @@ mkEquivalenceSpec testPaths testDesc testFun = do
     Right ts -> describe testDesc $ 
       forM_ ts \((t, u, k), m) -> it (show (spanFromTo t u))
         case do (t', u', k', m') <- runScoping scopeEquivalenceTest (t, u, k, m)
-                t'' <- runCheck m' t' k'
-                u'' <- runCheck m' u' k'
-                (t'', u'', k',) <$> runKindModule m' of
+                (kctx, m'') <- runKindModule m'
+                t'' <- runCheck kctx t' k'
+                u'' <- runCheck kctx u' k'
+                return (t'', u'', k', m'') of
           Left es      -> expectationFailure (showErrors src' es)
           Right (t', u', k', m'') -> testFun src' (t', u', k', m'')
   where
@@ -70,7 +71,7 @@ mkEquivalenceSpec testPaths testDesc testFun = do
       k' <- scopeKind ctx' k
       return (t', u', k', m')
 
-runSynthOrCheck :: M.ScopedModule -> TU.ScopedType -> Maybe K.Kind -> Either [Error] TK.KindedType
-runSynthOrCheck m t = \case
-  Nothing -> runSynth m t
-  Just k  -> runCheck m t k
+runSynthOrCheck :: KindCtx -> TU.ScopedType -> Maybe K.Kind -> Either [Error] TK.KindedType
+runSynthOrCheck kctx t = \case
+  Nothing -> runSynth kctx t
+  Just k  -> runCheck kctx t k

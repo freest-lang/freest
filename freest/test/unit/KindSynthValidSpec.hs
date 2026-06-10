@@ -16,6 +16,6 @@ spec = mkTypeSpec
   "Valid kind synthesis tests" 
   errorsAreSuccesses
   \src -> \case
-    (t, _, m) -> case runKindModule m >> runSynth m t of 
+    (t, _, m) -> case runKindModule m >>= \(kctx, _) -> runSynth kctx t of 
       Left es -> expectationFailure (showErrors src es)
       _       -> return ()

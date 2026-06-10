@@ -24,13 +24,13 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If ∆ ⊢ T : κ and T -> U, then ∆ ⊢ U : κ' and k' <: k"
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> reductionReflectsKinding `shouldBe` True
+       Right (modl', t') -> reductionReflectsKinding `shouldBe` True
         where
           reductionReflectsKinding = 
-            isWhnf t' || TK.kindOf (reduce m' t') <: TK.kindOf t'
+            isWhnf t' || TK.kindOf (reduce modl' t') <: TK.kindOf t'
 

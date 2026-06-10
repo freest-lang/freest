@@ -3,7 +3,6 @@ module Validation.Base
   , Validation
   , emptyValidationState
   , runValidation
-  , lookupKind
   , incCounter
   , unfold
   )
@@ -64,13 +63,6 @@ runValidation s v =
     Left e -> Left (errors ++ [e])
     Right x' | null errors -> Right x'
              | otherwise   -> Left errors
-
--- | Look up the kind of a @type@ or @data@ name in the validation state.
-lookupKind :: M.ScopedModule -> Identifier -> Validation K.Kind
-lookupKind mod i = do 
-  case M.kindSigs mod Map.!? i of
-    Just k  -> return k
-    Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
 
 unfold :: M.KindedModule -> Identifier -> TK.KindedType
 unfold mod i =
