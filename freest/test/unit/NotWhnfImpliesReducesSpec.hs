@@ -22,11 +22,11 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "A given type T is either a whnf or reduces"
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> whnfOrReduces `shouldBe` True
-        where whnfOrReduces = isWhnf t' || let !_ = reduce m' t' in True
+       Right (modl', t') -> whnfOrReduces `shouldBe` True
+        where whnfOrReduces = isWhnf t' || let !_ = reduce modl' t' in True
 

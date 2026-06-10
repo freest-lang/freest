@@ -64,7 +64,7 @@ data ReplState = ReplState
   , scopingCtx      :: Scoping.ScopingCtx
   , kindCtx         :: Kinding.KindCtx
   , typeCtx         :: Typing.TypeCtx
-  , modl            :: M.ScopedModule
+  , modl            :: M.KindedModule
   , valueCtx        :: ValueCtx
   }
 
@@ -78,7 +78,7 @@ emptyReplState = ReplState
   , scopingCtx      = Scoping.emptyScopingCtx
   , kindCtx         = Kinding.emptyKindCtx
   , typeCtx         = Typing.emptyTypeCtx
-  , modl            = M.emptyScopedModule
+  , modl            = M.emptyKindedModule
   , valueCtx        = Map.empty
   }
 
@@ -155,12 +155,12 @@ ini = do
 
 -- | Run a loader action and, on success, replace the validation/scoping/type
 -- contexts and module in the REPL state with whatever the loader produced.
-runLoader :: IO (Maybe (Source, ValidationState, Scoping.ScopingCtx, Typing.TypeCtx, M.ScopedModule)) -> Repl ()
+runLoader :: IO (Maybe (Source, ValidationState, Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)) -> Repl ()
 runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
-    Just (src, vs, sctx, tctx, smodl) ->
-      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, typeCtx = tctx, modl = smodl})
+    Just (src, vs, sctx, kctx, tctx, kmodl) ->
+      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl})
 
 fin :: Repl ExitDecision
 fin = liftIO $ putStrLn comeAgain >> pure Exit
@@ -246,18 +246,18 @@ handleKind src = runPipeline src parseType
 
 handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
-  (\s (t, u) -> validateTypes s [t, u])
-  (\(kmodl, [t', u']) -> liftIO $ print (equivalent kmodl t' u'))
+    (\s (t, u) -> validateTypes s [t, u])
+    (\[t', u'] -> do get >>= \s -> liftIO $ print (equivalent (modl s) t' u'))
 
 handleNormalise :: String -> Repl () -- freesti> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
-  (\(kmodl, [t']) -> liftIO $ putStrLn (unparse (normalise kmodl t')))
+  (\[t'] -> get >>= \s -> liftIO $ putStrLn (unparse (normalise (modl s) t')))
 
 handleGrammar :: String -> Repl () -- freesti> :g <types>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
-  (\(kmodl, ts') -> liftIO $ putStrLn (showGrammar (fromTypes kmodl ts')))
+  (\ts' -> get >>= \s -> liftIO $ putStrLn (showGrammar (fromTypes (modl s) ts')))
 
 handleType :: String -> Repl () -- freesti> :t <exp>
 handleType src = runPipeline src parseExp
@@ -302,31 +302,27 @@ handleState _ = get >>= liftIO . print
 
 -- | Scope and kind-synthesize a parsed type.
 validateType :: ReplState -> TU.ParsedType -> Validation TK.KindedType
-validateType s = Scoping.scopeType (scopingCtx s) >=> Kinding.synth (modl s) (kindCtx s)
+validateType s = Scoping.scopeType (scopingCtx s) >=> Kinding.synth (kindCtx s)
 
 -- | Kind the current module and scope/kind-synthesize a list of parsed types
 -- against it. The result list has the same length and order as the input.
-validateTypes :: ReplState -> [TU.ParsedType] -> Validation (M.KindedModule, [TK.KindedType])
-validateTypes s ts = do
-  kmodl <- Kinding.kindModule (modl s)
-  ts'   <- mapM (validateType s) ts
-  pure (kmodl, ts')
+validateTypes :: ReplState -> [TU.ParsedType] -> Validation [TK.KindedType]
+validateTypes = mapM . validateType
 
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s e = do
-  kmodl  <- Kinding.kindModule (modl s)
   scoped <- Scoping.scopeExp (scopingCtx s) e
-  kexp   <- Kinding.kindExp (modl s) kmodl (kindCtx s) scoped
-  fst <$>   Typing.synth kmodl (kindCtx s) (typeCtx s) kexp
+  kexp   <- Kinding.kindExp (modl s) (kindCtx s) scoped
+  fst <$>   Typing.synth (modl s) (kindCtx s) (typeCtx s) kexp
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
 -- state, merging into the existing scoped module. 'kindCtx' is unchanged.
 validateModule :: ReplState -> M.ParsedModule
-                -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.ScopedModule)
+                -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)
 validateModule s m = do
-  (sctx, tctx, merged) <- Pipeline.validateModule (scopingCtx s) (modl s) m
-  pure (sctx, kindCtx s, tctx, merged)
+  (sctx, kctx, tctx, merged) <- Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s) m
+  pure (sctx, kctx, tctx, merged)
 
 -- | Print a list of errors against the interactive source line(s).
 printREPLErrors :: [Error] -> Repl ()
@@ -338,12 +334,12 @@ printREPLErrors es = do
 type Value = ()
 type ValueCtx = Map.Map Variable Value
 
-eval :: M.ScopedModule -> Repl ()
+eval :: M.KindedModule -> Repl ()
 eval m = do
   liftIO $ putStrLn "Evaluating..."
   s <- get
   vctx <- collectLetDecls (valueCtx s) m
   put s{valueCtx = vctx}
 
-collectLetDecls :: ValueCtx -> M.ScopedModule -> Repl ValueCtx
+collectLetDecls :: ValueCtx -> M.KindedModule -> Repl ValueCtx
 collectLetDecls env _ = pure env

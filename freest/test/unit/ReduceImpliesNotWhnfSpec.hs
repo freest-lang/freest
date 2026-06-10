@@ -23,12 +23,12 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T reduces then T is not a whnf"
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> reducesImpliesNotWhnf >>= (`shouldBe` True)
+       Right (modl', t') -> reducesImpliesNotWhnf >>= (`shouldBe` True)
         where 
           reducesImpliesNotWhnf =
             catch
@@ -37,7 +37,7 @@ spec = mkTypeSpec
               -- (length (show u) `seq` pure (not whnf)))
               (\(x::ErrorCall) -> pure True)
             where
-              u' = reduce m' t'
+              u' = reduce modl' t'
               whnf = isWhnf t'
 
 showWhnf :: Bool -> String

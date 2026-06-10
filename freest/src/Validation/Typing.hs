@@ -15,7 +15,6 @@ module Validation.Typing
   , checkPat
   , checkRHS
   , typeModule
-  , runValidate
   )
 where
 
@@ -164,7 +163,7 @@ synth modl kctx tctx = \case
           checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
           return (T.AppArrow (spanFromTo pi e') m ti ti', tctxi'')
         TypeLevel (ai, ki) : ps' -> do
-          (ti', tctxi') <- synthAbs (Map.insert ai ki kctxi) tctxi ps'
+          (ti', tctxi') <- synthAbs (Map.insert (Left ai) ki kctxi) tctxi ps'
           checkEquivTypeCtxsFun m tctxi' tctxi (getSpan e)
           let ti'' = case ti' of
                 T.AppForall s m aks ti' ->
@@ -553,7 +552,7 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo ai fe) fe i m m')
             Nothing -> return ()
-          tctxi' <- checkFun' (i + 1) (Map.insert ai ki kctxi) tctxi ps''
+          tctxi' <- checkFun' (i + 1) (Map.insert (Left ai) ki kctxi) tctxi ps''
             (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv ai ki) u)
           checkEquivTypeCtxsFun m tctxi' tctxi (spanFromTo ai rhs)
           return tctxi'
@@ -660,7 +659,7 @@ checkPat modl kctx p t = case p of
             (Left $ E.PackPat (spanFromTo a p) aks p))
         ((a, k) : aks) ((b, k') : bks) -> do
           Kinding.checkK (T.fromVariable ObjLv a k') k
-          checkPackPat (Map.insert a k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
+          checkPackPat (Map.insert (Left a) k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
   E.WildPat  s _    -> do
     when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
     return (kctx, Map.empty)
@@ -721,7 +720,7 @@ checkPat modl kctx p t = case p of
   E.TypeInPat s (a, k) p' -> do
     (b, k', t') <- Expose.typeInput modl (Left p) t
     Kinding.checkSubkindOf (T.fromVariable ObjLv a k) k k'
-    checkPat modl (Map.insert a k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
+    checkPat modl (Map.insert (Left a) k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
   -- (&C p)
   E.ChoicePat s i p' -> do
     ti <- Expose.externalChoice modl p t i
@@ -927,12 +926,12 @@ instantiate i modl kctx tctx t1 args = do
       (t, as) -> 
         throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
 
-typeModule :: M.KindedModule -> Validation TypeCtx
-typeModule modl = do
-  tctx <- buildDConsCtx
-  (tctxds, kctx', tctx') <- checkDecls modl Map.empty tctx (M.definitions modl)
-  _ <- typeCtxDifference kctx' tctxds tctx'
-  return (tctx `Map.union` tctxds)
+typeModule :: KindCtx -> TypeCtx -> M.KindedModule -> Validation (KindCtx, TypeCtx)
+typeModule kctx tctx modl = do
+  tctx' <- flip Map.union tctx <$> buildDConsCtx
+  (tctxds, kctx', tctx'') <- checkDecls modl kctx tctx' (M.definitions modl)
+  _ <- typeCtxDifference kctx' tctxds tctx''
+  return (kctx', tctx'')
   where
     buildDConsCtx :: Validation TypeCtx
     buildDConsCtx = do
@@ -961,6 +960,3 @@ typeModule modl = do
               (\t u -> let s = spanFromTo t u in pure $ T.AppArrow s (K.Lin s) t u) (returnType aks k)
             returnType aks k = T.AppDName (getSpan it) k it (map (uncurry $ T.fromVariable ObjLv) aks)
 
-runValidate :: M.ScopedModule -> Either [Error] TypeCtx
-runValidate modl =
-  runValidation emptyValidationState (Kinding.kindModule modl >>= typeModule)

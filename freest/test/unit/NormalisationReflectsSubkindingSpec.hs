@@ -24,13 +24,13 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If ∆ ⊢ T : κ and T normalises to U, then ∆ ⊢ U : κ' and k' <: k"
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> if normalisationReflectsKinding 
+       Right (modl', t') -> if normalisationReflectsKinding 
           then  return ()
-          else expectationFailure ("T = " ++ show t' ++ "\nU = " ++ show (normalise m' t'))
+          else expectationFailure ("T = " ++ show t' ++ "\nU = " ++ show (normalise modl' t'))
         where normalisationReflectsKinding = 
-                TK.kindOf (normalise m' t') <: TK.kindOf t'
+                TK.kindOf (normalise modl' t') <: TK.kindOf t'

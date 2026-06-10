@@ -20,9 +20,9 @@ import Parser.Parser ( runParseModule )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
 import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
 import Validation.HOTRecursion ( checkNoHOTRec )
-import Validation.Kinding ( kindModule )
 import Validation.SessionPattern ( checkNoVarsInSessionPatterns )
-import Validation.Typing ( typeModule, TypeCtx )
+import Validation.Kinding ( kindModule, KindCtx, emptyKindCtx )
+import Validation.Typing ( typeModule, TypeCtx, emptyTypeCtx )
 import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, failedToLoadModule, notASourceFile )
 import UI.Error ( printErrors, Error, Source )
 import Paths_freest ( getDataFileName )
@@ -33,25 +33,24 @@ import Data.Map qualified as Map
 
 -- | Scope a parsed module against an existing scoping context, merge with an
 -- existing scoped module, then kind and type the merged whole.
-validateModule :: ScopingCtx -> M.ScopedModule -> M.ParsedModule
-               -> Validation (ScopingCtx, TypeCtx, M.ScopedModule)
-validateModule sctx existing m = do
-  (sctx', sm) <- scopeModule' sctx m
-  let merged  = existing <> sm
-  kmodl       <- kindModule merged
+validateModule :: ScopingCtx -> KindCtx -> TypeCtx -> M.ParsedModule
+               -> Validation (ScopingCtx, KindCtx, TypeCtx, M.KindedModule)
+validateModule sctx kctx tctx modl = do
+  (sctx', smodl) <- scopeModule' sctx modl
+  (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec kmodl
-  tctx        <- typeModule kmodl
+  (kctx'', tctx') <- typeModule kctx' tctx kmodl
   checkNoVarsInSessionPatterns kmodl
-  pure (sctx', tctx, merged)
+  pure (sctx', kctx'', tctx', kmodl)
 
 -- | Load just the Prelude.
-loadPrelude :: IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadPrelude :: IO (Maybe (Source, ValidationState, ScopingCtx, KindCtx, TypeCtx, M.KindedModule))
 loadPrelude = getDataFileName preludePath >>= loadM (putStrLn noModuleLoaded)
 
 -- | Load a program module on its own (no Prelude). Returns the scoped
 -- module after successful kinding and typing, or 'Nothing' if errors
 -- were found (in which case they are printed).
-loadModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, KindCtx, TypeCtx, M.KindedModule))
 loadModule fp = putStrLn preludeNotLoaded >> loadM (putStrLn moduleLoaded) fp
 
 -- | Load no module at all, just print a message to that effect,
@@ -63,16 +62,16 @@ loadNoModule = putStrLn preludeNotLoaded >> putStrLn noModuleLoaded
 -- is run on successful load (e.g. to print a status message; pass 'pure ()'
 -- to remain silent). Returns the scoped module after successful kinding and
 -- typing, or 'Nothing' if errors were found (in which case they are printed).
-loadM :: IO () -> FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadM :: IO () -> FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, KindCtx, TypeCtx, M.KindedModule))
 loadM post programPath = tryRead programPath >>= \case
   Nothing -> pure Nothing -- notASourceFile already printed
   Just programSrc ->
     case  -- Parse the program, then scope, kind and type it.
       do  programModule <- runParseModule programPath programSrc
           runValidation emptyValidationState do
-            (sctx, tctx, smodl) <- validateModule emptyScopingCtx M.emptyScopedModule programModule
+            (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx programModule
             vs                  <- get
-            pure (Map.singleton programPath (lines programSrc), vs, sctx, tctx, smodl)
+            pure (Map.singleton programPath (lines programSrc), vs, sctx, kctx, tctx, kmodl)
       of Left es -> do
           printSourceErrors [(programPath, programSrc)] es
           putStrLn failedToLoadModule
@@ -84,7 +83,7 @@ loadM post programPath = tryRead programPath >>= \case
 -- | Load a program module joined with the Prelude. Returns the scoped
 -- composed module after successful kinding and typing, or 'Nothing' if
 -- errors were found (in which case they are printed).
-loadPreludeAndModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
+loadPreludeAndModule :: FilePath -> IO (Maybe (Source, ValidationState, ScopingCtx, KindCtx, TypeCtx, M.KindedModule))
 loadPreludeAndModule programPath = do
   preludeFile <- getDataFileName preludePath
   mPreludeSrc <- tryRead preludeFile
@@ -97,9 +96,9 @@ loadPreludeAndModule programPath = do
             programModule <- runParseModule programPath programSrc
             let merged = preludeModule <> programModule
             runValidation emptyValidationState do
-              (sctx, tctx, smodl) <- validateModule emptyScopingCtx M.emptyScopedModule merged
+              (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx merged
               vs                  <- get
-              pure (Map.fromList [(preludePath, lines preludeSrc), (programPath, lines programSrc)], vs, sctx, tctx, smodl)
+              pure (Map.fromList [(preludePath, lines preludeSrc), (programPath, lines programSrc)], vs, sctx, kctx, tctx, kmodl)
         of Left es -> do
             printSourceErrors [ (preludePath, preludeSrc)
                               , (programPath, programSrc)
