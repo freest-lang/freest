@@ -18,7 +18,7 @@ import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
 import Parser.Lexer ( layoutSC )
 import Parser.LexerUtils ( runLexer, pushStartCode, Lexer )
-import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDeclList, parseItDecl, parseLowerId, parseUpperId )
+import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDeclList, parseItDecl, parseVariable, parseIdentifier )
 import Parser.Scoping qualified as Scoping
 import Parser.Unparser ( Unparse, unparse )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
@@ -294,22 +294,24 @@ handleHelp args = liftIO $ putStrLn $ unlines
 
 handleInfo :: String -> Repl () -- freesti> :i <id>
 handleInfo src = do
-  s <- get
-  let path = interactivePath (interactiveNo s)
-  case runLexer parseLowerId path src of
-    Right v -> -- src is a variable (exp or type)
-      case typeCtx s Map.!? Left v of
-        Just t  -> printAs src t
-        Nothing -> case kindCtx s Map.!? v of
-          Just k  -> printAs src k
-          Nothing -> liftIO $ putStrLn (src ++ " is not in scope")
-    Left _  ->
-      case runLexer parseUpperId path src of
-        Right i -> -- src is an identifier (TName or DName)
-          case M.kindSigs (modl s) Map.!? i of -- TODO: read from kindCtx
-            Just k  -> printAs src k
-            Nothing -> liftIO $ putStrLn (src ++ " is not in scope")
-        Left _  -> liftIO $ putStrLn ":i takes a single identifier"
+  liftIO $ putStrLn "Under construction..."
+  -- s <- get
+  -- let path       = interactivePath (interactiveNo s)
+  --     ctx        = scopingCtx s
+  --     notInScope = liftIO $ putStrLn (src ++ " is not in scope")
+  -- case runLexer parseVariable path src of
+  --   Right v -> -- src is a variable (exp or type); resolve via scoping
+  --     case Scoping.lookupEVar v ctx >>= \v' -> typeCtx s Map.!? Left v' of
+  --       Just t  -> printAs src t
+  --       Nothing -> case Scoping.lookupTVar v ctx >>= \v' -> kindCtx s Map.!? v' of
+  --         Just k  -> printAs src k
+  --         Nothing -> notInScope
+  --   Left _ -> case runLexer parseIdentifier path src of
+  --     Right i -- src is an identifier (TName or DName); confirm via scoping
+  --       | Scoping.memberKSig i ctx
+  --       , Just k <- M.kindSigs (modl s) Map.!? i -> printAs src k
+  --       | otherwise -> notInScope
+  --     Left _ -> liftIO $ putStrLn ":i takes a single identifier"
 
 handleState :: String -> Repl () -- freesti> :s
 handleState _ = get >>= liftIO . print
@@ -318,7 +320,9 @@ handleState _ = get >>= liftIO . print
 
 -- | Scope and kind-synthesize a parsed type.
 validateType :: ReplState -> TU.ParsedType -> Validation TK.KindedType
-validateType s = Scoping.scopeType (scopingCtx s) >=> Kinding.synth (kindCtx s)
+validateType s =
+  Scoping.scopeType (scopingCtx s) >=> 
+  Kinding.synth (kindCtx s)
 
 -- | Kind the current module and scope/kind-synthesize a list of parsed types
 -- against it. The result list has the same length and order as the input.
@@ -327,10 +331,11 @@ validateTypes = mapM . validateType
 
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
-validateExp s e = do
-  scoped <- Scoping.scopeExp (scopingCtx s) e
-  kexp   <- Kinding.kindExp (modl s) (kindCtx s) scoped
-  fst <$>   Typing.synth (modl s) (kindCtx s) (typeCtx s) kexp
+validateExp s =
+  Scoping.scopeExp (scopingCtx s) >=>
+  Kinding.kindExp (modl s) (kindCtx s) >=>
+  Typing.synth (modl s) (kindCtx s) (typeCtx s) >=>
+  pure . fst
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
 -- state, merging into the existing scoped module. 'kindCtx' is unchanged.

@@ -16,8 +16,8 @@ module Parser.Parser
   , parseType
   , parseTwoTypes
   , parseTypes
-  , parseLowerId
-  , parseUpperId
+  , parseVariable
+  , parseIdentifier
   -- testing
   , parseEquivalenceTests
   , parseKindingTests
@@ -51,8 +51,8 @@ import Data.List ( sortBy )
 %name parseExp Exp
 %name parseTwoTypes TwoTypes
 %name parseTypes TypePrimaryListWS
-%name parseLowerId LowerId
-%name parseUpperId UpperId
+%name parseVariable Variable
+%name parseIdentifier Identifier
 -- Parser entry points for test cases
 %name parseEquivalenceTests EquivalenceTestCases
 %name parseKindingTests KindingTestCases
@@ -177,7 +177,9 @@ Module :: { M.ParsedModule }
   -- TODO: no module declaration. See notes in Lexer.
   -- | ImportModuleDeclBlock { $1 }
 
-ModuleName :: { Token } : UPPER_ID { $1 } | QUALIFIED_UPPER_ID { $1 }
+ModuleName :: { Token }
+  : UPPER_ID { $1 }
+  | QUALIFIED_UPPER_ID { $1 }
 
 ImportModuleDeclBlock :: { M.ParsedModule }
   : OPEN ImportModuleDeclListPIPE Close { $2 }
@@ -205,10 +207,10 @@ ModuleDecl :: { M.ParsedModule -> M.ParsedModule }
   | KindSig  { $1 }
 
 DataDecl :: { M.ParsedModule -> M.ParsedModule }
-  : 'data' UPPER_ID KindedVarListWS '=' DataConsListPipe { M.insertDataDecl (mkIdTk $2) $3 $5 }
+  : 'data' Identifier KindedVarListWS '=' DataConsListPipe { M.insertDataDecl $2 $3 $5 }
 
 TypeDecl :: { M.ParsedModule -> M.ParsedModule }
-  : 'type' UPPER_ID KindedVarListWS '=' Type             { M.insertTypeDecl (mkIdTk $2) $3 $5 }
+  : 'type' Identifier KindedVarListWS '=' Type             { M.insertTypeDecl $2 $3 $5 }
 
 KindSig :: { M.ParsedModule -> M.ParsedModule }
   : 'type' UpperIdListComma ':' Kind { M.insertKindSig $2 $4  }
@@ -238,14 +240,20 @@ FnDef :: { E.ParsedLetDecl }
   | PatPrimary OpOrMinus FnDefParams RHS('=') { E.FnDef $2 [(ExpLevel $1 : $3, $4)] }
 
 ExpVar :: { Variable }
-  : LOWER_ID   { mkVarTk $1 }
+  : Variable          { $1 }
   | '(' OpOrMinus ')' { $2 }
 
 TypeVar :: { Variable }
-  : LOWER_ID { mkVarTk $1 }
+  : Variable { $1 }
 
 MultVar :: { Variable }
+  : Variable { $1 }
+
+Variable :: { Variable }
   : LOWER_ID { mkVarTk $1 }
+
+Identifier :: { Identifier }
+  : UPPER_ID { mkIdTk $1 }
 
 TypeVarNEListWS :: { [Variable] }
   : TypeVar { [$1] }
@@ -269,15 +277,15 @@ ExpVarListComma :: { [Variable] }
   | ExpVar                     { [$1] }
 
 UpperIdListComma :: { [Identifier] }
-  : UPPER_ID ',' UpperIdListComma { mkIdTk $1 : $3 }
-  | UPPER_ID                      { [mkIdTk $1] }
+  : Identifier ',' UpperIdListComma { $1 : $3 }
+  | Identifier                      { [$1] }
 
 DataConsListPipe :: { [(Identifier, [T.ParsedType])] }
   : DataCons '|' DataConsListPipe { $1 : $3 }
   | DataCons                      { [$1]    }
 
 DataCons :: { (Identifier, [T.ParsedType]) }
-  : UPPER_ID TypePrimaryListWS { (mkIdTk $1, $2) }
+  : Identifier TypePrimaryListWS { ($1, $2) }
 
 TypePrimaryListWS :: { [T.ParsedType] }
   : TypePrimary TypePrimaryListWS { $1 : $2 }
@@ -330,7 +338,7 @@ TypePrimary :: { T.ParsedType }
   | View '{' LabelTypeListComma '}'     { T.AppLinChoice (spanFromTo (fst $1) $4) (snd $1) $3 } -- sorted by AppLinChoice
   | '*' View '{' LabelListComma '}'     { T.UnChoice (spanFromTo $1 $5) (snd $2) $4 }       -- sorted by UnChoice
   -- Variables and constructors
-  | UPPER_ID { T.TName (getSpan $1) (mkIdTk $1) }
+  | Identifier { T.TName (getSpan $1) $1 }
   | TypeVar { T.Var (getSpan $1) $1 }
   -- Lists
   | '[' ']' {% prefixListTypeConsError $1 $2 }
@@ -389,7 +397,6 @@ MultOrKindedVars :: { [Either [Variable] [(Variable, K.Kind)]] }
   | '#' MultVar { [Left  [$2]] }
   | KindedVar   { [Right [$1]] }
 
-
 TypeListComma :: { [T.ParsedType] }
   : Type ',' TypeListComma { $1 : $3 }
   | Type                   { [$1] }
@@ -419,12 +426,12 @@ View :: { (Span, T.Polarity) }
   | '&' { (getSpan $1, T.In) }
 
 LabelTypeListComma :: { [(Identifier, T.ParsedType)] }
-  : UPPER_ID ':' Type ',' LabelTypeListComma { (mkIdTk $1, $3) : $5 }
-  | UPPER_ID ':' Type { [(mkIdTk $1, $3)] }
+  : Identifier ':' Type ',' LabelTypeListComma { ($1, $3) : $5 }
+  | Identifier ':' Type { [($1, $3)] }
 
 LabelListComma :: { [Identifier] }
-  : UPPER_ID ',' LabelListComma { mkIdTk $1 : $3 }
-  | UPPER_ID                    { [mkIdTk $1] }
+  : Identifier ',' LabelListComma { $1 : $3 }
+  | Identifier                    { [$1] }
 
 KindedVarListWS :: { [(Variable, K.Kind)] }
   : {- empty -} { [] }
@@ -446,7 +453,7 @@ ExpPrimary :: { E.ParsedExp }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
   | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1)) (map (E.Char (getSpan $1)) (getText $1)) }
   | ExpVar      { E.Var    (getSpan $1) $1 }
-  | UPPER_ID    { E.DCons  (getSpan $1) (mkIdTk $1) }
+  | Identifier    { E.DCons  (getSpan $1) $1 }
   | 'receiveType' { E.ReceiveType (getSpan $1) }
   | '(' ')'     { E.Tuple (spanFromTo $1 $2) [] } -- {let s = spanFromTo $1 $2 in E.DCons s (mkTupleId 0 s)}
   | '(' Commas ')' {% prefixTupleExpConsError $1 $3 } 
@@ -640,8 +647,12 @@ Close
   : CLOSE { () }
   | error {% popLayout }
 
--- Parsing FreeSTi commands
+-- Standalone entry points for FreeSTi
 
+TwoTypes :: { (T.ParsedType, T.ParsedType) }
+  : TypePrimary TypePrimary { ($1, $2) }
+
+-- FreeSTi commands
 ItDecl :: { M.ParsedModule }
   : Exp { let s = getSpan $1 in
           M.insertDef (E.ValDef
@@ -650,16 +661,6 @@ ItDecl :: { M.ParsedModule }
 
 DeclList :: { M.ParsedModule }
   : OPEN ModuleDeclListPIPE Close { $2 }
-
-TwoTypes :: { (T.ParsedType, T.ParsedType) }
-  : TypePrimary TypePrimary { ($1, $2) }
-
--- Standalone entry points used by the REPL's :info command.
-LowerId :: { Variable }
-  : LOWER_ID { mkVarTk $1 }
-
-UpperId :: { Identifier }
-  : UPPER_ID { mkIdTk $1 }
 
 -- Parsing test cases
 
