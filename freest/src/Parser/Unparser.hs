@@ -1,13 +1,30 @@
+{- |
+Module      :  Parser.Unparser
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Pretty-print (unparse) FreeST syntactic forms back to source-level strings.
+Provides the 'Unparse' class for types, kinds, multiplicities, and variables,
+and a handful of module-level helpers for rendering data and type-alias
+declarations.
+-}
 module Parser.Unparser
   ( Unparse(..)
-  ) 
+  , unparseDataDef
+  , unparseCons
+  , unparseTypeDef
+  )
   where
 
-import Syntax.Base
+import Syntax.Base ( Variable, Identifier )  
 import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
 import Syntax.Type.Internal qualified as T
+import Syntax.Type.Kinded qualified as TK
+import Utils ( internalError )
 
 import Data.List qualified as List
+import Data.Map qualified as Map
 
 data Precedence =
     PMin
@@ -145,3 +162,44 @@ instance Unparse (T.Type x) where
       view = \case
         T.In  -> "&"
         T.Out -> "+"
+
+-- | Unparse a datatype declaration, e.g. @data Tree a = Leaf | Node (Tree a) a (Tree a)@.
+unparseDataDef :: M.KindedModule -> Identifier -> String
+unparseDataDef kmodl i = case Map.lookup i (M.dataDecls kmodl) of
+  Just (aks, cs) -> "data " ++ show i ++ paramStr aks ++ " = "
+                    ++ List.intercalate " | " (map (unparseCons kmodl) cs)
+  Nothing        -> internalError $
+    "Parser.Unparser.unparseDataDef: datatype " ++ show i ++ " not found in module"
+
+-- | Unparse a single data constructor, e.g. @Node (Tree a) a (Tree a)@.
+unparseCons :: M.KindedModule -> Identifier -> String
+unparseCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
+  Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
+  Nothing      -> internalError $
+    "Parser.Unparser.unparseCons: constructor " ++ show cn ++ " not found in module"
+
+-- | Unparse a type alias declaration, e.g. @type Age = Int@ or @type Stream a = !a ; Stream a@.
+--
+-- The 'Bool' indicates whether the declaration had formal parameters. It is
+-- needed because the stored type is an 'TK.Abs' in two distinct cases that
+-- this function must render differently:
+--
+--     * @type Foo a = body@ — 'M.insertTypeDecl' wraps @body@ in @Abs aks _@
+--       when @aks@ is non-empty; stored as @(True,  Abs _ aks body)@. Rendered
+--       as @type Foo a = body@.
+--     * @type Foo = \\a -> body@ — the user wrote a type-level lambda;
+--       stored as @(False, Abs _ aks body)@. Rendered as @type Foo = \\a -> body@.
+--
+-- Both stored types are 'Abs'es of the same shape, so the 'Bool' is the only
+-- way to recover the original surface form.
+unparseTypeDef :: Identifier -> Bool -> TK.KindedType -> String
+unparseTypeDef i hasParams t = case (hasParams, t) of
+  (True, TK.Abs _ aks body) ->
+    "type " ++ show i ++ paramStr aks ++ " = " ++ unparse body
+  _ -> "type " ++ show i ++ " = " ++ unparse t
+
+-- | @paramStr [(a₁,k₁), …, (aₙ,kₙ)]@ produces @" a₁ … aₙ"@ (with a leading
+-- space) or @""@ for the empty list.
+paramStr :: [(Variable, K.Kind)] -> String
+paramStr []  = ""
+paramStr aks = " " ++ unwords (map (show . fst) aks)

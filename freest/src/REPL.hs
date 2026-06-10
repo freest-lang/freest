@@ -11,8 +11,7 @@ module REPL
   , repl
   ) where
 
-import Syntax.Base ( getSpan, Variable, Identifier, external )
-import Syntax.Kind qualified as K
+import Syntax.Base ( getSpan, Variable, external )
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
@@ -21,7 +20,7 @@ import Parser.Lexer ( layoutSC )
 import Parser.LexerUtils ( runLexer, pushStartCode, Lexer )
 import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDeclList, parseItDecl, parseVariable, parseIdentifier )
 import Parser.Scoping qualified as Scoping
-import Parser.Unparser ( Unparse, unparse )
+import Parser.Unparser ( Unparse, unparse, unparseDataDef, unparseTypeDef )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
 import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
@@ -253,45 +252,25 @@ handleInfo src = do
             case Map.lookup (Right i) (typeCtx s) of
               Just t  -> printAs src t -- type known: print it
               Nothing -> pure ()        -- type absent from the context: skip
-          Nothing -> case Map.lookup i (M.dataDecls kmodl) of
-            Just (aks, cs) -> putLines -- it's a datatype: print kind sig and definition
-              [ src ++ " is a datatype"
-              , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
-                         (Map.lookup i (M.kindSigs kmodl))
-              , showDataDef kmodl i aks cs
-              ]
-            Nothing -> case Map.lookup i (M.typeDecls kmodl) of
+          Nothing
+            | Map.member i (M.dataDecls kmodl) -> putLines -- it's a datatype: print kind sig and definition
+                [ src ++ " is a datatype"
+                , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
+                           (Map.lookup i (M.kindSigs kmodl))
+                , unparseDataDef kmodl i
+                ]
+            | otherwise -> case Map.lookup i (M.typeDecls kmodl) of
               Just (hasParams, t) -> putLines -- it's a type name: print kind sig and definition
                 [ src ++ " is a type"
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
                            (Map.lookup i (M.kindSigs kmodl))
-                , showTypeDef i hasParams t
+                , unparseTypeDef i hasParams t
                 ]
               Nothing -> notInScope -- not a constructor, datatype, or type name
       Left _ -> putLines [":i takes a single identifier"] -- input is neither a variable nor an identifier
   where
     notInScope :: Repl ()
     notInScope = putLines [src ++ " is not in scope"]
-    
-    paramStr :: [(Variable, K.Kind)] -> String
-    paramStr []  = ""
-    paramStr aks = " " ++ unwords (map (show . fst) aks)
-
-    showDataDef :: M.KindedModule -> Identifier -> [(Variable, K.Kind)] -> [Identifier] -> String
-    showDataDef kmodl i aks cs =
-      "data " ++ show i ++ paramStr aks ++ " = "
-      ++ List.intercalate " | " (map (showCons kmodl) cs)
-
-    showCons :: M.KindedModule -> Identifier -> String
-    showCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
-      Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
-      Nothing      -> show cn
-
-    showTypeDef :: Identifier -> Bool -> TK.KindedType -> String
-    showTypeDef i hasParams t = case (hasParams, t) of
-      (True, TK.Abs _ aks body) ->
-        "type " ++ show i ++ paramStr aks ++ " = " ++ unparse body
-      _ -> "type " ++ show i ++ " = " ++ unparse t
 
 handleHelp :: String -> Repl () -- freesti> :h
 handleHelp args = putLines
