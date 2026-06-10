@@ -9,7 +9,7 @@ module FreeST ( freest, runFreeST ) where
 
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import REPL ( ReplState(..), emptyReplState, repl )
-import Load ( loadM, loadPreludeAndModule )
+import Pipeline ( loadModule, loadPreludeAndModule )
 
 import Options.Applicative ( execParser )
 import System.Exit ( exitSuccess, exitFailure )
@@ -27,7 +27,7 @@ runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
 runFreeST RunOpts{filePath = Just programPath, implicitPrelude = False} =
-  loadM (pure ()) programPath >>=
+  loadModule programPath >>=
   maybe exitFailure (const exitSuccess)
 runFreeST RunOpts{filePath = Just programPath, implicitPrelude = True} =
   loadPreludeAndModule programPath >>=

@@ -53,13 +53,13 @@ library:
     - happy
   exposed-modules:
     - FreeST
-    - Load
     - Parser.LexerUtils
     - Parser.Parser
     - Parser.Scoping
     - Parser.Unparser
     - Parser.Lexer
     - Paths_freest
+    - Pipeline
     - REPL
     - Syntax.Base
     - Syntax.Expression

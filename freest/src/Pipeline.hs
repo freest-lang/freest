@@ -1,5 +1,5 @@
 {- |
-Module      :  Load
+Module      :  Pipeline
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
@@ -7,20 +7,21 @@ Loading FreeST source files: parsing, scoping, kinding and typing,
 with or without the implicit Prelude. On success returns the scoped
 module; on failure prints the errors and returns 'Nothing'.
 -}
-module Load
-  ( loadPrelude
+module Pipeline
+  ( validateModule
+  , loadPrelude
   , loadModule
   , loadPreludeAndModule
   , loadNoModule
-  , loadM
-  , validateModule
   ) where
 
 import Syntax.Module qualified as M
 import Parser.Parser ( runParseModule )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
 import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
+import Validation.HOTRecursion ( checkNoHOTRec )
 import Validation.Kinding ( kindModule )
+import Validation.SessionPattern ( checkNoVarsInSessionPatterns )
 import Validation.Typing ( typeModule, TypeCtx )
 import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, failedToLoadModule, notASourceFile )
 import UI.Error ( printErrors, Error, Source )
@@ -29,6 +30,19 @@ import Paths_freest ( getDataFileName )
 import Control.Exception ( IOException, try )
 import Control.Monad.State ( get )
 import Data.Map qualified as Map
+
+-- | Scope a parsed module against an existing scoping context, merge with an
+-- existing scoped module, then kind and type the merged whole.
+validateModule :: ScopingCtx -> M.ScopedModule -> M.ParsedModule
+               -> Validation (ScopingCtx, TypeCtx, M.ScopedModule)
+validateModule sctx existing m = do
+  (sctx', sm) <- scopeModule' sctx m
+  let merged  = existing <> sm
+  kmodl       <- kindModule merged
+  checkNoHOTRec kmodl
+  tctx        <- typeModule kmodl
+  checkNoVarsInSessionPatterns kmodl
+  pure (sctx', tctx, merged)
 
 -- | Load just the Prelude.
 loadPrelude :: IO (Maybe (Source, ValidationState, ScopingCtx, TypeCtx, M.ScopedModule))
@@ -96,17 +110,6 @@ loadPreludeAndModule programPath = do
             putStrLn moduleLoaded
             pure (Just result)
     _ -> pure Nothing -- notASourceFile already printed for missing file(s)
-
--- | Scope a parsed module against an existing scoping context, merge with an
--- existing scoped module, then kind and type the merged whole.
-validateModule :: ScopingCtx -> M.ScopedModule -> M.ParsedModule
-               -> Validation (ScopingCtx, TypeCtx, M.ScopedModule)
-validateModule sctx existing m = do
-  (sctx', sm) <- scopeModule' sctx m
-  let merged  = existing <> sm
-  kmodl       <- kindModule merged
-  tctx        <- typeModule kmodl
-  pure (sctx', tctx, merged)
 
 -- | Try to read a file; on IO failure print 'notASourceFile' and return
 -- 'Nothing', otherwise return the file contents wrapped in 'Just'.

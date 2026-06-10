@@ -64,7 +64,7 @@ instance Unparse K.Multiplicity where
 
 instance Unparse K.Kind where
   fragment = \case
-    K.Proper _ m pk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ " " ++ show pk)
+    K.Proper _ m pk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ show pk)
     K.Arrow _ k1 k2 -> (arrowRator, l ++ " -> " ++ r)
       where
         l = bracket (fragment k1) LeftAssoc arrowRator

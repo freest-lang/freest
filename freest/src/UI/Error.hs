@@ -104,6 +104,7 @@ data Error
       [Variable]
       (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
+  | MixedSessionVarPats Span E.Pat E.Pat
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -161,6 +162,7 @@ instance Located Error where
     VarOutOfScope s _ -> s
     PolymorphicTypeRecursion s _ _ _ -> s
     HigherOrderTypeRHS s _ -> s
+    MixedSessionVarPats s _ _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -458,10 +460,17 @@ toMessage src = \case
         "(Expected a proper type on the right-hand side, but found a type of kind "
         ++ bt (unparse k) ++ ". Consider adding " ++ prettyMoreParams (K.depth k)
         ++ " to the equation.)"
-      Right t -> 
+      Right t ->
         "(Found a self-reference different from the left-hand side "
         ++ bt (show i ++ (if null as then "" else " ") ++ unwords (map external as))
         ++ ", namely " ++ bt (unparse t) ++ ")"
+  MixedSessionVarPats s sp vp -> errorHeader s ++ "\n"
+    ++ "Cannot mix session patterns with variable patterns\n"
+    ++ "  session pattern:\n"
+    ++ snippet src sp True
+    ++ "  variable pattern:\n"
+    ++ snippet src vp True
+    ++ "(Session and variable patterns cannot appear together in the same match)"
   where
     thirdPerson = \case 1 -> "it"; _ -> "them"
 

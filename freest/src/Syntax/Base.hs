@@ -171,7 +171,7 @@ mkDefaultVar external l = Variable{varSpan = getSpan l, external, internal = def
 
 -- | The a variable that does not appear in a set of given variables
 mkFreshVar :: Span -> Set.Set Variable -> Variable
-mkFreshVar s fvs = unusedVar [firstInternal..] (mkDefaultVar "_γ" s) fvs
+mkFreshVar s = unusedVar [firstInternal..] (mkDefaultVar "_γ" s)
   where
     -- | The first variable in a list of internals, and not in a given set of
     -- variables.
@@ -189,8 +189,8 @@ data VarLv
 
 -- 4 _ Levels
 
--- | Used to separate the syntax of different computational levels 
--- (expressions vs. types).
+-- | Used to separate the syntax of different computational levels:
+-- expression, types and multiplicity.
 data Level a b c = ExpLevel a | TypeLevel b | MultLevel c deriving (Eq, Ord)
 
 instance (Show a, Show b, Show c) => Show (Level a b c) where
