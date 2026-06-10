@@ -11,7 +11,8 @@ module REPL
   , repl
   ) where
 
-import Syntax.Base ( getSpan, Variable, external )
+import Syntax.Base ( getSpan, Variable, Identifier, external )
+import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
@@ -140,13 +141,11 @@ repl =
       , ("quit"      , const $ liftIO exitSuccess)
       ]
 
--- The REPL commands
-
 type Repl a = HaskelineT (StateT ReplState IO) a
 
 ini :: Repl ()
 ini = do
-  liftIO $ putStrLn $ version ++ ", :h for help"
+  putLines [version ++ ", :h for help"]
   s <- get
   case filePath s of
     Just path                   -> handleLoad path
@@ -163,21 +162,18 @@ runLoader loader =
       modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl})
 
 fin :: Repl ExitDecision
-fin = liftIO $ putStrLn comeAgain >> pure Exit
+fin = putLines [comeAgain] >> pure Exit
 
 cmd :: String -> Repl ()
 cmd src = do
-  n <- gets interactiveNo
-  modify \s -> 
-    s{ source = Map.insert (interactivePath n) (lines src) (source s)
-     , interactiveNo = interactiveNo s + 1
-     }
+  path <- nextInteractivePath
+  modify (\s -> s{source = Map.insert path (lines src) (source s)})
   -- First try a bare expression, bound to 'it'
-  case runLexer parseItDecl (interactivePath n) (src ++ "\n") of
-    Right m1 -> handleModule m1 (liftIO $ putStrLn "Printing the value of variable 'it'")
+  case runLexer parseItDecl path (src ++ "\n") of
+    Right m1 -> handleModule m1 (putLines ["Printing the value of variable 'it'"])
     Left es1 ->
       -- Otherwise try a (possibly multi-line) block of let declarations
-      case runLexer (pushStartCode layoutSC >> parseDeclList) (interactivePath n) (src ++ "\n") of
+      case runLexer (pushStartCode layoutSC >> parseDeclList) path (src ++ "\n") of
         Right m2 -> handleModule m2 (pure ())
         Left es2 -> printREPLErrors -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
@@ -186,7 +182,7 @@ cmd src = do
     -- fields, evaluate, run 'post'. On failure: report the errors.
     handleModule :: M.ParsedModule -> Repl () -> Repl ()
     handleModule m post =
-      runValidate src validateModule m \(sctx, kctx, tctx, merged) -> do
+      runValidate src validateModule m printREPLErrors \(sctx, kctx, tctx, merged) -> do
         modify (\s -> s
           { scopingCtx = sctx
           , kindCtx = kctx
@@ -195,8 +191,10 @@ cmd src = do
         eval merged
         post
 
+-- Handling the various options
+
 -- TODO: handle relative paths
-handleLoad :: FilePath -> Repl () -- freesti> :l <file>
+handleLoad :: FilePath -> Repl () -- freesti> :l <path>
 handleLoad path = do
   modify (\s -> s{filePath = Just path})
   ip <- gets implicitPrelude
@@ -207,65 +205,96 @@ handleReload :: String -> Repl () -- freesti> :r
 handleReload "" =
   gets filePath >>= maybe (liftIO Pipeline.loadNoModule) handleLoad
 handleReload _  =
-  liftIO $ putStrLn "'reload' takes no arguments, just type ':r' to reload the current module"
-
--- | Parse the input and hand the parsed value to the validate/output half.
--- Parser errors are reported against the interactive source.
-runPipeline :: String                           -- source code
-           -> Lexer a                           -- parse
-           -> (ReplState -> a -> Validation b)  -- validate
-           -> (b -> Repl ())                    -- output
-           -> Repl ()
-runPipeline src parse validate output = do
-  n <- gets interactiveNo
-  modify (\s -> s{source = Map.insert (interactivePath n) (lines src) (source s), interactiveNo = n + 1})
-  case runLexer parse (interactivePath n) src of
-    Left es -> printREPLErrors es -- Lexer/parser errors
-    Right x -> runValidate src validate x output
-
--- | Run the validation, threading the validation state forward; on success
--- update 'validationState' and hand the result to 'output'; on failure print
--- the errors.
-runValidate :: String                            -- source code (for error reporting)
-            -> (ReplState -> a -> Validation b)  -- validate
-            -> a                                 -- parsed input
-            -> (b -> Repl ())                    -- output
-            -> Repl ()
-runValidate src validate x output = do
-  s <- get
-  case runState (runExceptT (validate s x)) (validationState s) of
-    (Left e,  ValidationState{errors}) -> printREPLErrors (e : errors)
-    (Right y, vs@ValidationState{errors})
-      | null errors -> modify (\s' -> s'{validationState = vs}) >> output y
-      | otherwise   -> printREPLErrors errors
+  putLines ["'reload' takes no arguments, just type ':r' to reload the current module"]
 
 handleKind :: String -> Repl () -- freesti> :k <type>
 handleKind src = runPipeline src parseType validateType (printAs src . TK.kindOf)
 
+handleType :: String -> Repl () -- freesti> :t <exp>
+handleType src = runPipeline src parseExp validateExp (printAs src)
+
 handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
     (\s (t, u) -> validateTypes s [t, u])
-    (\[t', u'] -> do get >>= \s -> liftIO $ print (equivalent (modl s) t' u'))
+    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (modl s) t' u')])
 
 handleNormalise :: String -> Repl () -- freesti> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
-  (\[t'] -> get >>= \s -> liftIO $ putStrLn (unparse (normalise (modl s) t')))
+  (\[t'] -> get >>= \s -> putLines [unparse (normalise (modl s) t')])
 
-handleGrammar :: String -> Repl () -- freesti> :g <types>
+handleGrammar :: String -> Repl () -- freesti> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
-  (\ts' -> get >>= \s -> liftIO $ putStrLn (showGrammar (fromTypes (modl s) ts')))
+  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (modl s) ts')])
 
-handleType :: String -> Repl () -- freesti> :t <exp>
-handleType src = runPipeline src parseExp validateExp (printAs src)
+handleInfo :: String -> Repl () -- freesti> :i <id>
+handleInfo src = do
+  path <- currentInteractivePath
+  s <- get
+  case runLexer parseVariable path src of
+    Right v -> -- input is a lowercase name; try as an expression, then as a type
+      let sp = getSpan v in
+      case runValidation (validationState s) (validateExp s (E.Var sp v)) of
+        Right t -> do -- bound at the expression level: print its type
+          putLines [src ++ " is an expression"]
+          printAs src t
+        Left _  -> case runValidation (validationState s) (validateType s (TU.Var sp v)) of
+          Right t -> do -- bound at the type level: print its kind
+            putLines [src ++ " is a type variable"]
+            printAs src (TK.kindOf t)
+          Left _ -> notInScope -- neither expression nor type variable
+    Left _ -> case runLexer parseIdentifier path src of
+      Right i -> -- input is an uppercase name; look it up in the kinded module
+        let kmodl = modl s in
+        case Map.lookup i (M.consDecls kmodl) of
+          Just (parent, _) -> do -- it's a data constructor: print its parent and its type
+            putLines [src ++ " is a constructor of datatype " ++ show parent]
+            case Map.lookup (Right i) (typeCtx s) of
+              Just t  -> printAs src t -- type known: print it
+              Nothing -> pure ()        -- type absent from the context: skip
+          Nothing -> case Map.lookup i (M.dataDecls kmodl) of
+            Just (aks, cs) -> putLines -- it's a datatype: print kind sig and definition
+              [ src ++ " is a datatype"
+              , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
+                         (Map.lookup i (M.kindSigs kmodl))
+              , showDataDef kmodl i aks cs
+              ]
+            Nothing -> case Map.lookup i (M.typeDecls kmodl) of
+              Just (hasParams, t) -> putLines -- it's a type name: print kind sig and definition
+                [ src ++ " is a type"
+                , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
+                           (Map.lookup i (M.kindSigs kmodl))
+                , showTypeDef i hasParams t
+                ]
+              Nothing -> notInScope -- not a constructor, datatype, or type name
+      Left _ -> putLines [":i takes a single identifier"] -- input is neither a variable nor an identifier
+  where
+    notInScope :: Repl ()
+    notInScope = putLines [src ++ " is not in scope"]
+    
+    paramStr :: [(Variable, K.Kind)] -> String
+    paramStr []  = ""
+    paramStr aks = " " ++ unwords (map (show . fst) aks)
 
--- | @printAs src x@ prints @src ++ " : " ++ unparse x@ to stdout.
-printAs :: Unparse a => String -> a -> Repl ()
-printAs src x = liftIO $ putStrLn (src ++ " : " ++ unparse x)
+    showDataDef :: M.KindedModule -> Identifier -> [(Variable, K.Kind)] -> [Identifier] -> String
+    showDataDef kmodl i aks cs =
+      "data " ++ show i ++ paramStr aks ++ " = "
+      ++ List.intercalate " | " (map (showCons kmodl) cs)
 
-handleHelp :: String -> Repl ()
-handleHelp args = liftIO $ putStrLn $ unlines
+    showCons :: M.KindedModule -> Identifier -> String
+    showCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
+      Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
+      Nothing      -> show cn
+
+    showTypeDef :: Identifier -> Bool -> TK.KindedType -> String
+    showTypeDef i hasParams t = case (hasParams, t) of
+      (True, TK.Abs _ aks body) ->
+        "type " ++ show i ++ paramStr aks ++ " = " ++ unparse body
+      _ -> "type " ++ show i ++ " = " ++ unparse t
+
+handleHelp :: String -> Repl () -- freesti> :h
+handleHelp args = putLines
   [ "Commands available from the prompt:"
   , ind "<type>                        show the normal form and kind of <type>"
   , ind "<typedecl>                    define a type (use :m for mutual recursion)"
@@ -292,29 +321,69 @@ handleHelp args = liftIO $ putStrLn $ unlines
   ]
   where ind = ("  " ++)
 
-handleInfo :: String -> Repl () -- freesti> :i <id>
-handleInfo src = do
-  liftIO $ putStrLn "Under construction..."
-  -- s <- get
-  -- let path       = interactivePath (interactiveNo s)
-  --     ctx        = scopingCtx s
-  --     notInScope = liftIO $ putStrLn (src ++ " is not in scope")
-  -- case runLexer parseVariable path src of
-  --   Right v -> -- src is a variable (exp or type); resolve via scoping
-  --     case Scoping.lookupEVar v ctx >>= \v' -> typeCtx s Map.!? Left v' of
-  --       Just t  -> printAs src t
-  --       Nothing -> case Scoping.lookupTVar v ctx >>= \v' -> kindCtx s Map.!? v' of
-  --         Just k  -> printAs src k
-  --         Nothing -> notInScope
-  --   Left _ -> case runLexer parseIdentifier path src of
-  --     Right i -- src is an identifier (TName or DName); confirm via scoping
-  --       | Scoping.memberKSig i ctx
-  --       , Just k <- M.kindSigs (modl s) Map.!? i -> printAs src k
-  --       | otherwise -> notInScope
-  --     Left _ -> liftIO $ putStrLn ":i takes a single identifier"
-
 handleState :: String -> Repl () -- freesti> :s
 handleState _ = get >>= liftIO . print
+
+-- Running pipelines
+
+-- | Parse the input and hand the parsed value to the validate/output half.
+-- Parser errors are reported against the interactive source.
+runPipeline :: String                           -- source code
+           -> Lexer a                           -- parse
+           -> (ReplState -> a -> Validation b)  -- validate
+           -> (b -> Repl ())                    -- continuation
+           -> Repl ()
+runPipeline src parse validate continuation = do
+  n <- gets interactiveNo
+  modify (\s -> s{source = Map.insert (interactivePath n) (lines src) (source s), interactiveNo = n + 1})
+  case runLexer parse (interactivePath n) src of
+    Left es -> printREPLErrors es -- Lexer/parser errors
+    Right x -> runValidate src validate x printREPLErrors continuation
+
+-- | Run the validation, threading the validation state forward; on success
+-- update 'validationState' and hand the result to 'output'; on failure print
+-- the errors.
+runValidate :: String                            -- source code (for error reporting)
+            -> (ReplState -> a -> Validation b)  -- validate
+            -> a                                 -- parsed input
+            -> ([Error] -> Repl ())              -- error action (for accumulated errors)
+            -> (b -> Repl ())                    -- continuation
+            -> Repl ()
+runValidate src validate x errAction continuation = do
+  s <- get
+  case runState (runExceptT (validate s x)) (validationState s) of
+    (Left e,  ValidationState{errors}) -> printREPLErrors (e : errors)
+    (Right y, vs@ValidationState{errors})
+      | null errors -> modify (\s' -> s'{validationState = vs}) >> continuation y
+      | otherwise   -> errAction errors
+
+-- Printing results
+-- | Print a list of errors against the interactive source line(s).
+printREPLErrors :: [Error] -> Repl ()
+printREPLErrors es = do
+  source <- gets source
+  liftIO $ printErrors source es
+
+-- | @printAs src x@ prints @src ++ " : " ++ unparse x@ to stdout.
+printAs :: Unparse a => String -> a -> Repl ()
+printAs src x = putLines [src ++ " : " ++ unparse x]
+
+-- | Print the given lines, skipping empty ones.
+putLines :: [String] -> Repl ()
+putLines = liftIO . putStr . unlines . filter (not . null)
+
+-- Interactive path
+
+nextInteractivePath :: Repl FilePath
+nextInteractivePath = do
+  n <- gets interactiveNo
+  modify (\s -> s{interactiveNo = n + 1})
+  pure (interactivePath n)
+
+currentInteractivePath :: Repl FilePath
+currentInteractivePath = do
+  n <- gets interactiveNo
+  pure (interactivePath n)
 
 -- Validating syntax
 
@@ -338,18 +407,12 @@ validateExp s =
   pure . fst
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
--- state, merging into the existing scoped module. 'kindCtx' is unchanged.
+-- state, merging into the existing scoped module.
 validateModule :: ReplState -> M.ParsedModule
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)
-validateModule s m = do
-  (sctx, kctx, tctx, merged) <- Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s) m
-  pure (sctx, kctx, tctx, merged)
+validateModule s =
+  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s)
 
--- | Print a list of errors against the interactive source line(s).
-printREPLErrors :: [Error] -> Repl ()
-printREPLErrors es = do
-  source <- gets source
-  liftIO $ printErrors source es
 -- Evaluation; interface with module Eval
 
 type Value = ()
@@ -357,7 +420,7 @@ type ValueCtx = Map.Map Variable Value
 
 eval :: M.KindedModule -> Repl ()
 eval m = do
-  liftIO $ putStrLn "Evaluating..."
+  putLines ["Evaluating..."]
   s <- get
   vctx <- collectLetDecls (valueCtx s) m
   put s{valueCtx = vctx}
