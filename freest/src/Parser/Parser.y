@@ -16,6 +16,8 @@ module Parser.Parser
   , parseType
   , parseTwoTypes
   , parseTypes
+  , parseLowerId
+  , parseUpperId
   -- testing
   , parseEquivalenceTests
   , parseKindingTests
@@ -49,6 +51,8 @@ import Data.List ( sortBy )
 %name parseExp Exp
 %name parseTwoTypes TwoTypes
 %name parseTypes TypePrimaryListWS
+%name parseLowerId LowerId
+%name parseUpperId UpperId
 -- Parser entry points for test cases
 %name parseEquivalenceTests EquivalenceTestCases
 %name parseKindingTests KindingTestCases
@@ -649,6 +653,13 @@ DeclList :: { M.ParsedModule }
 
 TwoTypes :: { (T.ParsedType, T.ParsedType) }
   : TypePrimary TypePrimary { ($1, $2) }
+
+-- Standalone entry points used by the REPL's :info command.
+LowerId :: { Variable }
+  : LOWER_ID { mkVarTk $1 }
+
+UpperId :: { Identifier }
+  : UPPER_ID { mkIdTk $1 }
 
 -- Parsing test cases
 

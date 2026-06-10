@@ -11,16 +11,16 @@ module REPL
   , repl
   ) where
 
-import Syntax.Base ( getSpan, Variable )
+import Syntax.Base ( getSpan, Variable, external )
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
 import Parser.Lexer ( layoutSC )
 import Parser.LexerUtils ( runLexer, pushStartCode, Lexer )
-import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDeclList, parseItDecl )
+import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDeclList, parseItDecl, parseLowerId, parseUpperId )
 import Parser.Scoping qualified as Scoping
-import Parser.Unparser ( unparse )
+import Parser.Unparser ( Unparse, unparse )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
 import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
@@ -240,9 +240,7 @@ runValidate src validate x output = do
       | otherwise   -> printREPLErrors errors
 
 handleKind :: String -> Repl () -- freesti> :k <type>
-handleKind src = runPipeline src parseType
-  validateType
-  (\t' -> liftIO $ putStrLn (src ++ " : " ++ unparse (TK.kindOf t')))
+handleKind src = runPipeline src parseType validateType (printAs src . TK.kindOf)
 
 handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
@@ -260,9 +258,11 @@ handleGrammar src = runPipeline src parseTypes
   (\(kmodl, ts') -> liftIO $ putStrLn (showGrammar (fromTypes kmodl ts')))
 
 handleType :: String -> Repl () -- freesti> :t <exp>
-handleType src = runPipeline src parseExp
-  validateExp
-  (\t -> liftIO $ putStrLn (src ++ " : " ++ unparse t))
+handleType src = runPipeline src parseExp validateExp (printAs src)
+
+-- | @printAs src x@ prints @src ++ " : " ++ unparse x@ to stdout.
+printAs :: Unparse a => String -> a -> Repl ()
+printAs src x = liftIO $ putStrLn (src ++ " : " ++ unparse x)
 
 handleHelp :: String -> Repl ()
 handleHelp args = liftIO $ putStrLn $ unlines
@@ -292,8 +292,24 @@ handleHelp args = liftIO $ putStrLn $ unlines
   ]
   where ind = ("  " ++)
 
-handleInfo :: String -> Repl () -- freesti> :i <text>
-handleInfo text = liftIO $ putStrLn "TODO: What do we want here?"
+handleInfo :: String -> Repl () -- freesti> :i <id>
+handleInfo src = do
+  s <- get
+  let path = interactivePath (interactiveNo s)
+  case runLexer parseLowerId path src of
+    Right v -> -- src is a variable (exp or type)
+      case typeCtx s Map.!? Left v of
+        Just t  -> printAs src t
+        Nothing -> case kindCtx s Map.!? v of
+          Just k  -> printAs src k
+          Nothing -> liftIO $ putStrLn (src ++ " is not in scope")
+    Left _  ->
+      case runLexer parseUpperId path src of
+        Right i -> -- src is an identifier (TName or DName)
+          case M.kindSigs (modl s) Map.!? i of -- TODO: read from kindCtx
+            Just k  -> printAs src k
+            Nothing -> liftIO $ putStrLn (src ++ " is not in scope")
+        Left _  -> liftIO $ putStrLn ":i takes a single identifier"
 
 handleState :: String -> Repl () -- freesti> :s
 handleState _ = get >>= liftIO . print
