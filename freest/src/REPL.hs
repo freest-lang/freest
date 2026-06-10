@@ -26,7 +26,7 @@ import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
-import Load qualified
+import Pipeline qualified
 import UI.Error ( printErrors, Error, Source )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
@@ -150,8 +150,8 @@ ini = do
   s <- get
   case filePath s of
     Just path                   -> handleLoad path
-    Nothing | implicitPrelude s -> runLoader Load.loadPrelude
-            | otherwise         -> liftIO Load.loadNoModule
+    Nothing | implicitPrelude s -> runLoader Pipeline.loadPrelude
+            | otherwise         -> liftIO Pipeline.loadNoModule
 
 -- | Run a loader action and, on success, replace the validation/scoping/type
 -- contexts and module in the REPL state with whatever the loader produced.
@@ -200,12 +200,12 @@ handleLoad :: FilePath -> Repl () -- freesti> :l <file>
 handleLoad path = do
   modify (\s -> s{filePath = Just path})
   ip <- gets implicitPrelude
-  let loader = if ip then Load.loadPreludeAndModule else Load.loadModule
+  let loader = if ip then Pipeline.loadPreludeAndModule else Pipeline.loadModule
   runLoader (loader path)
 
 handleReload :: String -> Repl () -- freesti> :r
 handleReload "" =
-  gets filePath >>= maybe (liftIO Load.loadNoModule) handleLoad
+  gets filePath >>= maybe (liftIO Pipeline.loadNoModule) handleLoad
 handleReload _  =
   liftIO $ putStrLn "'reload' takes no arguments, just type ':r' to reload the current module"
 
@@ -341,7 +341,7 @@ validateExp s e = do
 validateModule :: ReplState -> M.ParsedModule
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.ScopedModule)
 validateModule s m = do
-  (sctx, tctx, merged) <- Load.validateModule (scopingCtx s) (modl s) m
+  (sctx, tctx, merged) <- Pipeline.validateModule (scopingCtx s) (modl s) m
   pure (sctx, kindCtx s, tctx, merged)
 
 -- | Print a list of errors against the interactive source line(s).

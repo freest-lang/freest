@@ -40,7 +40,6 @@ import UI.Error
 import Utils
 import Validation.Base
 import Validation.Expose qualified as Expose
-import Validation.HOTRecursion (checkNoHOTRec)
 import Validation.Normalisation
 import Validation.Substitution ( subs, subsMultType )
 
@@ -55,6 +54,7 @@ import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
+import Validation.HOTRecursion (checkNoHOTRec)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map Variable Kind
@@ -231,7 +231,6 @@ kindModule mod = do
                  , M.consDecls   = cds
                  , M.definitions = []
                  }
-  checkNoHOTRec mod'
   (_, lds) <- kindLetDecls mod mod' Map.empty (M.definitions mod)
   return mod'{M.definitions = lds}
   where
@@ -515,7 +514,10 @@ kindExp smodl kmodl kctx = \case
 --     * a list of errors, if any was encountered;
 --     * the given module, otherwise.
 runKindModule :: M.ScopedModule -> Either [Error] M.KindedModule
-runKindModule modl = runValidation emptyValidationState (kindModule modl)
+runKindModule modl = runValidation emptyValidationState do 
+  modl' <- kindModule modl
+  checkNoHOTRec modl'
+  return modl'
 
 -- | Run synthesis on type, building the initial validation state from a given
 -- module. This returns either:
