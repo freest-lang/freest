@@ -181,13 +181,14 @@ cmd src = do
     -- fields, evaluate, run 'post'. On failure: report the errors.
     handleModule :: M.ParsedModule -> Repl () -> Repl ()
     handleModule m post =
-      runValidate src validateModule m printREPLErrors \(sctx, kctx, tctx, merged) -> do
+      runValidate src validateModule m printREPLErrors \(sctx, kctx, tctx, kmodl) -> do
+        merged <- gets ((<> kmodl) . modl)
         modify (\s -> s
           { scopingCtx = sctx
           , kindCtx = kctx
           , typeCtx = tctx
           , modl = merged})
-        eval merged
+        eval kmodl
         post
 
 -- Handling the various options

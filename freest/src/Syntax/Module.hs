@@ -195,6 +195,20 @@ instance Semigroup ScopedModule where
 instance Monoid ScopedModule where
   mempty = emptyScopedModule
 
+instance Semigroup KindedModule where
+  m1 <> m2 =
+    Module{ name        = name m2
+          , imports     = imports     m1 ++          imports     m2
+          , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
+          , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
+          , dataDecls   = dataDecls   m1 `Map.union` dataDecls   m2
+          , consDecls   = consDecls   m1 `Map.union` consDecls   m2
+          , definitions = definitions m1 ++          definitions m2
+          }
+
+instance Monoid KindedModule where
+  mempty = emptyKindedModule
+
 instance Show ParsedModule where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
