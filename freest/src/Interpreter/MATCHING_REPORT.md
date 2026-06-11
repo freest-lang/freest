@@ -142,7 +142,11 @@ argument order of the original `resolvePatternMatching`.
   to keep *all* type applications in the AST, but inferred ones are dropped
   (`head xs` carries no `@a`), so an arity that counts type slots under-saturates
   every polymorphic call written without an explicit `@` (confirmed: it broke
-  `head`, `Stack`, …). Deferred to elaboration support.
+  `head`, `Stack`, …). Deferred to elaboration support; captured as the pending
+  test `test/prog/Valid/SystemF/TypeAbsSuspension`. The clean way to implement it
+  once elaboration lands is to carry the `Level`-tagged parameter list in
+  `type Clause` (rather than erasing to `[Pat]`), so arity and the term/type
+  interleaving fall out of the clause instead of being threaded separately.
 
 ## Touched files
 
