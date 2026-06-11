@@ -104,6 +104,7 @@ synth modl kctx tctx = \case
   E.Int s _       -> pure (T.Int s   , tctx)
   E.Float s _     -> pure (T.Float s , tctx)
   E.Char s _      -> pure (T.Char s  , tctx)
+  E.String s _    -> pure (T.List s (T.Char s), tctx)
   -- Tuples, (e1 ... , en)
   E.Tuple s es -> do
     first (T.Tuple s) <$>
@@ -257,6 +258,7 @@ check modl kctx tctx e t = case e of
   E.Int s _   -> checkEquivTypes modl (Left e) t (T.Int s)   >> pure tctx
   E.Float s _ -> checkEquivTypes modl (Left e) t (T.Float s) >> pure tctx
   E.Char s _  -> checkEquivTypes modl (Left e) t (T.Char s)  >> pure tctx
+  E.String s _ -> checkEquivTypes modl (Left e) t (T.List s (T.Char s)) >> pure tctx
   -- Tuples, (e1 ... , en)
   E.Tuple s es ->
     case normalise modl t of
@@ -644,6 +646,10 @@ checkPat modl kctx p t = case p of
   -- 'a'
   E.CharPat   s _   -> do
     checkEquivTypes modl (Right p) t (T.Char s)
+    pure (kctx, Map.empty)
+  -- "abc"
+  E.StringPat s _   -> do
+    checkEquivTypes modl (Right p) t (T.List s (T.Char s))
     pure (kctx, Map.empty)
   -- x
   E.VarPat    s x   -> pure (kctx, Map.singleton (Left x) t)

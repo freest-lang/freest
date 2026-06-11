@@ -395,6 +395,7 @@ scopeExp ctx = \case
   E.Int s x -> pure $ E.Int s x
   E.Float s x -> pure $ E.Float s x
   E.Char s x -> pure $ E.Char s x
+  E.String s x -> pure $ E.String s x
   E.DCons s i -> pure $ E.DCons s i
   E.Var s x -> case lookupEVar x ctx of
     Nothing -> {- insertError (OutOfScope (getSpan x) x) -} -- leaving this for the typechecker

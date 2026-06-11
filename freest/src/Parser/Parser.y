@@ -451,7 +451,7 @@ ExpPrimary :: { E.ParsedExp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
   | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
-  | STRING_LIT  { E.listExp (getSpan $1) (T.Char (getSpan $1)) (map (E.Char (getSpan $1)) (getText $1)) }
+  | STRING_LIT  { E.String (getSpan $1) (read (getText $1)) }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | Identifier    { E.DCons  (getSpan $1) $1 }
   | 'receiveType' { E.ReceiveType (getSpan $1) }
@@ -585,7 +585,7 @@ PatPrimary :: { E.Pat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
-  | STRING_LIT       { E.stringPat (getSpan $1) (read (getText $1)) }
+  | STRING_LIT       { E.StringPat (getSpan $1) (read (getText $1)) }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
   | 'Wait'           { E.WaitPat   (getSpan $1) }

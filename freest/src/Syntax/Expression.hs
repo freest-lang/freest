@@ -55,6 +55,7 @@ data Pat
   = IntPat Span Int
   | FloatPat Span Double
   | CharPat Span Char
+  | StringPat Span String
   | WildPat Span Variable
   | VarPat Span Variable
   | PackPat Span [(Variable, Kind)] Pat
@@ -82,9 +83,6 @@ listPat s = \case
   []       -> NilPat s
   (p : ps) -> ConsPat s p (listPat s ps)
 
-stringPat :: Span -> String -> Pat
-stringPat s = listPat s . map (CharPat s)
-
 data LetDecl x
   = ValDef Pat      (RHS x)
   | FnDef  Variable [([Level Pat Variable Variable], RHS x)]
@@ -103,6 +101,7 @@ data Exp x
   = Int    Span Int
   | Float  Span Double
   | Char   Span Char
+  | String Span String
   | DCons  Span Identifier
   | Var    Span Variable
   | App    Span (Exp x) [Level (Exp x) (Type x) Multiplicity]
@@ -143,6 +142,7 @@ instance Located Pat where
     IntPat s _      -> s
     FloatPat s _    -> s
     CharPat s _     -> s
+    StringPat s _   -> s
     WildPat s _     -> s
     VarPat s _      -> s
     PackPat s _ _   -> s
@@ -157,6 +157,7 @@ instance Located Pat where
     IntPat _ i      -> IntPat s i
     FloatPat _ f    -> FloatPat s f
     CharPat _ c     -> CharPat s c
+    StringPat _ str -> StringPat s str
     WildPat _ x     -> WildPat s x
     VarPat _ x      -> VarPat s x
     PackPat _ as p  -> PackPat s as p
@@ -179,6 +180,7 @@ instance Located (Exp x) where
     Int s _      -> s
     Float s _    -> s
     Char s _     -> s
+    String s _   -> s
     DCons s _    -> s
     Var s _      -> s
     App s _ _    -> s
@@ -198,6 +200,7 @@ instance Located (Exp x) where
     Int _ i       -> Int s i
     Float _ f     -> Float s f
     Char _ c      -> Char s c
+    String _ str  -> String s str
     DCons _ i     -> DCons s i
     Var _ x       -> Var s x
     App _ e as    -> App s e as
@@ -227,6 +230,7 @@ instance Show Pat where
     IntPat _ i      -> show i
     FloatPat _ f    -> show f
     CharPat _ c     -> show c
+    StringPat _ str -> show str
     WildPat _ x     -> show x
     VarPat _ x      -> show x
     PackPat _ aks p  -> "(" ++intercalate ", " (map (\(a, k) -> "@("++ show a ++ " : " ++ show k ++ ")") aks) ++ ", " ++ show p ++ ")"
@@ -266,6 +270,7 @@ instance Show (Exp x) where
     Int _ i        -> show i
     Float _ d      -> show d
     Char _ c       -> show c
+    String _ s     -> show s
     DCons _ i      -> show i
     Var _ x        -> show x
     App _ f as     -> foldl (\s a -> "("++s++" "++showArg a++")") (show f) as

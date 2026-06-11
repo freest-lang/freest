@@ -422,6 +422,7 @@ kindPat kmodl kctx = \case
   E.IntPat   s i -> pure (kctx, E.IntPat   s i)
   E.FloatPat s f -> pure (kctx, E.FloatPat s f)
   E.CharPat  s c -> pure (kctx, E.CharPat  s c)
+  E.StringPat s t -> pure (kctx, E.StringPat s t)
   E.WildPat  s x -> pure (kctx, E.WildPat  s x)
   E.VarPat   s x -> pure (kctx, E.VarPat   s x)
   E.PackPat s aks p -> 
@@ -466,6 +467,7 @@ kindExp kmodl kctx = \case
   E.Int   s i -> pure $ E.Int   s i
   E.Float s d -> pure $ E.Float s d
   E.Char  s c -> pure $ E.Char  s c
+  E.String s t -> pure $ E.String s t
   E.DCons s i -> pure $ E.DCons s i
   E.Var   s a -> pure $ E.Var   s a
   E.App s e args -> do
