@@ -8,6 +8,7 @@ This module implements FreeST's values.
 module Interpreter.Values 
   (
     Env,
+    Clause,
     Value(..),
     showTups,
     chan,
@@ -29,20 +30,28 @@ import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
 import System.IO ( Handle, hPutStr, stderr, openFile, IOMode (..), hGetChar, hGetLine, hIsEOF, hClose )
 
 import Syntax.Base ( Variable )
-import Syntax.Expression ( KindedExp, Pat )
+import Syntax.Expression ( KindedExp, KindedRHS, Pat )
 import Syntax.Type.Kinded (KindedType)
 
 -- | An environment, composed of bindings from variables to values
 type Env = Map.Map Variable Value
+
+-- | A clause of a (multi-clause) function or a single @case@ alternative:
+-- a column of patterns together with its right-hand side.
+type Clause = ([Pat], KindedRHS)
 
 data Value
   = VInt Int
   | VFloat Double
   | VUnit
   | VChar Char
-  | VString String
   | VCons String [Value]
-  | VClosure [Pat] KindedExp Env
+  -- | A function: arity, the arguments collected so far (for partial
+  -- application), its clauses, and its captured environment. The environment is
+  -- self-contained: it holds the bindings in scope where the function was
+  -- defined, including the function itself (and its `mutual` siblings), so the
+  -- closure resolves correctly even after escaping its defining scope.
+  | VClosure Int [Value] [Clause] Env
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
   | VHandle Handle
@@ -55,11 +64,11 @@ data Value
   | VRecvType -}
 
 instance Show Value where
+  show v | Just str <- asString v = show str   -- a [Char] cons-list prints as a string
   show (VInt n) = show n
   show (VFloat n) = show n
   show (VUnit) = "()"
   show (VChar c) = show c
-  show (VString str) = show str
   show (VCons str vals) = str ++ " " ++ unwords (map show vals)
   show (VClosure {}) = "<closure>"
   show (VBuiltin _) = "<builtin>"
@@ -83,6 +92,33 @@ hsToFstBool False = VCons "False" []
 fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
+
+-- A FreeST string is a @[Char]@, i.e. a cons-list value built from the list
+-- constructors @"(::)"@ and @"[]"@ over 'VChar's. These marshal to and from
+-- Haskell 'String's at the builtin boundary.
+
+-- | Build a FreeST string value from a Haskell 'String'.
+hsToFstString :: String -> Value
+hsToFstString = foldr (\c acc -> VCons "(::)" [VChar c, acc]) (VCons "[]" [])
+
+-- | Extract a Haskell 'String' from a FreeST string value.
+fstToHsString :: Value -> String
+fstToHsString = \case
+  VCons "[]"   []              -> ""
+  VCons "(::)" [VChar c, rest] -> c : fstToHsString rest
+  v                            -> error ("fstToHsString: not a string: " ++ show v)
+
+-- | A FreeST string value as a Haskell 'String', if it is one (used for
+-- showing; an empty list stays a list, since "" and [] are indistinguishable).
+asString :: Value -> Maybe String
+asString = \case
+  VCons "(::)" [VChar c, rest] -> (c :) <$> go rest
+  _                            -> Nothing
+  where
+    go = \case
+      VCons "[]"   []              -> Just ""
+      VCons "(::)" [VChar d, more] -> (d :) <$> go more
+      _                            -> Nothing
 
 type ChannelEnd = (C.Chan Value, C.Chan Value)
 
@@ -136,8 +172,8 @@ builtins = Map.fromList
   -- *** Strings
   , ("ord",           VBuiltin (\(VChar c) -> VInt (ord c)))
   , ("chr",           VBuiltin (\(VInt x) -> VChar (chr x)))
-  , ("(^^)",          VBuiltin (\(VString str1) -> VBuiltin (\(VString str2) -> VString (str1++str2))))
-  , ("show",          VBuiltin (VString . show))
+  , ("(^^)",          VBuiltin (\s1 -> VBuiltin (\s2 -> hsToFstString (fstToHsString s1 ++ fstToHsString s2))))
+  , ("show",          VBuiltin (hsToFstString . show))
   -- ** Comparison
   , ("(<)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x < y))))
   , ("(<=)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x <= y))))
@@ -218,9 +254,9 @@ builtins = Map.fromList
   -- *** stdin
   -- **** Internal stdin functions
   , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
-  , ("internalGetLine",       VBuiltin (const $ VIO $ VString <$> getLine))
-  , ("internalGetContents",   VBuiltin (const $ VIO $ VString <$> getContents))
-  , ("internalPutStrOut",     VBuiltin (\(VString string) -> VIO $ VUnit <$ putStr string))
+  , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
+  , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
+  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ putStr (fstToHsString s)))
 
   {- -- IO operators
   , ("readBool",              VBuiltin (\(VString str) -> hsToFstBool (read str)))

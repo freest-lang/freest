@@ -3,182 +3,149 @@ Module      :  Interpreter.PatternMatching
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-This module implements FreeST's pattern matching handling.
+This module implements FreeST's runtime pattern matching: a value-directed
+matcher that matches runtime 'Value's against surface 'Pat'terns, producing
+variable bindings.
+
+Session patterns perform communication, which is irreversible — so a channel
+matched by a session pattern must be received from *once*, with the result then
+selecting a clause (it must not be re-received as we try later clauses). We
+therefore split matching into two passes:
+
+  1. 'forceColumns' performs the session effects demanded by the clauses
+     (receive a choice label, receive a value, wait), turning the channels into
+     ordinary data values. Because the type system makes the session structure
+     of a column the same across all clauses, this can be done once, up front,
+     even when the session pattern is nested inside a data pattern (e.g. a
+     tuple).
+
+  2. 'matchClause' / 'matchPat' then match the clauses against those forced
+     values *purely*, with ordinary backtracking and guard fall-through.
 -}
-module Interpreter.PatternMatching 
-  (
-    compileFunctionToClosure,
-    resolvePatternMatching
+module Interpreter.PatternMatching
+  ( matchPat
+  , matchClause
+  , forceColumns
+  , mkClosure
   ) where
 
-{-
-TODO:
-- When introducing closures, capture only free variables in the environment, and not the whole env
-- Change resolvePatternMatching, switch value argument with Pattern
-- Improve pattern matching of functions, to also accept session-type patterns 
-- Implement more efficient compilation of function with pattern matching to closure with cases (check The Implementation of Functional Programming Languages, by Simon Peyton Jones)
--}
-
 import Control.Monad (zipWithM)
-import Data.Function (on)
-import Data.Map (empty, singleton, union, unions, insert, filterWithKey)
-import qualified Data.Set as Set
+import Data.List (transpose)
+import Data.Map (empty, singleton, union, insert)
 
-import Interpreter.Values (Value(VUnit, VInt, VFloat, VChar, VCons, VClosure, VChan, VPack), Env, receive)
+import Interpreter.Values (Value(..), Env, Clause, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
-import Control.Concurrent (getChanContents)
-import GHC.IO (unsafePerformIO)
 
+-- == Pure matching (run after 'forceColumns') ==============================
 
--- HANDLING PATTERN MATCHING
+-- | Match a single pattern (one column) against a value, producing bindings on
+-- success or 'Nothing' on failure. Session patterns are matched against the
+-- *forced* representations produced by 'forceColumns'.
+matchPat :: Value -> E.Pat -> IO (Maybe Env)
+matchPat v = \case
+  E.IntPat _ i   -> pure $ case v of VInt   i' | i == i' -> Just empty ; _ -> Nothing
+  E.FloatPat _ f -> pure $ case v of VFloat f' | f == f' -> Just empty ; _ -> Nothing
+  E.CharPat _ c  -> pure $ case v of VChar  c' | c == c' -> Just empty ; _ -> Nothing
+  E.WildPat _ _  -> pure (Just empty)
+  E.VarPat _ x   -> pure (Just (singleton x v))
+  E.AsPat _ x p  -> fmap (insert x v) <$> matchPat v p
+  E.PackPat _ _ p ->
+    case v of
+      VPack _ inner -> matchPat inner p
+      _             -> pure Nothing
+  E.DConsPat _ (B.Identifier _ con) ps ->
+    case v of
+      VCons con' vs | con == con' && length ps == length vs -> matchClause ps vs
+      _                                                      -> pure Nothing
+  -- Session patterns, matched against the forced representations:
+  --   a chosen branch  &l   →  VCons l [continuation]
+  --   a received value ?p;q →  VCons "(,)" [forced p, forced q]
+  --   a closed channel Wait →  any (the wait was performed)
+  E.ChoicePat _ (B.Identifier _ label) q ->
+    case v of
+      VCons label' [cont] | label == label' -> matchPat cont q
+      _                                     -> pure Nothing
+  E.InPat _ p1 p2 ->
+    case v of
+      VCons "(,)" [v1, v2] -> matchClause [p1, p2] [v1, v2]
+      _                    -> pure Nothing
+  E.TypeInPat _ _ p -> matchPat v p   -- the type input was already consumed
+  E.WaitPat _       -> pure (Just empty)
 
--- | Match patterns to values, returning a list of associations between variables and values on a success, or a list of the patterns that failed otherwise
-resolvePatternMatching :: Value -> E.Pat -> Either (E.Pat, Value) Env
-resolvePatternMatching val (E.IntPat s i) =
-  case val of
-    VInt i' -> if i == i' then Right empty else Left (E.IntPat s i, val)
-    _ -> Left (E.IntPat s i, val)
-resolvePatternMatching val (E.FloatPat s f) =
-  case val of
-    VFloat f' -> if f == f' then Right empty else Left (E.FloatPat s f, val)
-    _ -> Left (E.FloatPat s f, val)
-resolvePatternMatching val (E.CharPat s c) =
-  case val of
-    VChar c' -> if c == c' then Right empty else Left (E.CharPat s c, val)
-    otherVal -> Left (E.CharPat s c, otherVal)
-resolvePatternMatching _ (E.WildPat _ _) = Right empty
-resolvePatternMatching val (E.VarPat _ var) = Right $ singleton var val
-resolvePatternMatching val (E.PackPat s vars pat) =
-  case val of
-    VPack _ exp -> do
-      let binding = resolvePatternMatching exp pat
-      case binding of
-        Left _ -> Left (pat, exp)
-        Right bindings -> Right bindings
-    _ -> Left (E.PackPat s vars pat, val)
-resolvePatternMatching val (E.DConsPat s iden pats) = do
-  let (B.Identifier s' patIden) = iden
-  case val of
-    VCons iden' vals' -> do
-      -- if data constructors match
-      if patIden == iden' then do
-        -- TODO: check if arity of data constructors matches number of patters/arguments
-        -- get results from pattern matching underlying patterns and terms
-        let binding = zipWithM resolvePatternMatching vals' pats
-        case binding of
-          Left _ -> Left (E.DConsPat s iden pats, val)
-          Right bindings -> Right $ unions bindings
-      else Left (E.DConsPat s iden pats, val)
-    {- VChan (c1, c2) -> do
-      if patIden == "(,)" then do
-        -- get results from pattern matching underlying patterns and terms
-        let binding = zipWithM resolvePatternMatching pats [VChan (c1, c2)]
-        case binding of
-          Left _ -> Left (E.DConsPat s iden pats, val)
-          Right bindings -> Right $ concat bindings
-      else Left (E.DConsPat s iden pats, val) -}
-    _ -> Left (E.DConsPat s iden pats, val)
--- TODO: Do we need to check contents of channel? getChanContents to get contents, check if head is VUnit? Label?
-resolvePatternMatching val (E.WaitPat s) =
-  case val of
-    VChan c -> Right empty
-    _ -> Left (E.WaitPat s, val)
-resolvePatternMatching val (E.InPat s pat1 pat2) = Left (E.InPat s pat1 pat2, val)
-  {- do
-  case val of
-    VChan c -> do
-      let chanContents = unsafePerformIO $ getChanContents $ fst c
-      let msg = head chanContents
-      let binding = resolvePatternMatching pat1 msg
-      case binding of
-        Left _ -> Left (pat1, msg)
-        Right bindings -> do
-          -- TODO: must remove head from channel, how to??
-          -- TODO: receive creates a new copy of the channel? Immutability or mutability?
-          let binding' = resolvePatternMatching pat2 (VChan c)
-          case binding' of
-            Left _ -> Left (E.InPat s pat1 pat2, val)
-            Right bindings' -> Right $ union bindings bindings'
-    _ -> Left (E.InPat s pat1 pat2, val) -}
-resolvePatternMatching val (E.ChoicePat s iden pat) = Left (E.ChoicePat s iden pat, val)
--- check against select 
-resolvePatternMatching val (E.TypeInPat s (var, kind) pat) = Left (E.TypeInPat s (var, kind) pat, val)
-resolvePatternMatching val (E.AsPat s var pat) = do
-  let binding = resolvePatternMatching val pat
-  case binding of
-    Left _ -> Left (E.AsPat s var pat, val)
-    Right bindings -> Right $ insert var val  bindings
+-- | Match a column of patterns left-to-right against a list of values, failing
+-- fast and unioning the bindings.
+matchClause :: [E.Pat] -> [Value] -> IO (Maybe Env)
+matchClause []       []       = pure (Just empty)
+matchClause (p : ps) (v : vs) = do
+  mb <- matchPat v p
+  case mb of
+    Nothing -> pure Nothing
+    Just b  -> fmap (union b) <$> matchClause ps vs
+matchClause _ _ = pure Nothing   -- arity mismatch
 
--- COMPILATION OF FUNCTIONS WITH PATTERN MATCHING
+-- == Session forcing pass ==================================================
 
--- | A clause in a function definition
-type Clause = ([E.Pat], E.KindedRHS)
+-- | Perform, once, the session effects the clauses demand on the argument
+-- values, turning channels into ordinary data values. The patterns of all the
+-- clauses (one column list per clause) guide which effect to perform; by the
+-- type system they agree on the session structure of every position.
+forceColumns :: [Clause] -> [Value] -> IO [Value]
+forceColumns clauses vals = zipWithM forceCol (transpose (map fst clauses)) vals
 
--- | Compile function definitions with pattern matching into a closure with case-expressions
-compileFunctionToClosure :: Env -> [Clause] -> Value
-compileFunctionToClosure env clauses = do
-  let arity = length $ fst $ head clauses
-      -- TODO improve transformations from sets to lists
-      freeVars = Set.unions 
-        (map (\(pats, rhs) -> E.freeVarsRHS rhs Set.\\ Set.unions (map E.allVarsPat pats))
-        clauses)
-      -- generate list of fresh variables to be used as parameters to the closure (take into account previously generated vars with foldr and accumulator)
-      params = snd $ foldl
-        (\(freeVars', acc) _ -> (freeVars' ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')], acc ++ [B.mkFreshVar B.nullSpan (Set.fromList freeVars')]))
-        (Set.toList freeVars, [])
-        [1..arity]
-      -- generate case expressions to serve as body of the closure
-      body = flatNaiveClauseCompilation params clauses
-      cenv = filterWithKey (\k _ -> Set.member k freeVars) env
-  -- attach closures
-  -- TODO: could be interesting to capture only the free variables
-  VClosure [E.VarPat B.nullSpan param | param <- params] body env
+-- | Force one position, given the patterns the clauses use there.
+forceCol :: [E.Pat] -> Value -> IO Value
+forceCol pats val = case val of
+  -- a channel reached by a session pattern: perform its effect (once)
+  VChan _ ->
+    case filter isSessionPat (map stripAs pats) of
+      (sp : _) -> performEffect sp val
+      []       -> pure val               -- only bound (var pattern): no effect
+  -- recurse into data, using the sub-patterns of the clauses that match `con`
+  VCons con vs ->
+    let subColumns = transpose [ ps | E.DConsPat _ (B.Identifier _ con') ps <- map stripAs pats
+                                    , con' == con, length ps == length vs ]
+    in if null subColumns then pure val
+       else VCons con <$> zipWithM forceCol subColumns vs
+  _ -> pure val
 
--- simple, naive compilation of clauses into cases by adding a single case expression that checks pattern matching for all parameters
-flatNaiveClauseCompilation :: [B.Variable] -> [Clause] -> E.KindedExp
-flatNaiveClauseCompilation parameters clauses = 
-  -- simple case expression
-  E.Case B.nullSpan target alternatives
-  where
-    -- target is the tuple of all parameters
-    target = if length parameters == 1 then E.Var B.nullSpan (head parameters) else E.Tuple B.nullSpan (map (E.Var B.nullSpan) parameters)
-    -- choosing the correct alternative is done via case expression, that attempts pattern matching target against all tuple of all patterns in each clause
-    alternatives = map (\(lhs, rhs) -> if length parameters == 1 then (head lhs, rhs) else (E.TuplePat B.nullSpan lhs, rhs)) clauses
+-- | Perform a session pattern's effect on a channel, producing the forced value
+-- that 'matchPat' then matches purely.
+performEffect :: E.Pat -> Value -> IO Value
+performEffect (E.ChoicePat _ _ _) (VChan c) = do
+  (label, c') <- receiveLabel c
+  pure (VCons label [VChan c'])
+performEffect (E.InPat _ p1 p2) (VChan c) = do
+  (v, c') <- receive c
+  v'  <- forceCol [p1] v
+  c'' <- forceCol [p2] (VChan c')
+  pure (VCons "(,)" [v', c''])
+performEffect (E.TypeInPat _ _ p) (VChan c) = do
+  (_, c') <- receive c                  -- consume the (erased) type message
+  forceCol [p] (VChan c')
+performEffect (E.WaitPat _) (VChan c) = do
+  _ <- receive c                        -- wait for the peer to close
+  pure VUnit
+performEffect _ v = pure v
 
-{- -- | Checks if two patterns are compatible, if in the context of a function, both could be matched against the expression
--- TODO lacking remaining patterns
-compatibleByPM :: E.Pat -> E.Pat -> Bool
-compatibleByPM E.WildPat{} _ = True
-compatibleByPM _ E.WildPat{} = True
-compatibleByPM E.VarPat{} _ = True
-compatibleByPM _ E.VarPat{} = True
-compatibleByPM (E.DConsPat _ id1 pats1) (E.DConsPat _ id2 pats2) = id1 == id2 && and (zipWith compatibleByPM pats1 pats2)
-compatibleByPM (E.AsPat _ var1 pat1) (E.AsPat _ var2 pat2) = compatibleByPM pat1 pat2
-compatibleByPM p1 p2 = p1 == p2
+isSessionPat :: E.Pat -> Bool
+isSessionPat = \case
+  E.ChoicePat{} -> True
+  E.InPat{}     -> True
+  E.TypeInPat{} -> True
+  E.WaitPat{}   -> True
+  _             -> False
 
+-- | 'AsPat' is transparent for the purpose of finding the session structure.
+stripAs :: E.Pat -> E.Pat
+stripAs = \case
+  E.AsPat _ _ p -> stripAs p
+  p             -> p
 
--- convert clauses to cases
-decisionTreeClauseCompilation :: [B.Variable] -> [Clause] -> E.Exp
-decisionTreeClauseCompilation (freshVar:freshVars) clauses = 
-  E.Case B.nullSpan (E.Var B.nullSpan freshVar) $ map (\(pat, clauses) -> (pat, convertToRHS freshVars clauses)) groupedClauses
-  where
-    groupedClauses = groupClausesByPatterns clauses
-    -- control recursion, stopping when there's no more patterns to extract
-    convertToRHS :: [B.Variable] -> [Clause] -> E.RHS
-    convertToRHS freshVars clauses =
-      -- if no more patterns, just return first clause RHS
-      -- Warning: if length clauses >= 1, this means there's redundant patterns
-      if null $ fst $ head clauses then snd $ head clauses
-      -- otherwise, recursively call clausesToCases and wrap resulting case in a unguarged rhs
-      else E.UnguardedRHS (decisionTreeClauseCompilation freshVars clauses) Nothing
-    -- group clauses by the leading parameter pattern
-    groupClausesByPatterns :: [Clause] -> [(E.Pat, [Clause])]
-    groupClausesByPatterns clauses =
-      -- extract leading pattern
-      let leadingPat = map (\(pats, rhs) -> (head pats, (tail pats, rhs))) clauses
-      -- group by leading pattern
-          groups = groupBy (compatibleByPM `on` fst) leadingPat
-      -- place clauses that share a leading pattern in the same group
-      -- (TODO: handle compatible patterns)
-      in map (\x -> (fst $ head x, map snd x)) groups -}
+-- == Function values =======================================================
+
+-- | Build a function value from its clauses, capturing the environment. The
+-- environment is captured lazily, so a self- or mutually-recursive binding can
+-- include the closure(s) being defined (tied with an ordinary recursive @let@).
+mkClosure :: Env -> [Clause] -> Value
+mkClosure env clauses = VClosure (length (fst (head clauses))) [] clauses env

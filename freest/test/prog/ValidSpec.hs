@@ -11,12 +11,14 @@ import UI.CLI
 import FreeST
 import ProgSpecUtils
 
-import Control.Exception
+import Control.Concurrent ( forkIO )
+import Control.Exception ( SomeException, evaluate, try )
 import Control.Monad ( void )
 import Data.List ( intercalate, isPrefixOf )
+import System.Environment ( getExecutablePath )
 import System.Exit ( ExitCode(..) )
-import System.IO ( stdout, stderr )
-import System.IO.Silently
+import System.IO ( Handle, hGetContents )
+import System.Process
 import System.Timeout
 import Test.Hspec
 import Test.HUnit ( assertFailure )
@@ -48,22 +50,36 @@ doExpectationsMatch :: String -> String -> Expectation
 doExpectationsMatch out exp =
   filter (/= '\n') out `shouldBe` filter (/= '\n') exp
   
+-- | Run a single program in a *throwaway child process* (this same test binary
+-- re-executed with @--run-one@), so that the I/O server threads the Prelude
+-- forks are reaped by the OS when the child exits, rather than leaking across
+-- the whole suite. The child is killed if it exceeds the timeout.
 testOne :: FilePath -> IO (String, TestResult)
-testOne file = hCapture [stdout, stderr] $
-   catches runTest
-    [ Handler (\(e :: ExitCode) -> exitProgram e)
-    , Handler (\(_ :: SomeException) -> pure Failed)
-    ]
- where
-  exitProgram :: ExitCode -> IO TestResult
-  exitProgram ExitSuccess = pure Passed
-  exitProgram _           = pure Failed
+testOne file = do
+  self <- getExecutablePath
+  res  <- timeout timeInMicro $
+    withCreateProcess
+      (proc self ["--run-one", file])
+        { std_in = NoStream, std_out = CreatePipe, std_err = CreatePipe }
+      $ \_ mout merr ph -> do
+          -- drain (and discard) the child's output so the parent's memory stays
+          -- bounded even if the program loops printing, and the child never
+          -- blocks on a full pipe
+          mapM_ (forkIO . drain) (maybe [] pure mout ++ maybe [] pure merr)
+          waitForProcess ph
+  pure $ case res of
+    Nothing   -> ("<timeout>", Timeout)
+    Just code -> (failureHint, case code of ExitSuccess -> Passed ; _ -> Failed)
+  where
+    failureHint = "interpreter failed (rerun:  prog --run-one " ++ file ++ ")"
 
-  runTest :: IO TestResult
-  runTest = do
-    res <- timeout timeInMicro (freest defaultRunOpts{file})
-    case res of Just _  -> pure Passed
-                Nothing -> pure Timeout
+-- | Read a handle to EOF, discarding its contents with bounded memory.
+drain :: Handle -> IO ()
+drain h = void (try (hGetContents h >>= evaluate . length) :: IO (Either SomeException Int))
+
+-- | Child mode: interpret a single program (this runs in its own process).
+runOne :: FilePath -> IO ()
+runOne file = freest defaultRunOpts{file}
 
 -- n microseconds (1/10^6 seconds).
 timeInMicro :: Int
