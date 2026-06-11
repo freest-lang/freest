@@ -40,8 +40,13 @@ Implemented as a *force-once-then-match-purely* pass: `forceColumns` /
 (receive a choice label, receive a value, wait/close, receive a type), turning
 channels into ordinary data values *once*, before any clause is tried. The
 matcher proper then stays pure, so there is no risk of replaying a receive while
-backtracking — commit is structural. Handles choice patterns nested inside data
-(e.g. the Prelude's stdin reader).
+backtracking — commit is structural. The force pass recurses through nesting:
+session patterns nested in **data** (a `&choice` in a tuple, a `?receive`
+delivering a tuple), session patterns in **different argument columns**, and
+session patterns nested in a **choice continuation** — `forceChoice` commits to
+the label the peer actually chose, then recurses into that branch with the
+continuation patterns of the clauses that selected it, so e.g. `&Bid (?x;c)`
+forces and binds `x`.
 
 ### Phase 4 — recursion — **done, but not as the plan proposed**
 

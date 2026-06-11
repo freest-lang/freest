@@ -99,8 +99,9 @@ forceCol pats val = case val of
   -- a channel reached by a session pattern: perform its effect (once)
   VChan _ ->
     case filter isSessionPat (map stripAs pats) of
-      (sp : _) -> performEffect sp val
-      []       -> pure val               -- only bound (var pattern): no effect
+      (E.ChoicePat{} : _) -> forceChoice pats val   -- needs the whole column (see below)
+      (sp : _)            -> performEffect sp val
+      []                  -> pure val               -- only bound (var pattern): no effect
   -- recurse into data, using the sub-patterns of the clauses that match `con`
   VCons con vs ->
     let subColumns = transpose [ ps | E.DConsPat _ (B.Identifier _ con') ps <- map stripAs pats
@@ -109,12 +110,24 @@ forceCol pats val = case val of
        else VCons con <$> zipWithM forceCol subColumns vs
   _ -> pure val
 
--- | Perform a session pattern's effect on a channel, producing the forced value
--- that 'matchPat' then matches purely.
-performEffect :: E.Pat -> Value -> IO Value
-performEffect (E.ChoicePat _ _ _) (VChan c) = do
+-- | Force an external choice: receive the label, then force the continuation
+-- using the continuation patterns of the clauses that selected *this* label —
+-- so a session pattern nested in the continuation (e.g. @&Bid (?x;c)@) is forced
+-- too. (Mirrors the @VCons@ recursion in 'forceCol': commit to the branch the
+-- peer actually chose, then recurse into it. The type system guarantees the
+-- selected clauses agree on the continuation's session structure.)
+forceChoice :: [E.Pat] -> Value -> IO Value
+forceChoice pats (VChan c) = do
   (label, c') <- receiveLabel c
-  pure (VCons label [VChan c'])
+  let conts = [ q | E.ChoicePat _ (B.Identifier _ l) q <- map stripAs pats, l == label ]
+  forced <- forceCol conts (VChan c')
+  pure (VCons label [forced])
+forceChoice _ v = pure v
+
+-- | Perform a session pattern's effect on a channel, producing the forced value
+-- that 'matchPat' then matches purely. (External choice is handled by
+-- 'forceChoice', which needs the whole pattern column.)
+performEffect :: E.Pat -> Value -> IO Value
 performEffect (E.InPat _ p1 p2) (VChan c) = do
   (v, c') <- receive c
   v'  <- forceCol [p1] v
