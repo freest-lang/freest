@@ -89,7 +89,7 @@ matchClauses env vals clauses = do
   where
     goRows vals' = \case
       [] -> errorWithoutStackTrace $
-        show (clausesSpan clauses) ++ ": Non-exhaustive patterns in pattern matching"
+        show (clausesSpan clauses) ++ ": Non-exhaustive patterns"
       (pats, rhs) : rest -> do
         mb <- matchClause pats vals'
         case mb of
