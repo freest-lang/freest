@@ -79,6 +79,7 @@ data Error
   | PartiallyAppliedSelect Span Identifier
   | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
   | ProperKindMismatch Span TK.KindedType K.Kind
+  | RestrictedFunInMutual Span Variable TK.KindedType
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
   | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.Pat)
@@ -145,6 +146,7 @@ instance Located Error where
     ParseError s _ -> s
     PrekindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
+    RestrictedFunInMutual s _ _ -> s
     SigLacksDef s _ -> s
     TypeConsOutOfScope s _ -> s
     TypeMismatch s _ _ _ -> s
@@ -379,6 +381,9 @@ toMessage src = \case
     ++ "(Expected a proper type, but got " ++ bt (unparse t)
     ++ " of kind " ++ bt (unparse k) ++ ")"
     where arity = K.depth k
+  RestrictedFunInMutual s x t -> makeError src s
+    ("Mutually recursive function " ++ bt (external x)
+      ++ " must be unrestricted, but has type " ++ bt (unparse t))
   SigLacksDef s x -> makeError src s
     ("Variable " ++  external x ++ " has a type signature but no definition")
   TypeConsOutOfScope s i -> makeError src s

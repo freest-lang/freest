@@ -458,6 +458,10 @@ checkDecls modl kctx tctx = foldM checkDecl (Map.empty, kctx, tctx)
       E.Mutual ds -> do
         let (sigs, fndefs) =
               List.partition (\case E.TypeSig{} -> True; _ -> False) ds
+        forM_ sigs \case
+          E.TypeSig xs t | Kinding.isRestricted t ->
+            forM_ xs \x -> throwE (RestrictedFunInMutual (getSpan x) x t)
+          _ -> return ()
         checkDecls modl kctxi tctxi (sigs ++ fndefs)
 
 -- | Check-against for function arguments. Given kind and type contexts, it
