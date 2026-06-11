@@ -131,6 +131,18 @@ argument order of the original `resolvePatternMatching`.
   clause left" (e.g. `sign x | x > 0 = 1 | x < 0 = -1` on `sign 0`). That is why
   Phase 5 emits a real located error; the open question is only whether such
   failure should stay fatal (current, sound) or become observable to the program.
+- **Type abstraction is erased, not suspended.** System F says `Λa. e` is a
+  value that suspends `e` until a type is applied; the interpreter instead
+  *erases* type abstraction/application, so the body is driven only by term
+  arguments. Observable only with a *trailing* type parameter over a non-value
+  body — `g x @a = g x @a` diverges where suspension would yield a value (a type
+  argument *in the middle*, `f p1 @a p2`, is unaffected, since the closure stays
+  partial until the following term argument). This cannot be fixed in the
+  interpreter alone: making type application a force point needs the elaborator
+  to keep *all* type applications in the AST, but inferred ones are dropped
+  (`head xs` carries no `@a`), so an arity that counts type slots under-saturates
+  every polymorphic call written without an explicit `@` (confirmed: it broke
+  `head`, `Stack`, …). Deferred to elaboration support.
 
 ## Touched files
 
