@@ -14,7 +14,6 @@ module Syntax.Expression
        , TuplePat
        )
   , listPat
-  , stringPat
   , RHS(..)
   , LetDecl(..)
   , ParsedExp, ScopedExp, KindedExp
