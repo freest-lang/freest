@@ -59,6 +59,10 @@ data Error
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
+  | LinConsumedInGuard 
+      Span 
+      (Either Variable Identifier) 
+      TK.KindedType
   | LinConsumedInUnFun 
       Span 
       (Either Variable Identifier) 
@@ -135,6 +139,7 @@ instance Located Error where
     LexicalError s _ -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
+    LinConsumedInGuard s _ _ -> s
     LinConsumedInUnFun s _ _ _ _ -> s
     MultipleConsDecls s _ -> s
     MultipleFieldDecls s _ -> s
@@ -320,6 +325,17 @@ toMessage src = \case
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
     ("Linear " ++ prettyVarCons xi ++ " was not consumed")
+  LinConsumedInGuard s xi t -> errorHeader s ++ "\n" 
+      ++ ((case m' of 
+        K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+      ++ "type " ++ bt (unparse t) ++ ", bound at\n"
+      ++ snippet src xi True
+      ++ " cannot be consumed inside a guard")
+    where 
+      m' = case TK.kindOf t of 
+        K.Proper _ m _ -> m
+        _ -> internalError "Non-proper type for expression variable"
   LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
       ++ ((case m' of 
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "

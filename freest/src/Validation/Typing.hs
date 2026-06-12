@@ -236,9 +236,11 @@ synthRHS modl kctx tctx fep = \case
     (tctxds, kctx', tctx') <- maybe
       (pure (Map.empty, kctx, tctx)) (checkDecls modl kctx tctx) ds
     tctxg1 <- check modl kctx' tctx' g1 (T.Bool (getSpan g1))
+    checkEquivTypeCtxsGuard tctxg1 tctx'
     (t1, tctxe1) <- synth modl kctx' tctxg1 e1
     tctxes <- forM ges \(gi, ei) -> do
       tctxgi <- check modl kctx' tctx' gi (T.Bool (getSpan gi))
+      checkEquivTypeCtxsGuard tctxgi tctx'
       check modl kctx' tctxgi ei t1
     checkEquivTypeCtxsCase fep (tctxe1 : tctxes)
     (t1,) <$> typeCtxDifference kctx' tctxe1 tctxds
@@ -757,6 +759,7 @@ checkRHS modl kctx tctx ep rhs t = case rhs of
       (pure (Map.empty, kctx, tctx)) (checkDecls modl kctx tctx) ds
     tctxes <- forM ges \(gj, ej) -> do
       tctxgj <- check modl kctx' tctx' gj (T.Bool (getSpan gj))
+      checkEquivTypeCtxsGuard tctxgj tctx'
       check modl kctx' tctxgj ej t
     checkEquivTypeCtxsCase ep tctxes
     typeCtxDifference kctx' (head tctxes) tctxds
@@ -811,6 +814,18 @@ checkEquivTypeCtxsFun m tctx1 tctx2 s = do
     case T.kindOf t of
       K.Proper _ m' _ -> unless (m' K.<: m) do
         throwE (LinConsumedInUnFun (getSpan xa) xa t s m)
+      _ -> internalError "Non-proper type in type context" -- TODO: what about kind variables?
+
+checkEquivTypeCtxsGuard
+  :: TypeCtx
+  -> TypeCtx
+  -> Validation ()
+checkEquivTypeCtxsGuard tctx1 tctx2 = do
+  let tctxδ = Map.assocs (tctx2 `Map.difference` tctx1) 
+  forM_ tctxδ \(xa, t) ->
+    case T.kindOf t of
+      K.Proper _ m _ -> unless (K.isUn m) do
+        throwE (LinConsumedInGuard (getSpan xa) xa t)
       _ -> internalError "Non-proper type in type context" -- TODO: what about kind variables?
 
 instantiate :: Int
