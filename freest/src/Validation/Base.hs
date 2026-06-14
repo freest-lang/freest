@@ -16,7 +16,7 @@ import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import UI.Error
 import Validation.Substitution ( subs )
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 
 import Control.Monad.State ( State, MonadState, modify, gets, foldM, runState )
 import Data.Map.Strict qualified as Map
@@ -68,7 +68,7 @@ unfold :: M.KindedModule -> Identifier -> TK.KindedType
 unfold mod i =
   case M.typeDecls mod Map.!? i of
     Just (_, u)  -> u
-    Nothing -> internalError $ "Validation.Base.unfold: name " ++ show i ++ " not in type declaration map"
+    Nothing -> internalError "Validation.Base.unfold" $ "name " ++ show i ++ " not in type declaration map"
 
 -- getKind :: M.KindedModule -> Identifier -> K.Kind
 -- getKind mod i =

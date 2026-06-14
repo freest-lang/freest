@@ -55,7 +55,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Names
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 
 import Data.Bifunctor
 import Data.Function ( on )
@@ -127,7 +127,7 @@ pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out K.Top _ aks t
   where AppExists s x1 x2 x3 aks t =  AppQuant s x1 x2 x3 Out K.Top existsMult aks t
 
 existsMult :: K.Multiplicity
-existsMult = internalError "attempted to evaluate multiplicity of an `exists`"
+existsMult = internalError "Syntax.Type.Internal.existsMult" "attempted to evaluate multiplicity of an `exists`"
 
 pattern AppArrow :: Span -> XType x -> XType x -> K.Multiplicity -> Type x -> Type x -> Type x
 pattern AppArrow s x1 x2 m t u <- App s x1 (Arrow _ x2 m) [t,u]
@@ -189,7 +189,7 @@ pattern AppVar s x1 x2 vl a ts <- (\case Var s x1 vl a -> App s x1 (Var s x1 vl 
 pattern Tuple :: Span -> XType x -> XType x -> [Type x] -> Type x
 pattern Tuple s x1 x2 ts <- AppDName s x1 x2 (isTupleId -> True) ts
   where Tuple s x1 x2    = \case
-          [_] -> internalError "cannot construct a 1-tuple type."
+          [_] -> internalError "Syntax.Type.Internal.Tuple" "cannot construct a 1-tuple type"
           ts  -> AppDName s x1 x2 (mkTupleId (length ts) s) ts
 
 pattern List :: Span -> XType x -> XType x -> Type x -> Type x

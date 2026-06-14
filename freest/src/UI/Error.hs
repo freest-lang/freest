@@ -22,7 +22,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
-import Utils
+import Compiler.Bug ( internalError )
 
 import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
@@ -172,7 +172,7 @@ instance Located Error where
     MixedSessionVarPats s _ _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
-  setSpan = internalError "span not settable for Error type."
+  setSpan = internalError "UI.Error.Error.setSpan" "span not settable for Error type."
 
 -- | The source code of a FreeST program, represented as a mapping from file paths
 -- to the lines of code in those files. This is used to extract snippets of code
@@ -190,7 +190,7 @@ getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
 
 lookupSrc :: Source -> FilePath -> [String]
 lookupSrc src fp = fromMaybe
-  (internalError $ "UI.Error.lookupSrc: file not in source map: " ++ fp)
+  (internalError "UI.Error.lookupSrc" $ "file not in source map: " ++ fp)
   (src Map.!? fp)
 
 snippet :: Located a => Source -> a -> Bool -> String
@@ -325,17 +325,17 @@ toMessage src = \case
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
     ("Linear " ++ prettyVarCons xi ++ " was not consumed")
-  LinConsumedInGuard s xi t -> errorHeader s ++ "\n" 
-      ++ ((case m' of 
+  LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
+      ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
         _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
       ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
       ++ " cannot be consumed inside a guard")
-    where 
-      m' = case TK.kindOf t of 
+    where
+      m' = case TK.kindOf t of
         K.Proper _ m _ -> m
-        _ -> internalError "Non-proper type for expression variable"
+        _ -> internalError "UI.Error.toMessage.LinConsumedInGuard" "non-proper type for expression variable"
   LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
       ++ ((case m' of 
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
@@ -350,9 +350,9 @@ toMessage src = \case
     ++ "(This would allow duplicating or discarding it. "
     ++ "Consider using a restricted function instead.)"
     where 
-      m' = case TK.kindOf t of 
+      m' = case TK.kindOf t of
         K.Proper _ m _ -> m
-        _ -> internalError "Non-proper type for expression variable"
+        _ -> internalError "UI.Error.toMessage.LinConsumedInUnFun" "non-proper type for expression variable"
   MultipleConsDecls s is -> makeError src s
     ("Multiple declarations of constructor " ++ bt (show (head is)))
     ++ "Duplicate declarations at:\n"
@@ -379,7 +379,7 @@ toMessage src = \case
     ("Non-linear pattern for" ++ case TK.kindOf t of
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
-      _ -> internalError "Pattern with non-proper type")
+      _ -> internalError "UI.Error.toMessage.NonLinPat" "pattern with non-proper type")
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ case ss of
@@ -524,3 +524,33 @@ showErrors src = intercalate "\n" . map (toMessage src)
 
 printErrors :: Source -> [Error] -> IO ()
 printErrors src es = putStrLn $ showErrors src es
+
+-- | The ordinal 'String' of an 'Integral'.
+ordinal :: (Integral a, Show a) => a -> String
+ordinal i = show i ++ suffix
+  where suffix | i' > 10 && i' < 20 = "th"
+               | otherwise = suffix' (i' `mod` 10)
+        suffix' = \case 1 ->"st"; 2 ->"nd"; 3 ->"rd"; _ ->"th"
+        i' = abs i 
+
+-- | From MissingH. Removes any whitespace characters that are present at the
+-- start or end of a string.
+strip :: String -> String
+strip = lstrip . rstrip
+
+-- | From MissingH. Same as 'strip', but applies only to the left side of the
+-- string.
+lstrip :: String -> String
+lstrip = \case 
+  []                 -> []
+  s@(x:xs) 
+    | elem x " \t\r\n" -> lstrip xs
+    | otherwise      -> s
+
+-- | From MissingH. Same as 'strip', but applies only to the right side of the
+-- string.
+rstrip :: String -> String
+rstrip = reverse . lstrip . reverse
+
+rpad :: Int -> a -> [a] -> [a]
+rpad n c s = s ++ replicate (n - length s) c

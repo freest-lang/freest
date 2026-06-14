@@ -1,15 +1,15 @@
 {- |
-Module      :  FreeST
+Module      :  Compiler.FreeST
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 The entry point of the FreeST compiler.
 -}
-module FreeST ( freest, runFreeST ) where
+module Compiler.FreeST ( freest, runFreeST ) where
 
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
-import REPL ( ReplState(..), emptyReplState, repl )
-import Pipeline ( loadModule, loadPreludeAndModule )
+import Compiler.REPL ( ReplState(..), emptyReplState, repl )
+import Compiler.Pipeline ( loadModule, loadPreludeAndModule )
 
 import Options.Applicative ( execParser )
 import System.Exit ( exitSuccess, exitFailure )

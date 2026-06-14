@@ -25,7 +25,7 @@ import Syntax.Module qualified as M
 import Syntax.Names
 import Syntax.Type.Kinded qualified as T
 import UI.Error
-import Utils
+import Compiler.Bug ( internalError )
 import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Kinding ( KindCtx )
@@ -703,10 +703,10 @@ checkPat modl kctx p t = case p of
       Nothing  -> throwE (ConsOutOfScope (getSpan i) i)
     aks <- case M.dataDecls modl Map.!? i' of
       Just (aks, _) -> return aks
-      Nothing -> internalError ("Constructor " ++ show i ++ " has no associated data declaration")
+      Nothing -> internalError "Validation.Typing.checkPat" ("constructor " ++ show i ++ " has no associated data declaration")
     k <- case M.kindSigs modl Map.!? i' of
       Just k -> return k
-      Nothing -> internalError ("Data type " ++ show i' ++ " has no associated kind signature")
+      Nothing -> internalError "Validation.Typing.checkPat" ("data type " ++ show i' ++ " has no associated kind signature")
     case normalise modl t of
       T.AppDName _ _ i'' us | i' == i'' -> do
         let ts' = map (subsAll (map fst aks) us) ts
@@ -814,7 +814,7 @@ checkEquivTypeCtxsFun m tctx1 tctx2 s = do
     case T.kindOf t of
       K.Proper _ m' _ -> unless (m' K.<: m) do
         throwE (LinConsumedInUnFun (getSpan xa) xa t s m)
-      _ -> internalError "Non-proper type in type context" -- TODO: what about kind variables?
+      _ -> internalError "Validation.Typing.checkEquivTypeCtxsFun" "non-proper type in type context" -- TODO: what about kind variables?
 
 checkEquivTypeCtxsGuard
   :: TypeCtx
@@ -826,7 +826,7 @@ checkEquivTypeCtxsGuard tctx1 tctx2 = do
     case T.kindOf t of
       K.Proper _ m _ -> unless (K.isUn m) do
         throwE (LinConsumedInGuard (getSpan xa) xa t)
-      _ -> internalError "Non-proper type in type context" -- TODO: what about kind variables?
+      _ -> internalError "Validation.Typing.checkEquivTypeCtxsGuard" "non-proper type in type context" -- TODO: what about kind variables?
 
 instantiate :: Int
             -> M.KindedModule
@@ -971,7 +971,7 @@ typeModule kctx tctx modl = do
               t <- buildArrow (Map.fromList aks) aks k ts
               let (K.Proper _ m _) = T.kindOf t
               return (Right ic, T.AppForall (getSpan ic) m aks t)
-            _ -> internalError $ "Identifier `" ++ show it ++ "` has no kind signature."
+            _ -> internalError "Validation.Typing.typeModule.buildDConsCtx" $ "identifier `" ++ show it ++ "` has no kind signature"
           where
             buildArrow kctx aks k = \case
               []       -> pure (returnType aks k)

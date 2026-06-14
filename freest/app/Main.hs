@@ -7,7 +7,7 @@ Executable entry point for the FreeST compiler. Delegates to 'FreeST.main'.
 -}
 module Main where
 
-import qualified FreeST
+import qualified Compiler.FreeST as FreeST
 
 main :: IO ()
 main = FreeST.freest

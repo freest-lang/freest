@@ -1,5 +1,5 @@
 {- |
-Module      :  Pipeline
+Module      :  Compiler.Pipeline
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
@@ -7,7 +7,7 @@ Loading FreeST source files: parsing, scoping, kinding and typing,
 with or without the implicit Prelude. On success returns the scoped
 module; on failure prints the errors and returns 'Nothing'.
 -}
-module Pipeline
+module Compiler.Pipeline
   ( validateModule
   , loadPrelude
   , loadModule

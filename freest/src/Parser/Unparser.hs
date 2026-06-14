@@ -21,7 +21,7 @@ import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 
 import Data.List qualified as List
 import Data.Map qualified as Map
@@ -168,15 +168,15 @@ unparseDataDef :: M.KindedModule -> Identifier -> String
 unparseDataDef kmodl i = case Map.lookup i (M.dataDecls kmodl) of
   Just (aks, cs) -> "data " ++ show i ++ paramStr aks ++ " = "
                     ++ List.intercalate " | " (map (unparseCons kmodl) cs)
-  Nothing        -> internalError $
-    "Parser.Unparser.unparseDataDef: datatype " ++ show i ++ " not found in module"
+  Nothing        -> internalError "Parser.Unparser.unparseDataDef" $
+    "datatype " ++ show i ++ " not found in module"
 
 -- | Unparse a single data constructor, e.g. @Node (Tree a) a (Tree a)@.
 unparseCons :: M.KindedModule -> Identifier -> String
 unparseCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
   Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
-  Nothing      -> internalError $
-    "Parser.Unparser.unparseCons: constructor " ++ show cn ++ " not found in module"
+  Nothing      -> internalError "Parser.Unparser.unparseCons" $
+    "constructor " ++ show cn ++ " not found in module"
 
 -- | Unparse a type alias declaration, e.g. @type Age = Int@ or @type Stream a = !a ; Stream a@.
 --

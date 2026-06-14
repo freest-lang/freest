@@ -33,7 +33,7 @@ module Syntax.Base
 where
 
 
-import Utils (internalError)
+import Compiler.Bug (internalError)
 
 import Data.Bifunctor ( Bifunctor(..) )
 import Data.List ( (\\) )

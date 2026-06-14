@@ -21,7 +21,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Traversable (for)
-import Utils (internalError)
+import Compiler.Bug (internalError)
 
 type MultConstraints = [MultEquation]
 
@@ -60,7 +60,7 @@ solve eqs = do
   bfs :: MultConstraints -> [SolverState] -> Either MultEquation SolverState
   bfs = \cases
     []                (st : _) -> Right st
-    []                []       -> internalError "multiplicity unification: no states"
+    []                []       -> internalError "Validation.LocalInference.Multiplicities.solve.bfs" "multiplicity unification: no states"
     (mc@(l, r) : mcs) sts      -> case next of
       [] -> Left case substituted of (l', r', _) : _ -> (l',r'); [] -> mc
       _  -> bfs mcs next

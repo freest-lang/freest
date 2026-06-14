@@ -37,7 +37,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as T
 import UI.Error
-import Utils
+import Compiler.Bug ( internalError )
 import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
@@ -308,7 +308,7 @@ kindModule ctx mod = do
             Just (snd -> ts) -> do
               (m, ts') <- foldCheckProperJoin ctx m ts
               return (m, Map.insert ci (i, ts') acc)
-            Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
+            Nothing -> internalError "Validation.Kinding.synthDataMult" ("constructor " ++ show ci ++ " not found"))
           (Un (getSpan i), Map.empty)
 
 kindLetDecls :: M.KindedModule
