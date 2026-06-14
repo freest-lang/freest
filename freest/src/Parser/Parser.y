@@ -405,9 +405,9 @@ AtTypeList :: { [T.ParsedType] }
   : '@' TypePrimary            { [$2] }
   | '@' TypePrimary AtTypeList { $2 : $3 }
 
-Quant :: { (Span, T.Polarity) }
-  : 'forall' { (getSpan $1, T.In ) }
-  | 'exists' { (getSpan $1, T.Out) }
+-- Quant :: { (Span, T.Polarity) }
+--   : 'forall' { (getSpan $1, T.In ) }
+--   | 'exists' { (getSpan $1, T.Out) }
 
 Commas :: { Int }
   : ',' { 1 }
@@ -417,9 +417,9 @@ Polarity :: { (Span, T.Polarity) }
   : '!'  { (getSpan $1, T.Out) }
   | '?'  { (getSpan $1, T.In) }
 
-Polarity2 :: { (Span, T.Polarity) }
-  : '!' '!' {(spanFromTo $1 $2, T.Out) }
-  | '?' '?' {(spanFromTo $1 $2, T.In ) }
+-- Polarity2 :: { (Span, T.Polarity) }
+--   : '!' '!' {(spanFromTo $1 $2, T.Out) }
+--   | '?' '?' {(spanFromTo $1 $2, T.In ) }
 
 View :: { (Span, T.Polarity) }
   : '+' { (getSpan $1, T.Out) }

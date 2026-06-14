@@ -237,7 +237,7 @@ handleInfo src = do
       let sp = getSpan v in
       case runValidation (validationState s) (validateExp s (E.Var sp v)) of
         Right t -> do -- bound at the expression level: print its type
-          putLines [src ++ " is an expression"]
+          putLines [src ++ " is an expression variable"]
           printAs src t
         Left _  -> case runValidation (validationState s) (validateType s (TU.Var sp v)) of
           Right t -> do -- bound at the type level: print its kind
