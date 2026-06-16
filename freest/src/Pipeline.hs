@@ -41,9 +41,9 @@ validateModule sctx kctx tctx modl = do
   (sctx', smodl) <- scopeModule' sctx modl
   (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec kmodl
-  (kctx'', tctx') <- typeModule kctx' tctx kmodl
-  checkNoVarsInSessionPatterns kmodl
-  pure (sctx', kctx'', tctx', kmodl)
+  (kmodl', kctx'', tctx') <- typeModule kctx' tctx kmodl
+  checkNoVarsInSessionPatterns kmodl'
+  pure (sctx', kctx'', tctx', kmodl')
 
 -- | A snapshot of all state produced by a successful module load:
 -- the source map (for error reporting), the running 'ValidationState',

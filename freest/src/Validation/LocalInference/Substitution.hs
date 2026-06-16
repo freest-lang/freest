@@ -6,7 +6,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as T
 import Validation.Base
-import Validation.Substitution (subsMultType)
+import Validation.Substitution (subsMultType, subsMultMult)
 
 -- | Instantiation-level substitution. Instantiation variables may occur as
 -- types or as multiplicities.
@@ -45,6 +45,10 @@ applySubs (Θ ivtms) t =
       t -> t
 
     subsm = subsMultType InstLv
+
+applySubsMult :: Substitution -> K.Multiplicity -> K.Multiplicity
+applySubsMult (Θ ivtms) m =
+  foldr (\(ivi, tmi) mi -> either (\_ m -> m) (subsMultMult InstLv ivi) tmi mi) m ivtms
 
 -- | Make a fresh type instantiation variable.
 freshInstVarT :: Span -> K.Kind -> Validation T.KindedType
