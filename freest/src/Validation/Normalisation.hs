@@ -116,7 +116,7 @@ reduce mod = \case
   T.App s f ts -> T.App s (reduce mod f) ts
 
   -- 4. Should not happen
-  t -> internalError "Validation.Normalisation.reduce" $ "Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
+  t -> internalError $ "Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.

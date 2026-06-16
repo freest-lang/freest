@@ -9,10 +9,16 @@ never be reached if the surrounding invariants hold. Distinct from
 -}
 module Compiler.Bug ( internalError ) where
 
-import GHC.Stack ( HasCallStack )
+import GHC.Stack ( HasCallStack, SrcLoc(..), callStack, getCallStack )
 
--- | Abort with a "(Internal error) " prefix to flag a compiler bug.
--- The first argument names the offending site (e.g. @"Module.function"@)
--- and prefixes the message so the call site is visible without a stack trace.
-internalError :: HasCallStack => String -> String -> a
-internalError loc msg = error $ "(Internal error) " ++ loc ++ ": " ++ msg
+-- | Abort with an "(Internal error) " prefix to flag a compiler bug.
+--
+-- The call site is recovered from the 'HasCallStack' implicit parameter,
+-- so callers do not pass it explicitly — the GHC compiler stamps the
+-- module, file and line at every solve of the constraint.
+internalError :: HasCallStack => String -> a
+internalError msg = error $ "(Internal error) " ++ location ++ ": " ++ msg
+  where
+    location = case getCallStack callStack of
+      (_, loc) : _ -> srcLocModule loc ++ ":" ++ show (srcLocStartLine loc)
+      []           -> "<unknown>"

@@ -60,7 +60,7 @@ solve eqs = do
   bfs :: MultConstraints -> [SolverState] -> Either MultEquation SolverState
   bfs = \cases
     []                (st : _) -> Right st
-    []                []       -> internalError "Validation.LocalInference.Multiplicities.solve.bfs" "multiplicity unification: no states"
+    []                []       -> internalError "multiplicity unification: no states"
     (mc@(l, r) : mcs) sts      -> case next of
       [] -> Left case substituted of (l', r', _) : _ -> (l',r'); [] -> mc
       _  -> bfs mcs next

@@ -172,7 +172,7 @@ instance Located Error where
     MixedSessionVarPats s _ _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
-  setSpan = internalError "UI.Error.Error.setSpan" "span not settable for Error type."
+  setSpan = internalError "span not settable for Error type."
 
 -- | The source code of a FreeST program, represented as a mapping from file paths
 -- to the lines of code in those files. This is used to extract snippets of code
@@ -190,7 +190,7 @@ getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
 
 lookupSrc :: Source -> FilePath -> [String]
 lookupSrc src fp = fromMaybe
-  (internalError "UI.Error.lookupSrc" $ "file not in source map: " ++ fp)
+  (internalError $ "file not in source map: " ++ fp)
   (src Map.!? fp)
 
 snippet :: Located a => Source -> a -> Bool -> String
@@ -335,7 +335,7 @@ toMessage src = \case
     where
       m' = case TK.kindOf t of
         K.Proper _ m _ -> m
-        _ -> internalError "UI.Error.toMessage.LinConsumedInGuard" "non-proper type for expression variable"
+        _ -> internalError "non-proper type for expression variable"
   LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
       ++ ((case m' of 
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
@@ -352,7 +352,7 @@ toMessage src = \case
     where 
       m' = case TK.kindOf t of
         K.Proper _ m _ -> m
-        _ -> internalError "UI.Error.toMessage.LinConsumedInUnFun" "non-proper type for expression variable"
+        _ -> internalError "non-proper type for expression variable"
   MultipleConsDecls s is -> makeError src s
     ("Multiple declarations of constructor " ++ bt (show (head is)))
     ++ "Duplicate declarations at:\n"
@@ -379,7 +379,7 @@ toMessage src = \case
     ("Non-linear pattern for" ++ case TK.kindOf t of
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
-      _ -> internalError "UI.Error.toMessage.NonLinPat" "pattern with non-proper type")
+      _ -> internalError "pattern with non-proper type")
   ParseError s (_, ss) -> makeError src s
     "Parse error"
     ++ case ss of

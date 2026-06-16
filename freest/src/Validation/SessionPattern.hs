@@ -88,7 +88,7 @@ checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subCol
             Just s -> s
             Nothing -> case col of
               p : _ -> getSpan p
-              []    -> internalError "Validation.SessionPattern.checkPatColumn" "an empty column cannot contain a mix"
+              []    -> internalError "an empty column cannot contain a mix"
     -- Same-shape groups: ChoicePats with the same identifier, DConsPats with
     -- the same identifier, plus each non-Choice/DCons constructor.
     sameShape  = List.groupBy ((==) `on` shapeKey)
@@ -160,7 +160,7 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     choiceId :: E.Pat -> Identifier
     choiceId (E.ChoicePat _ i _) = i
     choiceId (E.AsPat _ _ p)     = choiceId p
-    choiceId _                   = internalError "Validation.SessionPattern.groupBySession.choiceId" "not a ChoicePat"
+    choiceId _                   = internalError "not a ChoicePat"
 
 containsVarPat, containsSessionPat, isMixedPat :: [E.Pat] -> Bool
 containsVarPat = any isVar

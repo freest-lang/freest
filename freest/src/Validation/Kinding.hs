@@ -308,7 +308,7 @@ kindModule ctx mod = do
             Just (snd -> ts) -> do
               (m, ts') <- foldCheckProperJoin ctx m ts
               return (m, Map.insert ci (i, ts') acc)
-            Nothing -> internalError "Validation.Kinding.synthDataMult" ("constructor " ++ show ci ++ " not found"))
+            Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
           (Un (getSpan i), Map.empty)
 
 kindLetDecls :: M.KindedModule

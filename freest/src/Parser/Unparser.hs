@@ -168,14 +168,14 @@ unparseDataDef :: M.KindedModule -> Identifier -> String
 unparseDataDef kmodl i = case Map.lookup i (M.dataDecls kmodl) of
   Just (aks, cs) -> "data " ++ show i ++ paramStr aks ++ " = "
                     ++ List.intercalate " | " (map (unparseCons kmodl) cs)
-  Nothing        -> internalError "Parser.Unparser.unparseDataDef" $
+  Nothing        -> internalError $
     "datatype " ++ show i ++ " not found in module"
 
 -- | Unparse a single data constructor, e.g. @Node (Tree a) a (Tree a)@.
 unparseCons :: M.KindedModule -> Identifier -> String
 unparseCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
   Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
-  Nothing      -> internalError "Parser.Unparser.unparseCons" $
+  Nothing      -> internalError $
     "constructor " ++ show cn ++ " not found in module"
 
 -- | Unparse a type alias declaration, e.g. @type Age = Int@ or @type Stream a = !a ; Stream a@.

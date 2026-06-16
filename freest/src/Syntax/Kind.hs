@@ -106,16 +106,16 @@ instance Subsort Prekind where
   Channel <: Session = True
   pk1     <: pk2     = pk1 == pk2
 instance Join Prekind where
-  join ψ@VarPK{} _  = internalError "Syntax.Kind.Prekind.join" ("prekind variable " ++ show ψ)
-  join _ ψ@VarPK{}  = internalError "Syntax.Kind.Prekind.join" ("prekind variable " ++ show ψ)
+  join ψ@VarPK{} _  = internalError ("prekind variable " ++ show ψ)
+  join _ ψ@VarPK{}  = internalError ("prekind variable " ++ show ψ)
   join Channel Channel = Channel
   join Session Session = Session
   join Channel Session = Session
   join Session Channel = Session  
   join _       _       = Top
 instance Meet Prekind where
-  meet ψ@VarPK{} _  = internalError "Syntax.Kind.Prekind.meet" ("prekind variable " ++ show ψ)
-  meet _ ψ@VarPK{}  = internalError "Syntax.Kind.Prekind.meet" ("prekind variable " ++ show ψ)
+  meet ψ@VarPK{} _  = internalError ("prekind variable " ++ show ψ)
+  meet _ ψ@VarPK{}  = internalError ("prekind variable " ++ show ψ)
   meet Channel _       = Channel
   meet _       Channel = Channel
   meet Session _       = Session
@@ -148,7 +148,7 @@ instance Ord Kind where
 instance Join Kind where
   join (Proper s m1 pk1) (Proper _ m2 pk2) = 
     Proper s (join m1 m2) (join pk1 pk2)
-  join _ _ = internalError "Syntax.Kind.Kind.join" "join of non-proper kinds"
+  join _ _ = internalError "join of non-proper kinds"
 
 instance Subsort Kind where
   Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
@@ -189,13 +189,13 @@ image :: Kind -> Kind
 image = \case
   k@Proper{} -> k
   Arrow _ _ k -> image k
-  k -> internalError "Syntax.Kind.image" ("kind " ++ show k)
+  k -> internalError ("kind " ++ show k)
 
 depth :: Kind -> Int
 depth = \case
   k@Proper{} -> 0
   Arrow _ _ k -> 1 + depth k
-  k -> internalError "Syntax.Kind.depth" ("kind " ++ show k)
+  k -> internalError ("kind " ++ show k)
 
 instance Show Multiplicity where
   show = \case 
