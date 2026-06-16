@@ -492,6 +492,15 @@ checkDecls modl kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
                , kctxi
                , tctxsig `Map.union` tctxi
                )
+      E.ValDef p@(E.VarPat _ x) rhs -- TODO: generalize for all pats, using something like patType :: Pat -> Maybe Type
+        | Just u <- tctxi Map.!? Left x -> do
+            (rhs', tctx'') <- checkRHS modl kctxi tctxi (Left (Right p)) rhs u
+            let tctxp = Map.singleton (Left x) u
+            return ( List.snoc ds (E.ValDef p rhs')
+                   , tctxp `Map.union` tctxds
+                   , kctxi
+                   , tctxp `Map.union` tctx''
+                   )
       E.ValDef p rhs -> do
         (rhs', trhs, tctx'') <- synthRHS modl kctxi tctxi (Left (Right p)) rhs
         (kctxp, tctxp) <- checkPat modl kctxi p trhs
