@@ -83,8 +83,8 @@ data Type x
   | Char Span (XType x)
   | Arrow Span (XType x) K.Multiplicity
   | Quant Span (XType x) Polarity K.Prekind K.Multiplicity
-  | ForallM Span (XType x) K.Multiplicity [Variable] (Type x)
-  | Void Span (XType x) K.Kind -- TODO: why a kind here and not in, say, Quant?
+  | ForallM Span (XType x) K.Multiplicity [Variable] (Type x) -- type-level universal quantifier over multiplicity variables
+  | Void Span (XType x) K.Kind
   --   Session types
   | Skip Span (XType x)
   | End Span (XType x) Polarity

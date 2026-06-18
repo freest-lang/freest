@@ -39,8 +39,9 @@ import Syntax.Type.Unkinded qualified as T
 import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
+    ( emptyValidationState, runValidation, Validation )
 import Validation.Expose qualified as Expose
-import Validation.Normalisation
+import Validation.Normalisation ( normalise )
 import Validation.Substitution ( subs, subsMultType )
 
 import Control.Monad.Identity ( Identity(..) )
@@ -48,7 +49,7 @@ import Control.Monad.Extra ( unlessM, (&&^) )
 import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, gets, modify )
 import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
 import Data.Bifunctor ( first, second, bimap )
-import Data.Bitraversable (bitraverse) -- bimapM 
+import Data.Bitraversable (bitraverse)
 import Data.Foldable.Extra ( allM )
 import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
@@ -69,9 +70,9 @@ emptyKindCtx = Map.empty
 synth :: KindCtx -> T.ScopedType -> Validation TK.KindedType
 synth ctx = \case
   -- Functional types
-  T.Int s    -> pure $ TK.Int s
-  T.Float s  -> pure $ TK.Float s
-  T.Char s   -> pure $ TK.Char s
+  T.Int s -> pure $ TK.Int s
+  T.Float s -> pure $ TK.Float s
+  T.Char s -> pure $ TK.Char s
   T.Arrow s m -> pure $ TK.Arrow s m
   -- Session types
   T.Message s m p -> pure $ TK.Message s m p
@@ -85,38 +86,37 @@ synth ctx = \case
   T.Skip s -> pure $ TK.Skip s
   T.Void s k -> pure $ TK.Void s k
   T.AppSemi s t u -> do
-    (m1, pk1, t') <- checkSession ctx t
-    (m2, pk2, u') <- checkSession ctx u
-    return $ TK.AppSemi s t' u'
+    (_, _, t') <- checkSession ctx t
+    (_, _, u') <- checkSession ctx u
+    pure $ TK.AppSemi s t' u'
   T.AppDual s t -> do
-    t' <- check ctx t (ls s)
-    return (TK.AppDual s t')
+    (_, _, t') <- checkSession ctx t -- (ls s)
+    pure $ TK.AppDual s t'
   -- Polymorphism
   T.AppQuant s p pk m aks t -> do
     let ctx' = Map.fromList (first Left <$> aks) `Map.union` ctx
     (_, _, kt) <- checkPrekind ctx' t pk
-    return $ TK.AppQuant s p pk m aks kt
+    pure $ TK.AppQuant s p pk m aks kt
   T.ForallM s m φs t -> TK.ForallM s m φs <$> synth ctx t
   -- Equations (including built-ins)
   T.TName s i -> flip (TK.TName s) i <$> lookupKind' ctx i
   T.Tuple s ts -> do
     (_, ts') <- foldCheckProperJoin ctx (Un s) ts
-    return $ TK.Tuple s ts'
+    pure $ TK.Tuple s ts'
   T.List s t -> do
     (_, _, t') <- checkProper ctx t
-    return $ TK.List s t'
+    pure $ TK.List s t'
   T.DName s i -> flip (TK.DName s) i <$> lookupKind' ctx i
   -- Higher-order
   T.Var s a -> case ctx Map.!? Left a of
     Just k -> pure $ TK.fromVariable ObjLv a k
-    Nothing -> do
-      throwE (TypeVarOutOfScope s a)
+    Nothing -> throwE (TypeVarOutOfScope s a)
   T.App s t ts -> do
     t' <- synth ctx t
     let k = TK.kindOf t'
     let (ks, kn) = Expose.kindArrow k
     (_, ts') <- checkArgs t' (length ts) (length ks) ts ks kn
-    return $ TK.App s t' ts'
+    pure $ TK.App s t' ts'
     where
       checkArgs :: TK.KindedType -> Int -> Int -- error info
                 -> [T.ScopedType] -> [Kind] -> Kind
@@ -124,7 +124,7 @@ synth ctx = \case
       checkArgs _ _ _ [] ks kn = pure
         (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks, [])
       checkArgs t' nargs npars ts [] kn = do
-        throwE (GivenTooManyArgsK (spanFromTo (head ts) (last ts)) t' kn npars nargs)
+        throwE (TooManyKArgs (spanFromTo (head ts) (last ts)) t' kn npars nargs)
       checkArgs t' nargs npars (ti : ts) (ki : ks) kn = do
         ti' <- check ctx ti ki
         second (ti' :) <$> checkArgs t' nargs npars ts ks kn

@@ -51,8 +51,8 @@ data Error
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
-  | GivenTooManyArgs Span TK.KindedType Int Int
-  | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
+  | TooManyEArgs Span TK.KindedType Int Int
+  | TooManyKArgs Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
   | KindMismatch Span K.Kind TK.KindedType
   | KindMismatchK Span K.Kind K.Kind TU.ScopedType
@@ -130,8 +130,8 @@ instance Located Error where
     ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     ExposeError s _ _ _ -> s
-    GivenTooManyArgs s _ _ _ -> s
-    GivenTooManyArgsK s _ _ _ _ -> s
+    TooManyEArgs s _ _ _ -> s
+    TooManyKArgs s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
     KindMismatch s _ _ -> s
     KindMismatchK s _ _ _ -> s
@@ -293,11 +293,11 @@ toMessage src = \case
       Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
       Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
     ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
-  GivenTooManyArgs s t n m -> makeError src s
+  TooManyEArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to "
     ++ thirdPerson (m - n) ++ ")"
-  GivenTooManyArgsK s t k n m -> makeError src s
+  TooManyKArgs s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(A type of kind " ++ bt (unparse k) ++ " cannot be applied to further arguments)"
   IllegalChoice s i t -> makeError src (getSpan i)

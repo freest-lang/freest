@@ -73,6 +73,7 @@ library:
     - UI.CLI
     - UI.Error
     - Validation.Base
+    - Validation.Constraint
     - Validation.Expose
     - Validation.HOTRecursion
     - Validation.Kinding

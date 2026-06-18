@@ -1029,7 +1029,7 @@ instantiateWith instResult i modl kctx tctx t1 args = do
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)
       (t, as) -> 
-        throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
+        throwE (TooManyEArgs (spanFromTo (head as) (last as)) t i (i + length as))
 
 typeModule :: KindCtx -> TypeCtx -> M.KindedModule -> Validation (M.KindedModule, KindCtx, TypeCtx)
 typeModule kctx tctx modl = do
