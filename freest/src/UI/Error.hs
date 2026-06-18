@@ -56,6 +56,7 @@ data Error
   | IllegalChoice Span Identifier TK.KindedType
   | KindMismatch Span K.Kind TK.KindedType
   | KindMismatchK Span K.Kind K.Kind TU.ScopedType
+  | KSigLacksBinding Span Identifier
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
@@ -134,6 +135,7 @@ instance Located Error where
     IllegalChoice s _ _ -> s
     KindMismatch s _ _ -> s
     KindMismatchK s _ _ _ -> s
+    KSigLacksBinding s _ -> s
     LacksKindSig s _ -> s
     LacksTypeSig s _ -> s
     LexicalError s _ -> s
@@ -317,6 +319,9 @@ toMessage src = \case
         ++ " with actual kind " ++ bt (unparse k2))
     -- where
     --   diff = (K.depth k2 - K.depth k1)
+  KSigLacksBinding s i -> makeError src s
+    ("The kind signature for type " ++ bt (show i)
+      ++ " lacks an accompanying binding")
   LacksKindSig s i -> makeError src s
     ("Type " ++ bt (show i) ++ " lacks a kind signature")
   LacksTypeSig s x -> makeError src s

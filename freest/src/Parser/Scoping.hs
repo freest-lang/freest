@@ -208,6 +208,9 @@ scopeModule' ctx m = do
   (ctx, tds, dds) <- scopeTypeDataDecls ctx (M.typeDecls m) (M.dataDecls m)
   (ctx, cds) <- scopeConsDecls ctx dds (M.consDecls m)
   (ctx, lds) <- scopeDefs      ctx (M.definitions m)
+  forM_ (Map.toList kss) \(i, _) ->
+    unless (i `Map.member` tds || i `Map.member` dds) $
+      insertError (KSigLacksBinding (getSpan i) i)
   return (ctx, m{ M.kindSigs    = kss
                 , M.typeDecls   = tds
                 , M.dataDecls   = dds
