@@ -21,7 +21,7 @@ import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Traversable (for)
-import Utils (internalError)
+import Compiler.Bug (internalError)
 
 type MultConstraints = [MultEquation]
 

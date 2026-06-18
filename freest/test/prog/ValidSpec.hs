@@ -11,7 +11,7 @@ mark a test as pending.
 -}
 module ValidSpec where
 
-import FreeST ( runFreeST )
+import Compiler.FreeST ( runFreeST )
 import UI.CLI
 import ProgSpecUtils
 

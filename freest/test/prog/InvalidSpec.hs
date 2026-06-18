@@ -11,7 +11,7 @@ pending.
 -}
 module InvalidSpec where
 
-import FreeST ( runFreeST )
+import Compiler.FreeST ( runFreeST )
 import UI.CLI
 import ProgSpecUtils
 

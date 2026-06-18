@@ -21,7 +21,7 @@ import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Kinding ( runSynth, KindCtx )
 import Validation.Substitution ( subsMultType )
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 import Parser.Unparser
 
 import Language.Simple.Grammar
@@ -89,7 +89,7 @@ word' = \case
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
       zip (map show [1..]) words
-  T.ForallM _ _ [] _ -> internalError "what??"
+  T.ForallM _ _ [] _ -> internalError "ForallM with empty quantifier list"
   t@(T.ForallM s m (φ : φs) u) -> do
     let φ1 = Variable s "φ1" (-2)
         φ2 = Variable s "φ2" (-3)
@@ -226,7 +226,7 @@ getTransitions x = do
   p <- gets productions
   case p Map.!? x of
     Just transitions -> pure transitions
-    Nothing -> internalError $ "TypeEquivalence.getTransitions: nonterminal " ++ show x ++ " not in map " ++ show p
+    Nothing -> internalError $ "nonterminal " ++ show x ++ " not in map " ++ show p
 
 -- | Get the LHS for given transitions; if no productions for the
 -- transitions are found, add new productions and return its LHS.
