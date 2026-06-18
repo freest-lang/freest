@@ -26,7 +26,7 @@ plus' m n = \@(a : *T) (s : a -> a) (z : a) -> m  @a s (n  @a s z)
 
 times m n = \@(a : *T) (s : a -> a) -> n  @a (m  @a s)
 
-expr m n = \@(a : *T) (f : a -> a) -> n  @(a -> a) (m  @a {- CANNOT INFER -}) f
+expr m n = \@(a : *T) (f : a -> a) -> n  @(a -> a) (m  @a) f
 
 isZero : Nat -> Bool
 isZero n = n  @Bool (\(_ : Bool) -> False) True

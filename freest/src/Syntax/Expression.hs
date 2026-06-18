@@ -89,7 +89,7 @@ data LetDecl x
   | Mutual [LetDecl x {- FnDef only -}]
 
 data RHS x
-  = GuardedRHS [(Exp x, Exp x)] (Maybe [LetDecl x])
+  = GuardedRHS [(Exp x, Exp x)] (Maybe [LetDecl x]) -- TODO: just [LetDecl x]?
   | UnguardedRHS (Exp x) (Maybe [LetDecl x])
 
 type ParsedExp = Exp Parsed

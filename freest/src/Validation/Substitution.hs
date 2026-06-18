@@ -14,6 +14,7 @@ module Validation.Substitution
   , betaRule
   , freeTypeVars
   , subsMultType
+  , subsMultMult
   )
 where
 

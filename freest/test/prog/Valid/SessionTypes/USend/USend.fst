@@ -14,7 +14,7 @@ unrestricted values. The partially evaluated function can then be reused, contra
 module USend where
 
 unsend : forall (a : *T) -> a -> forall (b : 1S) -> () -> !a;b -1-> b
-unsend @a x @b () = send x @b -- CANNOT INFER
+unsend @a x @b () = send x
 
 main : Int
 main =

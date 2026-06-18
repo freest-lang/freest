@@ -384,7 +384,7 @@ validateExp s =
   Scoping.scopeExp (scopingCtx s) >=>
   Kinding.kindExp (modl s) (kindCtx s) >=>
   Typing.synth (modl s) (kindCtx s) (typeCtx s) >=>
-  pure . fst
+  pure . \(_, t, _) -> t
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
 -- state, merging into the existing scoped module.

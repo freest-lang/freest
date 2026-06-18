@@ -6,7 +6,8 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as T
 import Validation.Base
-import Validation.Substitution (subsMultType)
+import Validation.Substitution (subsMultType, subsMultMult)
+import Utils (internalError)
 
 -- | Instantiation-level substitution. Instantiation variables may occur as
 -- types or as multiplicities.
@@ -46,11 +47,22 @@ applySubs (Θ ivtms) t =
 
     subsm = subsMultType InstLv
 
--- | Make a fresh type instantiation variable.
+applySubsMult :: Substitution -> K.Multiplicity -> K.Multiplicity
+applySubsMult (Θ ivtms) m =
+  foldr (\(ivi, tmi) mi -> either (\_ m -> m) (subsMultMult InstLv ivi) tmi mi) m ivtms
+
+-- | Make a fresh type instantiation variable. Its kind carries a fresh,
+-- multiplicity rather than the one provided in the kind, so that
+-- its multiplicity can be refined.
 freshInstVarT :: Span -> K.Kind -> Validation T.KindedType
 freshInstVarT s k = do
   i <- incCounter
-  return $ T.Var s k InstLv (Variable s ("ạ" ++ show i) i)
+  let v = Variable s ("ạ" ++ show i) i
+  case k of
+    K.Proper ks _ pk -> do
+      m <- freshInstVarM s
+      return (T.Var s (K.Proper ks m pk) InstLv v)
+    _ -> internalError "non-proper instantiation kind"
 
 -- | Make a fresh multiplicity instantiation variable.
 freshInstVarM :: Span -> Validation K.Multiplicity
