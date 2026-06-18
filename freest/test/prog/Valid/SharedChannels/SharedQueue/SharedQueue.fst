@@ -11,17 +11,17 @@ type Internal = ?Int; ?Internal; Close
 
 -- nodes
 
-runHeadNode : Internal -> Dual Head 1-> ()
+runHeadNode : Internal -> Dual Head -1-> ()
 runHeadNode prev head = 
     let (i, prev) = receive prev in
     send_ i head;
     runHeadNode (receiveAndClose prev) head
 
-runTailNode : Dual Internal -> Dual Tail 1-> ()
+runTailNode : Dual Internal -> Dual Tail -1-> ()
 runTailNode next tail =
     let i = receive_ tail in
     let (prev', next') = channel @Internal in
-    fork (\(_ : ()) 1-> send i next |> send prev' |> wait);
+    fork (\(_ : ()) -1-> send i next |> send prev' |> wait);
     runTailNode next' tail
     -- Internal error at Validation.Rename.rename: Dual
     -- runTailNode (fork_ @Internal (\(c : Dual Internal) -> send c (send i next))) tail
@@ -34,8 +34,8 @@ type Queue = (Head, Tail)
 initQueue : Queue
 initQueue =
     let (internalC, internalS) = channel @Internal in
-    (forkWith1 (runHeadNode internalC),
-     forkWith1 (runTailNode internalS))
+    (forkWith (runHeadNode internalC),
+     forkWith (runTailNode internalS))
 
 enqueue : Int -> Queue -> ()
 enqueue i queue = 
@@ -57,7 +57,7 @@ runCounter i counter =
 initCounter : Counter
 initCounter = 
     let (counterC, counterS) = channel @Counter in
-    fork (\(_ : ()) 1-> runCounter 0 counterS);
+    fork (\(_ : ()) -1-> runCounter 0 counterS);
     counterC
 
 -- main
@@ -70,7 +70,7 @@ main =
     let queue   = initQueue in
     let counter = initCounter in
     -- writer-reader concurrency, no writter-writer nor reader-reader concurrency
-    parallel maxSize (\(_ : ()) 1-> enqueue (receive_ counter) queue);
+    parallel maxSize (\(_ : ()) -> enqueue (receive_ counter) queue);
     repeat maxSize $ (\(_ : ()) -> print (dequeue queue))
     -- writer-reader, writter-writer and reader-reader concurrency
     -- parallel @() 10 $ (\(_ : ()) -> enqueue (receiveUn @Int counter) queue);

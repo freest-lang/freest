@@ -5,5 +5,4 @@ resolver: lts-21.25
 
 packages:
   - freest
-  - freesti
   - sgbisim

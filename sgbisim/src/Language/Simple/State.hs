@@ -25,13 +25,13 @@ module Language.Simple.State
   )
 where
 
-import Language.Simple.Grammar
+import Language.Simple.Grammar ( Nonterminal, Norm(..), Productions, Word )
 
-import Control.Monad.State
+import Control.Monad.State ( Monad(return), gets, modify, State )
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Sequence qualified as Seq
-import Prelude hiding ( Word, log )
+import Prelude hiding ( Word )
 
 -- Table to store the norm of each non-terminal
 type NormTable = Map.Map Nonterminal Norm

@@ -14,7 +14,6 @@ module Syntax.Expression
        , TuplePat
        )
   , listPat
-  , stringPat
   , RHS(..)
   , LetDecl(..)
   , ParsedExp, ScopedExp, KindedExp
@@ -55,6 +54,7 @@ data Pat
   = IntPat Span Int
   | FloatPat Span Double
   | CharPat Span Char
+  | StringPat Span String
   | WildPat Span Variable
   | VarPat Span Variable
   | PackPat Span [(Variable, Kind)] Pat
@@ -93,17 +93,14 @@ listPat s = \case
   []       -> NilPat s
   (p : ps) -> ConsPat s p (listPat s ps)
 
-stringPat :: Span -> String -> Pat
-stringPat s = listPat s . map (CharPat s)
-
 data LetDecl x
   = ValDef Pat      (RHS x)
-  | FnDef  Variable [([Level Pat Variable], RHS x)]
+  | FnDef  Variable [([Level Pat Variable Variable], RHS x)]
   | TypeSig [Variable] (Type x)
   | Mutual [LetDecl x {- FnDef only -}]
 
 data RHS x
-  = GuardedRHS [(Exp x, Exp x)] (Maybe [LetDecl x])
+  = GuardedRHS [(Exp x, Exp x)] (Maybe [LetDecl x]) -- TODO: just [LetDecl x]?
   | UnguardedRHS (Exp x) (Maybe [LetDecl x])
 
 type ParsedExp = Exp Parsed
@@ -114,10 +111,11 @@ data Exp x
   = Int    Span Int
   | Float  Span Double
   | Char   Span Char
+  | String Span String
   | DCons  Span Identifier
   | Var    Span Variable
-  | App    Span (Exp x) [Level (Exp x) (Type x)]
-  | Abs    Span [Level (Pat,Type x) (Variable,Kind)] Multiplicity (Exp x)
+  | App    Span (Exp x) [Level (Exp x) (Type x) Multiplicity]
+  | Abs    Span [Level (Pat,Type x) (Variable,Kind) Variable] Multiplicity (Exp x)
   | Pack   Span [Type x] (Exp x)
   | Asc    Span (Exp x) (Type x)
   | Let    Span [LetDecl x] (Exp x)
@@ -133,7 +131,7 @@ pattern Tuple :: Span -> [Exp x] -> Exp x
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
                              e@(DCons s i@(isUnitId -> True)) -> App s e []
                              e -> e
-                      -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es,_)))
+                      -> App s (DCons _ (isTupleId -> True)) (partitionLevels -> (es, _, _)))
   where Tuple s = \case 
           [] -> DCons s (mkTupleId 0 s)
           es -> App s (DCons s (mkTupleId (length es) s)) (map ExpLevel es)
@@ -154,6 +152,7 @@ instance Located Pat where
     IntPat s _      -> s
     FloatPat s _    -> s
     CharPat s _     -> s
+    StringPat s _   -> s
     WildPat s _     -> s
     VarPat s _      -> s
     PackPat s _ _   -> s
@@ -168,6 +167,7 @@ instance Located Pat where
     IntPat _ i      -> IntPat s i
     FloatPat _ f    -> FloatPat s f
     CharPat _ c     -> CharPat s c
+    StringPat _ str -> StringPat s str
     WildPat _ x     -> WildPat s x
     VarPat _ x      -> VarPat s x
     PackPat _ as p  -> PackPat s as p
@@ -190,6 +190,7 @@ instance Located (Exp x) where
     Int s _      -> s
     Float s _    -> s
     Char s _     -> s
+    String s _   -> s
     DCons s _    -> s
     Var s _      -> s
     App s _ _    -> s
@@ -209,6 +210,7 @@ instance Located (Exp x) where
     Int _ i       -> Int s i
     Float _ f     -> Float s f
     Char _ c      -> Char s c
+    String _ str  -> String s str
     DCons _ i     -> DCons s i
     Var _ x       -> Var s x
     App _ e as    -> App s e as
@@ -238,6 +240,7 @@ instance Show Pat where
     IntPat _ i      -> show i
     FloatPat _ f    -> show f
     CharPat _ c     -> show c
+    StringPat _ str -> show str
     WildPat _ x     -> show x
     VarPat _ x      -> show x
     PackPat _ aks p  -> "(" ++intercalate ", " (map (\(a, k) -> "@("++ show a ++ " : " ++ show k ++ ")") aks) ++ ", " ++ show p ++ ")"
@@ -245,7 +248,7 @@ instance Show Pat where
     WaitPat _       -> "Wait"
     InPat _ p1 p2   -> "(?" ++ show p1 ++ "; " ++ show p2 ++ ")"
     ChoicePat _ l p -> "(&"++show l++" "++show p++")"
-    TypeInPat _ (a, k) p -> "(??(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
+    TypeInPat _ (a, k) p -> "(?@(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
     AsPat _ x p     -> show x++"@"++show p
 
 instance Show (LetDecl x) where
@@ -256,6 +259,7 @@ instance Show (LetDecl x) where
         show x++" "++unwords (map showParam ps)++show rhs) psrhss
       where showParam = \case TypeLevel a -> "@"++show a
                               ExpLevel  p -> show p
+                              MultLevel φ -> "#"++show φ
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
     Mutual ds -> "mutual ⦃\n"++intercalate "⨾\n" (map show ds)++"\n⦄"
 
@@ -276,15 +280,19 @@ instance Show (Exp x) where
     Int _ i        -> show i
     Float _ d      -> show d
     Char _ c       -> show c
+    String _ s     -> show s
     DCons _ i      -> show i
     Var _ x        -> show x
     App _ f as     -> foldl (\s a -> "("++s++" "++showArg a++")") (show f) as
-                      where showArg (ExpLevel  e) = show e
-                            showArg (TypeLevel t) = "@"++show t
-    Abs _ ps m e   -> "(\\"++unwords (map showParam ps)++" "++show m++"-> "
-                      ++show e++")"
-                      where showParam (ExpLevel  (p,t)) = show p++":"++show t
-                            showParam (TypeLevel (a,k)) = show a++":"++show k
+                      where showArg = \case 
+                              ExpLevel  e -> show e
+                              TypeLevel t -> "@" ++ show t
+                              MultLevel m -> "#" ++ show m
+    Abs _ ps m e   -> "(\\"++unwords (map showParam ps)++" -"++show m++"-> "++show e++")"
+                      where showParam = \case
+                              ExpLevel  (p,t) -> "("++show p++":"++show t++")"
+                              TypeLevel (a,k) -> "@("++show a++":"++show k++")"
+                              MultLevel φ     -> "#("++show φ++")"
     Pack _ ts e    -> "(" ++ intercalate ", " (map (('@' :) . show) ts) ++ ", " ++ show e ++ ")"
     Asc _ e t      -> "(" ++ show e ++ " : " ++ show t ++ ")"
     Let _ ds e     -> "(let ⦃ "
@@ -319,8 +327,11 @@ freeVarsDecls = \case
   ValDef pat rhs    -> freeVarsRHS rhs
   FnDef var clauses -> Set.unions 
                         (map (\(params, rhs) -> 
-                          let (pats, vars) = B.partitionLevels params 
-                          in freeVarsRHS rhs Set.\\ Set.union (Set.unions $ map allVarsPat pats) (Set.unions $ map Set.singleton vars)) 
+                          let (pats, tvars, mvars) = B.partitionLevels params 
+                          in freeVarsRHS rhs Set.\\ Set.unions ( Set.fromList tvars
+                                                               : Set.fromList mvars
+                                                               : map allVarsPat pats
+                                                               ))
                         clauses) Set.\\ Set.singleton var
   TypeSig vars _    -> Set.empty
   Mutual letdecls   -> let boundVars = Set.unions $ map boundVarsDecls letdecls
@@ -353,10 +364,12 @@ freeVarsRHS = \case
 freeVars :: Exp x -> Set.Set Variable
 freeVars = \case
   Var _ var                   -> Set.singleton var
-  App _ f args                -> freeVars f `Set.union` Set.unions (map freeVars $ fst $ B.partitionLevels args)
-  Abs _ params _ body         -> let (pats, vars) = B.partitionLevels params
-                                     (pats', vars') = (Set.unions $ map (allVarsPat . fst) pats, Set.fromList $ map fst vars)
-                                 in freeVars body Set.\\ Set.union pats' vars'
+  App _ f args                -> freeVars f `Set.union` Set.unions ((\(exps, _, _) -> map freeVars exps) $ B.partitionLevels args)
+  Abs _ params _ body         -> let (map fst -> pats, map fst -> tvars, mvars) = B.partitionLevels params
+                                 in freeVars body Set.\\ Set.unions [ Set.unions $ map allVarsPat pats
+                                                                    , Set.fromList tvars
+                                                                    , Set.fromList mvars
+                                                                    ]
   Pack _ _ exp                -> freeVars exp
   Asc _ exp _                 -> freeVars exp
   Let _ decls exp             -> let (free, bound) = collectVarsLet decls in free `Set.union` (freeVars exp Set.\\ bound)

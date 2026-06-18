@@ -6,7 +6,7 @@ module FixZCombinator where
 type X : *T -> *T
 type X a = (X a) -> a -> a
 
-fixZcomb : forall (a : *T). ((a -> a) -> (a -> a)) -> (a -> a)
+fixZcomb : forall (a : *T) -> ((a -> a) -> (a -> a)) -> (a -> a)
 fixZcomb @a f =
   (\(x : X a) -> f (\(z : a) -> x x z))
   (\(x : X a) -> f (\(z : a) -> x x z))

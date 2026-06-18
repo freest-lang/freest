@@ -17,6 +17,8 @@ module Syntax.Module
   , insertTypeDecl
   , insertDef
   , emptyParsedModule
+  , emptyScopedModule
+  , emptyKindedModule
   )
 where
 
@@ -37,7 +39,7 @@ type KindedModule = Module Kinded
 type TypedModule  = Module Typed
 
 data Module p
-  = Module { name        :: Maybe [String]
+  = Module { name        :: Maybe [String] -- TODO: why do we need the Nothing case? Shouldn't all modules have a name? and do I need a List of Strings instead of just a String?
            , imports     :: [[String]]
            , kindSigs    :: KindSigs  p
            , typeDecls   :: TypeDecls p
@@ -133,13 +135,35 @@ insertDef :: E.LetDecl p -> Module p -> Module p
 insertDef d m = m{definitions = d : definitions m}
 
 emptyParsedModule :: ParsedModule
-emptyParsedModule = 
+emptyParsedModule =
   Module{ name        = Nothing
         , imports     = []
         , kindSigs    = []
         , typeDecls   = []
         , dataDecls   = []
         , consDecls   = []
+        , definitions = []
+        }
+
+emptyScopedModule :: ScopedModule
+emptyScopedModule =
+  Module{ name        = Nothing
+        , imports     = []
+        , kindSigs    = Map.empty
+        , typeDecls   = Map.empty
+        , dataDecls   = Map.empty
+        , consDecls   = Map.empty
+        , definitions = []
+        }
+
+emptyKindedModule :: KindedModule
+emptyKindedModule =
+  Module{ name        = Nothing
+        , imports     = []
+        , kindSigs    = Map.empty
+        , typeDecls   = Map.empty
+        , dataDecls   = Map.empty
+        , consDecls   = Map.empty
         , definitions = []
         }
 
@@ -154,8 +178,36 @@ instance Semigroup ParsedModule where
           , definitions = definitions m1 ++ definitions m2
           }
 
-instance Monoid ParsedModule where 
+instance Monoid ParsedModule where
   mempty = emptyParsedModule
+
+instance Semigroup ScopedModule where
+  m1 <> m2 =
+    Module{ name        = name m2
+          , imports     = imports     m1 ++          imports     m2
+          , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
+          , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
+          , dataDecls   = dataDecls   m1 `Map.union` dataDecls   m2
+          , consDecls   = consDecls   m1 `Map.union` consDecls   m2
+          , definitions = definitions m1 ++          definitions m2
+          }
+
+instance Monoid ScopedModule where
+  mempty = emptyScopedModule
+
+instance Semigroup KindedModule where
+  m1 <> m2 =
+    Module{ name        = name m2
+          , imports     = imports     m1 ++          imports     m2
+          , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
+          , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
+          , dataDecls   = dataDecls   m1 `Map.union` dataDecls   m2
+          , consDecls   = consDecls   m1 `Map.union` consDecls   m2
+          , definitions = definitions m1 ++          definitions m2
+          }
+
+instance Monoid KindedModule where
+  mempty = emptyKindedModule
 
 instance Show ParsedModule where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
@@ -182,6 +234,30 @@ instance Show ParsedModule where
         | otherwise = "type " ++ show i ++ " = " ++ show t
 
 instance Show ScopedModule where
+  show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
+    List.intercalate "\n" $ filter (not . null)
+      [ case name of 
+          Nothing -> ""
+          Just n -> "module "++ List.intercalate "." n++" where"
+      , List.intercalate "\n" (map showImport imports)
+      , List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
+      , List.intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
+      , List.intercalate "\n" (map showDataDecl $ Map.toList dataDecls)
+      , List.intercalate "\n" (map show definitions)
+      ]
+    where 
+      showImport ss = "import " ++ List.intercalate "." ss
+      showKindSig (i, k) = "type " ++ show i ++ " : " ++ show k
+      showDataDecl (i, (aks, is)) =
+        "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = " 
+        ++ List.intercalate " | " (map ((++ " ...") . show) is)
+      showConsDecl (i, (i', aks, ts)) =
+        "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
+      showTypeDecl = \case 
+        (i, (True, T.Abs _ _ aks t)) -> "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
+        (i, (_, t)) -> "type " ++ show i ++ " = " ++ show t
+
+instance Show KindedModule where
   show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
       [ case name of 

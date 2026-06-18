@@ -3,16 +3,14 @@ Module      :  UI.Error
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-Errors. A work in progress.
+Errors. A work in progress -- Life is a work in progress
 -}
-{-# LANGUAGE LambdaCase #-}
-
 
 module UI.Error
   ( Error(..)
   , Source
   , toMessage
-  , showErrors
+  , showErrors -- for testing
   , printErrors
   )
 where
@@ -24,24 +22,30 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
-import Utils
+import Compiler.Bug ( internalError )
 
-import Data.List (intercalate,nub)
+import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
-import Syntax.Expression
 import Data.List qualified as List
 import Data.Char qualified as Char
+import Data.Maybe ( fromMaybe )
+import Debug.Trace ( traceM )
 
 -- | The errors that can be found in a FreeST program.
 data Error
-  = ArrowMultMismatch Span (Either Variable E.KindedExp) Int
-    K.Multiplicity K.Multiplicity
+  = ArrowMultMismatch 
+      Span 
+      (Either Variable E.KindedExp) 
+      Int
+      K.Multiplicity 
+      K.Multiplicity
   | CannotInferHigherKindedTypeApp Span K.Kind
+  | CannotSatisfyMultConstraint Span K.Multiplicity K.Multiplicity
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
   | CannotSynthesiseSendType Span
-  | ConflictingDefs Span (Level String String) [Span]
+  | ConflictingDefs Span (Level String String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
   | ExpectsTooManyArgs Span TK.KindedType Int Int
@@ -55,7 +59,16 @@ data Error
   | LacksKindSig Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
-  | LinConsumedInUnFun Span (Either Variable Identifier) TK.KindedType (Either Variable E.KindedExp)
+  | LinConsumedInGuard 
+      Span 
+      (Either Variable Identifier) 
+      TK.KindedType
+  | LinConsumedInUnFun 
+      Span 
+      (Either Variable Identifier) 
+      TK.KindedType 
+      Span 
+      K.Multiplicity
   | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
     (Either (Either Variable E.Pat) E.KindedExp)
   | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
@@ -64,11 +77,13 @@ data Error
   | MultipleKindSigs Span [Identifier]
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
+  | MultVarOutOfScope Span Variable
   | NonLinPat Span E.Pat TK.KindedType
   | ParseError Span (Token, [String])
   | PartiallyAppliedSelect Span Identifier
   | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
   | ProperKindMismatch Span TK.KindedType K.Kind
+  | RestrictedFunInMutual Span Variable TK.KindedType
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
   | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.Pat)
@@ -80,13 +95,21 @@ data Error
   | TypeMismatchSendType Span TK.KindedType
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg Span Int (Level (Maybe TK.KindedType) K.Kind) (Level E.KindedExp TK.KindedType)
-  | UnexpectedParam Span Int (Level TK.KindedType K.Kind)
-    (Level E.Pat Variable)
+  | UnexpectedArg 
+      Span
+      Int
+      (Level (Maybe TK.KindedType) K.Kind ())
+      (Level E.KindedExp TK.KindedType K.Multiplicity)
+  | UnexpectedParam Span Int (Level TK.KindedType K.Kind ()) (Level () () ())
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
-  | PolymorphicTypeRecursion Span Identifier [Variable] (Either K.Kind TK.KindedType)
+  | PolymorphicTypeRecursion
+      Span
+      Identifier
+      [Variable]
+      (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
+  | MixedSessionVarPats Span E.Pat E.Pat
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -95,6 +118,7 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
+    CannotSatisfyMultConstraint s _ _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
@@ -115,16 +139,19 @@ instance Located Error where
     LexicalError s _ -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
-    LinConsumedInUnFun s _ _ _ -> s
+    LinConsumedInGuard s _ _ -> s
+    LinConsumedInUnFun s _ _ _ _ -> s
     MultipleConsDecls s _ -> s
     MultipleFieldDecls s _ -> s
     MultipleKindSigs s _ -> s
     MultipleTypeDecls s _ -> s
     MultipleVarDecls s _ ->  s
+    MultVarOutOfScope s _ -> s
     NonLinPat s _ _ -> s
     ParseError s _ -> s
     PrekindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
+    RestrictedFunInMutual s _ _ -> s
     SigLacksDef s _ -> s
     TypeConsOutOfScope s _ -> s
     TypeMismatch s _ _ _ -> s
@@ -142,19 +169,29 @@ instance Located Error where
     VarOutOfScope s _ -> s
     PolymorphicTypeRecursion s _ _ _ -> s
     HigherOrderTypeRHS s _ -> s
+    MixedSessionVarPats s _ _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
+-- | The source code of a FreeST program, represented as a mapping from file paths
+-- to the lines of code in those files. This is used to extract snippets of code
+-- to display in error messages.
+-- The list of lines of code may be empty, when parsing from an interactive prompt.
 type Source = Map.Map FilePath [String]
 
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
-  take (ec - sc) . drop (sc - 1) $ (src Map.! fp) !! (sl - 1)
+  take (ec - sc) . drop (sc - 1) $ lookupSrc src fp !! (sl - 1)
 
 getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
-  (src Map.! fp) !! (sl - 1)
+  lookupSrc src fp !! (sl - 1)
+
+lookupSrc :: Source -> FilePath -> [String]
+lookupSrc src fp = fromMaybe
+  (internalError $ "file not in source map: " ++ fp)
+  (src Map.!? fp)
 
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
@@ -168,8 +205,9 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
   where
     sep = " | "
     n = length (show el)
-    srcf = src Map.! fp
-    l = srcf !! (min (length srcf) sl - 1)
+    srcf = lookupSrc src fp
+    l | null srcf = []
+      | otherwise = srcf !! (min (length srcf) sl - 1)
     spaces x = replicate x ' '
     carets x = replicate x '^'
 
@@ -179,7 +217,7 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
   where
     n = length (show el)
     sep = " | "
-    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ src Map.! fp
+    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ lookupSrc src fp
     spaces x = replicate x ' '
     lineCarets i li =
       rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep
@@ -199,27 +237,11 @@ makeError :: Located a => Source -> a -> String -> String
 makeError src (getSpan -> s) msg =
   errorHeader s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
 
-prettyKind :: K.Kind -> String
-prettyKind = \case
-  K.Proper _ m pk -> prettyMulti m ++ prettyPre pk
-  K.Arrow _ k1 k2 -> prettyKind k1 ++ " -> " ++ prettyKind k2
-  K.Var _ τ       -> "kind variable " ++ external τ
-  where
-    prettyMulti = \case
-      K.Lin -> "a linear"
-      K.Un -> "an unrestricted"
-      K.VarM _ φ -> "a multiplicity variable " ++ external φ
-    prettyPre = \case
-      K.Top -> ""
-      K.Session -> " session"
-      K.Channel -> " channel"
-      K.VarPK ψ -> " prekind variable " ++ external ψ
-
 toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m m' -> makeError src s
-    ("Expected " ++ showMult m ++ " function, but got " ++ showMult m'
-      ++ " one instead"
+    ("Expected " ++ showMult m ++ ", but got " ++ showMult m'
+      ++ " instead"
       ++ (if i > 0
           then " (on the " ++ ordinal (i + 1) ++ " parameter of this "
             ++ (case xe of Left _ -> "function definition" -- should not occur
@@ -227,12 +249,15 @@ toMessage src = \case
           else ""))
     where
       showMult = \case
-        K.Lin    -> "a linear"
-        K.Un     -> "an unrestricted"
-        K.VarM _ x -> "a multiplicity" ++ external x
+        K.Lin{}   -> "a linear function"
+        K.Un{}    -> "an unrestricted function"
+        m@K.Sup{} -> "a function with multiplicity " ++ bt (unparse m)
   CannotInferHigherKindedTypeApp s k -> makeError src s
     ("Cannot infer type application for a type of kind " ++ bt (unparse k))
     ++ "Please provide all type arguments before this one"
+  CannotSatisfyMultConstraint s m1 m2 -> makeError src s
+    "Cannot satisfy multiplicity constraints"
+    ++ "(Cannot unify " ++ bt (unparse m1) ++ " with " ++ bt (unparse m2) ++ ")"
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesiseReceiveType s -> makeError src s
@@ -243,8 +268,9 @@ toMessage src = \case
     "Could not infer a type for this `sendType` expression"
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
-      ExpLevel x -> "variable " ++ x
-      TypeLevel a -> "type variable " ++ bt a)
+      ExpLevel x -> "variable " ++ bt x
+      TypeLevel a -> "type variable " ++ bt a
+      MultLevel φ -> "multiplicity variable " ++ bt φ)
     ++ "Conflicting definitions at:\n" ++ unlines (map show ss)
   ConsOutOfScope s i -> makeError src s
     ("Constructor out of scope: " ++ bt (show i))
@@ -271,8 +297,7 @@ toMessage src = \case
     ++ thirdPerson (m - n) ++ ")"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
-    ++ "(Cannot apply a type of kind " ++ bt (unparse k) ++ " to "
-    ++ thirdPerson (m - n) ++ ")"
+    ++ "(A type of kind " ++ bt (unparse k) ++ " cannot be applied to further arguments)"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
   KindMismatch s k1 t -> makeError src s
@@ -299,15 +324,35 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
-    ("Linear variable " ++ prettyVarCons xi ++ " was not consumed")
-  LinConsumedInUnFun s xi t fe -> errorHeader s ++ "\n" ++
-    ("Linear " ++ prettyVarCons xi
-      ++ " of type " ++ unparse t ++ ", bound at\n"
+    ("Linear " ++ prettyVarCons xi ++ " was not consumed")
+  LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
+      ++ ((case m' of
+        K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+      ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
-      ++ " was consumed in body of an unrestricted function\n"
-      ++ snippet src fe True)
+      ++ " cannot be consumed inside a guard")
+    where
+      m' = case TK.kindOf t of
+        K.Proper _ m _ -> m
+        _ -> internalError "non-proper type for expression variable"
+  LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
+      ++ ((case m' of 
+        K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+      ++ "type " ++ bt (unparse t) ++ ", bound at\n"
+      ++ snippet src xi True
+      ++ " was consumed in body of "
+      ++ (case m of 
+        K.Un{} -> "an unrestricted function"
+        _      -> "a function with multiplicity " ++ bt (unparse m))
+      ++ "\n" ++ snippet src fe True)
     ++ "(This would allow duplicating or discarding it. "
-    ++ "Consider using a linear function instead.)"
+    ++ "Consider using a restricted function instead.)"
+    where 
+      m' = case TK.kindOf t of
+        K.Proper _ m _ -> m
+        _ -> internalError "non-proper type for expression variable"
   MultipleConsDecls s is -> makeError src s
     ("Multiple declarations of constructor " ++ bt (show (head is)))
     ++ "Duplicate declarations at:\n"
@@ -318,7 +363,7 @@ toMessage src = \case
     ++ unlines (map (("  " ++) . show . getSpan) is)
   MultipleKindSigs s is -> makeError src s
     ("Multiple kind signatures for type " ++ bt (show (head is)))
-    ++ "Duplicate signatures  at:\n"
+    ++ "Duplicate signatures at:\n"
     ++ unlines (map (("  " ++) . show . getSpan) is)
   MultipleTypeDecls s is -> makeError src s
     ("Multiple declarations of type " ++ bt (show (head is)))
@@ -328,14 +373,19 @@ toMessage src = \case
     ("Multiple declarations of variable " ++ bt (external (head xs)))
     ++ "Duplicate declarations at:\n"
     ++ unlines (map (("  " ++) . show . getSpan) xs)
+  MultVarOutOfScope s φ -> makeError src s
+    ("Multiplicity variable out of scope: " ++ external φ)
   NonLinPat s p t -> makeError src s
-    ("Non-linear pattern for linear type " ++ bt (unparse t))
-  ParseError s (_, [x]) -> makeError src s
-    "Parse error"
-    ++ "(" ++ x ++ " expected)"
+    ("Non-linear pattern for" ++ case TK.kindOf t of
+      K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
+      K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
+      _ -> internalError "pattern with non-proper type")
   ParseError s (_, ss) -> makeError src s
     "Parse error"
-    ++ "(Expected one of: " ++ intercalate ", " ss ++ ")"
+    ++ case ss of
+      [] -> ""
+      [x] -> "(Expected " ++ x ++ ")"
+      ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
   PrekindMismatch s pk t k -> makeError src s
     ("Expected a " ++ prettyPk pk ++ ", but got " ++
       (case k of
@@ -347,6 +397,9 @@ toMessage src = \case
     ++ "(Expected a proper type, but got " ++ bt (unparse t)
     ++ " of kind " ++ bt (unparse k) ++ ")"
     where arity = K.depth k
+  RestrictedFunInMutual s x t -> makeError src s
+    ("Mutually recursive function " ++ bt (external x)
+      ++ " must be unrestricted, but has type " ++ bt (unparse t))
   SigLacksDef s x -> makeError src s
     ("Variable " ++  external x ++ " has a type signature but no definition")
   TypeConsOutOfScope s i -> makeError src s
@@ -394,21 +447,28 @@ toMessage src = \case
                     m -> "a " ++ show m ++ "-tuple pattern"))
   TypeVarOutOfScope s a -> makeError src s
     ("Type variable out of scope: " ++ external a)
-  UnexpectedArg s n a1 a2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
-    (case (a1, a2) of
-      (TypeLevel k, ExpLevel e) ->
-        "Expected a type argument of kind " ++ bt (unparse k)
-        ++ ", but got a value argument"
-      (ExpLevel  t, TypeLevel u) ->
-        "Expected a value argument "
-        ++ maybe "" (\t -> "of type " ++ bt (unparse t)) t
-        ++ ", but got type argument")
+  UnexpectedArg s n arg1 arg2 -> makeError src s -- TODO: use n to write the ordinal of the argument?
+    ("Expected " ++ expected ++ ", but got " ++ got)
+    where
+      expected = case arg1 of
+        ExpLevel mt -> "a value argument" ++ maybe "" ((" of type "++) . bt . unparse) mt
+        TypeLevel k -> "a type argument of kind " ++ bt (unparse k)
+        MultLevel _ -> "a multiplicity argument"
+      got = case arg2 of
+        ExpLevel _ -> "a value argument"
+        TypeLevel _ -> "a type argument"
+        MultLevel _ -> "a multiplicity argument"
   UnexpectedParam s n p1 p2 -> makeError src s -- TODO: use n to write the ordinal of the parameter?
-    (case (p1, p2) of
-      (TypeLevel k, ExpLevel p ) ->
-        "Expected a type parameter of kind " ++ bt (unparse k) ++ ", but got a pattern"
-      (ExpLevel  t, TypeLevel a) ->
-        "Expected a pattern of type " ++ bt (unparse t) ++ ", but got a type parameter")
+    ("Expected " ++ expected ++ ", but got " ++ got)
+    where
+      expected = case p1 of
+        ExpLevel t -> "a pattern of type " ++ bt (unparse t)
+        TypeLevel k -> "a type parameter of kind " ++ bt (unparse k)
+        MultLevel _ -> "a multiplicity parameter"
+      got = case p2 of
+        ExpLevel _ -> "a pattern"
+        TypeLevel _ -> "a type parameter"
+        MultLevel _ -> "a multiplicity parameter"
   UnsupportedError s msg1 msg2 -> makeError src s
     ("Unsupported feature: " ++ msg1)
     ++ msg2
@@ -421,10 +481,17 @@ toMessage src = \case
         "(Expected a proper type on the right-hand side, but found a type of kind "
         ++ bt (unparse k) ++ ". Consider adding " ++ prettyMoreParams (K.depth k)
         ++ " to the equation.)"
-      Right t -> 
+      Right t ->
         "(Found a self-reference different from the left-hand side "
         ++ bt (show i ++ (if null as then "" else " ") ++ unwords (map external as))
         ++ ", namely " ++ bt (unparse t) ++ ")"
+  MixedSessionVarPats s sp vp -> errorHeader s ++ "\n"
+    ++ "Cannot mix session patterns with variable patterns\n"
+    ++ "  session pattern:\n"
+    ++ snippet src sp True
+    ++ "  variable pattern:\n"
+    ++ snippet src vp True
+    ++ "(Session and variable patterns cannot appear together in the same match)"
   where
     thirdPerson = \case 1 -> "it"; _ -> "them"
 
@@ -457,3 +524,33 @@ showErrors src = intercalate "\n" . map (toMessage src)
 
 printErrors :: Source -> [Error] -> IO ()
 printErrors src es = putStrLn $ showErrors src es
+
+-- | The ordinal 'String' of an 'Integral'.
+ordinal :: (Integral a, Show a) => a -> String
+ordinal i = show i ++ suffix
+  where suffix | i' > 10 && i' < 20 = "th"
+               | otherwise = suffix' (i' `mod` 10)
+        suffix' = \case 1 ->"st"; 2 ->"nd"; 3 ->"rd"; _ ->"th"
+        i' = abs i 
+
+-- | From MissingH. Removes any whitespace characters that are present at the
+-- start or end of a string.
+strip :: String -> String
+strip = lstrip . rstrip
+
+-- | From MissingH. Same as 'strip', but applies only to the left side of the
+-- string.
+lstrip :: String -> String
+lstrip = \case 
+  []                 -> []
+  s@(x:xs) 
+    | elem x " \t\r\n" -> lstrip xs
+    | otherwise      -> s
+
+-- | From MissingH. Same as 'strip', but applies only to the right side of the
+-- string.
+rstrip :: String -> String
+rstrip = reverse . lstrip . reverse
+
+rpad :: Int -> a -> [a] -> [a]
+rpad n c s = s ++ replicate (n - length s) c

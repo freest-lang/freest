@@ -9,7 +9,7 @@ Church Encoding _ Natural Numbers
 module SystemFNats where
 
 type Nat : *T
-type Nat = forall (a : *T) . (a -> a) -> a -> a
+type Nat = forall (a : *T) -> (a -> a) -> a -> a
 
 zero : Nat 
 zero = \@(a : *T) (s : a -> a) (z : a) -> z
@@ -26,7 +26,7 @@ plus' m n = \@(a : *T) (s : a -> a) (z : a) -> m  @a s (n  @a s z)
 
 times m n = \@(a : *T) (s : a -> a) -> n  @a (m  @a s)
 
-expr m n = \@(a : *T) (f : a -> a) -> n  @(a -> a) (m  @a {- CANNOT INFER -}) f
+expr m n = \@(a : *T) (f : a -> a) -> n  @(a -> a) (m  @a) f
 
 isZero : Nat -> Bool
 isZero n = n  @Bool (\(_ : Bool) -> False) True

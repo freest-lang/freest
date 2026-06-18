@@ -24,11 +24,11 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "Type translation to grammar converges"
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl 
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> translateToGrammar `shouldBe` True
+       Right (modl', t') -> translateToGrammar `shouldBe` True
         where translateToGrammar = length (showGrammar g) > 1
-              g@(productions, _) = fromTypes m' [t']
+              g@(productions, _) = fromTypes modl' [t']

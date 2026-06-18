@@ -3,7 +3,6 @@ module Validation.Base
   , Validation
   , emptyValidationState
   , runValidation
-  , lookupKind
   , incCounter
   , unfold
   )
@@ -17,7 +16,7 @@ import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import UI.Error
 import Validation.Substitution ( subs )
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 
 import Control.Monad.State ( State, MonadState, modify, gets, foldM, runState )
 import Data.Map.Strict qualified as Map
@@ -65,18 +64,11 @@ runValidation s v =
     Right x' | null errors -> Right x'
              | otherwise   -> Left errors
 
--- | Look up the kind of a @type@ or @data@ name in the validation state.
-lookupKind :: M.ScopedModule -> Identifier -> Validation K.Kind
-lookupKind mod i = do 
-  case M.kindSigs mod Map.!? i of
-    Just k  -> return k
-    Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
-
 unfold :: M.KindedModule -> Identifier -> TK.KindedType
 unfold mod i =
   case M.typeDecls mod Map.!? i of
     Just (_, u)  -> u
-    Nothing -> internalError $ "Validation.Base.unfold: name " ++ show i ++ " not in type declaration map"
+    Nothing -> internalError $ "name " ++ show i ++ " not in type declaration map"
 
 -- getKind :: M.KindedModule -> Identifier -> K.Kind
 -- getKind mod i =

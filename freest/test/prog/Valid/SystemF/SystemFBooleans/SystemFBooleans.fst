@@ -9,7 +9,7 @@ Church Encoding _ Boolean Values
 module SystemFBooleans where
 
 type Bool' : *T
-type Bool' = forall (b : *T). b -> b -> b
+type Bool' = forall (b : *T) -> b -> b -> b
 
 true, false : Bool'
 
@@ -25,18 +25,18 @@ not' = \(b : Bool') -> \@(a : *T) -> \(t : a) -> \(f : a) -> b @a f t
 type Bool'' : *T -> *T
 type Bool'' b = b -> b -> b
 
-true', false': forall (b : *T). Bool'' b
+true', false': forall (b : *T) -> Bool'' b
 
 true'  @b t _ = t
 
 false' @b _ f = f
 
-not'' : forall (b : *T). Bool'' b -> Bool'' b
+not'' : forall (b : *T) -> Bool'' b -> Bool'' b
 not'' @b b = \(t : b) (f : b) -> b f t
 
 -- Destructor
 
-cond : forall (a : *T) . Bool' -> a -> a -> a
+cond : forall (a : *T) -> Bool' -> a -> a -> a
 cond @a b e1 e2 = b @a e1 e2
 
 -- Boolean ops based on the conditional
@@ -58,7 +58,7 @@ toBit : Bool' -> Int
 toBit b = b  @Int 1 0
 
 ifInt : Bool' -> Int -> Int -> Int
-ifInt = cond  @Int -- CANNOT INFER
+ifInt = cond  @Int
 
 -- main : Int
 -- main = ifInt (not' true) 1 2

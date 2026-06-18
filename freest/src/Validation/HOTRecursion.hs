@@ -30,18 +30,18 @@ checkNoHOTRec modl = forM_ (Map.toList modl.typeDecls) checkNoHOTRecDecl
       where T.Abs s aks t' = if hasParams then t else T.Abs s [] t
     checkNoHOTRecType v k i as = \case
       t@(T.AppTName s i' ts)
-        | i' == i && (notProper || paramsNotEqualToArgs) ->
-          throwE $ E.PolymorphicTypeRecursion (getSpan i) i as 
-            if notProper then Left k else Right t
+        | i' == i && (not proper || not paramsEqualToArgs) ->
+          throwE $ E.PolymorphicTypeRecursion (getSpan i) i as
+            if proper then Right t else Left k
         | i' `Set.member` v -> return ()
         | not (null ts) -> checkNoHOTRecType (Set.insert i' v) k i as t'
-        where 
-          notProper = not (K.isProper k)
-          paramsNotEqualToArgs = not (paramsEqToArgs as ts)
+        where
+          proper = K.isProper k
+          paramsEqualToArgs = paramsEqToArgs as ts
           paramsEqToArgs = \cases
-            []     []               -> True
+            []       []                   -> True
             (a : as) (T.Var _ _ _ b : ts) -> a == b && paramsEqToArgs as ts
-            _      _                -> False
+            _      _                      -> False
           t' = betaRule (snd $ modl.typeDecls Map.! i') ts
       T.Abs _ _ t -> checkNoHOTRecType v k i as t
       T.App _ t ts -> forM_ (t : ts) (checkNoHOTRecType v k i as)

@@ -23,10 +23,10 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "If T normalises to U, then U is a whnf" 
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl 
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> normYieldsWhnf `shouldBe` True
-        where normYieldsWhnf = isWhnf (normalise m' t')
+       Right (modl', t') -> normYieldsWhnf `shouldBe` True
+        where normYieldsWhnf = isWhnf (normalise modl' t')

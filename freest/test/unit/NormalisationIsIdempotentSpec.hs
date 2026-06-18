@@ -19,11 +19,14 @@ spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
   "normalise t == normalise (normalise t)" 
   errorsAreFailures
-  \src (t, mk, m) -> 
-    case do m' <- runKindModule m 
-            t' <- runSynthOrCheck m t mk
-            return (m', t')
+  \src (t, mk, modl) -> 
+    case do (kctx, modl') <- runKindModule modl
+            t' <- runSynthOrCheck kctx t mk
+            return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
-       Right (m', t') -> normalisationIsIdempotent `shouldBe` True
-        where normalisationIsIdempotent = 
-                normalise m' t' == normalise m' (normalise m' t')
+       Right (modl', t') -> 
+        if nt' == nnt' then return () 
+        else expectationFailure (show nt' ++ "\n/=\n" ++ show nnt')-- `shouldBe` True
+        where
+          nt'  = normalise modl' t' 
+          nnt' = normalise modl' nt'

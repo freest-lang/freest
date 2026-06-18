@@ -1,13 +1,30 @@
+{- |
+Module      :  Parser.Unparser
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Pretty-print (unparse) FreeST syntactic forms back to source-level strings.
+Provides the 'Unparse' class for types, kinds, multiplicities, and variables,
+and a handful of module-level helpers for rendering data and type-alias
+declarations.
+-}
 module Parser.Unparser
   ( Unparse(..)
-  ) 
+  , unparseDataDef
+  , unparseCons
+  , unparseTypeDef
+  )
   where
 
-import Syntax.Base
+import Syntax.Base ( Variable, Identifier )  
 import Syntax.Kind qualified as K
+import Syntax.Module qualified as M
 import Syntax.Type.Internal qualified as T
+import Syntax.Type.Kinded qualified as TK
+import Compiler.Bug ( internalError )
 
 import Data.List qualified as List
+import Data.Map qualified as Map
 
 data Precedence =
     PMin
@@ -55,9 +72,16 @@ class Unparse t where
   unparse :: t -> String
   unparse = snd . fragment
 
+instance Unparse K.Multiplicity where
+  fragment = \case
+    K.Lin _ -> (maxRator, "1")
+    K.Un  _ -> (maxRator, "*")
+    K.VarM _ lv φ -> (maxRator, unparse φ)
+    K.Sup _ lvφs -> (minRator, List.intercalate " + " (map (unparse . snd) lvφs))
+
 instance Unparse K.Kind where
   fragment = \case
-    K.Proper _ m pk -> (maxRator, show m ++ show pk)
+    K.Proper _ m pk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ show pk)
     K.Arrow _ k1 k2 -> (arrowRator, l ++ " -> " ++ r)
       where
         l = bracket (fragment k1) LeftAssoc arrowRator
@@ -65,21 +89,21 @@ instance Unparse K.Kind where
     K.Var _ τ       -> (maxRator, show τ)
 
 instance Unparse Variable where
-  fragment a = (maxRator, external a ++ "#" ++ show (internal a))
-  
+  fragment a = (maxRator, show a)
 instance Unparse (T.Type x) where
   fragment = \case 
     T.Int  _ _ -> (maxRator, "Int")
     T.Float _ _ -> (maxRator, "Float")
     T.Char _ _ -> (maxRator, "Char")
-    T.Arrow _ _ m -> (maxRator, "(" ++ arrow m ++ ")")
-    T.Quant _ _ p pk -> (maxRator, "(" ++ quant True p pk ++ ")")
+    T.Arrow _ _ m -> (maxRator, "(" ++ multArrow m ++ ")")
+    T.Quant _ _ p pk m -> (maxRator, "(" ++ quant True p pk m ++ ")")
+    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ concatMap (('#':) . show) φs ++ " -" ++ show m ++ "-> " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
     T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
                                         T.In  -> "Wait")
-    T.Message _ _ m p -> (maxRator, "(" ++ multiplicity m ++ polarity p ++ ")")
+    T.Message _ _ m p -> (maxRator, "(" ++ msgMultiplicity m ++ polarity p ++ ")")
     T.Choice _ _ m p is -> 
-      (maxRator, multiplicity m ++ view p ++ "{" ++ fields ++ "}")
+      (maxRator, msgMultiplicity m ++ view p ++ "{" ++ fields ++ "}")
       where 
         fields = List.intercalate ", " (map show is)
     T.Semi _ _ -> (maxRator, "(;)")
@@ -91,20 +115,18 @@ instance Unparse (T.Type x) where
         r = bracket (fragment k) RightAssoc appRator
     T.Var  _ _ _ a -> fragment a
     T.Abs _ _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
-    T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ arrow m ++ " " ++ r)
+    T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ multArrow m ++ " " ++ r)
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
-    T.AppQuant _ _ _ _ p pk aks t -> 
-      (dotRator, quant False p pk ++ bindings aks ++ ". " ++ unparse t)
+    T.AppQuant _ _ _ _ p pk m aks t -> 
+      (dotRator, quant False p pk m ++ bindings aks ++ quantSep p pk m ++ unparse t)
     T.Tuple _ _ _ ts -> 
       (maxRator, "(" ++ List.intercalate ", " (map unparse ts) ++ ")")
     T.List _ _ _ t -> 
       (maxRator, "[" ++ unparse t ++ "]")
     T.AppMessage _ _ _ m p t -> 
-      (msgRator, multiplicity m ++ polarity p ++ bracket (fragment t) RightAssoc msgRator)
-    T.AppQuantS _ _ _ _ p a k t ->
-      (dotRator, polarity p ++ polarity p ++ bindings [(a, k)] ++ ". " ++ unparse t)
+      (msgRator, msgMultiplicity m ++ polarity p ++ bracket (fragment t) RightAssoc msgRator)
     T.AppLinChoice _ _ _ p lts ->
       (maxRator, view p ++ "{" ++ fields lts ++ "}")
       where 
@@ -122,23 +144,62 @@ instance Unparse (T.Type x) where
         r = bracket (fragment (last ts)) RightAssoc appRator
     where
       quant prefix = \cases
-        T.In  K.Top     -> "forall" ++ if prefix then "" else " "
-        T.Out K.Top     -> "exists" ++ if prefix then "" else " "
-        T.In  K.Session -> "??"
-        T.Out K.Session -> "!!"
-      arrow = \case 
-        K.Lin    -> "1->"
-        K.Un     -> "->"
-        K.VarM _ φ -> external φ ++ "->"
-      multiplicity = \case
-        K.Lin    -> ""
-        K.Un     -> "*"
-        K.VarM _ φ -> external φ
+        T.In  K.Top     m -> "forall" ++ if prefix then "#" ++ show m else " "
+        T.Out K.Top     m -> "exists" ++ if prefix then "" else " "
+        p     K.Session m -> polarity p ++ "type "
+      quantSep = \cases
+        T.In K.Top m -> " -" ++ show m ++ "-> "
+        _    _     _ -> ". "
+      multArrow m = "-" ++ filter (/= ' ') (unparse m) ++ "->"
+      msgMultiplicity = \case
+        K.Lin{}    -> ""
+        K.Un{}     -> "*"
       polarity = \case
         T.In  -> "?"
         T.Out -> "!"
       bindings = 
-        unwords . map \(a, k) -> "(" ++ external a ++ " : " ++ unparse k ++ ")"
+        unwords . map \(a, k) -> "(" ++ show a ++ " : " ++ unparse k ++ ")"
       view = \case
         T.In  -> "&"
         T.Out -> "+"
+
+-- | Unparse a datatype declaration, e.g. @data Tree a = Leaf | Node (Tree a) a (Tree a)@.
+unparseDataDef :: M.KindedModule -> Identifier -> String
+unparseDataDef kmodl i = case Map.lookup i (M.dataDecls kmodl) of
+  Just (aks, cs) -> "data " ++ show i ++ paramStr aks ++ " = "
+                    ++ List.intercalate " | " (map (unparseCons kmodl) cs)
+  Nothing        -> internalError $
+    "datatype " ++ show i ++ " not found in module"
+
+-- | Unparse a single data constructor, e.g. @Node (Tree a) a (Tree a)@.
+unparseCons :: M.KindedModule -> Identifier -> String
+unparseCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
+  Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
+  Nothing      -> internalError $
+    "constructor " ++ show cn ++ " not found in module"
+
+-- | Unparse a type alias declaration, e.g. @type Age = Int@ or @type Stream a = !a ; Stream a@.
+--
+-- The 'Bool' indicates whether the declaration had formal parameters. It is
+-- needed because the stored type is an 'TK.Abs' in two distinct cases that
+-- this function must render differently:
+--
+--     * @type Foo a = body@ — 'M.insertTypeDecl' wraps @body@ in @Abs aks _@
+--       when @aks@ is non-empty; stored as @(True,  Abs _ aks body)@. Rendered
+--       as @type Foo a = body@.
+--     * @type Foo = \\a -> body@ — the user wrote a type-level lambda;
+--       stored as @(False, Abs _ aks body)@. Rendered as @type Foo = \\a -> body@.
+--
+-- Both stored types are 'Abs'es of the same shape, so the 'Bool' is the only
+-- way to recover the original surface form.
+unparseTypeDef :: Identifier -> Bool -> TK.KindedType -> String
+unparseTypeDef i hasParams t = case (hasParams, t) of
+  (True, TK.Abs _ aks body) ->
+    "type " ++ show i ++ paramStr aks ++ " = " ++ unparse body
+  _ -> "type " ++ show i ++ " = " ++ unparse t
+
+-- | @paramStr [(a₁,k₁), …, (aₙ,kₙ)]@ produces @" a₁ … aₙ"@ (with a leading
+-- space) or @""@ for the empty list.
+paramStr :: [(Variable, K.Kind)] -> String
+paramStr []  = ""
+paramStr aks = " " ++ unwords (map (show . fst) aks)

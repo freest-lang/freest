@@ -1,11 +1,13 @@
 module Stack where
 
 type StackADT : *T
-type StackADT = exists (a : *T). 
-  ( a
-  , Int -> a -> a
-  , a -> (Int, a)
-  , a -> [Int]
+type StackADT = 
+  (exists (a : *T)
+  , ( a
+    , Int -> a -> a
+    , a -> (Int, a)
+    , a -> [Int]
+    )
   )
 
 stackADT : StackADT

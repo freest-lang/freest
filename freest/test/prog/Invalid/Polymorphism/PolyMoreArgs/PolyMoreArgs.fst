@@ -1,6 +1,6 @@
 module PolyMoreArgs where
 
-id' : forall (a : *T). a -> a
+id' : forall (a : *T) -> a -> a
 id' @a x = x
 
 main : Int

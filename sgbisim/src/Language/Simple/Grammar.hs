@@ -94,5 +94,6 @@ instance HasTransitions Word where
 data Norm = Normed Int | Unnormed
   deriving (Eq, Ord, Show)
   
+addNorm :: Norm -> Norm -> Norm
 Normed n `addNorm` Normed m = Normed (n + m)
 _        `addNorm` _        = Unnormed

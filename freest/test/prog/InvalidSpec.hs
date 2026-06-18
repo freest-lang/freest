@@ -3,21 +3,23 @@ Module      :  InvalidSpec
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-The module specifies how to conduct invalid program tests.
+Hspec driver for the negative test suite. Runs each program under
+@test/prog/Invalid/@ through the FreeST compiler and expects it to fail;
+the test passes when the compiler reports an error (or exits non-zero).
+A sibling @.expected@ file starting with @\<pending\>@ marks the test as
+pending.
 -}
 module InvalidSpec where
 
-import FreeST
-import ProgSpecUtils
+import Compiler.FreeST ( runFreeST )
 import UI.CLI
+import ProgSpecUtils
 
-import Control.Exception
 import Control.Exception
 import Control.Monad ( void )
 import Data.List
 import System.Directory
 import System.Exit
-import System.Exit ( ExitCode(..) )
 import System.FilePath
 import System.IO ( stdout, stderr )
 import System.IO.Silently ( hSilence )
@@ -42,7 +44,7 @@ testDir baseDir invalidTest = do
 testInvalid :: String -> FilePath -> Spec
 testInvalid test file = do
   b <- runIO $ hSilence [stdout, stderr] $ catches
-    (  freest defaultRunOpts{file = test}
+    (  runFreeST defaultRunOpts{filePath = Just test}
     >> return (Just errorExpected)
     )
     [ Handler (\(e :: ExitCode) -> return $ exitProgram e)

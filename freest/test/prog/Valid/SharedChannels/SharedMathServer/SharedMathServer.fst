@@ -53,6 +53,6 @@ client2 ch =
 main : ()
 main =
   let (c, s) = channel @MathServer in
-  fork (\(_ : ()) 1-> client1 c);
-  fork (\(_ : ()) 1-> client2 c);
+  fork (\(_ : ()) -1-> client1 c);
+  fork (\(_ : ()) -1-> client2 c);
   runMathServer 2 s

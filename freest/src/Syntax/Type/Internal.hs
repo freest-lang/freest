@@ -48,13 +48,14 @@ module Syntax.Type.Internal
   , isAppQuant
   , isAppDName
   , fromVariable
+  , existsMult
   )
 where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Names
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 
 import Data.Bifunctor
 import Data.Function ( on )
@@ -81,7 +82,8 @@ data Type x
   | Float Span (XType x)
   | Char Span (XType x)
   | Arrow Span (XType x) K.Multiplicity
-  | Quant Span (XType x) Polarity K.Prekind
+  | Quant Span (XType x) Polarity K.Prekind K.Multiplicity
+  | ForallM Span (XType x) K.Multiplicity [Variable] (Type x)
   | Void Span (XType x) K.Kind -- TODO: why a kind here and not in, say, Quant?
   --   Session types
   | Skip Span (XType x)
@@ -94,7 +96,7 @@ data Type x
   | TName Span (XType x) Identifier
   | DName Span (XType x) Identifier
   -- Non-constants
-  | Var Span (XType x) VarLevel Variable
+  | Var Span (XType x) VarLv Variable
   | Abs Span (XType x) [(Variable, K.Kind)] (Type x)
   | App Span (XType x) (Type x) [Type x]
 
@@ -104,18 +106,28 @@ deriving instance (Ord (XType x)) => Ord (Type x)
 -- (also, consider OverloadedLists:
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/overloaded_lists.html)
 
-pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.Prekind -> [(Variable, K.Kind)] -> Type x -> Type x
-pattern AppQuant s x1 x2 x3 p pk aks t <- App s x1 (Quant _ x2 p pk) [Abs _ x3 aks t]
-  where AppQuant _ _ _ _ _ _ []  t  = t
-        AppQuant s x1 x2 x3 p pk aks t  = App s x1 (Quant s x2 p pk) [Abs s x3 aks t]
+-- pattern ForallM :: Span -> XType x -> K.Multiplicity -> [Variable] -> Type x -> Type x
+-- pattern ForallM s x m φs t <- ForallM' s x m φs t
+--   where ForallM s x m φs t 
+--           | null φs   = t
+--           | otherwise = ForallM' s x m φs t
 
-pattern AppForall :: Span -> XType x -> XType x -> XType x -> [(Variable, K.Kind)] -> Type x -> Type x
-pattern AppForall s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 In K.Top aks t
-  where AppForall s x1 x2 x3 aks t  = AppQuant s x1 x2 x3 In K.Top aks t
+pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, K.Kind)] -> Type x -> Type x
+pattern AppQuant s x1 x2 x3 p pk m aks t <- App s x1 (Quant _ x2 p pk m) [Abs _ x3 aks t]
+  where AppQuant s x1 x2 x3 p pk m aks t 
+          | null aks  = t 
+          | otherwise = App s x1 (Quant s x2 p pk m) [Abs s x3 aks t]
+
+pattern AppForall :: Span -> XType x -> XType x -> XType x -> K.Multiplicity -> [(Variable, K.Kind)] -> Type x -> Type x
+pattern AppForall s x1 x2 x3 m aks t <- AppQuant s x1 x2 x3 In K.Top m aks t
+  where AppForall s x1 x2 x3 m aks t =  AppQuant s x1 x2 x3 In K.Top m aks t
 
 pattern AppExists :: Span -> XType x -> XType x -> XType x -> [(Variable, K.Kind)] -> Type x -> Type x
-pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out K.Top aks t
-  where AppExists s x1 x2 x3 aks t  = AppQuant s x1 x2 x3 Out K.Top aks t
+pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out K.Top _ aks t
+  where AppExists s x1 x2 x3 aks t =  AppQuant s x1 x2 x3 Out K.Top existsMult aks t
+
+existsMult :: K.Multiplicity
+existsMult = internalError "attempted to evaluate multiplicity of an `exists`"
 
 pattern AppArrow :: Span -> XType x -> XType x -> K.Multiplicity -> Type x -> Type x -> Type x
 pattern AppArrow s x1 x2 m t u <- App s x1 (Arrow _ x2 m) [t,u]
@@ -126,21 +138,21 @@ pattern AppMessage s x1 x2 m p t <- App s x1 (Message _ x2 m p) [t]
   where AppMessage s x1 x2 m p t  = App s x1 (Message s x2 m p) [t]
 
 pattern AppQuantS :: Span -> XType x -> XType x -> XType x -> Polarity -> Variable -> K.Kind -> Type x -> Type x
-pattern AppQuantS s x1 x2 x3 p a k t <- App s x1 (Quant _ x2 p K.Session) [Abs _ x3 [(a, k)] t]
-  where AppQuantS s x1 x2 x3 p a k t  = App s x1 (Quant s x2 p K.Session) [Abs s x3 [(a, k)] t]
+pattern AppQuantS s x1 x2 x3 p a k t <- App s x1 (Quant _ x2 p K.Session K.Lin{}) [Abs _ x3 [(a, k)] t]
+  where AppQuantS s x1 x2 x3 p a k t  = App s x1 (Quant s x2 p K.Session (K.Lin s)) [Abs s x3 [(a, k)] t]
 
 pattern AppLinChoice :: Span -> XType x -> XType x -> Polarity -> [(Identifier, Type x)] -> Type x
-pattern AppLinChoice s x1 x2 p lts <- App s x1 (Choice _ x2 K.Lin p ls) (zip ls -> lts)
-  where AppLinChoice s x1 x2 p lts  = App s x1 (Choice s x2 K.Lin p ls) ts
+pattern AppLinChoice s x1 x2 p lts <- App s x1 (Choice _ x2 K.Lin{} p ls) (zip ls -> lts)
+  where AppLinChoice s x1 x2 p lts  = App s x1 (Choice s x2 (K.Lin s) p ls) ts
           where (ls, ts) = unzip $ sortBy (compare `on` fst) lts
 
 pattern UnMessage :: Span -> XType x -> Polarity -> Type x
-pattern UnMessage s x p <- Message s x K.Un p
-  where UnMessage s x p  = Message s x K.Un p
+pattern UnMessage s x p <- Message s x K.Un{} p
+  where UnMessage s x p  = Message s x (K.Un s) p
 
 pattern UnChoice :: Span -> XType x -> Polarity -> [Identifier] -> Type x
-pattern UnChoice s x p ls <- Choice s x K.Un p ls
-  where UnChoice s x p ls  = Choice s x K.Un p (sort ls)
+pattern UnChoice s x p ls <- Choice s x K.Un{} p ls
+  where UnChoice s x p ls  = Choice s x (K.Un s) p (sort ls)
 
 pattern AppSemi :: Span -> XType x -> XType x -> Type x -> Type x -> Type x
 pattern AppSemi s x1 x2 t u <- App s x1 (Semi _ x2) [t,u]
@@ -166,7 +178,7 @@ pattern AppDName s x1 x2 i ts <- (\case DName s x1 i            -> App s x1 (DNa
   where AppDName _ _ x2 i []  = DName (getSpan i) x2 i
         AppDName s x1 x2 i ts  = App s x1 (DName (getSpan i) x2 i) ts
 
-pattern AppVar :: Span -> XType x -> XType x -> VarLevel -> Variable -> [Type x] -> Type x
+pattern AppVar :: Span -> XType x -> XType x -> VarLv -> Variable -> [Type x] -> Type x
 pattern AppVar s x1 x2 vl a ts <- (\case Var s x1 vl a -> App s x1 (Var s x1 vl a) []
                                          App s x1 (Var _ x2 vl a) ts -> App s x1 (Var s x2 vl a) ts
                                          t -> t
@@ -177,7 +189,7 @@ pattern AppVar s x1 x2 vl a ts <- (\case Var s x1 vl a -> App s x1 (Var s x1 vl 
 pattern Tuple :: Span -> XType x -> XType x -> [Type x] -> Type x
 pattern Tuple s x1 x2 ts <- AppDName s x1 x2 (isTupleId -> True) ts
   where Tuple s x1 x2    = \case
-          [_] -> internalError "cannot construct a 1-tuple type."
+          [_] -> internalError "cannot construct a 1-tuple type"
           ts  -> AppDName s x1 x2 (mkTupleId (length ts) s) ts
 
 pattern List :: Span -> XType x -> XType x -> Type x -> Type x
@@ -227,7 +239,7 @@ isAppLinChoice = \case AppLinChoice{} -> True; _ -> False
 isAppQuant     = \case AppQuant{}     -> True; _ -> False
 isAppDName     = \case AppDName{}     -> True; _ -> False
 
-fromVariable :: VarLevel -> Variable -> XType x -> Type x
+fromVariable :: VarLv -> Variable -> XType x -> Type x
 fromVariable vl a x = Var (varSpan a) x vl a
 
 instance Show Polarity where
@@ -249,7 +261,8 @@ instance Show (Type x) where
     Float{}   -> "Float"
     Char{}    -> "Char"
     Arrow _ _ m -> "("++show m++"->)"
-    Quant _ _ p K.Top -> "("++showQuant p++")"
+    Quant _ _ p K.Top m -> "("++showQuant p++ "#" ++ (if p == In then show m else "") ++ ")"
+    ForallM _ _ m φs t -> "(forall " ++ concatMap (("#"++) . show) φs ++ " -" ++ show m ++ "-> " ++ show t ++ ")"
     -- Session types
     Skip{}            -> "Skip"
     Semi{}            -> "(;)"
@@ -257,9 +270,9 @@ instance Show (Type x) where
     End _ _ In          -> "Wait"
     End _ _ Out         -> "Close"
     Message _ _ m p  -> "(" ++ showMsgMult m ++ show p ++ ")"
-    Quant _ _ p K.Session -> "(" ++ show p ++ show p ++ ")"
+    Quant _ _ p K.Session K.Lin{} -> "(" ++ show p ++ show p ++ ")"
     Choice _ _ m p ls   ->
-      (if m == K.Un then "*" else "")
+      (case m  of K.Un{} -> "*"; _ -> "")
       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
     AppMessage _ _ _ m p t  -> showMsgMult m ++ show p ++ show t
     AppQuantS _ _ _ _ p a k t -> 
@@ -270,7 +283,7 @@ instance Show (Type x) where
       ++ "}"
       where showField (l, t) = show l ++ ": " ++ show t
     -- Polymorphism
-    AppQuant _ _ _ _ p K.Top aks t -> "(" ++ showQuant p ++ " " ++ showAbs aks ". " t ++ ")"
+    AppQuant _ _ _ _ p K.Top m aks t -> "(" ++ showQuant p ++ " " ++ showAbs aks  ((if p == In then " -" ++ show m else "") ++ "-> ") t ++ ")"
     -- Higher-order
     Var _ _ _ a    -> show a
     AppSemi _ _ _ t u -> "(" ++ show t ++ ";" ++ show u ++")"
@@ -283,15 +296,11 @@ instance Show (Type x) where
     -- The type of non-contractive types
     Void _ _ k -> "(Void @" ++ show k ++ ")"
     where
-      showMsgMult = \case K.Lin -> ""; m -> show m
+      showMsgMult = \case K.Lin{} -> ""; m -> show m
       showView = \case In -> "&"; Out -> "+"
       showQuant = \case In -> "forall"; Out -> "exists"
       showAbs aks sep t =
         unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t
-
-class Congruence t where
-  congruent :: M.Map Variable Variable -> t -> t -> Bool
-
 instance Eq (Type x) where
   (==) = congruent M.empty
 
@@ -301,8 +310,12 @@ instance Congruence (Type x) where
     Int{} Int{} -> True
     Float{} Float{} -> True
     Char{} Char{}  -> True
-    (Arrow _ _ m1) (Arrow _ _ m2) -> m1 == m2
-    (Quant _ _ p1 pk1) (Quant _ _ p2 pk2) -> p1 == p2 && pk1 == pk2
+    (Arrow _ _ m1) (Arrow _ _ m2) -> congruent m m1 m2
+    (Quant _ _ p1 pk1 m1) (Quant _ _ p2 pk2 m2) -> 
+      p1 == p2 && pk1 == pk2
+      && (p1 /= In || p2 /= In || congruent m m1 m2)
+    (ForallM _ _ m1 φs1 t1) (ForallM _ _ m2 φs2 t2) ->
+      congruent m m1 m2 && φs1 == φs2 && t1 == t2
   -- Session types
     Skip{} Skip{} -> True
     Semi{} Semi{} -> True
@@ -323,11 +336,6 @@ instance Congruence (Type x) where
   -- The type of non-contractive types
     (Void _ _ k1) (Void _ _ k2) -> k1 == k2
     _ _ -> False
-
-instance Congruence [Type x] where
-  congruent m ts us =
-    length ts == length us &&
-    all (uncurry (congruent m)) (zip ts us)
 
 -- instance Congruence [(Identifier, Type)] where
 --   congruent m m1 m2 =
@@ -350,7 +358,8 @@ instance Located (Type x) where
     Semi s _         -> s
     Dual s _         -> s
     -- Polymorphism
-    Quant s _ _ _ -> s
+    Quant s _ _ _ _ -> s
+    ForallM s _ _ _ _ -> s
     -- Higher-order
     Var s _ _ _       -> s
     Abs s _ _ _      -> s
@@ -367,7 +376,8 @@ instance Located (Type x) where
     Float _ x          -> Float s x
     Char _ x          -> Char s x
     Arrow _ x m        -> Arrow s x m
-    Quant _ x p pk -> Quant s x p pk
+    Quant _ x p pk m -> Quant s x p pk m
+    ForallM _ x m φs t -> ForallM s x m φs t
     -- Session types
     Message _ x m p    -> Message s x m p
     Choice  _ x m p ls -> Choice s x m p ls

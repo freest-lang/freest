@@ -3,7 +3,7 @@ module ImplicitForall where
 id' : a -> a 
 id' x = x 
 
-const' : a -> forall b . b -> a 
+const' : a -> forall b -> b -> a 
 const' x y = x 
 
 main : ()
