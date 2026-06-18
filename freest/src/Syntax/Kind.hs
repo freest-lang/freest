@@ -201,7 +201,7 @@ us s = Proper s (Un s)  Session
 lc s = Proper s (Lin s) Channel
 uc s = Proper s (Un s)  Channel
 
--- Utils
+-- 4. Utils
 
 isChannel, isSession, isProper :: Kind -> Bool
 
