@@ -33,7 +33,7 @@ import Control.Monad (zipWithM)
 import Data.List (transpose)
 import Data.Map (empty, singleton, union, insert)
 
-import Interpreter.Values (Value(..), Env, Clause, receive, receiveLabel)
+import Interpreter.Values (Value(..), Env, Clause, asString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 
@@ -47,6 +47,7 @@ matchPat v = \case
   E.IntPat _ i   -> pure $ case v of VInt   i' | i == i' -> Just empty ; _ -> Nothing
   E.FloatPat _ f -> pure $ case v of VFloat f' | f == f' -> Just empty ; _ -> Nothing
   E.CharPat _ c  -> pure $ case v of VChar  c' | c == c' -> Just empty ; _ -> Nothing
+  E.StringPat _ s -> pure $ case asString v of Just s' | s == s' -> Just empty ; _ -> Nothing
   E.WildPat _ _  -> pure (Just empty)
   E.VarPat _ x   -> pure (Just (singleton x v))
   E.AsPat _ x p  -> fmap (insert x v) <$> matchPat v p

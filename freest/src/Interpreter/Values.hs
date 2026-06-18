@@ -19,7 +19,9 @@ module Interpreter.Values
     close,
     builtins,
     hsToFstBool,
-    fstToHsBool
+    fstToHsBool,
+    hsToFstString,
+    asString
   ) where
 
 import qualified Control.Concurrent.Chan as C ( Chan, newChan, readChan, writeChan )

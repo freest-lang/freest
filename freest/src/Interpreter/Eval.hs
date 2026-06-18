@@ -31,12 +31,12 @@ import qualified Data.Set as Set
 import Debug.Trace
 -- ends here
 
+import Compiler.Bug (internalError)
 import Interpreter.PatternMatching (mkClosure, matchPat, matchClause, forceColumns)
-import Interpreter.Values (Env, Clause, Value(..), chan, send, builtins, fstToHsBool, receive, receiveLabel)
+import Interpreter.Values (Env, Clause, Value(..), chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
-import Utils (internalError)
 
 -- | An alternative of a case expression
 type Alternative = (E.Pat, E.KindedRHS)
@@ -156,7 +156,7 @@ collectLetDecls outer = go outer empty
               binds <- maybe (internalError "Pattern matching failed!") pure mb
               go (binds `union` env) (binds `union` acc) ds
 
-    funClauses = map (\(params, rhs) -> (fst (B.partitionLevels params), rhs))
+    funClauses = map (\(B.partitionLevels -> (es, _, _), rhs) -> (es, rhs))
     builtinForPat = \case
       E.VarPat _ var -> Data.Map.lookup (B.external var) builtins
       _              -> Nothing
@@ -241,25 +241,26 @@ eval _ (E.Float _ f) =
   return $ VFloat f
 eval _ (E.Char _ c) =
   return $ VChar c
+eval _ (E.String _ s) =
+  -- a string literal is the @Char@ cons-list @['a','b',...]@
+  return $ hsToFstString s
 eval _ (E.DCons _ (B.Identifier _ str)) =
   return $ VCons str []
 eval env (E.Var _ var) =
   case envLookup env var of
     VIO io -> io
     val -> return val
-eval env (E.App _ exp args) = do
+eval env (E.App _ exp (B.partitionLevels -> (es, _, _))) = do
   func <- eval env exp
-  let termArgs = fst $ B.partitionLevels args
   -- TODO: handle undefined?
-  evalArgs <- mapM (eval env) termArgs
+  evalArgs <- mapM (eval env) es
   res <- handleApplication env func evalArgs
   case res of
     VIO io -> io
     _ -> return res
-eval env (E.Abs _ params _ body) = do
-  let expParams = map fst $ fst $ B.partitionLevels params
+eval env (E.Abs _ (B.partitionLevels -> (expParams, _, _)) _ body) = do
   -- a lambda is a one-clause function (no guards, no `where`)
-  return $ mkClosure env [(expParams, E.UnguardedRHS body Nothing)]
+  return $ mkClosure env [(map fst expParams, E.UnguardedRHS body Nothing)]
 eval env (E.Pack span types exp) = do
   val <- eval env exp
   return $ VPack types val

@@ -77,11 +77,15 @@ testOne file = do
   where
     failureHint = "interpreter failed (rerun:  prog --run-one " ++ file ++ ")"
 
-  runTest :: IO TestResult
-  runTest = do
-    res <- timeout timeInMicro (runFreeST defaultRunOpts{filePath = Just file})
-    case res of Just _  -> pure Passed
-                Nothing -> pure Timeout
+-- | Child-process entry point (invoked as @prog --run-one <file>@): interpret a
+-- single program and exit with its status, which the parent reads back.
+runOne :: FilePath -> IO ()
+runOne file = runFreeST defaultRunOpts{filePath = Just file}
+
+-- | Read and discard a handle's contents, so the child never blocks on a full
+-- output pipe and the parent's memory stays bounded.
+drain :: Handle -> IO ()
+drain h = void (evaluate . length =<< hGetContents h)
 
 -- n microseconds (1/10^6 seconds).
 timeInMicro :: Int

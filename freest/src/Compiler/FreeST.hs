@@ -7,6 +7,7 @@ The entry point of the FreeST compiler.
 -}
 module Compiler.FreeST ( freest, runFreeST ) where
 
+import Interpreter.Eval (interpret)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL ( ReplState(..), emptyReplState, repl )
 import Compiler.Pipeline ( loadModule, loadPreludeAndModule )
@@ -27,8 +28,10 @@ runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
 runFreeST RunOpts{filePath = Just programPath, implicitPrelude = False} =
-  loadModule programPath >>=
-  maybe exitFailure (const exitSuccess)
+  loadModule programPath >>= \case
+    Nothing -> exitFailure 
+    Just (_, _, _, _, _, modl) -> interpret modl >> exitSuccess
 runFreeST RunOpts{filePath = Just programPath, implicitPrelude = True} =
-  loadPreludeAndModule programPath >>=
-  maybe exitFailure (const exitSuccess)
+  loadPreludeAndModule programPath >>= \case
+    Nothing -> exitFailure 
+    Just (_, _, _, _, _, modl) -> interpret modl >> exitSuccess
