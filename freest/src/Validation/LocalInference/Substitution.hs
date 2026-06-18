@@ -7,7 +7,7 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as T
 import Validation.Base
 import Validation.Substitution (subsMultType, subsMultMult)
-import Utils (internalError)
+import Compiler.Bug (internalError)
 
 -- | Instantiation-level substitution. Instantiation variables may occur as
 -- types or as multiplicities.
