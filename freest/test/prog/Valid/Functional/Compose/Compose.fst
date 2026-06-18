@@ -26,7 +26,6 @@ module Compose where
 --      -- -- (succAfter (succAfter (id @Int))) 0; ()
 --      flip hPutChar_ -- stdout
 
-type A : *T
 data A = A
 
 main : ()

@@ -1,6 +1,5 @@
 module Shape where
 
-type Radius, Point, Shape : *T
 type Radius = Float
 type Point  = (Float, Float)
 data Shape = Circle Point Radius

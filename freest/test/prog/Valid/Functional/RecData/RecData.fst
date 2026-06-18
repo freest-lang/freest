@@ -1,6 +1,5 @@
 module RecData where
 
-type T : *T
 data T = C T
 
 -- Not bound to terminate

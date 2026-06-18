@@ -1,6 +1,5 @@
 module DataUn where
 
-type T : *T
 data T = C (Int -> Int)
 
 f : Int -> Int

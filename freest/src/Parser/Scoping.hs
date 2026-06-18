@@ -204,6 +204,7 @@ runScopeModule = runScoping scopeModule
 -- | Scope a module, returning also the resulting context.
 scopeModule' :: ScopingCtx -> M.ParsedModule -> Validation (ScopingCtx, M.ScopedModule)
 scopeModule' ctx m = do
+  m <- insertMissingKindSigs m
   (ctx, kss) <- scopeKindSigs  ctx (M.kindSigs m)
   (ctx, tds, dds) <- scopeTypeDataDecls ctx (M.typeDecls m) (M.dataDecls m)
   (ctx, cds) <- scopeConsDecls ctx dds (M.consDecls m)
@@ -222,9 +223,22 @@ scopeModule' ctx m = do
 scopeModule :: ScopingCtx -> M.ParsedModule -> Validation M.ScopedModule
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
+-- | For every @type@ or @data@ binding that has no kind signature, append a
+-- fresh @ti : k@ entry to the parsed module's kind signatures, where @k@ is
+-- a fresh kind variable. Bindings that already have a signature are untouched.
+insertMissingKindSigs :: M.ParsedModule -> Validation M.ParsedModule
+insertMissingKindSigs m = do
+  let existing = map fst (M.kindSigs m)
+      bindings = map fst (M.typeDecls m) ++ map fst (M.dataDecls m)
+      missing  = filter (`notElem` existing) bindings
+  fresh <- forM missing \ti -> do
+    v <- freshInternal (mkDefaultVar "_κ" ti)
+    return (ti, K.Var (getSpan ti) v)
+  return m{ M.kindSigs = M.kindSigs m ++ fresh }
+
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
-scopeKindSigs :: ScopingCtx -> M.KindSigs Parsed 
+scopeKindSigs :: ScopingCtx -> M.KindSigs Parsed
                  -> Validation (ScopingCtx, M.KindSigs Scoped)
 scopeKindSigs ctx kss = do
   let es = Map.fromList [(i, [i]) | i <- kSigElems ctx]
@@ -285,9 +299,10 @@ scopeDataDecls :: ScopingCtx
 scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
   where
     scopeDataDecl (ctx', dds') dd@(ti, (unzip -> (as, ks), cis)) = do
-        unless (ti `memberKSig` ctx) do
-          throwE (LacksKindSig (getSpan ti) ti)
-        as'  <- mapM freshInternal as 
+        -- Missing kind signatures are now filled in by 'insertMissingKindSigs'.
+        -- unless (ti `memberKSig` ctx) do
+        --   throwE (LacksKindSig (getSpan ti) ti)
+        as'  <- mapM freshInternal as
         ks'  <- mapM (scopeKind ctx) ks
         return (ctx', Map.insert ti (zip as' ks', cis) dds')
     scopeConsDecls ctx = foldM (scopeConsDecl ctx) Map.empty
@@ -303,7 +318,8 @@ scopeTypeDecls :: ScopingCtx -> M.TypeDecls Parsed
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
   where
     scopeTypeDecl (ctx', tds') (ti, (n, t)) = do
-      unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
+      -- Missing kind signatures are now filled in by 'insertMissingKindSigs'.
+      -- unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
       t'  <- scopeType ctx' t
       return (ctx', Map.insert ti (n, t') tds')
 

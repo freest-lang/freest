@@ -1,6 +1,5 @@
 module IntListSum where
 
-type IntList : *T
 data IntList = Nil | Cons Int IntList
 
 sum' : IntList -> Int

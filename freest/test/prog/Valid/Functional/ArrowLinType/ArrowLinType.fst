@@ -1,6 +1,5 @@
 module ArrowLinType where 
 
-type Arrow : 1T
 type Arrow = Int -1-> Bool
 
 isTen : Arrow

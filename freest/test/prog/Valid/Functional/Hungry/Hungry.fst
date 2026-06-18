@@ -2,7 +2,6 @@ module Hungry where
 
 -- Types and Programming Languages, Benjamin Pierce, Page 270
 
-type Hungry : *T
 type Hungry = Int -> Hungry
  
 f : Int -> Hungry

@@ -1,9 +1,7 @@
 module MutualRecData where
 
-type RedBlackTree : *T
 data RedBlackTree = Node Colored | Empty
 
-type Colored : *T
 data Colored = Red RedBlackTree Int RedBlackTree
              | Black RedBlackTree Int RedBlackTree
 

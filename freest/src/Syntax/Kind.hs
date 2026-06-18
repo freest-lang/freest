@@ -217,9 +217,10 @@ isProper = \case
 
 depth :: Kind -> Int
 depth = \case
-  k@Proper{} -> 0
+  Proper{}    -> 0
   Arrow _ _ k -> 1 + depth k
-  k -> internalError ("kind " ++ show k)
+  Var{}       -> 0
+  -- k -> internalError ("kind " ++ show k)
 
 -- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
 -- image :: Kind -> Kind
