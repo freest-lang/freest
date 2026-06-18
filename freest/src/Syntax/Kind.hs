@@ -19,7 +19,6 @@ module Syntax.Kind
   , isSession
   , isChannel
   , isProper
-  , image
   , depth
   )
 where 
@@ -39,6 +38,8 @@ class Join t where
 
 class Meet t where
   meet :: t -> t -> t
+
+-- 1. Multiplicities
 
 data Multiplicity = Lin Span | Sup Span [(VarLv, Variable)]
 
@@ -91,11 +92,20 @@ instance Subsort Multiplicity where
   _           <: Lin{}       = True
   Sup _ lvφs1 <: Sup _ lvφs2 = Set.fromList lvφs1 `Set.isSubsetOf` Set.fromList lvφs2
   m1          <: m2          = m1 == m2
+
 instance Join Multiplicity where
   join = \cases
     (Lin s)         m           -> Lin s
     m             Lin{}         -> Lin (getSpan m)
     (Sup s lvφs1) (Sup _ lvφs2) -> Sup s (lvφs1 `List.union` lvφs2)
+
+instance Show Multiplicity where
+  show = \case 
+    Lin{}      -> "1"
+    Un{}       -> "*"
+    Sup _ lvφs -> List.intercalate "+" (map (show . snd) lvφs)
+
+-- 2. Prekinds
 
 data Prekind = Top | Session | Channel | VarPK Variable
   deriving (Eq, Ord)
@@ -105,6 +115,7 @@ instance Subsort Prekind where
   Channel <: Top     = True
   Channel <: Session = True
   pk1     <: pk2     = pk1 == pk2
+
 instance Join Prekind where
   join ψ@VarPK{} _  = internalError ("prekind variable " ++ show ψ)
   join _ ψ@VarPK{}  = internalError ("prekind variable " ++ show ψ)
@@ -113,6 +124,7 @@ instance Join Prekind where
   join Channel Session = Session
   join Session Channel = Session  
   join _       _       = Top
+
 instance Meet Prekind where
   meet ψ@VarPK{} _  = internalError ("prekind variable " ++ show ψ)
   meet _ ψ@VarPK{}  = internalError ("prekind variable " ++ show ψ)
@@ -121,6 +133,15 @@ instance Meet Prekind where
   meet Session _       = Session
   meet _       Session = Session
   meet _       _       = Top
+
+instance Show Prekind where
+  show = \case 
+    Top     -> "T"
+    Session -> "S"
+    Channel -> "C"
+    VarPK ψ -> external ψ
+
+-- 3. Kinds
 
 data Kind 
   = Proper Span Multiplicity Prekind 
@@ -156,6 +177,14 @@ instance Subsort Kind where
   Var _ τ1        <: Var _ τ2        = τ1 == τ2
   _               <: _               = False
 
+instance Located Kind where
+  getSpan = \case 
+    Proper s _ _ -> s 
+    Arrow s _ _  -> s
+  setSpan s = \case
+    Proper _ m pk -> Proper s m pk 
+    Arrow _ k1 k2 -> Arrow s k1 k2 
+  
 -- for debugging
 instance Show Kind where
   show = \case 
@@ -172,6 +201,8 @@ us s = Proper s (Un s)  Session
 lc s = Proper s (Lin s) Channel
 uc s = Proper s (Un s)  Channel
 
+-- Utils
+
 isChannel, isSession, isProper :: Kind -> Bool
 
 isChannel (Proper _ _ Channel) = True
@@ -184,37 +215,15 @@ isProper = \case
   Proper{} -> True
   _        -> False
 
--- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
-image :: Kind -> Kind
-image = \case
-  k@Proper{} -> k
-  Arrow _ _ k -> image k
-  k -> internalError ("kind " ++ show k)
-
 depth :: Kind -> Int
 depth = \case
   k@Proper{} -> 0
   Arrow _ _ k -> 1 + depth k
   k -> internalError ("kind " ++ show k)
 
-instance Show Multiplicity where
-  show = \case 
-    Lin{}      -> "1"
-    Un{}       -> "*"
-    Sup _ lvφs -> List.intercalate "+" (map (show . snd) lvφs)
-
-instance Show Prekind where
-  show = \case 
-    Top     -> "T"
-    Session -> "S"
-    Channel -> "C"
-    VarPK ψ -> external ψ
-
-instance Located Kind where
-  getSpan = \case 
-    Proper s _ _ -> s 
-    Arrow s _ _  -> s
-  
-  setSpan s = \case
-    Proper _ m pk -> Proper s m pk 
-    Arrow _ k1 k2 -> Arrow s k1 k2 
+-- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
+-- image :: Kind -> Kind
+-- image = \case
+--   k@Proper{} -> k
+--   Arrow _ _ k -> image k
+--   k -> internalError ("kind " ++ show k)
