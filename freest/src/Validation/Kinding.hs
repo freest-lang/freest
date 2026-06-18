@@ -37,7 +37,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as T
 import UI.Error
-import Utils
+import Compiler.Bug ( internalError )
 import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation

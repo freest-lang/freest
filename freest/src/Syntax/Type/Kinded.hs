@@ -63,7 +63,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Names
 import Syntax.Type.Internal qualified as T
-import Utils (internalError)
+import Compiler.Bug (internalError)
 
 import Data.List (intercalate)
 

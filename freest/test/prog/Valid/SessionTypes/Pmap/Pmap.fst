@@ -6,7 +6,7 @@ map @a @b _ [] = [] @b
 map @a @b f (x :: xs) = f x :: map f xs
 
 pmap @a @b f xs =
-  map (receiveAndWait @b) $ -- CANNOT INFER
+  map receiveAndWait $
     map (\(x : a) -> forkWith (sendAndClose (f x))) xs
 
 -- pmap f =

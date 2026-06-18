@@ -55,7 +55,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Names
-import Utils ( internalError )
+import Compiler.Bug ( internalError )
 
 import Data.Bifunctor
 import Data.Function ( on )
@@ -189,7 +189,7 @@ pattern AppVar s x1 x2 vl a ts <- (\case Var s x1 vl a -> App s x1 (Var s x1 vl 
 pattern Tuple :: Span -> XType x -> XType x -> [Type x] -> Type x
 pattern Tuple s x1 x2 ts <- AppDName s x1 x2 (isTupleId -> True) ts
   where Tuple s x1 x2    = \case
-          [_] -> internalError "cannot construct a 1-tuple type."
+          [_] -> internalError "cannot construct a 1-tuple type"
           ts  -> AppDName s x1 x2 (mkTupleId (length ts) s) ts
 
 pattern List :: Span -> XType x -> XType x -> Type x -> Type x

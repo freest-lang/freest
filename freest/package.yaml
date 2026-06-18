@@ -52,15 +52,16 @@ library:
     - alex
     - happy
   exposed-modules:
-    - FreeST
+    - Compiler.Bug
+    - Compiler.FreeST
+    - Compiler.Pipeline
+    - Compiler.REPL
     - Parser.LexerUtils
     - Parser.Parser
     - Parser.Scoping
     - Parser.Unparser
     - Parser.Lexer
     - Paths_freest
-    - Pipeline
-    - REPL
     - Syntax.Base
     - Syntax.Expression
     - Syntax.Kind
@@ -71,7 +72,6 @@ library:
     - Syntax.Type.Kinded
     - UI.CLI
     - UI.Error
-    - Utils
     - Validation.Base
     - Validation.Expose
     - Validation.HOTRecursion

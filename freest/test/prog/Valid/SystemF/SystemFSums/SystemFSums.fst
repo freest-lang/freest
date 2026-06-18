@@ -7,8 +7,6 @@ Church Encoding _ Sums
 as per Practical Foundations for Programming Languages, Robert Harper, 2nd edition, page 141
 -}
 
--- CANNOT INFER (id @T) as argument
-
 module SystemFSums where
 
 type Sum : *T -> *T -> *T

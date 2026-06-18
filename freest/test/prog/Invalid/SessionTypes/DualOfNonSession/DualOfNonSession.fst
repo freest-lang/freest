@@ -1,4 +1,4 @@
 module DualOfNonSession where
 
 main : Dual (Int -> Int)
-main = undefined @(Dual (Int -> Int)) -- CANNOT INFER
+main = undefined

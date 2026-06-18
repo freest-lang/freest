@@ -1,11 +1,11 @@
 {- |
-Module      :  REPL
+Module      :  Compiler.REPL
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
 The interactive read-eval-print loop used by the FreeSTi interpreter.
 -}
-module REPL
+module Compiler.REPL
   ( ReplState(..)
   , emptyReplState
   , repl
@@ -26,7 +26,7 @@ import Validation.Normalisation ( normalise )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
-import Pipeline qualified
+import Compiler.Pipeline qualified as Pipeline
 import UI.Error ( printErrors, Error, Source )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
@@ -384,7 +384,7 @@ validateExp s =
   Scoping.scopeExp (scopingCtx s) >=>
   Kinding.kindExp (modl s) (kindCtx s) >=>
   Typing.synth (modl s) (kindCtx s) (typeCtx s) >=>
-  pure . fst
+  pure . \(_, t, _) -> t
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
 -- state, merging into the existing scoped module.

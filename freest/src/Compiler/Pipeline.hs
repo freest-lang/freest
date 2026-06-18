@@ -1,5 +1,5 @@
 {- |
-Module      :  Pipeline
+Module      :  Compiler.Pipeline
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
@@ -7,7 +7,7 @@ Loading FreeST source files: parsing, scoping, kinding and typing,
 with or without the implicit Prelude. On success returns the scoped
 module; on failure prints the errors and returns 'Nothing'.
 -}
-module Pipeline
+module Compiler.Pipeline
   ( validateModule
   , loadPrelude
   , loadModule
@@ -41,9 +41,9 @@ validateModule sctx kctx tctx modl = do
   (sctx', smodl) <- scopeModule' sctx modl
   (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec kmodl
-  (kctx'', tctx') <- typeModule kctx' tctx kmodl
-  checkNoVarsInSessionPatterns kmodl
-  pure (sctx', kctx'', tctx', kmodl)
+  (kmodl', kctx'', tctx') <- typeModule kctx' tctx kmodl
+  checkNoVarsInSessionPatterns kmodl'
+  pure (sctx', kctx'', tctx', kmodl')
 
 -- | A snapshot of all state produced by a successful module load:
 -- the source map (for error reporting), the running 'ValidationState',

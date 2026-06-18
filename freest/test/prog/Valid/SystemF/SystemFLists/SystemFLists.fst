@@ -6,7 +6,7 @@ Copyright   : (c) Vasco T. Vasconcelos, Gil Silva, 2 Dec 2021
 Church Encoding _ Lists
 -}
 
--- CANNOT INFER nil @T, diverge @T
+-- CANNOT INFER nil @T (QL limitation)
 
 module SystemFLists where
 

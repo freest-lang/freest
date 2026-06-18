@@ -45,12 +45,11 @@ fold (?type (a:*T). (?x ; c)) = fold' x c
     fold' x (&Done c) = c |> send x |> wait
     fold' x (&More (?@(b:1S). (?f ; ?y; c))) = fold' (f x y) c
 
--- CANNOT INFER
 showInt : Int -> String
-showInt = show @Int
+showInt = show
 
 showBool : Bool -> String
-showBool = show @Bool
+showBool = show
 
 -- A consumer for type Dual Fold
 showStream : Dual Fold -> String
