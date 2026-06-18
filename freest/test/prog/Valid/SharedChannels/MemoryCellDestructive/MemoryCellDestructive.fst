@@ -8,12 +8,11 @@ module MemoryCellDestructive where
 type IntCell : *C
 type IntCell = *!Int
 
--- CANNOT INFER
 write: Int -> IntCell -1-> ()
-write = send_ @Int
+write = send_
 
 read: Dual IntCell -> Int
-read = receive_ @Int
+read = receive_
 
 sleep : Int -> ()
 sleep n = if n == 0 then () else sleep (n - 1)

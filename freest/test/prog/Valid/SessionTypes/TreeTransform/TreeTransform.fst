@@ -30,7 +30,7 @@ type TreeC a = +{LeafC: Skip, NodeC: !a; TreeC a; TreeC a; ?a}
 transform : forall (a : *T) (b : 1S) -> Tree a -> TreeC a; b -> (Tree a, b)
 transform @a @b tree c =
   case tree of
-    Leaf       -> (Leaf @a, select LeafC c) -- CANNOT INFER
+    Leaf       -> (Leaf, select LeafC c)
     Node x l r -> (Node y l r, c)
       where c = select NodeC c
             c = send x c
@@ -53,19 +53,19 @@ treeSum @a c =
 
 xs, main : Tree Int
 
-xs = Node 1 (Node 2 (Node 8 (Leaf @Int)  -- CANNOT INFER
-                               (Leaf @Int)) 
-                    (Node 3 (Node 5 (Leaf @Int) 
-                                    (Leaf @Int)) 
-                            (Node 4 (Leaf @Int) 
-                                    (Leaf @Int)))) 
-            (Node 6 (Leaf @Int) 
-                    (Node 7 (Leaf @Int) 
-                            (Leaf @Int)))
+xs = Node 1 (Node 2 (Node 8 Leaf
+                            Leaf) 
+                    (Node 3 (Node 5 Leaf 
+                                    Leaf) 
+                            (Node 4 Leaf 
+                                    Leaf))) 
+            (Node 6 Leaf 
+                    (Node 7 Leaf 
+                            Leaf))
 
 main =
   let (w, r) = channel @(TreeC Int; Wait) in
   fork (\(_ : ()) -1-> treeSum r |> snd |> close);
-  let (t, w) = transform @Int @Wait xs w in
+  let (t, w) = transform xs w in
   wait w;
   t

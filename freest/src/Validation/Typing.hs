@@ -324,12 +324,12 @@ check modl kctx tctx e t = case e of
         throwE (TypeMismatch s t u (Left e))
   E.DCons s i      -> do
     (u,tctx') <- lookupType kctx tctx (Right i)
-    checkEquivTypes modl (Left e) t u
-    return (e, tctx')
+    --   checkEquivTypes modl (Left e) t u >> return (e, tctx') -- no bare-head app inference
+    checkApp modl kctx e s e u tctx' [] t                       -- bare-head app inference
   E.Var s x       -> do
     (u, tctx') <- lookupType kctx tctx (Left x)
-    checkEquivTypes modl (Left e) t u
-    return (e, tctx')
+    --   checkEquivTypes modl (Left e) t u >> return (e, tctx') -- no bare-head app inference
+    checkApp modl kctx e s e u tctx' [] t                       -- bare-head app inference
   E.App s h@(E.Select s' i) args ->
     case args of
       [] -> throwE (CannotSynthesiseSelect s' i)
@@ -366,16 +366,7 @@ check modl kctx tctx e t = case e of
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s h args -> do
     (h', t', tctx') <- synth modl kctx tctx h
-    (args', mcs, kivs, us, t'') <- instantiate 0 modl kctx tctx t' args
-    (mcs', θ') <- LTI.match e modl t t''
-    θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
-      Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
-      Right θ''   -> return (θ'' <> θ')
-    forM_ kivs \(k, t) -> checkInstPrekind (LI.applySubs θ t) k
-    checkEquivTypes modl (Left e) (LI.applySubs θ t  )
-                                  (LI.applySubs θ t'')
-    (args'', tctx'') <- checkValArgs modl kctx θ tctx' args' us
-    return (E.App s h' args'', tctx'')
+    checkApp modl kctx e s h' t' tctx' args t
   E.Abs s pars m e' -> do
     checkFun modl kctx tctx (Right e) pars' (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
       (E.UnguardedRHS e'' Nothing, tctx') -> return (E.Abs s pars m e'', tctx')
@@ -545,11 +536,30 @@ checkInstPrekind t = go (T.kindOf t)
     go (K.Proper _ m pk1) (K.Proper s _ pk2)
       | not (pk1 K.<: pk2) = throwE (PrekindMismatch (getSpan t) pk2 t (K.Proper s m pk1))
     go (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) = go k21 k11 >> go k12 k22
-    -- Kind variables would mean kind polymorphism, which is not handled yet;
-    -- flag them instead of letting them slip through the catch-all below.
     go (K.Var _ _) _ = internalError "unhandled kind variable"
     go _ (K.Var _ _) = internalError "unhandled kind variable"
     go _ _ = return ()
+
+-- | Check a (synthesised) head applied to a possibly empty
+-- argument list against the expected type.
+checkApp :: M.KindedModule -> KindCtx -> E.KindedExp -> Span
+         -> E.KindedExp -> T.KindedType -> TypeCtx
+         -> [Level E.KindedExp T.KindedType K.Multiplicity] -> T.KindedType
+         -> Validation (E.KindedExp, TypeCtx)
+checkApp modl kctx e s h' t' tctx' args t = do
+  let inst = case normalise modl t of
+        T.AppForall{} -> instantiate
+        T.ForallM{}   -> instantiate
+        _             -> instantiateResult
+  (args', mcs, kivs, us, t'') <- inst 0 modl kctx tctx' t' args
+  (mcs', θ') <- LTI.match e modl t t''
+  θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
+    Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
+    Right θ''   -> return (θ'' <> θ')
+  forM_ kivs \(k, w) -> checkInstPrekind (LI.applySubs θ w) k
+  checkEquivTypes modl (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
+  (args'', tctx'') <- checkValArgs modl kctx θ tctx' args' us
+  return (if null args'' then h' else E.App s h' args'', tctx'')
 
 -- | Check function arguments while inferring type and multiplicity applications
 -- using the Quick Look method.
@@ -880,14 +890,30 @@ checkEquivTypeCtxsGuard tctx1 tctx2 = do
         throwE (LinConsumedInGuard (getSpan xa) xa t)
       _ -> internalError "Non-proper type in type context" -- TODO: what about kind variables?
 
-instantiate :: Int
+-- | Argument-driven instantiation: opens the head's quantifiers as the arguments
+-- consume them, leaving any quantifiers in the result.
+-- 'instantiateResult' additionally instantiates the leading quantifiers the
+-- arguments leave in the result (instSigma in QL).
+instantiate, instantiateResult
+            :: Int
             -> M.KindedModule
             -> KindCtx
             -> TypeCtx
             -> T.KindedType
             -> [Level E.KindedExp T.KindedType K.Multiplicity]
             -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], [T.KindedType], T.KindedType)
-instantiate i modl kctx tctx t1 args = do
+instantiate       = instantiateWith False
+instantiateResult = instantiateWith True
+
+instantiateWith :: Bool
+            -> Int
+            -> M.KindedModule
+            -> KindCtx
+            -> TypeCtx
+            -> T.KindedType
+            -> [Level E.KindedExp T.KindedType K.Multiplicity]
+            -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], [T.KindedType], T.KindedType)
+instantiateWith instResult i modl kctx tctx t1 args = do
   (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] args
   let kivs' = map (second (LI.applySubs θ)) kivs
       mcs'  = flip concatMap kivs' \(k, t) -> LMI.kindSubConstraints (T.kindOf t) k
@@ -903,29 +929,30 @@ instantiate i modl kctx tctx t1 args = do
                  -> [Level E.KindedExp T.KindedType K.Multiplicity]
                  -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], LI.Substitution, [T.KindedType], T.KindedType)
     instantiate' i t kivs args = case (normalise modl t, args) of
-      -- I-Result
-      (t', []) -> do
-        return ([], [], kivs, mempty, [], t)
       -- I-AllType
       (T.AppForall s m ((a, k) : aks) t1, TypeLevel t2 : args') -> do
         (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ((k, t2) : kivs) args'
         return (TypeLevel t2 : args'', eqs, kivs, θ, us, u)
-      -- I-AllOther
-      (T.AppForall s m ((a, k) : aks) t1, arg : args') -> do
+      -- I-AllOther (also opens a trailing quantifier when instResult and args is [])
+      (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
+        let sp = case args of { [] -> s; (arg : rest) -> foldl spanFromTo (getSpan arg) rest }
         unless (K.isProper k) do
-          throwE (CannotInferHigherKindedTypeApp (getSpan arg) k)
-        tiv <- LI.freshInstVarT (foldl spanFromTo (getSpan arg) args') k
-        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ((k, tiv) : kivs) (arg : args')
+          throwE (CannotInferHigherKindedTypeApp sp k)
+        tiv <- LI.freshInstVarT sp k
+        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ((k, tiv) : kivs) args
         return (TypeLevel tiv : args'', eqs, kivs, θ, us, u)
       -- I-AllMMult
       (T.ForallM s m (φ : φs) t1, MultLevel m' : args') -> do
         (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ m' ((if null φs then id else T.ForallM s m φs) t1)) kivs args'
         return (MultLevel m' : args'', eqs, kivs, θ, us, u)
-      -- I-AllMOther
-      (T.ForallM s m (φ : φs) t1, arg : args') -> do
-        miv <- LI.freshInstVarM (foldl spanFromTo (getSpan arg) args')
-        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ miv ((if null φs then id else T.ForallM s m φs) t1)) kivs (arg : args')
+      -- I-AllMOther (also opens a trailing quantifier when instResult and args is [])
+      (T.ForallM s m (φ : φs) t1, args) | not (null args) || instResult -> do
+        let sp = case args of { [] -> s; (arg : rest) -> foldl spanFromTo (getSpan arg) rest }
+        miv <- LI.freshInstVarM sp
+        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ miv ((if null φs then id else T.ForallM s m φs) t1)) kivs args
         return (MultLevel miv : args'', eqs, kivs, θ, us, u)
+      -- I-Result
+      (t', []) -> return ([], [], kivs, mempty, [], t)
       -- I-Var
       (T.Var s k InstLv iv, ExpLevel e : args') -> do
         t <- T.AppArrow s <$> LI.freshInstVarM s 
@@ -992,19 +1019,15 @@ instantiate i modl kctx tctx t1 args = do
               (_, t2, tctx') <- synth modl kctx tctx h
               (_, _, _, us, t3) <- instantiate 0 modl kctx tctx' t2 []
               LTI.match e modl t1 t3
-            e (T.Var _ _ InstLv iv) -> do
+            e (T.Var _ k InstLv iv) -> do
               (_, t2, _) <- synth modl kctx tctx e
-              return ([], LI.subsType iv t2)
+              return (LMI.kindSubConstraints (T.kindOf t2) k, LI.subsType iv t2)
             e t1 -> do
               (_, t2, tctx') <- synth modl kctx tctx e
               (_, _, _, _, t3) <- instantiate 0 modl kctx tctx' t2 []
               LTI.match e modl t1 t3
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)
-      -- (T.AppForall _ _ ((_, k) : _) _, arg : _) ->
-      --   throwE (UnexpectedArg (getSpan arg) 0 (TypeLevel k) arg)
-      -- (T.ForallM{}, arg : _) ->
-      --   throwE (UnexpectedArg (getSpan arg) 0 (MultLevel ()) arg)
       (t, as) -> 
         throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
 

@@ -4,11 +4,11 @@ module Prelude where
 
 -- * Undefined. Useful for builtins, but should also be builtin...
 undefined : forall (a : *T) -> a
-undefined @a = undefined @a
+undefined @a = undefined
 
 -- * Error
 error : forall (a : *T) -> String -> a
-error = undefined @(forall (a : *T) -> String -> a)
+error @a = undefined
 
 -- * Standard types, classes and related functions
 
@@ -18,8 +18,8 @@ type Bool : *T
 data Bool = True | False
 
 (||), (&&) : Bool -> Bool -> Bool
-(||) = undefined @(Bool -> Bool -> Bool)
-(&&) = undefined @(Bool -> Bool -> Bool)
+(||) = undefined
+(&&) = undefined
 
 not : Bool -> Bool
 not True  = False
@@ -46,16 +46,16 @@ type Ordering : *T
 data Ordering = LT | EQ | GT
 
 ord : Char -> Int
-ord = undefined @(Char -> Int)
+ord = undefined
 
 chr : Int -> Char
-chr = undefined @(Int -> Char)
+chr = undefined
 
 type String : *T
 type String = [Char]
 
 show : forall (a : *T) -> a -> String
-show = undefined @(forall (a : *T) -> a -> String)
+show @a = undefined
 
 type R : *T -> *T
 type R a = R a -> a
@@ -84,18 +84,18 @@ uncurry @a @b @c f (x, y) =  f x y
 
 -- ** Comparison (only Int and Float, for now)
 (<), (<=), (==), (>=), (>), (/=) : Int -> Int -> Bool
-(< ) = undefined @(Int -> Int -> Bool)
-(<=) = undefined @(Int -> Int -> Bool)
-(==) = undefined @(Int -> Int -> Bool)
-(>=) = undefined @(Int -> Int -> Bool)
-(> ) = undefined @(Int -> Int -> Bool)
-(/=) = undefined @(Int -> Int -> Bool)
+(< ) = undefined
+(<=) = undefined
+(==) = undefined
+(>=) = undefined
+(> ) = undefined
+(/=) = undefined
 
 (>.), (<.), (>=.), (<=.) : Float -> Float -> Bool
-(>.)  = undefined @(Float -> Float -> Bool)
-(<.)  = undefined @(Float -> Float -> Bool)
-(>=.) = undefined @(Float -> Float -> Bool)
-(<=.) = undefined @(Float -> Float -> Bool)
+(>.)  = undefined
+(<.)  = undefined
+(>=.) = undefined
+(<=.) = undefined
 
 -- ** Numeric functions
 
@@ -105,78 +105,78 @@ uncurry @a @b @c f (x, y) =  f x y
    , min, max
    , gcd, lcm 
    : Int -> Int -> Int
-(+)      = undefined @(Int -> Int -> Int)
-(-)      = undefined @(Int -> Int -> Int)
-(*)      = undefined @(Int -> Int -> Int)
-(/)      = undefined @(Int -> Int -> Int)
-(^)      = undefined @(Int -> Int -> Int)
-quot     = undefined @(Int -> Int -> Int)
-rem      = undefined @(Int -> Int -> Int) 
-div      = undefined @(Int -> Int -> Int)
-mod      = undefined @(Int -> Int -> Int)
-min      = undefined @(Int -> Int -> Int)
-max      = undefined @(Int -> Int -> Int)
-subtract = undefined @(Int -> Int -> Int)
-gcd      = undefined @(Int -> Int -> Int)
-lcm      = undefined @(Int -> Int -> Int)
+(+)      = undefined
+(-)      = undefined
+(*)      = undefined
+(/)      = undefined
+(^)      = undefined
+quot     = undefined
+rem      = undefined 
+div      = undefined
+mod      = undefined
+min      = undefined
+max      = undefined
+subtract = undefined
+gcd      = undefined
+lcm      = undefined
 
 succ, pred, abs, negate : Int -> Int
-succ   = undefined @(Int -> Int)
-pred   = undefined @(Int -> Int)
-abs    = undefined @(Int -> Int)
-negate = undefined @(Int -> Int)
+succ   = undefined
+pred   = undefined
+abs    = undefined
+negate = undefined
 
 even, odd : Int -> Bool
-even = undefined @(Int -> Bool)
-odd  = undefined @(Int -> Bool)
+even = undefined
+odd  = undefined
 
 -- *** Float
 (+.), (-.), (*.), (/.), (**), maxF, minF, logBase : Float -> Float -> Float
-(+.)    = undefined @(Float -> Float -> Float)
-(-.)    = undefined @(Float -> Float -> Float)
-(*.)    = undefined @(Float -> Float -> Float)
-(/.)    = undefined @(Float -> Float -> Float)
-(**)    = undefined @(Float -> Float -> Float)
-maxF    = undefined @(Float -> Float -> Float)
-minF    = undefined @(Float -> Float -> Float)
-logBase = undefined @(Float -> Float -> Float)
+(+.)    = undefined
+(-.)    = undefined
+(*.)    = undefined
+(/.)    = undefined
+(**)    = undefined
+maxF    = undefined
+minF    = undefined
+logBase = undefined
 
 absF, negateF, recip
     , exp, log, sqrt 
     , log1p, expm1, log1pexp, log1mexp
     , sin, cos, tan, asin, acos, atan, sinh, cosh, tanh 
     : Float -> Float
-absF     = undefined @(Float -> Float)
-negateF  = undefined @(Float -> Float)
-recip    = undefined @(Float -> Float)
-exp      = undefined @(Float -> Float)
-log      = undefined @(Float -> Float)
-sqrt     = undefined @(Float -> Float)
-log1p    = undefined @(Float -> Float)
-expm1    = undefined @(Float -> Float)
-log1pexp = undefined @(Float -> Float)
-log1mexp = undefined @(Float -> Float)
-sin      = undefined @(Float -> Float)
-cos      = undefined @(Float -> Float)
-tan      = undefined @(Float -> Float)
-asin     = undefined @(Float -> Float)
-acos     = undefined @(Float -> Float)
-atan     = undefined @(Float -> Float)
-sinh     = undefined @(Float -> Float)
-cosh     = undefined @(Float -> Float)
-tanh     = undefined @(Float -> Float)
+absF     = undefined
+negateF  = undefined
+recip    = undefined
+exp      = undefined
+log      = undefined
+sqrt     = undefined
+log1p    = undefined
+expm1    = undefined
+log1pexp = undefined
+log1mexp = undefined
+sin      = undefined
+cos      = undefined
+tan      = undefined
+asin     = undefined
+acos     = undefined
+atan     = undefined
+sinh     = undefined
+cosh     = undefined
+tanh     = undefined
 
 truncate, round ,ceiling, floor : Float -> Int
-truncate = undefined @(Float -> Int)
-round    = undefined @(Float -> Int)
-ceiling  = undefined @(Float -> Int)
-floor    = undefined @(Float -> Int)
+truncate = undefined
+round    = undefined
+ceiling  = undefined
+floor    = undefined
 
 pi : Float
-pi = undefined @Float
+pi = undefined
 
 fromInteger : Int -> Float
-fromInteger = undefined @(Int -> Float)
+fromInteger = undefined
 
 -- ** Miscellaneous functions
 
@@ -239,19 +239,19 @@ length @a (_ :: xs) = succ (length xs)
 -- * Concurrency
 
 fork : forall #m (a : *T) -> (() -m-> a) -> ()
-fork = undefined @(forall #m (a : *T) -> (() -m-> a) -> ())
+fork #m @a = undefined
 
 send : forall (a : 1T) -> a -> forall (b : 1S) -> !a;b -1-> b
-send = undefined @(forall (a : 1T) -> a -> forall (b : 1S) -> !a;b -1-> b)
+send @a = undefined
 
 receive : forall (a : 1T) (b : 1S) -> ?a;b -> (a, b)
-receive = undefined @(forall (a : 1T) (b : 1S) -> ?a;b -> (a, b))
+receive @a @b = undefined
 
 wait : Wait -> ()
-wait = undefined @(Wait -> ())
+wait = undefined
 
 close : Close -> ()
-close = undefined @(Close -> ())
+close = undefined
 
 -- | Sends a value on a given channel and then waits for the channel to be
 -- | closed. Returns ().
@@ -311,11 +311,11 @@ readApply @a @b f c =
 
 -- | Sends a value on a star channel. Unrestricted version of `send`.
 send_ : forall (a : 1T) -> a -> *!a -1-> ()
-send_ = undefined @(forall (a : 1T) -> a -> *!a -1-> ()) -- @a x c = c |> send x |> sink @*!a
+send_ @a = undefined -- @a x c = c |> send x |> sink @*!a
 
 -- | Receives a value from a star channel. Unrestricted version of `receive`.
 receive_ : forall (a : 1T) -> *?a -> a
-receive_ = undefined @(forall (a : 1T) -> *?a -> a) -- @a c =  c |> receive @a @*?a |> fst @a @*?a
+receive_ @a = undefined -- @a c =  c |> receive @a @*?a |> fst @a @*?a
 
 -- | Session initiation. Accepts a request for a linear session on a shared
 -- channel. The requester uses a conventional `receive` to obtain the channel
@@ -581,11 +581,11 @@ getLine _ = hGetLine_ stdin
 -- **** Internal stdin functions
 
 internalGetChar : () -> Char
-internalGetChar = undefined @(() -> Char)
+internalGetChar = undefined
 internalGetLine : () -> String
-internalGetLine = undefined @(() -> String)
+internalGetLine = undefined
 internalGetContents : () -> String
-internalGetContents = undefined @(() -> String)
+internalGetContents = undefined
 
 runReader : () -> Dual InStream -1-> ()
 runReader _ (&GetChar reader) = runReader () $ send (internalGetChar ()) reader
@@ -632,7 +632,7 @@ print @a x = putStrLn $ show x
 -- **** Internal stdout functions
 
 internalPutStrOut : String -> ()
-internalPutStrOut = undefined @(String -> ())
+internalPutStrOut = undefined
 
 runPrinter : () -> Dual OutStream -1-> ()
 runPrinter _ (&PutChar printer) = 
