@@ -27,6 +27,8 @@ import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Compiler.Pipeline qualified as Pipeline
+import Interpreter.Value ( Env, emptyEnv )
+import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
@@ -65,7 +67,7 @@ data ReplState = ReplState
   , kindCtx         :: Kinding.KindCtx
   , typeCtx         :: Typing.TypeCtx
   , modl            :: M.KindedModule
-  , valueCtx        :: ValueCtx
+  , valueCtx        :: Env
   }
 
 emptyReplState :: ReplState
@@ -95,7 +97,7 @@ instance Show ReplState where
     , "  kindCtx = " ++ show (kindCtx s)
     , "  typeCtx = " ++ show (typeCtx s)
     , "  modl = " ++ show (modl s)
-    , "  valueCtx = " ++ show (valueCtx s)
+    , "  valueCtx = " ++ show (Map.keys (valueCtx s))
     , "}"
     ]
 
@@ -152,13 +154,15 @@ ini = do
             | otherwise         -> liftIO Pipeline.loadNoModule
 
 -- | Run a loader action and, on success, replace the validation/scoping/type
--- contexts and module in the REPL state with whatever the loader produced.
+-- contexts and module in the REPL state with whatever the loader produced, and
+-- evaluate the loaded module into a fresh value environment.
 runLoader :: IO (Maybe (Source, ValidationState, Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)) -> Repl ()
 runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
-    Just (src, vs, sctx, kctx, tctx, kmodl) ->
-      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl})
+    Just (src, vs, sctx, kctx, tctx, kmodl) -> do
+      vctx <- liftIO (evalModule emptyEnv kmodl)
+      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl, valueCtx = vctx})
 
 fin :: Repl ExitDecision
 fin = putLines [comeAgain] >> pure Exit
@@ -169,17 +173,18 @@ cmd src = do
   modify (\s -> s{source = Map.insert path (lines src) (source s)})
   -- First try a bare expression, bound to 'it'
   case runLexer parseItDecl path (src ++ "\n") of
-    Right m1 -> handleModule m1 (putLines ["Printing the value of variable 'it'"])
+    Right m1 -> handleModule m1 printIt
     Left es1 ->
       -- Otherwise try a (possibly multi-line) block of let declarations
       case runLexer (pushStartCode layoutSC >> parseDeclList) path (src ++ "\n") of
-        Right m2 -> handleModule m2 (pure ())
+        Right m2 -> handleModule m2 (const (pure ()))
         Left es2 -> printREPLErrors -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
   where
     -- | Validate parsed declarations. On success: update the remaining state
-    -- fields, evaluate, run 'post'. On failure: report the errors.
-    handleModule :: M.ParsedModule -> Repl () -> Repl ()
+    -- fields, evaluate, run 'post' on the typed module. On failure: report the
+    -- errors.
+    handleModule :: M.ParsedModule -> (M.KindedModule -> Repl ()) -> Repl ()
     handleModule m post =
       runValidate src validateModule m printREPLErrors \(sctx, kctx, tctx, kmodl) -> do
         merged <- gets ((<> kmodl) . modl)
@@ -189,7 +194,7 @@ cmd src = do
           , typeCtx = tctx
           , modl = merged})
         eval kmodl
-        post
+        post kmodl
 
 -- Handling the various options
 
@@ -393,17 +398,21 @@ validateModule :: ReplState -> M.ParsedModule
 validateModule s =
   Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s)
 
--- Evaluation; interface with module Eval
+-- Evaluation; interface with module Interpreter.Eval
 
-type Value = ()
-type ValueCtx = Map.Map Variable Value
-
+-- | Evaluate a parsed-and-typed module: extend the value environment with its
+-- definitions (running their side effects), threading it through the state.
 eval :: M.KindedModule -> Repl ()
 eval m = do
-  putLines ["Evaluating..."]
-  s <- get
-  vctx <- collectLetDecls (valueCtx s) m
+  s    <- get
+  vctx <- liftIO (evalModule (valueCtx s) m)
   put s{valueCtx = vctx}
 
-collectLetDecls :: ValueCtx -> M.KindedModule -> Repl ValueCtx
-collectLetDecls env _ = pure env
+-- | Print the value bound to @it@ (an expression entered at the prompt
+-- becomes the binding @it = …@).
+printIt :: M.KindedModule -> Repl ()
+printIt kmodl = do
+  vctx <- gets valueCtx
+  case [ var | E.ValDef (E.VarPat _ var) _ <- M.definitions kmodl, external var == "it" ] of
+    itVar : _ -> mapM_ (\v -> putLines [unparse v]) (Map.lookup itVar vctx)
+    []        -> pure ()

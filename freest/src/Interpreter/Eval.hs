@@ -6,8 +6,7 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module implements FreeST's interpreter.
 -}
 module Interpreter.Eval
-  (
-    interpret
+  ( evalModule
   ) where
 
 {-
@@ -167,9 +166,11 @@ collectLetDecls outer = go outer empty
     insertVarPat (E.VarPat _ var) val = insert var val
     insertVarPat _                _   = id
 
--- | Collect declarations from the module, and bind these to variables in an environment
-buildEnv :: M.KindedModule -> IO Env
-buildEnv m = collectLetDecls empty (M.definitions m)
+-- | Evaluate a module's declarations top-down in (and extending) an environment,
+-- running their side effects and returning the new bindings. The REPL threads
+-- this across inputs; 'interpret' runs it once from the empty environment.
+evalModule :: Env -> M.KindedModule -> IO Env
+evalModule env m = (`union` env) <$> collectLetDecls env (M.definitions m)
 
 -- | Lookup a variable in the context
 envLookup :: Env -> B.Variable -> Value
@@ -299,11 +300,6 @@ eval _ (E.SendType _ _) =
 eval _ (E.ReceiveType _) =
   return $ fromJust $ Data.Map.lookup "receiveType" builtins
   {- return VRecvType -}
-
--- | Run a module: evaluate its declarations top-down.
-interpret :: M.KindedModule -> IO ()
-interpret m = void (buildEnv m)
-
 
 -- OLD DEFINITIONS
 

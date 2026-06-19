@@ -9,7 +9,7 @@ debugging representation. Marshalling helpers, channel operations and the
 builtins live in "Interpreter.Builtin".
 -}
 module Interpreter.Value
-  ( Env
+  ( Env, emptyEnv
   , Clause
   , Value(..)
   , ChannelEnd
@@ -25,6 +25,9 @@ import Syntax.Type.Kinded ( KindedType )
 
 -- | An environment, composed of bindings from variables to values
 type Env = Map.Map Variable Value
+
+emptyEnv :: Env
+emptyEnv = Map.empty
 
 -- | A clause of a (multi-clause) function or a single @case@ alternative.
 -- (A 'Nothing' in the list represents a type/multiplicity parameter)
