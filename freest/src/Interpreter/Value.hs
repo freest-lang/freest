@@ -9,10 +9,11 @@ debugging representation. Marshalling helpers, channel operations and the
 builtins live in "Interpreter.Builtin".
 -}
 module Interpreter.Value
-  ( Env, emptyEnv
+  ( ValueCtx, emptyValueCtx
   , Clause
   , Value(..)
   , ChannelEnd
+  , mkClosure
   ) where
 
 import qualified Control.Concurrent.Chan as C ( Chan )
@@ -24,10 +25,10 @@ import Syntax.Expression ( KindedRHS, Pat )
 import Syntax.Type.Kinded ( KindedType )
 
 -- | An environment, composed of bindings from variables to values
-type Env = Map.Map Variable Value
+type ValueCtx = Map.Map Variable Value
 
-emptyEnv :: Env
-emptyEnv = Map.empty
+emptyValueCtx :: ValueCtx
+emptyValueCtx = Map.empty
 
 -- | A clause of a (multi-clause) function or a single @case@ alternative.
 -- (A 'Nothing' in the list represents a type/multiplicity parameter)
@@ -43,7 +44,7 @@ data Value
   | VUnit
   | VChar Char
   | VCons String [Value]
-  | VClosure [Maybe Value] [Clause] Env
+  | VClosure [Maybe Value] [Clause] ValueCtx
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
   | VHandle Handle
@@ -66,5 +67,11 @@ instance Show Value where
   show (VHandle _)      = "<handle>"
   show (VLabel str)     = "<label : " ++ str ++ ">"
   show VFork            = "<fork>"
-  show (VChan _)        = "<chan>"
-  show (VPack _ vals)   = "(*T, " ++ show vals ++ ")"
+  show (VChan _)        = "<channel>"
+  show (VPack _ vals)   = "<package " ++ show vals ++ ">"
+
+-- | Build a function value from its clauses, capturing the environment. The
+-- environment is captured lazily, so a self- or mutually-recursive binding can
+-- include the closure(s) being defined (tied with an ordinary recursive @let@).
+mkClosure :: ValueCtx -> [Clause] -> Value
+mkClosure ctx clauses = VClosure [] clauses ctx

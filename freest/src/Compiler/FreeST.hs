@@ -8,7 +8,7 @@ The entry point of the FreeST compiler.
 module Compiler.FreeST ( freest, runFreeST ) where
 
 import Interpreter.Eval (evalModule)
-import Interpreter.Value (emptyEnv)
+import Interpreter.Value (emptyValueCtx)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL ( ReplState(..), emptyReplState, repl )
 import Compiler.Pipeline ( loadSilent )
@@ -34,5 +34,5 @@ runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip} =
   loadSilent ip programPath >>= \case
     Nothing -> exitFailure
     Just (src, _, _, _, _, modl) ->
-      catch (evalModule emptyEnv modl >> exitSuccess)
+      catch (evalModule emptyValueCtx modl >> exitSuccess)
             (\e -> printException src e >> exitFailure)

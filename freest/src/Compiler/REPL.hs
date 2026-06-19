@@ -27,7 +27,7 @@ import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Compiler.Pipeline qualified as Pipeline
-import Interpreter.Value ( Env, emptyEnv )
+import Interpreter.Value ( ValueCtx, emptyValueCtx )
 import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
 import Interpreter.Exception ( printException )
@@ -69,7 +69,7 @@ data ReplState = ReplState
   , kindCtx         :: Kinding.KindCtx
   , typeCtx         :: Typing.TypeCtx
   , modl            :: M.KindedModule
-  , valueCtx        :: Env
+  , valueCtx        :: ValueCtx
   }
 
 emptyReplState :: ReplState
@@ -163,9 +163,9 @@ runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
     Just (src, vs, sctx, kctx, tctx, kmodl) -> do
-      vctx <- liftIO (try (evalModule emptyEnv kmodl)) >>= \case
+      vctx <- liftIO (try (evalModule emptyValueCtx kmodl)) >>= \case
         Right v -> pure v
-        Left e  -> liftIO (printException src e) >> pure emptyEnv   -- e.g. main failed at load
+        Left e  -> liftIO (printException src e) >> pure emptyValueCtx   -- e.g. main failed at load
       modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl, valueCtx = vctx})
 
 fin :: Repl ExitDecision
@@ -411,7 +411,7 @@ eval m = do
   s <- get
   liftIO (try (evalModule (valueCtx s) m)) >>= \case
     Right vctx -> put s{valueCtx = vctx}
-    Left e     -> liftIO (printException (source s) e)   -- TODO: keep the old env, or not?
+    Left e     -> liftIO (printException (source s) e)   -- TODO: keep the old ctx, or not?
 
 -- | Print the value bound to @it@ (an expression entered at the prompt
 -- becomes the binding @it = …@).

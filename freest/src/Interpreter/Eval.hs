@@ -12,7 +12,7 @@ module Interpreter.Eval
 {-
 TODO:
 - Implement channels for case: check https://github.com/freest-lang/freest3/blob/dev/FreeST/src/Interpreter/Eval.hs, evalCase
-- When introducing closures, capture only free variables in the environment, and not the whole env
+- When introducing closures, capture only free variables in the environment, and not the whole ctx
 - Handling Prelude definitions, the search in the builtins should be more efficient: check if there's an undefined in the body. Also, what if the user redefines these?
 - Handling of undefined is correct?
 - Missing evaluation for E.Case (what about labels?)
@@ -28,63 +28,55 @@ import Data.List (find)
 import Data.Map (empty, singleton, union, unions, lookup, assocs, filterWithKey, insert, fromList)
 import Data.Maybe (isJust, fromJust, catMaybes, fromMaybe)
 import qualified Data.Set as Set
--- for debuging don't forget to remove
-import Debug.Trace
--- ends here
 
 import Compiler.Bug (internalError)
 import Interpreter.Exception (Exception(NonExhaustivePatterns))
-import Interpreter.PatternMatching (mkClosure, matchPat, matchClause, forceColumns)
-import Interpreter.Value (Env, Clause, Value(..))
+import Interpreter.PatternMatching (matchPat, matchClause, forceColumns)
+import Interpreter.Value (ValueCtx, Clause, Value(..), mkClosure)
 import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
 
--- | An alternative of a case expression
-type Alternative = (E.Pat, E.KindedRHS)
-
--- AUXILIARY FUNCTIONS
-
 -- | Bind a clause/alternative's `where` declarations; they are in scope for
 -- both the guards and the bodies of the RHS.
-bindWhere :: Env -> Maybe [E.KindedLetDecl] -> IO Env
-bindWhere env = \case
-  Nothing    -> return env
+bindWhere :: ValueCtx -> Maybe [E.KindedLetDecl] -> IO ValueCtx
+bindWhere ctx = \case
+  Nothing    -> return ctx
   Just decls -> do
-    binds <- collectLetDecls env decls
-    return (binds `union` env)
+    binds <- collectLetDecls ctx decls
+    return (binds `union` ctx)
 
 -- | Evaluate guards in order, returning the first body whose guard holds, or
 -- 'Nothing' if every guard fails (so matching falls through to the next clause).
-tryGuards :: Env -> [(E.KindedExp, E.KindedExp)] -> IO (Maybe E.KindedExp)
-tryGuards env = \case
+tryGuards :: ValueCtx -> [(E.KindedExp, E.KindedExp)] -> IO (Maybe E.KindedExp)
+tryGuards ctx = \case
   [] -> return Nothing
   (guard, body) : guards -> do
-    val <- eval env guard
-    if fstToHsBool val then return (Just body) else tryGuards env guards
+    val <- eval ctx guard
+    if fstToHsBool val then return (Just body) else tryGuards ctx guards
 
 -- | Resolve a RHS in an environment that already holds the pattern bindings:
 -- bind the `where` declarations, then (for a guarded RHS) select a guard.
 -- Returns the chosen body and the environment to evaluate it in, or 'Nothing'
 -- if all guards fail.
-resolveRHS :: Env -> E.KindedRHS -> IO (Maybe (E.KindedExp, Env))
-resolveRHS env = \case
+resolveRHS :: ValueCtx -> E.KindedRHS -> IO (Maybe (E.KindedExp, ValueCtx))
+resolveRHS ctx = \case
   E.UnguardedRHS body whereDecls -> do
-    env' <- bindWhere env whereDecls
-    return (Just (body, env'))
+    ctx' <- bindWhere ctx whereDecls
+    return (Just (body, ctx'))
   E.GuardedRHS guards whereDecls -> do
-    env' <- bindWhere env whereDecls
-    mBody <- tryGuards env' guards
-    return (fmap (, env') mBody)
+    ctx' <- bindWhere ctx whereDecls
+    mBody <- tryGuards ctx' guards
+    return (fmap (, ctx') mBody)
 
 -- | The single matcher shared by functions and @case@ expressions. Tries the
 -- clauses in order against the (already-evaluated) argument values: a clause is
 -- chosen only if its columns all match *and* its guards succeed; otherwise we
 -- fall through to the next clause. The given environment is used to evaluate
 -- guards and bodies.
-matchClauses :: Env -> [Value] -> [Clause] -> IO Value
-matchClauses env vals clauses = do
+matchClauses :: ValueCtx -> [Value] -> [Clause] -> IO Value
+matchClauses ctx vals clauses = do
   -- perform the session effects (receive/branch/wait) once, up front, turning
   -- channels into ordinary data values; then match the clauses purely.
   vals' <- forceColumns clauses vals
@@ -97,10 +89,10 @@ matchClauses env vals clauses = do
         case mb of
           Nothing    -> goRows vals' rest                -- a column failed
           Just binds -> do
-            res <- resolveRHS (binds `union` env) rhs
+            res <- resolveRHS (binds `union` ctx) rhs
             case res of
               Nothing          -> goRows vals' rest      -- guards failed: fall through
-              Just (exp', env') -> eval env' exp'
+              Just (exp', ctx') -> eval ctx' exp'
 
 -- | A source span locating a group of clauses for a non-exhaustive-match error:
 -- the whole group, from the head of the first clause to the body of the last.
@@ -123,40 +115,40 @@ clausesSpan = \case
 --
 -- A definition whose name is a builtin (e.g. @(+) = undefined@) is bound to the
 -- builtin rather than to its user-written right-hand side.
-collectLetDecls :: Env -> [E.KindedLetDecl] -> IO Env
+collectLetDecls :: ValueCtx -> [E.KindedLetDecl] -> IO ValueCtx
 collectLetDecls outer = go outer empty
   where
-    -- `env` = outer + the bindings so far; `acc` = just the new bindings
-    go :: Env -> Env -> [E.KindedLetDecl] -> IO Env
-    go env acc = \case
+    -- `ctx` = outer + the bindings so far; `acc` = just the new bindings
+    go :: ValueCtx -> ValueCtx -> [E.KindedLetDecl] -> IO ValueCtx
+    go ctx acc = \case
       [] -> pure acc
       d : ds -> case d of
-        E.TypeSig _ _ -> go env acc ds
+        E.TypeSig _ _ -> go ctx acc ds
 
         -- a single function is recursive in its own name (self-knot)
         E.FnDef var clauses ->
-          let val = fromMaybe (mkClosure (insert var val env) (funClauses clauses))
+          let val = fromMaybe (mkClosure (insert var val ctx) (funClauses clauses))
                               (Data.Map.lookup (B.external var) builtins)
-          in go (insert var val env) (insert var val acc) ds
+          in go (insert var val ctx) (insert var val acc) ds
 
         -- the functions of a `mutual` block are mutually recursive
         E.Mutual mds ->
-          let mbinds    = fromList [ (var, mkClosure mutualEnv (funClauses clauses))
+          let mbinds    = fromList [ (var, mkClosure mutualCtx (funClauses clauses))
                                    | E.FnDef var clauses <- mds ]
-              mutualEnv = env `union` mbinds
-          in go mutualEnv (acc `union` mbinds) ds
+              mutualCtx = ctx `union` mbinds
+          in go mutualCtx (acc `union` mbinds) ds
 
         -- a value is not recursive: evaluate it in the current environment
         E.ValDef pat rhs
           | Just b <- builtinForPat pat ->
-              go (insertVarPat pat b env) (insertVarPat pat b acc) ds
+              go (insertVarPat pat b ctx) (insertVarPat pat b acc) ds
           | otherwise -> do
-              res <- resolveRHS env rhs
-              (e, env') <- maybe (internalError "Non-exhaustive guards in value definition") pure res
-              v     <- eval env' e
+              res <- resolveRHS ctx rhs
+              (e, ctx') <- maybe (internalError "Non-exhaustive guards in value definition") pure res
+              v     <- eval ctx' e
               mb    <- matchPat v pat
               binds <- maybe (internalError "Pattern matching failed!") pure mb
-              go (binds `union` env) (binds `union` acc) ds
+              go (binds `union` ctx) (binds `union` acc) ds
 
     funClauses = map (first (map paramPat))
     paramPat (B.ExpLevel p) = Just p
@@ -170,39 +162,39 @@ collectLetDecls outer = go outer empty
 -- | Evaluate a module's declarations top-down in (and extending) an environment,
 -- running their side effects and returning the new bindings. The REPL threads
 -- this across inputs; 'interpret' runs it once from the empty environment.
-evalModule :: Env -> M.KindedModule -> IO Env
-evalModule env m = (`union` env) <$> collectLetDecls env (M.definitions m)
+evalModule :: ValueCtx -> M.KindedModule -> IO ValueCtx
+evalModule ctx m = (`union` ctx) <$> collectLetDecls ctx (M.definitions m)
 
 -- | Lookup a variable in the context
-envLookup :: Env -> B.Variable -> Value
-envLookup env var =
-  case Data.Map.lookup var env of
+ctxLookup :: ValueCtx -> B.Variable -> Value
+ctxLookup ctx var =
+  case Data.Map.lookup var ctx of
     Just val -> val
     Nothing -> internalError $ "Variable `" ++ show var ++ "` not found in the context."
 
 -- | Evaluate application expressions
-handleApplication :: Env -> Value -> [Maybe Value] -> IO Value
+handleApplication :: ValueCtx -> Value -> [Maybe Value] -> IO Value
 handleApplication _ func [] = return func
 handleApplication _ (VCons cons vals) args = do
   return $ VCons cons $ vals ++ termArgs args
-handleApplication env (VClosure collected clauses cenv) args = do
+handleApplication ctx (VClosure collected clauses cctx) args = do
   let allArgs = collected ++ args
       arity   = length (fst (head clauses))
   -- not enough arguments yet (term *or* type/mult slots): stay a partial value
   if length allArgs < arity then
-    return $ VClosure allArgs clauses cenv
+    return $ VClosure allArgs clauses cctx
   -- saturated: run the clause matcher on the term values of the first `arity`
   -- arguments, in the closure's self-contained captured environment
   else do
     let (these, rest) = splitAt arity allArgs
-    result <- matchClauses cenv (termArgs these) clauses
+    result <- matchClauses cctx (termArgs these) clauses
     -- any leftover arguments are applied to the result
     if null rest then return result
-    else handleApplication env result rest
+    else handleApplication ctx result rest
 handleApplication _ (VBuiltin builtin) args =
   return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) (termArgs args)
-handleApplication env VFork args = case termArgs args of
-  [fun] -> forkIO (void $ handleApplication env fun [Just VUnit]) $> VUnit
+handleApplication ctx VFork args = case termArgs args of
+  [fun] -> forkIO (void $ handleApplication ctx fun [Just VUnit]) $> VUnit
   []    -> return VFork    -- only type/multiplicity applied so far
   _     -> internalError "fork applied to too many arguments"
 
@@ -232,7 +224,7 @@ termArgs = catMaybes
 -- MAIN FUNCTIONS
 
 -- | Evaluate expressions, encoded as Syntax.Expression.Exp
-eval :: Env -> E.KindedExp -> IO Value
+eval :: ValueCtx -> E.KindedExp -> IO Value
 eval _ (E.Int _ i) =
   return $ VInt i
 eval _ (E.Float _ f) =
@@ -244,49 +236,49 @@ eval _ (E.String _ s) =
   return $ hsToFstString s
 eval _ (E.DCons _ (B.Identifier _ str)) =
   return $ VCons str []
-eval env (E.Var _ var) =
-  case envLookup env var of
+eval ctx (E.Var _ var) =
+  case ctxLookup ctx var of
     VIO io -> io
     val -> return val
-eval env (E.App _ exp args) = do
-  func <- eval env exp
+eval ctx (E.App _ exp args) = do
+  func <- eval ctx exp
   -- evaluate term arguments; type/multiplicity applications carry no value but
   -- still consume one of the closure's slots (so it stays a value until filled)
   evalArgs <- mapM evalArg args
-  res <- handleApplication env func evalArgs
+  res <- handleApplication ctx func evalArgs
   case res of
     VIO io -> io
     _ -> return res
   where
-    evalArg (B.ExpLevel e) = Just <$> eval env e
+    evalArg (B.ExpLevel e) = Just <$> eval ctx e
     evalArg _              = pure Nothing
-eval env (E.Abs _ params _ body) =
+eval ctx (E.Abs _ params _ body) =
   -- a lambda is a one-clause function (no guards, no `where`); the parameter
   -- list keeps its type/mult slots so a trailing one suspends the closure
-  return $ mkClosure env [(map clauseParam params, E.UnguardedRHS body Nothing)]
+  return $ mkClosure ctx [(map clauseParam params, E.UnguardedRHS body Nothing)]
   where
     clauseParam (B.ExpLevel (p, _)) = Just p
     clauseParam _                   = Nothing
-eval env (E.Pack span types exp) = do
-  val <- eval env exp
+eval ctx (E.Pack span types exp) = do
+  val <- eval ctx exp
   return $ VPack types val
-eval env (E.Asc span exp typ) = do
-  eval env exp
-eval env (E.Let _ decls exp) = do
-  letBindings <- collectLetDecls env decls
-  eval (env `union` letBindings) exp
-eval env (E.Semi span exp1 exp2) =
-  eval env exp1 >> eval env exp2
-eval env (E.Case _ exp alternatives) = do
-  val <- eval env exp
+eval ctx (E.Asc span exp typ) = do
+  eval ctx exp
+eval ctx (E.Let _ decls exp) = do
+  letBindings <- collectLetDecls ctx decls
+  eval (ctx `union` letBindings) exp
+eval ctx (E.Semi span exp1 exp2) =
+  eval ctx exp1 >> eval ctx exp2
+eval ctx (E.Case _ exp alternatives) = do
+  val <- eval ctx exp
   -- a `case` is the one-column instance of the clause matcher (session effects,
   -- including choice patterns, are handled inside it)
-  matchClauses env [val] (map (\(p, rhs) -> ([Just p], rhs)) alternatives)
-eval env (E.If _ ifExp thenExp elseExp) = do
-  ifVal <- eval env ifExp
+  matchClauses ctx [val] (map (\(p, rhs) -> ([Just p], rhs)) alternatives)
+eval ctx (E.If _ ifExp thenExp elseExp) = do
+  ifVal <- eval ctx ifExp
   if fstToHsBool ifVal
-  then eval env thenExp
-  else eval env elseExp
+  then eval ctx thenExp
+  else eval ctx elseExp
 eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
@@ -308,7 +300,7 @@ eval _ (E.ReceiveType _) =
 -- Because of how the parser parses function applications (f a b c d => f [a, b, c, d] even if f only takes one arg)
 -- is necessary to repeat the evaluation until [arg] is empty.
 -- TODO: context is a mess must check if it is correct, don't like that there is a lot of repetition
-consumeAllArgs :: (Env, Env) -> Value -> [Value] -> IO Value
+consumeAllArgs :: (ValueCtx, ValueCtx) -> Value -> [Value] -> IO Value
 consumeAllArgs (global, local) (VClosure pats exp local_ctx) args = case sequence (doPatternMatching pats args []) of
   Just patternMatching ->
     if length pats == length args then eval (global, patternMatching ++ local_ctx ++ local) exp
@@ -341,7 +333,7 @@ consumeAllArgs ctx (VBuiltin builtin) (arg:args) = consumeAllArgs ctx (builtin a
 consumeAllArgs ctx (VCons str vals) args = return $ VCons str (vals++args) -}
 
 {- -- TODO: think of a better name for this function
-resolveLetDecls :: Env -> [LetDecl] -> IO [(String, Value)]
+resolveLetDecls :: ValueCtx -> [LetDecl] -> IO [(String, Value)]
 resolveLetDecls _ [] = return []
 resolveLetDecls global ((E.ValDef pat rhs):letDecls) = do (exp, whereDecls) <- case rhs of
     E.UnguardedRHS exp whereDecls -> return (exp, whereDecls)
@@ -361,7 +353,7 @@ resolveLetDecls global ((E.FnDef var levelRhss):letDecls) = do
   letDeclsCtx <- resolveLetDecls global letDecls
   return $ (B.external var, VFun (map (\(levels, rhs) -> (map (\(B.ExpLevel pat) -> pat) (filterTypesFromLevels levels), rhs)) levelRhss)) : letDeclsCtx -}
 
--- TODO: create a resolveWhereDecls for more readable code (Env -> Maybe [LetDecl] -> [(String, Value)])
+-- TODO: create a resolveWhereDecls for more readable code (ValueCtx -> Maybe [LetDecl] -> [(String, Value)])
 
 {- -- TODO: DELETE, refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing

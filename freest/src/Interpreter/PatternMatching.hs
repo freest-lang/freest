@@ -8,7 +8,7 @@ matcher that matches runtime 'Value's against surface 'Pat'terns, producing
 variable bindings.
 
 Session patterns perform communication, which is irreversible — so a channel
-matched by a session pattern must be received from *once*, with the result then
+matched by a session pattern must be received from once, with the result then
 selecting a clause (it must not be re-received as we try later clauses). We
 therefore split matching into two passes:
 
@@ -20,13 +20,12 @@ therefore split matching into two passes:
      tuple).
 
   2. 'matchClause' / 'matchPat' then match the clauses against those forced
-     values *purely*, with ordinary backtracking and guard fall-through.
+     values purely, with ordinary backtracking and guard fall-through.
 -}
 module Interpreter.PatternMatching
   ( matchPat
   , matchClause
   , forceColumns
-  , mkClosure
   ) where
 
 import Control.Monad (zipWithM)
@@ -35,17 +34,17 @@ import Data.Map (empty, singleton, union, insert)
 
 import Data.Maybe (catMaybes)
 
-import Interpreter.Value (Value(..), Env, Clause)
+import Interpreter.Value (Value(..), ValueCtx, Clause)
 import Interpreter.Builtin (asString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 
--- == Pure matching (run after 'forceColumns') ==============================
+-- * Pure matching (run after 'forceColumns')
 
 -- | Match a single pattern (one column) against a value, producing bindings on
 -- success or 'Nothing' on failure. Session patterns are matched against the
 -- *forced* representations produced by 'forceColumns'.
-matchPat :: Value -> E.Pat -> IO (Maybe Env)
+matchPat :: Value -> E.Pat -> IO (Maybe ValueCtx)
 matchPat v = \case
   E.IntPat _ i   -> pure $ case v of VInt   i' | i == i' -> Just empty ; _ -> Nothing
   E.FloatPat _ f -> pure $ case v of VFloat f' | f == f' -> Just empty ; _ -> Nothing
@@ -79,7 +78,7 @@ matchPat v = \case
 
 -- | Match a column of patterns left-to-right against a list of values, failing
 -- fast and unioning the bindings.
-matchClause :: [E.Pat] -> [Value] -> IO (Maybe Env)
+matchClause :: [E.Pat] -> [Value] -> IO (Maybe ValueCtx)
 matchClause []       []       = pure (Just empty)
 matchClause (p : ps) (v : vs) = do
   mb <- matchPat v p
@@ -88,14 +87,14 @@ matchClause (p : ps) (v : vs) = do
     Just b  -> fmap (union b) <$> matchClause ps vs
 matchClause _ _ = pure Nothing   -- arity mismatch
 
--- == Session forcing pass ==================================================
+-- * Session forcing pass
 
 -- | Perform, once, the session effects the clauses demand on the argument
 -- values, turning channels into ordinary data values. The patterns of all the
 -- clauses (one column list per clause) guide which effect to perform; by the
 -- type system they agree on the session structure of every position.
 forceColumns :: [Clause] -> [Value] -> IO [Value]
-forceColumns clauses vals = zipWithM forceCol (transpose (map (catMaybes . fst) clauses)) vals
+forceColumns clauses = zipWithM forceCol (transpose (map (catMaybes . fst) clauses))
 
 -- | Force one position, given the patterns the clauses use there.
 forceCol :: [E.Pat] -> Value -> IO Value
@@ -158,11 +157,3 @@ stripAs :: E.Pat -> E.Pat
 stripAs = \case
   E.AsPat _ _ p -> stripAs p
   p             -> p
-
--- == Function values =======================================================
-
--- | Build a function value from its clauses, capturing the environment. The
--- environment is captured lazily, so a self- or mutually-recursive binding can
--- include the closure(s) being defined (tied with an ordinary recursive @let@).
-mkClosure :: Env -> [Clause] -> Value
-mkClosure env clauses = VClosure [] clauses env
