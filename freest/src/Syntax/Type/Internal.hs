@@ -82,7 +82,7 @@ data Type x
   | Float Span (XType x)
   | Char Span (XType x)
   | Arrow Span (XType x) K.Multiplicity
-  | Quant Span (XType x) Polarity K.Prekind K.Multiplicity
+  | Quant Span (XType x) Polarity K.Prekind K.Multiplicity -- Quantification over proper kinds only
   | ForallM Span (XType x) K.Multiplicity [Variable] (Type x) -- type-level universal quantifier over multiplicity variables
   | Void Span (XType x) K.Kind
   --   Session types

@@ -105,9 +105,9 @@ where
 
 -- Recursive types
 
-case IntStream : 1S
+case IntStream : 1C
 where
-  type IntStream : 1S
+  type IntStream : 1C
   type IntStream = !Int ; IntStream
 
 case Tree : 1S

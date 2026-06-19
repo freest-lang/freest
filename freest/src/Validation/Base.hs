@@ -1,3 +1,13 @@
+{- |
+Module      :  Validation.Base
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Building blocks shared by the validation phases: the 'Validation' monad
+(@ExceptT 'Error' (State 'ValidationState')@), its state and runner,
+a fresh-name counter, and the 'unfold' lookup that resolves a 'TName' to
+its kinded body via the current module's @typeDecls@ map.
+-}
 module Validation.Base
   ( ValidationState(..)
   , Validation
@@ -5,6 +15,12 @@ module Validation.Base
   , runValidation
   , incCounter
   , unfold
+  , emit
+  , freshMultVar
+  , freshPrekindVar
+  , freshMult
+  , freshPrekind
+  , freshKind
   )
 where
 
@@ -15,29 +31,32 @@ import Syntax.Module qualified as M
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import UI.Error
+import Validation.Constraint ( Constraint, Constraints )
 import Validation.Substitution ( subs )
 import Compiler.Bug ( internalError )
 
 import Control.Monad.State ( State, MonadState, modify, gets, foldM, runState )
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
 
--- | The validation state. Keeps track of errors. Also stores declarations
--- for easy lookup, but these are not supposed to change.
-data ValidationState
-  = ValidationState
-    { errors  :: [Error]
-    , counter :: Int
-    }
+-- | The validation state. Keeps errors, a fresh-name counter, and the
+-- 'Constraints' gathered during kind inference.
+data ValidationState = ValidationState
+  { errors      :: [Error]
+  , counter     :: Int
+  , constraints :: Constraints
+  }
 
--- | The empty validation state. No errors or declarations.
+-- | The empty validation state. No errors, fresh counter at 0, no constraints.
 emptyValidationState :: ValidationState
-emptyValidationState = ValidationState 
-  { errors  = []
-  , counter = 0
+emptyValidationState = ValidationState
+  { errors      = []
+  , counter     = 0
+  , constraints = Set.empty
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
@@ -69,6 +88,37 @@ unfold mod i =
   case M.typeDecls mod Map.!? i of
     Just (_, u)  -> u
     Nothing -> internalError $ "name " ++ show i ++ " not in type declaration map"
+
+-- | Add a constraint to the validation state.
+emit :: Constraint -> Validation ()
+emit c = modify $ \s -> s { constraints = Set.insert c (constraints s) }
+
+-- | A fresh multiplicity variable @φₙ@: a 'Variable' named @"φ"@ with a fresh
+-- internal index. Use this when you need the raw variable (e.g. on the LHS of
+-- a 'JoinMult' constraint); use 'freshMult' when you need it wrapped.
+freshMultVar :: Span -> Validation Variable
+freshMultVar s = Variable s "φ" <$> incCounter
+
+-- | A fresh prekind variable @ψₙ@: a 'Variable' named @"ψ"@ with a fresh
+-- internal index. Use this when you need the raw variable (e.g. on the LHS of
+-- a 'MeetPrekind' / 'JoinPrekind' constraint); use 'freshPrekind' when you
+-- need it wrapped.
+freshPrekindVar :: Span -> Validation Variable
+freshPrekindVar s = Variable s "ψ" <$> incCounter
+
+-- | A fresh multiplicity, wrapping a 'freshMultVar' as @Sup s [(ObjLv, φₙ)]@.
+freshMult :: Span -> Validation K.Multiplicity
+freshMult s = (\v -> K.Sup s [(ObjLv, v)]) <$> freshMultVar s
+
+-- | A fresh prekind, wrapping a 'freshPrekindVar' as @VarPK ψₙ@.
+freshPrekind :: Span -> Validation K.Prekind
+freshPrekind s = K.VarPK <$> freshPrekindVar s
+
+-- | A fresh proper kind @φₙψₙ@: combines 'freshMult' and 'freshPrekind'.
+-- Used to replace a 'K.Var' returned by 'synth' with a proper kind containing
+-- fresh multiplicity and prekind variables.
+freshKind :: Span -> Validation K.Kind
+freshKind s = K.Proper s <$> freshMult s <*> freshPrekind s
 
 -- getKind :: M.KindedModule -> Identifier -> K.Kind
 -- getKind mod i =

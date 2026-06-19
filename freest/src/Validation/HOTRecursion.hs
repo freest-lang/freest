@@ -16,16 +16,16 @@ import UI.Error qualified as E
 import Validation.Base (Validation, runValidation, emptyValidationState)
 import Validation.Substitution (betaRule)
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, void)
 import Control.Monad.Trans.Except (throwE)
 import Data.Bifunctor (first)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 
 checkNoHOTRec :: M.KindedModule -> Validation ()
-checkNoHOTRec modl = forM_ (Map.toList modl.typeDecls) checkNoHOTRecDecl
+checkNoHOTRec modl = void $ Map.traverseWithKey checkNoHOTRecDecl modl.typeDecls
   where
-    checkNoHOTRecDecl (i, (hasParams, t)) = 
+    checkNoHOTRecDecl i (hasParams, t) =
       checkNoHOTRecType Set.empty (T.kindOf t') i (map fst aks) t'
       where T.Abs s aks t' = if hasParams then t else T.Abs s [] t
     checkNoHOTRecType v k i as = \case
