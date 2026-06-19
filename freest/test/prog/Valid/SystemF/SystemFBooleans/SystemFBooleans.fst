@@ -63,5 +63,5 @@ ifInt = cond  @Int
 -- main : Int
 -- main = ifInt (not' true) 1 2
 
-main : Bool
-main = toBool $ and' (or' false true) (not' false)
+main : ()
+main = print $ toBool $ and' (or' false true) (not' false)

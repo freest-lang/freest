@@ -30,6 +30,7 @@ import Data.List qualified as List
 import Data.Char qualified as Char
 import Data.Maybe ( fromMaybe )
 import Debug.Trace ( traceM )
+import System.IO ( stderr, hPutStrLn )
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -523,7 +524,7 @@ showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)
 
 printErrors :: Source -> [Error] -> IO ()
-printErrors src es = putStrLn $ showErrors src es
+printErrors src es = hPutStrLn stderr $ showErrors src es
 
 -- | The ordinal 'String' of an 'Integral'.
 ordinal :: (Integral a, Show a) => a -> String

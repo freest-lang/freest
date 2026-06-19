@@ -3,6 +3,5 @@ module MultDivPrecedence where
 precedence : Int
 precedence = div 6 2 * (1 + 2)
 
-main : Int
-main = precedence
-
+main : ()
+main = print precedence

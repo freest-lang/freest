@@ -16,8 +16,8 @@ sumFives c =
      let (n, c) = receive c in
      n + sumFives c
 
-main : Int
+main : ()
 main =
   let (w, r) = channel @Chan in
   let _ = fork (\(_ : ()) -1-> fives 32 w) in
-  sumFives r
+  print (sumFives r)

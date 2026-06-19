@@ -30,13 +30,14 @@ listSum @a c =
             let c = send (x + rest) c in
             (x+rest,c)
 
-aCons, main : IntList
-
+aCons : IntList
 aCons = Cons 5 (Cons 4 (Cons 3 (Cons 2 (Cons 1 Nil))))
 
+main : ()
 main =
     let (w, r) = channel @(IntListC;Close) in
     fork (\(_ : ()) -1-> r |> listSum |> snd |> wait);
     let (l, c) = transform aCons w in
     close c;
-    l
+    print l
+

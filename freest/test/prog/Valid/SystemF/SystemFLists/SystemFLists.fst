@@ -112,8 +112,8 @@ four @a s z = s $ s $ s $ s z
 replicate' : forall (a : *T) -> Nat -> a -> List a
 replicate' @a n val = n @(List a) (cons @a val) (nil @a)
 
-main : Int
-main = length' @Char $ replicate' @Char four 'a'
+main : ()
+main = print $ length' @Char $ replicate' @Char four 'a'
 
 -- sorting
 insert : Int -> List Int -> List Int

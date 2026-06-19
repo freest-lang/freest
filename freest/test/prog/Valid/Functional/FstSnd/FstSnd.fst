@@ -6,5 +6,5 @@ fst' @a @b p = let (x, _) = p in x
 snd' : forall (a : *T) (b : 1T) -> (a, b) -> b
 snd' @a @b p = let (_, y) = p in y
 
-main : Int
-main = fst' (5, 'h') + snd' (True, 7)
+main : ()
+main = print (fst' (5, 'h') + snd' (True, 7))

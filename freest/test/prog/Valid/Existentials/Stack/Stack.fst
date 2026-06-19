@@ -20,8 +20,8 @@ stackADT = ( @[Int]
            )
          : StackADT
 
-main : Int
-main = fst $ pop (push 5 (push 7 new))
+main' : Int
+main' = fst $ pop (push 5 (push 7 new))
   where (@(s : *T), (new, push, pop, toList)) = stackADT
 
 -- Reversing a list in O(n)
@@ -34,5 +34,5 @@ rev = rev' new
     rev' s []        = toList s
     rev' s (x :: xs) = rev' (push x s) xs
 
-main : [Int]
-main = rev ([1, 2, 3] @Int)
+main : ()
+main = print (rev ([1, 2, 3] @Int))

@@ -17,10 +17,10 @@ module TypeAbsSuspension where
 -- explicit in the AST; see src/Interpreter/MATCHING_REPORT.md, deferred item
 -- "Type abstraction is erased, not suspended".
 
-g : Int -> forall (a:*T) . Int
+g : Int -> forall (a:*T) -> Int
 g x @a = g x @a
 
-h : (forall (a:*T) . Int) -> Int
+h : (forall (a:*T) -> Int) -> Int
 h _ = 0
 
 main : Int

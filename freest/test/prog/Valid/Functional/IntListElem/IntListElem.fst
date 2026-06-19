@@ -13,6 +13,5 @@ elem'' a l =
     Nil -> False
     Cons x y -> if a == x then True else elem'' a y
 
-main : Bool
-main = elem' 23 (Cons 5 (Cons 7 Nil))
-
+main : ()
+main = print (elem' 23 (Cons 5 (Cons 7 Nil)))

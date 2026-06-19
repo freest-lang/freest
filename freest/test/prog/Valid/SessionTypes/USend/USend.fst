@@ -16,7 +16,7 @@ module USend where
 unsend : forall (a : *T) -> a -> forall (b : 1S) -> () -> !a;b -1-> b
 unsend @a x @b () = send x
 
-main : Int
+main : ()
 main =
   let (s1, r1) = channel @(!Int;Close)
       (s2, r2) = channel @(!Int;Close)
@@ -28,4 +28,4 @@ main =
   -- fork (\(_ : ()) -1-> sendFive s1 |> close);
   -- fork (\(_ : ()) -1-> sendFive s2 |> close);
 -- Variable or data constructor not in scope: 'sendFive'
-  receiveAndWait r1 + receiveAndWait r2
+  receiveAndWait r1 + receiveAndWait r2 |> print

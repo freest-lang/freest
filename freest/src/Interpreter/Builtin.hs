@@ -1,89 +1,31 @@
 {- |
-Module      :  Interpreter.Values
+Module      :  Interpreter.Builtin
 Copyright   :  © The FreeST Team
 Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 
-This module implements FreeST's values.
+The builtin functions exposed to FreeST programs, together with the marshalling
+helpers (between Haskell and FreeST values) and the channel operations they and
+the evaluator rely on. Value rendering for output goes through 'unparse'.
 -}
-module Interpreter.Values 
-  (
-    Env,
-    Clause,
-    Value(..),
-    showTups,
-    chan,
-    receive,
-    receiveLabel,
-    send,
-    wait,
-    close,
-    builtins,
-    hsToFstBool,
-    fstToHsBool,
-    hsToFstString,
-    asString
+module Interpreter.Builtin
+  ( builtins
+  , asString
+  , fstToHsBool
+  , hsToFstString
+  , chan
+  , receive
+  , receiveLabel
+  , send
   ) where
 
-import qualified Control.Concurrent.Chan as C ( Chan, newChan, readChan, writeChan )
+import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
 import Data.Char ( chr, ord )
-import Data.Functor ( ($>), (<&>) )
+import Data.Functor ( ($>) )
 import qualified Data.Map as Map
 import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
-import System.IO ( Handle, hPutStr, stderr, openFile, IOMode (..), hGetChar, hGetLine, hIsEOF, hClose )
 
-import Syntax.Base ( Variable )
-import Syntax.Expression ( KindedExp, KindedRHS, Pat )
-import Syntax.Type.Kinded (KindedType)
-
--- | An environment, composed of bindings from variables to values
-type Env = Map.Map Variable Value
-
--- | A clause of a (multi-clause) function or a single @case@ alternative:
--- a column of patterns together with its right-hand side.
-type Clause = ([Pat], KindedRHS)
-
-data Value
-  = VInt Int
-  | VFloat Double
-  | VUnit
-  | VChar Char
-  | VCons String [Value]
-  -- | A function: arity, the arguments collected so far (for partial
-  -- application), its clauses, and its captured environment. The environment is
-  -- self-contained: it holds the bindings in scope where the function was
-  -- defined, including the function itself (and its `mutual` siblings), so the
-  -- closure resolves correctly even after escaping its defining scope.
-  | VClosure Int [Value] [Clause] Env
-  | VBuiltin (Value -> Value)
-  | VIO (IO Value)
-  | VHandle Handle
-  | VLabel String
-  | VFork
-  | VChan ChannelEnd
-  | VPack [KindedType] Value
-{-   | VSelect String
-  | VSendType
-  | VRecvType -}
-
-instance Show Value where
-  show v | Just str <- asString v = show str   -- a [Char] cons-list prints as a string
-  show (VInt n) = show n
-  show (VFloat n) = show n
-  show (VUnit) = "()"
-  show (VChar c) = show c
-  show (VCons str vals) = str ++ " " ++ unwords (map show vals)
-  show (VClosure {}) = "<closure>"
-  show (VBuiltin _) = "<builtin>"
-  show (VIO io) = "<IO>"
-  show (VHandle _) = "<handle>"
-  show (VLabel str) = "<label : " ++ str ++ ">"
-  show (VFork) = "<fork>"
-  show (VChan _) = "<chan>"
-  show (VPack types vals) = "(*T, " ++ show vals ++ ")"
-
-showTups :: [Value] -> String
-showTups [val] = show val
-showTups (val:vals) = show val ++ " (-1), " ++ showTups vals
+import Interpreter.Value ( Value(..), ChannelEnd )
+import Parser.Unparser ( unparse )
 
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
@@ -94,10 +36,6 @@ hsToFstBool False = VCons "False" []
 fstToHsBool :: Value -> Bool
 fstToHsBool (VCons "True" []) = True
 fstToHsBool (VCons "False" []) = False
-
--- A FreeST string is a @[Char]@, i.e. a cons-list value built from the list
--- constructors @"(::)"@ and @"[]"@ over 'VChar's. These marshal to and from
--- Haskell 'String's at the builtin boundary.
 
 -- | Build a FreeST string value from a Haskell 'String'.
 hsToFstString :: String -> Value
@@ -111,7 +49,8 @@ fstToHsString = \case
   v                            -> error ("fstToHsString: not a string: " ++ show v)
 
 -- | A FreeST string value as a Haskell 'String', if it is one (used for
--- showing; an empty list stays a list, since "" and [] are indistinguishable).
+-- pattern matching; an empty list stays a list, since "" and [] are
+-- indistinguishable).
 asString :: Value -> Maybe String
 asString = \case
   VCons "(::)" [VChar c, rest] -> (c :) <$> go rest
@@ -121,8 +60,6 @@ asString = \case
       VCons "[]"   []              -> Just ""
       VCons "(::)" [VChar d, more] -> (d :) <$> go more
       _                            -> Nothing
-
-type ChannelEnd = (C.Chan Value, C.Chan Value)
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do
@@ -160,7 +97,7 @@ close (VChan c) = do
   return VUnit
 
 builtins :: Map.Map String Value
-builtins = Map.fromList 
+builtins = Map.fromList
   [
   -- * Undefined
     ("undefined",     VBuiltin undefined)
@@ -175,7 +112,7 @@ builtins = Map.fromList
   , ("ord",           VBuiltin (\(VChar c) -> VInt (ord c)))
   , ("chr",           VBuiltin (\(VInt x) -> VChar (chr x)))
   , ("(^^)",          VBuiltin (\s1 -> VBuiltin (\s2 -> hsToFstString (fstToHsString s1 ++ fstToHsString s2))))
-  , ("show",          VBuiltin (hsToFstString . show))
+  , ("show",          VBuiltin (hsToFstString . unparse))
   -- ** Comparison
   , ("(<)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x < y))))
   , ("(<=)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x <= y))))
@@ -259,28 +196,6 @@ builtins = Map.fromList
   , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
   , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
   , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ putStr (fstToHsString s)))
-
-  {- -- IO operators
-  , ("readBool",              VBuiltin (\(VString str) -> hsToFstBool (read str)))
-  , ("readInt",               VBuiltin (\(VString x) -> VInt (read x)))
-  , ("readInt",               VBuiltin (\(VString c) -> VChar (read c)))
-  -- Parser/Lexer does not accept variables starting with __
-  , ("putStrOut",             VBuiltin (\val -> VIO $ putStr (show val) $> VUnit))
-  , ("putStrErr",             VBuiltin (\val -> VIO $ hPutStr stderr (show val) $> VUnit))
-  , ("getChar",               VIO $ getChar <&> VChar)
-  , ("getLine",               VIO $ getLine <&> VString)
-  , ("getContents",           VIO $ getContents <&> VString) -}
-  {- , ("openFile",      VBuiltin (\(VString path) -> VBuiltin (\(VCons mode []) -> VIO $ case mode of
-                        "ReadMode" -> openFile path ReadMode <&> VCons "FileHandle" . (:[]) . VHandle
-                        "WriteMode" -> openFile path WriteMode <&> VCons "FileHandle" . (:[]) . VHandle
-                        "AppendMode" -> openFile path AppendMode <&> VCons "FileHandle" . (:[]) . VHandle
-                        _ -> undefined)))
-  , ("putFileStr",    VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VBuiltin (\(VString str) -> VIO $ hPutStr handle str $> VUnit)))
-  , ("readFileChar",  VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hGetChar handle <&> VChar))
-  , ("readFileLine",  VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hGetLine handle <&> VString))
-  , ("isEOF",         VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hIsEOF handle <&> hsToFstBool))
-  , ("closeFile",     VBuiltin (\(VCons "FileHandle" [VHandle handle]) -> VIO $ hClose handle $> VUnit)) -}
-  
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))

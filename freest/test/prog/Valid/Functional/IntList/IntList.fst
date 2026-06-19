@@ -7,6 +7,5 @@ null' : IntList -> Bool
 null' Nil        = True
 null' (Cons x y) = False
 
-main : Bool
-main = null' (Cons 5 (Cons 7 Nil))
-
+main : ()
+main = print (null' (Cons 5 (Cons 7 Nil)))

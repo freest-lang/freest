@@ -29,5 +29,5 @@ send' n p = snd (p n)
 
 -- If we send the process p the numbers 5, 3, and 20, the number it
 -- returns in response to the last interaction is 28.
-main : Int
-main = curr (send' 20 (send' 3 (send' 5 (sum 0))))
+main : ()
+main = print (curr (send' 20 (send' 3 (send' 5 (sum 0)))))

@@ -33,7 +33,8 @@ import Control.Monad (zipWithM)
 import Data.List (transpose)
 import Data.Map (empty, singleton, union, insert)
 
-import Interpreter.Values (Value(..), Env, Clause, asString, receive, receiveLabel)
+import Interpreter.Value (Value(..), Env, Clause)
+import Interpreter.Builtin (asString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 

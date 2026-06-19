@@ -12,6 +12,3 @@ f cond c d =
     if cond
     then x c |> wait; consumeD d
     else receiveAndClose (x d); consumeC c
-
-main : Int
-main = 5

@@ -1,4 +1,4 @@
 module SemiAsSection where
 
-main : Int
-main = (;) 'a' 2
+main : ()
+main = print ((;) 'a' 2)

@@ -10,7 +10,7 @@ module Compiler.FreeST ( freest, runFreeST ) where
 import Interpreter.Eval (interpret)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL ( ReplState(..), emptyReplState, repl )
-import Compiler.Pipeline ( loadModule, loadPreludeAndModule )
+import Compiler.Pipeline ( loadSilent )
 
 import Options.Applicative ( execParser )
 import System.Exit ( exitSuccess, exitFailure )
@@ -27,11 +27,7 @@ runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip} =
 runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
-runFreeST RunOpts{filePath = Just programPath, implicitPrelude = False} =
-  loadModule programPath >>= \case
-    Nothing -> exitFailure 
-    Just (_, _, _, _, _, modl) -> interpret modl >> exitSuccess
-runFreeST RunOpts{filePath = Just programPath, implicitPrelude = True} =
-  loadPreludeAndModule programPath >>= \case
-    Nothing -> exitFailure 
+runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip} =
+  loadSilent ip programPath >>= \case
+    Nothing -> exitFailure
     Just (_, _, _, _, _, modl) -> interpret modl >> exitSuccess

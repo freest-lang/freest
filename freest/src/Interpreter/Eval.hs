@@ -33,7 +33,8 @@ import Debug.Trace
 
 import Compiler.Bug (internalError)
 import Interpreter.PatternMatching (mkClosure, matchPat, matchClause, forceColumns)
-import Interpreter.Values (Env, Clause, Value(..), chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
+import Interpreter.Value (Env, Clause, Value(..))
+import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Module as M
@@ -174,14 +175,6 @@ envLookup env var =
     Just val -> val
     Nothing -> internalError $ "Variable `" ++ show var ++ "` not found in the context."
 
--- | Lookup a variable (as a string) in the context
-envLookup' :: Env -> String -> Maybe Value
-envLookup' env var = do
-  let binding = find (\(var', val) -> B.external var' == var) $ assocs env
-  case binding of
-    Just binding -> return $ snd binding
-    Nothing -> Nothing
-
 -- | Evaluate application expressions
 handleApplication :: Env -> Value -> [Value] -> IO Value
 handleApplication _ func [] = return func
@@ -296,27 +289,9 @@ eval _ (E.ReceiveType _) =
   return $ fromJust $ Data.Map.lookup "receiveType" builtins
   {- return VRecvType -}
 
--- | Interprets a module and returns the result
-interpret :: M.KindedModule -> IO Value
-interpret m = do
-  -- evaluate module declarations, binding results to variables
-  env <- buildEnv m
-  let binding = envLookup' env "main"
-  -- let binding = find (\(var, val) -> B.external var == "main") $ assocs env
-  case binding of
-    Just binding -> return binding
-    Nothing -> return VUnit
- {-  case getMainFunction m of
-    -- main function of the form main = <exp>
-    Just (E.ValDef pat rhs) -> do
-      (exp, whereDecls) <- extractFromRHS (m_env, empty) rhs
-      whereBindings <- case whereDecls of
-        Just whereDecls' -> collectLetDecls (m_env, empty) whereDecls'
-        Nothing -> return empty
-      eval (m_env, whereBindings) exp
-    Nothing -> do return VUnit
-
-    getMainFunction m = find (\case E.ValDef (E.VarPat _ var) _ -> B.external var == "main"; _ -> False) (M.definitions m) -}
+-- | Run a module: evaluate its declarations top-down.
+interpret :: M.KindedModule -> IO ()
+interpret m = void (buildEnv m)
 
 
 -- OLD DEFINITIONS
