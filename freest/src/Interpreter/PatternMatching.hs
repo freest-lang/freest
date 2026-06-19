@@ -33,6 +33,8 @@ import Control.Monad (zipWithM)
 import Data.List (transpose)
 import Data.Map (empty, singleton, union, insert)
 
+import Data.Maybe (catMaybes)
+
 import Interpreter.Value (Value(..), Env, Clause)
 import Interpreter.Builtin (asString, receive, receiveLabel)
 import qualified Syntax.Base as B
@@ -93,7 +95,7 @@ matchClause _ _ = pure Nothing   -- arity mismatch
 -- clauses (one column list per clause) guide which effect to perform; by the
 -- type system they agree on the session structure of every position.
 forceColumns :: [Clause] -> [Value] -> IO [Value]
-forceColumns clauses vals = zipWithM forceCol (transpose (map fst clauses)) vals
+forceColumns clauses vals = zipWithM forceCol (transpose (map (catMaybes . fst) clauses)) vals
 
 -- | Force one position, given the patterns the clauses use there.
 forceCol :: [E.Pat] -> Value -> IO Value
@@ -163,4 +165,4 @@ stripAs = \case
 -- environment is captured lazily, so a self- or mutually-recursive binding can
 -- include the closure(s) being defined (tied with an ordinary recursive @let@).
 mkClosure :: Env -> [Clause] -> Value
-mkClosure env clauses = VClosure (length (fst (head clauses))) [] clauses env
+mkClosure env clauses = VClosure [] clauses env

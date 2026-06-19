@@ -26,9 +26,9 @@ import Syntax.Type.Kinded ( KindedType )
 -- | An environment, composed of bindings from variables to values
 type Env = Map.Map Variable Value
 
--- | A clause of a (multi-clause) function or a single @case@ alternative:
--- a column of patterns together with its right-hand side.
-type Clause = ([Pat], KindedRHS)
+-- | A clause of a (multi-clause) function or a single @case@ alternative.
+-- (A 'Nothing' in the list represents a type/multiplicity parameter)
+type Clause = ([Maybe Pat], KindedRHS)
 
 -- | A bidirectional channel end: the channel to read from and the channel to
 -- write to.
@@ -40,7 +40,7 @@ data Value
   | VUnit
   | VChar Char
   | VCons String [Value]
-  | VClosure Int [Value] [Clause] Env
+  | VClosure [Maybe Value] [Clause] Env
   | VBuiltin (Value -> Value)
   | VIO (IO Value)
   | VHandle Handle

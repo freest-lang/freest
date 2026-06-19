@@ -22,10 +22,11 @@ TODO:
 
 import Control.Concurrent (forkIO)
 import Control.Monad (zipWithM, foldM)
+import Data.Bifunctor (first)
 import Data.Functor (($>), void)
 import Data.List (find)
 import Data.Map (empty, singleton, union, unions, lookup, assocs, filterWithKey, insert, fromList)
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe (isJust, fromJust, catMaybes, fromMaybe)
 import qualified Data.Set as Set
 -- for debuging don't forget to remove
 import Debug.Trace
@@ -74,7 +75,7 @@ resolveRHS env = \case
   E.GuardedRHS guards whereDecls -> do
     env' <- bindWhere env whereDecls
     mBody <- tryGuards env' guards
-    return (fmap (\body -> (body, env')) mBody)
+    return (fmap (, env') mBody)
 
 -- | The single matcher shared by functions and @case@ expressions. Tries the
 -- clauses in order against the (already-evaluated) argument values: a clause is
@@ -91,8 +92,8 @@ matchClauses env vals clauses = do
     goRows vals' = \case
       [] -> errorWithoutStackTrace $
         show (clausesSpan clauses) ++ ": Non-exhaustive patterns"
-      (pats, rhs) : rest -> do
-        mb <- matchClause pats vals'
+      (params, rhs) : rest -> do
+        mb <- matchClause (catMaybes params) vals'
         case mb of
           Nothing    -> goRows vals' rest                -- a column failed
           Just binds -> do
@@ -108,9 +109,9 @@ clausesSpan = \case
   []  -> B.nullSpan
   cls -> B.spanFromTo (clauseHead (head cls)) (B.getSpan (snd (last cls)))
   where
-    clauseHead = \case
-      (p : _, _) -> B.getSpan p
-      (_,    rhs) -> B.getSpan rhs
+    clauseHead (params, rhs) = case catMaybes params of
+      p : _ -> B.getSpan p
+      []    -> B.getSpan rhs
 
 
 
@@ -134,8 +135,8 @@ collectLetDecls outer = go outer empty
 
         -- a single function is recursive in its own name (self-knot)
         E.FnDef var clauses ->
-          let val = maybe (mkClosure (insert var val env) (funClauses clauses)) id
-                          (Data.Map.lookup (B.external var) builtins)
+          let val = fromMaybe (mkClosure (insert var val env) (funClauses clauses))
+                              (Data.Map.lookup (B.external var) builtins)
           in go (insert var val env) (insert var val acc) ds
 
         -- the functions of a `mutual` block are mutually recursive
@@ -157,7 +158,9 @@ collectLetDecls outer = go outer empty
               binds <- maybe (internalError "Pattern matching failed!") pure mb
               go (binds `union` env) (binds `union` acc) ds
 
-    funClauses = map (\(B.partitionLevels -> (es, _, _), rhs) -> (es, rhs))
+    funClauses = map (first (map paramPat))
+    paramPat (B.ExpLevel p) = Just p
+    paramPat _              = Nothing
     builtinForPat = \case
       E.VarPat _ var -> Data.Map.lookup (B.external var) builtins
       _              -> Nothing
@@ -176,35 +179,35 @@ envLookup env var =
     Nothing -> internalError $ "Variable `" ++ show var ++ "` not found in the context."
 
 -- | Evaluate application expressions
-handleApplication :: Env -> Value -> [Value] -> IO Value
+handleApplication :: Env -> Value -> [Maybe Value] -> IO Value
 handleApplication _ func [] = return func
 handleApplication _ (VCons cons vals) args = do
-  return $ VCons cons $ vals ++ args
-handleApplication env (VClosure arity collected clauses cenv) args = do
+  return $ VCons cons $ vals ++ termArgs args
+handleApplication env (VClosure collected clauses cenv) args = do
   let allArgs = collected ++ args
-  -- not enough arguments yet: accumulate and stay partially applied
+      arity   = length (fst (head clauses))
+  -- not enough arguments yet (term *or* type/mult slots): stay a partial value
   if length allArgs < arity then
-    return $ VClosure arity allArgs clauses cenv
-  -- saturated: run the clause matcher on the first `arity` arguments, in the
-  -- closure's self-contained captured environment
+    return $ VClosure allArgs clauses cenv
+  -- saturated: run the clause matcher on the term values of the first `arity`
+  -- arguments, in the closure's self-contained captured environment
   else do
     let (these, rest) = splitAt arity allArgs
-    result <- matchClauses cenv these clauses
+    result <- matchClauses cenv (termArgs these) clauses
     -- any leftover arguments are applied to the result
     if null rest then return result
     else handleApplication env result rest
 handleApplication _ (VBuiltin builtin) args =
-  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) args
-handleApplication env VFork [fun] = {- do
-  _ <- forkIO $ do
-    putStrLn $ "fork started"
-    v <- handleApplication env fun [VUnit]
-    putStrLn "application handled"
-    print v
-    putStrLn "value forced"
-    pure ()
-  pure VUnit -}
-  forkIO (void $ handleApplication env fun [VUnit]) $> VUnit
+  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) (termArgs args)
+handleApplication env VFork args = case termArgs args of
+  [fun] -> forkIO (void $ handleApplication env fun [Just VUnit]) $> VUnit
+  []    -> return VFork    -- only type/multiplicity applied so far
+  _     -> internalError "fork applied to too many arguments"
+
+-- | The term-level (value) arguments of an applied list; type and multiplicity
+-- applications carry no runtime value.
+termArgs :: [Maybe Value] -> [Value]
+termArgs = catMaybes
 {- handleApplication (global, local) (VSelect label) args =
   case args of
     [VChan chan] -> do
@@ -243,17 +246,25 @@ eval env (E.Var _ var) =
   case envLookup env var of
     VIO io -> io
     val -> return val
-eval env (E.App _ exp (B.partitionLevels -> (es, _, _))) = do
+eval env (E.App _ exp args) = do
   func <- eval env exp
-  -- TODO: handle undefined?
-  evalArgs <- mapM (eval env) es
+  -- evaluate term arguments; type/multiplicity applications carry no value but
+  -- still consume one of the closure's slots (so it stays a value until filled)
+  evalArgs <- mapM evalArg args
   res <- handleApplication env func evalArgs
   case res of
     VIO io -> io
     _ -> return res
-eval env (E.Abs _ (B.partitionLevels -> (expParams, _, _)) _ body) = do
-  -- a lambda is a one-clause function (no guards, no `where`)
-  return $ mkClosure env [(map fst expParams, E.UnguardedRHS body Nothing)]
+  where
+    evalArg (B.ExpLevel e) = Just <$> eval env e
+    evalArg _              = pure Nothing
+eval env (E.Abs _ params _ body) =
+  -- a lambda is a one-clause function (no guards, no `where`); the parameter
+  -- list keeps its type/mult slots so a trailing one suspends the closure
+  return $ mkClosure env [(map clauseParam params, E.UnguardedRHS body Nothing)]
+  where
+    clauseParam (B.ExpLevel (p, _)) = Just p
+    clauseParam _                   = Nothing
 eval env (E.Pack span types exp) = do
   val <- eval env exp
   return $ VPack types val
@@ -268,7 +279,7 @@ eval env (E.Case _ exp alternatives) = do
   val <- eval env exp
   -- a `case` is the one-column instance of the clause matcher (session effects,
   -- including choice patterns, are handled inside it)
-  matchClauses env [val] (map (\(p, rhs) -> ([p], rhs)) alternatives)
+  matchClauses env [val] (map (\(p, rhs) -> ([Just p], rhs)) alternatives)
 eval env (E.If _ ifExp thenExp elseExp) = do
   ifVal <- eval env ifExp
   if fstToHsBool ifVal

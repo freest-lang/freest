@@ -1,6 +1,1 @@
-<pending>
-Type abstraction is erased, not suspended (deferred; see MATCHING_REPORT.md).
-`g 5` should be a suspended type abstraction (a value) that `h` discards, so
-main = 0; the interpreter runs the body eagerly and diverges. When the
-elaborator keeps type applications explicit, drop this <pending> line: the
-program should run to completion and print 0.
+0
