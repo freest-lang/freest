@@ -9,6 +9,5 @@ double x = 2 * x
 isZero : Int -> Bool
 isZero x = x == 0
 
-main : Bool
-main = dot isZero double 7
-
+main : ()
+main = print (dot isZero double 7)

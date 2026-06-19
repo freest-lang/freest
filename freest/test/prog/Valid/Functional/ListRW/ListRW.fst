@@ -45,10 +45,10 @@ iLength' @a x = iFold 0 (+) x
 aList : IList
 aList = Cons 5 (Cons 3 (Cons 7 (Cons 1 Nil)))
 
-main : Int
+main : ()
 main = 
   let (w, r) = channel @(IListW;Close) in
   fork (\(_ : ()) -1-> iListW aList w |> close);
   let (i, r) = iLength' r in 
   wait r;
-  i
+  print i

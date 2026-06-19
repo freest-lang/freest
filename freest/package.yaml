@@ -98,11 +98,12 @@ tests:
       source-dirs: 
         - test/prog
       dependencies:
-        - freest 
-        - hspec >= 2.7.1       
+        - freest
+        - hspec >= 2.7.1
         - HUnit >= 1.6.0.0
         - silently >= 1.2.5.1
-      ghc-options: 
+        - process >= 1.6
+      ghc-options:
         - -O2 -threaded 
         - -rtsopts 
         - -with-rtsopts=-N

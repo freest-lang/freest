@@ -1,4 +1,4 @@
 module SendAndClose where
 
-main : Int
-main = forkWith (sendAndClose 5) |> receiveAndWait
+main : ()
+main = forkWith (sendAndClose 5) |> receiveAndWait |> print

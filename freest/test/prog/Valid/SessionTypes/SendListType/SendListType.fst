@@ -20,10 +20,10 @@ sendList @a l c =
     Nil       -> c |> select NilC
     Cons x xs -> c |> select ConsC |> send x |> sendList xs
 
-main : List
+main : ()
 main =
   let (o, i) = channel @(ListOut; Close) 
       xs = Cons 2 (Cons 3 (Cons 4 (Cons 5 Nil))) in
   fork (\(_ : ()) -1-> o |> sendList xs |> close);
   let (ys, Wait) = rcvList i in
-  ys
+  print ys

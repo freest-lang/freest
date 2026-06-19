@@ -12,7 +12,5 @@ c = 20 + (div (-3 * 5) 5)
 d : Int
 d = 5 + (div 15 3) * 2 - (rem 8 3)
 
-main : Int
-main = a + b + c + d
-
-
+main : ()
+main = print (a + b + c + d)

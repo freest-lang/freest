@@ -8,7 +8,7 @@ f2 c = x1 + x2
   where (x1, c) = receive c
         x2      = receiveAndWait c
 
-main : Int
+main : ()
 main =
   let (c1, c2) = channel @(!Int; !Int; Close)
-  in fork (\(_ : ()) -1-> f1 c1); f2 c2
+  in fork (\(_ : ()) -1-> f1 c1); print (f2 c2)

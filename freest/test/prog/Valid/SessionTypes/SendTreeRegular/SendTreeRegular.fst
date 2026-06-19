@@ -32,8 +32,8 @@ write (Node l x r) c =
     |> send (forkWith (write r))
     |> close
 
-main : Tree
-main = forkWith (write xs) |> read
+main : ()
+main = forkWith (write xs) |> read |> print
   where xs = Node (Node Leaf 
                         5 
                         Leaf) 

@@ -32,8 +32,6 @@ flipFlopADT =
   : FlipFlop
   where (@(c : *T), (new, get, inc)) = counterADT
 
-main : Bool
-main = read (toggle (reset (toggle new)))
+main : ()
+main = print (read (toggle (reset (toggle new))))
   where (@(f : *T), (new, read, toggle, reset)) = flipFlopADT
-  
-  

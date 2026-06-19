@@ -12,6 +12,7 @@ module Compiler.Pipeline
   , loadPrelude
   , loadModule
   , loadPreludeAndModule
+  , loadSilent
   , loadNoModule
   ) where
 
@@ -30,6 +31,7 @@ import Paths_freest ( getDataFileName )
 import Control.Exception ( IOException, try )
 import Control.Monad.State ( get )
 import Data.Map qualified as Map
+import System.IO ( stderr, hPutStrLn )
 
 -- | Scope a parsed module against an existing scoping context, then kind
 -- and type it. Returns the extended contexts and the new module's kinded
@@ -74,6 +76,16 @@ loadPreludeAndModule programPath = do
   preludeFile <- getDataFileName preludePath
   loadM (putStrLn moduleLoaded) [preludeFile, programPath]
 
+-- | Load a program silently (no status banners), so a batch run's stdout
+-- carries only the program's own output. @withPrelude@ selects whether the
+-- implicit Prelude is loaded alongside the program.
+loadSilent :: Bool -> FilePath -> IO (Maybe LoadState)
+loadSilent withPrelude programPath = do
+  files <- if withPrelude
+             then (: [programPath]) <$> getDataFileName preludePath
+             else pure [programPath]
+  loadM (pure ()) files
+
 -- | Read the given files, parse them, merge into a single 'ParsedModule',
 -- then scope, kind and type-check it. The 'post' action runs on successful
 -- load (pass 'pure ()' to remain silent). On failure (any unreadable file,
@@ -92,7 +104,7 @@ loadM post paths =
                 pure (srcs, vs, sctx, kctx, tctx, kmodl)
       of Left es -> do
           printErrors srcs es
-          putStrLn failedToLoadModule
+          hPutStrLn stderr failedToLoadModule
           pure Nothing
          Right result -> do
           post
@@ -104,5 +116,5 @@ tryRead :: FilePath -> IO (Maybe String)
 tryRead path = do
   result <- try (readFile path) :: IO (Either IOException String)
   case result of
-    Left _  -> Nothing <$ putStrLn (notASourceFile path)
+    Left _  -> Nothing <$ hPutStrLn stderr (notASourceFile path)
     Right s -> pure (Just s)

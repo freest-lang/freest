@@ -32,15 +32,13 @@ read @a c = case c of
           (left , c) = read c
           (right, c) = read c
     
-xs, main : Tree
-
+xs : Tree
 xs = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf))
 
+main : ()
 main =
   let (writer, reader) = channel @(TreeChannel;Close) in
   fork (\(_ : ()) -1-> write xs writer |> close);
   let (ys, reader) = read reader in 
   wait reader;
-  ys
-
-
+  print ys

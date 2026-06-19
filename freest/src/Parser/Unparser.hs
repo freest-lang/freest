@@ -22,6 +22,7 @@ import Syntax.Module qualified as M
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import Compiler.Bug ( internalError )
+import Interpreter.Value ( Value(..) )
 
 import Data.List qualified as List
 import Data.Map qualified as Map
@@ -203,3 +204,31 @@ unparseTypeDef i hasParams t = case (hasParams, t) of
 paramStr :: [(Variable, K.Kind)] -> String
 paramStr []  = ""
 paramStr aks = " " ++ unwords (map (show . fst) aks)
+
+-- | Render a runtime value the way FreeST programs print it: data constructors
+-- applied prefix (nested arguments parenthesised), tuples, lists and character
+-- lists with their usual surface syntax, and everything else as 'show' does.
+instance Unparse Value where
+  fragment v = (maxRator, go v)
+    where
+      go w | Just str <- charList w        = show str
+      go (VCons c vals) | isTupleCon c      = "(" ++ List.intercalate ", " (map go vals) ++ ")"
+      go w@(VCons "(::)" [_, _])            = "[" ++ List.intercalate "," (map go (listElems w)) ++ "]"
+      go (VCons str [])                     = str
+      go (VCons str vals)                   = unwords (str : map arg vals)
+      go w                                  = show w
+
+      -- parenthesise a constructor argument that has arguments of its own
+      arg w@(VCons c (_ : _)) | not (isTupleCon c) && c /= "(::)" = "(" ++ go w ++ ")"
+      arg w                                                       = go w
+
+      isTupleCon c = length c >= 3 && head c == '(' && last c == ')' && all (== ',') (drop 1 (init c))
+
+      listElems (VCons "(::)" [x, rest]) = x : listElems rest
+      listElems _                        = []
+
+      charList (VCons "(::)" [VChar c, rest]) = (c :) <$> chars rest
+      charList _                              = Nothing
+      chars (VCons "[]"   [])                 = Just ""
+      chars (VCons "(::)" [VChar d, more])    = (d :) <$> chars more
+      chars _                                 = Nothing

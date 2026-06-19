@@ -18,8 +18,7 @@ pairToValue : Pair -> Value
 pairToValue p =
   let (x, y) = p in x + y
 
-main : Value
+main : ()
 main =
   let aTriple = (1, 2, 3) in
-  pairToValue (tripleToPair aTriple)
-  
+  print (pairToValue (tripleToPair aTriple))

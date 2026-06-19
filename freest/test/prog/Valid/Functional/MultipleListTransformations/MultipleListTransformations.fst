@@ -101,7 +101,7 @@ list1 = repetidor 10 2
 list2 : IntList
 list2 = makeUntil 10
 
-main : Bool
+main : ()
 main = 
     let a = sum' list1 in
     let b = sumNegatives list1 in
@@ -110,4 +110,12 @@ main =
     let e = takeOutNumber list2 10 in
     let f = decrementList (incrementList list1 1) 1 in
     let g = divideList (multiplyList list1 2) 2 in
-    (a == 10*2) && (b == 10*-2) && (c == 4) && (d == 4) && (equalsList (makeUntil 9) e) && (equalsList list1 f) && (equalsList list1 g)
+    print (  (a == 10*2)
+          && (b == 10*-2)
+          && (c == 4)
+          && (d == 4)
+          && (equalsList (makeUntil 9) e)
+          && (equalsList list1 f)
+          && (equalsList list1 g)
+          )
+

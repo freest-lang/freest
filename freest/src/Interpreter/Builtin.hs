@@ -1,0 +1,204 @@
+{- |
+Module      :  Interpreter.Builtin
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+The builtin functions exposed to FreeST programs, together with the marshalling
+helpers (between Haskell and FreeST values) and the channel operations they and
+the evaluator rely on. Value rendering for output goes through 'unparse'.
+-}
+module Interpreter.Builtin
+  ( builtins
+  , asString
+  , fstToHsBool
+  , hsToFstString
+  , chan
+  , receive
+  , receiveLabel
+  , send
+  ) where
+
+import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
+import Data.Char ( chr, ord )
+import Data.Functor ( ($>) )
+import qualified Data.Map as Map
+import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
+
+import Interpreter.Value ( Value(..), ChannelEnd )
+import Parser.Unparser ( unparse )
+
+-- | Convert Haskell's True and False into FreeST's value representation
+hsToFstBool :: Bool -> Value
+hsToFstBool True = VCons "True" []
+hsToFstBool False = VCons "False" []
+
+-- | Extract True and False from FreeST's value representation
+fstToHsBool :: Value -> Bool
+fstToHsBool (VCons "True" []) = True
+fstToHsBool (VCons "False" []) = False
+
+-- | Build a FreeST string value from a Haskell 'String'.
+hsToFstString :: String -> Value
+hsToFstString = foldr (\c acc -> VCons "(::)" [VChar c, acc]) (VCons "[]" [])
+
+-- | Extract a Haskell 'String' from a FreeST string value.
+fstToHsString :: Value -> String
+fstToHsString = \case
+  VCons "[]"   []              -> ""
+  VCons "(::)" [VChar c, rest] -> c : fstToHsString rest
+  v                            -> error ("fstToHsString: not a string: " ++ show v)
+
+-- | A FreeST string value as a Haskell 'String', if it is one (used for
+-- pattern matching; an empty list stays a list, since "" and [] are
+-- indistinguishable).
+asString :: Value -> Maybe String
+asString = \case
+  VCons "(::)" [VChar c, rest] -> (c :) <$> go rest
+  _                            -> Nothing
+  where
+    go = \case
+      VCons "[]"   []              -> Just ""
+      VCons "(::)" [VChar d, more] -> (d :) <$> go more
+      _                            -> Nothing
+
+chan :: IO (ChannelEnd, ChannelEnd)
+chan = do
+  c1 <- C.newChan
+  c2 <- C.newChan
+  return ((c1, c2), (c2, c1))
+
+receive :: ChannelEnd -> IO (Value, ChannelEnd)
+receive c = do
+  v <- C.readChan (fst c)
+  return (v, c)
+
+receiveLabel :: ChannelEnd -> IO (String, ChannelEnd)
+receiveLabel c = do
+  (VLabel s, _) <- receive c
+  return (s, c)
+
+send :: Value -> ChannelEnd -> IO ChannelEnd
+send v c = do
+  C.writeChan (snd c) v
+  return c
+
+sendLabel :: String -> ChannelEnd -> IO ChannelEnd
+sendLabel s c = do
+  send (VLabel s) c
+  return c
+
+wait :: Value -> Value
+wait (VChan c) =
+  VIO $ C.readChan (fst c)
+
+close :: Value -> IO Value
+close (VChan c) = do
+  C.writeChan (snd c) VUnit
+  return VUnit
+
+builtins :: Map.Map String Value
+builtins = Map.fromList
+  [
+  -- * Undefined
+    ("undefined",     VBuiltin undefined)
+  -- * Error
+
+  -- * Standard types, classes and related functions
+  -- ** Basic datatypes
+  -- *** Logical operators
+  , ("(&&)",          VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x && fstToHsBool y))))
+  , ("(||)",          VBuiltin (\x -> VBuiltin (\y -> hsToFstBool (fstToHsBool x || fstToHsBool y))))
+  -- *** Strings
+  , ("ord",           VBuiltin (\(VChar c) -> VInt (ord c)))
+  , ("chr",           VBuiltin (\(VInt x) -> VChar (chr x)))
+  , ("(^^)",          VBuiltin (\s1 -> VBuiltin (\s2 -> hsToFstString (fstToHsString s1 ++ fstToHsString s2))))
+  , ("show",          VBuiltin (hsToFstString . unparse))
+  -- ** Comparison
+  , ("(<)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x < y))))
+  , ("(<=)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x <= y))))
+  , ("(==)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x == y))))
+  , ("(>=)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x >= y))))
+  , ("(>)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x > y))))
+  , ("(/=)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x /= y))))
+  , ("(>.)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x > y))))
+  , ("(<.)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x < y))))
+  , ("(>=.)",         VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x >= y))))
+  , ("(<=.)",         VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> hsToFstBool (x <= y))))
+  -- ** Numeric functions
+  -- *** Int
+  , ("(+)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x + y))))
+  , ("(-)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x - y))))
+  , ("(*)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x * y))))
+  , ("(/)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (div x y))))
+  , ("(^)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x ^ y))))
+  , ("subtract",      VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (x - y))))
+  , ("quot",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (quot x y))))
+  , ("rem",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (rem x y))))
+  , ("div",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (div x y))))
+  , ("mod",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (mod x y))))
+  , ("min",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (min x y))))
+  , ("max",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (max x y))))
+  , ("gcd",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (gcd x y))))
+  , ("lcm",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> VInt (lcm x y))))
+  , ("succ",          VBuiltin (\(VInt x) -> VInt (succ x)))
+  , ("pred",          VBuiltin (\(VInt x) -> VInt (pred x)))
+  , ("abs",           VBuiltin (\(VInt x) -> VInt (abs x)))
+  , ("negate",        VBuiltin (\(VInt x) -> VInt (-x)))
+  , ("even",          VBuiltin (\(VInt x) -> hsToFstBool (even x)))
+  , ("odd",           VBuiltin (\(VInt x) -> hsToFstBool (odd x)))
+  -- *** Float
+  , ("(+.)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x + y))))
+  , ("(-.)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x - y))))
+  , ("(*.)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x * y))))
+  , ("(/.)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x / y))))
+  , ("(**)",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (x ** y))))
+  , ("maxF",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (max x y))))
+  , ("minF",          VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (min x y))))
+  , ("logBase",       VBuiltin (\(VFloat x) -> VBuiltin (\(VFloat y) -> VFloat (logBase x y))))
+  , ("absF",          VBuiltin (\(VFloat x) -> VFloat (abs x)))
+  , ("negateF",       VBuiltin (\(VFloat x) -> VFloat (negate x)))
+  , ("recip",         VBuiltin (\(VFloat x) -> VFloat (recip x)))
+  , ("exp",           VBuiltin (\(VFloat x) -> VFloat (exp x)))
+  , ("log",           VBuiltin (\(VFloat x) -> VFloat (log x)))
+  , ("sqrt",          VBuiltin (\(VFloat x) -> VFloat (sqrt x)))
+  , ("log1p",         VBuiltin (\(VFloat x) -> VFloat (log1p x)))
+  , ("expm1",         VBuiltin (\(VFloat x) -> VFloat (expm1 x)))
+  , ("log1pexp",      VBuiltin (\(VFloat x) -> VFloat (log1pexp x)))
+  , ("log1mexp",      VBuiltin (\(VFloat x) -> VFloat (log1mexp x)))
+  , ("sin",           VBuiltin (\(VFloat x) -> VFloat (sin x)))
+  , ("cos",           VBuiltin (\(VFloat x) -> VFloat (cos x)))
+  , ("tan",           VBuiltin (\(VFloat x) -> VFloat (tan x)))
+  , ("asin",          VBuiltin (\(VFloat x) -> VFloat (asin x)))
+  , ("acos",          VBuiltin (\(VFloat x) -> VFloat (acos x)))
+  , ("atan",          VBuiltin (\(VFloat x) -> VFloat (atan x)))
+  , ("sinh",          VBuiltin (\(VFloat x) -> VFloat (sinh x)))
+  , ("cosh",          VBuiltin (\(VFloat x) -> VFloat (cosh x)))
+  , ("tanh",          VBuiltin (\(VFloat x) -> VFloat (tanh x)))
+  , ("truncate",      VBuiltin (\(VFloat x) -> VInt (truncate x)))
+  , ("round",         VBuiltin (\(VFloat x) -> VInt (round x)))
+  , ("ceiling",       VBuiltin (\(VFloat x) -> VInt (ceiling x)))
+  , ("floor",         VBuiltin (\(VFloat x) -> VInt (floor x)))
+  , ("pi",            VFloat pi)
+  , ("fromInteger",   VBuiltin (\(VInt x) -> VFloat (fromInteger (toInteger x))))
+  -- * Concurrency
+  , ("fork",          VFork)
+  , ("send",          VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VChan <$> send val c)))
+  , ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
+  , ("wait",          VBuiltin wait)
+  , ("close",         VBuiltin (VIO . close))
+  , ("send_",         VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VUnit <$ send val c)))
+  , ("receive_",      VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return val))
+  -- * I/O
+  -- ** Standard I/O
+  -- *** stdin
+  -- **** Internal stdin functions
+  , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
+  , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
+  , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
+  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ putStr (fstToHsString s)))
+
+  -- * Other Expressions
+  , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
+  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
+  , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VChan c))
+  ]

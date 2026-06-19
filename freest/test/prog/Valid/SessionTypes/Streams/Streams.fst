@@ -37,5 +37,5 @@ upFrom n = (\ (_ : ()) -> (n, upFrom (n + 1)))
 
 -- The third element in the upFrom 0 stream
 
-main : Int
-main = hd (tl (tl (tl (upFrom 0))))
+main : ()
+main = hd (tl (tl (tl (upFrom 0)))) |> print

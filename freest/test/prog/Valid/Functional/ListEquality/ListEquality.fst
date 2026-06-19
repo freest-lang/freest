@@ -30,5 +30,5 @@ equalList' (Cons _ __) Nil         = False
 equalList' Nil         (Cons _ __) = False
 equalList' (Cons x xs) (Cons y ys) = x == y && equalList xs ys
 
-main : Bool
-main = equalList aList1 aList3
+main : ()
+main = print (equalList aList1 aList3)

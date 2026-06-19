@@ -43,9 +43,9 @@ aStackClient c =
   in c |> select Stop |> close;
   x
 
-main : Int
+main : ()
 main =
   let (r, w) = channel @(EStack; Wait) in
   fork (\(_ : ()) -1-> r |> eStack |> wait);
-  aStackClient w
-    
+  print (aStackClient w)
+

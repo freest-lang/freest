@@ -21,5 +21,6 @@ map f xs = case xs of
 xs : List
 xs = Cons 7 $ Cons 8 $ Cons (-1) $ Cons 1 $ Cons 6 $ Cons 5 Nil
 
-main : Int
-main = sum $ filter (\(x : Int) -> x > 10) $ map (\(y : Int) -> y * 2) xs
+main : ()
+main = print (sum $ filter (\(x : Int) -> x > 10) $ map (\(y : Int) -> y * 2) xs)
+

@@ -783,7 +783,7 @@ checkPat modl kctx p t = case p of
     (kctx' , tctxp1) <- checkPat modl kctx p1 t1
     (kctx'', tctxp2) <- checkPat modl kctx' p2 t2
     return (kctx'', Map.union tctxp1 tctxp2)
-  -- ?@a. p
+  -- ?type a. p
   E.TypeInPat s (a, k) p' -> do
     (b, k', t') <- Expose.typeInput modl (Left p) t
     Kinding.checkSubkindOf (T.fromVariable ObjLv a k) k k'

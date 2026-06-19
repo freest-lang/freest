@@ -48,8 +48,8 @@ toInt n = n @Int 0 (\(x : Int) -> 2 * x) (\(x : Int) -> 2 * x + 1)
 --           (\(z : Bin) (s0 : Bin->Bin) (s1 : Bin->Bin) -> s0 n)
 --           (\(z : Bin) (s0 : Bin->Bin) (s1 : Bin->Bin) -> s1 n)
 
-main : Bool
-main = isZero fifteen
+main : ()
+main = print $ isZero fifteen
 -- main = toInt fifteen
 
 -- TO BE CONTINUED

@@ -8,3 +8,4 @@ type U = Int
 
 main : T
 main = 5
+

@@ -51,7 +51,7 @@ treeSum @a c =
             (r, c) = treeSum c
             c = send (x + l + r) c
 
-xs, main : Tree Int
+xs : Tree Int
 
 xs = Node 1 (Node 2 (Node 8 Leaf
                             Leaf) 
@@ -63,9 +63,10 @@ xs = Node 1 (Node 2 (Node 8 Leaf
                     (Node 7 Leaf 
                             Leaf))
 
+main : ()
 main =
   let (w, r) = channel @(TreeC Int; Wait) in
   fork (\(_ : ()) -1-> treeSum r |> snd |> close);
   let (t, w) = transform xs w in
   wait w;
-  t
+  print t

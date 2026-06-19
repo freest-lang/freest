@@ -376,6 +376,6 @@ main : ()
 main =
   let result = clientParallel in
   -- Print value
-  putStr "  Value: "; print result;
+  putStr "Value: "; print result;
   -- Print fitness
   putStr "Fitness: "; print $ fitnessAllOnes result

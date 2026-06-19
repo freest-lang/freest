@@ -68,9 +68,5 @@ three @a s z = s (s (s z))
 
 four = succ' three
 
-main : Int
-main = toInt $ pred' $ plus one three
--- main = toInt $ exp two $ times four four
-
--- main : Bool
--- main = isZero $ plus three four
+main : ()
+main = print $ toInt $ pred' $ plus one three

@@ -28,20 +28,20 @@ readT : forall (a : 1S) -> (Dual T; a) -> a
 readT @a c =
   case c of
     &Lt c ->
-      putStr (show '<');
+      putStr "<";
       readT (readT c)
     &Gt c ->
-      putStr (show '>');
+      putStr ">";
       c
 
 readD : forall (a : 1S) -> (Dual D; a) -> a
 readD @a c =
   case c of
     &Lt c ->
-      print '<';
+      putStr "<";
       readD (readT c)
     &Dollar c ->
-      putStr (show '$');
+      putStr "$";
       c
 
 forwardT : forall (a : 1S) (b : 1S) -> (Dual T; a) -> (T; b) -1-> (a, b)

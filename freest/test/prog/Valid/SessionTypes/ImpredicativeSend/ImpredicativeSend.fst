@@ -15,7 +15,3 @@ f cond c d =
 
     consumeD : !Int; ?Bool -> Skip
     consumeD d = snd (receive (send' 7 d))
-
-main : Int
-main = 5
-
