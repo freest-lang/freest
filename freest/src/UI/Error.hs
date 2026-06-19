@@ -10,6 +10,8 @@ module UI.Error
   ( Error(..)
   , Source
   , toMessage
+  , header
+  , snippet
   , showErrors -- for testing
   , printErrors
   )
@@ -231,8 +233,11 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
         caretsFrom = map (const '^')
         (ws, li') = List.span Char.isSpace li
 
+header :: Located a => String -> a -> String
+header sort (getSpan -> s) = show s ++ ": " ++ sort ++ ":"
+
 errorHeader :: Located a => a -> String
-errorHeader (getSpan -> s) = show s ++ ": error:"
+errorHeader = header "error"
 
 makeError :: Located a => Source -> a -> String -> String
 makeError src (getSpan -> s) msg =

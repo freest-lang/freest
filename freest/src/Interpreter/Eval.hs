@@ -20,6 +20,7 @@ TODO:
  -}
 
 import Control.Concurrent (forkIO)
+import Control.Exception (throwIO)
 import Control.Monad (zipWithM, foldM)
 import Data.Bifunctor (first)
 import Data.Functor (($>), void)
@@ -32,6 +33,7 @@ import Debug.Trace
 -- ends here
 
 import Compiler.Bug (internalError)
+import Interpreter.Exception (Exception(NonExhaustivePatterns))
 import Interpreter.PatternMatching (mkClosure, matchPat, matchClause, forceColumns)
 import Interpreter.Value (Env, Clause, Value(..))
 import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
@@ -89,8 +91,7 @@ matchClauses env vals clauses = do
   goRows vals' clauses
   where
     goRows vals' = \case
-      [] -> errorWithoutStackTrace $
-        show (clausesSpan clauses) ++ ": Non-exhaustive patterns"
+      [] -> throwIO (NonExhaustivePatterns (clausesSpan clauses))
       (params, rhs) : rest -> do
         mb <- matchClause (catMaybes params) vals'
         case mb of

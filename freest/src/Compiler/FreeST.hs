@@ -12,7 +12,9 @@ import Interpreter.Value (emptyEnv)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL ( ReplState(..), emptyReplState, repl )
 import Compiler.Pipeline ( loadSilent )
+import Interpreter.Exception ( printException )
 
+import Control.Exception ( catch )
 import Options.Applicative ( execParser )
 import System.Exit ( exitSuccess, exitFailure )
 
@@ -31,4 +33,6 @@ runFreeST RunOpts{filePath = Nothing} =
 runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip} =
   loadSilent ip programPath >>= \case
     Nothing -> exitFailure
-    Just (_, _, _, _, _, modl) -> evalModule emptyEnv modl >> exitSuccess
+    Just (src, _, _, _, _, modl) ->
+      catch (evalModule emptyEnv modl >> exitSuccess)
+            (\e -> printException src e >> exitFailure)

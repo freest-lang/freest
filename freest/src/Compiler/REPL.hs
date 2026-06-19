@@ -30,6 +30,7 @@ import Compiler.Pipeline qualified as Pipeline
 import Interpreter.Value ( Env, emptyEnv )
 import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
+import Interpreter.Exception ( printException )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
 import Data.List qualified as List
@@ -54,6 +55,7 @@ import System.Console.Repline
   )
 import System.Exit ( exitSuccess )
 import Control.Monad.Except (runExceptT)
+import Control.Exception (try)
 
 -- The state of the REPL
 
@@ -161,7 +163,9 @@ runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
     Just (src, vs, sctx, kctx, tctx, kmodl) -> do
-      vctx <- liftIO (evalModule emptyEnv kmodl)
+      vctx <- liftIO (try (evalModule emptyEnv kmodl)) >>= \case
+        Right v -> pure v
+        Left e  -> liftIO (printException src e) >> pure emptyEnv   -- e.g. main failed at load
       modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl, valueCtx = vctx})
 
 fin :: Repl ExitDecision
@@ -404,9 +408,10 @@ validateModule s =
 -- definitions (running their side effects), threading it through the state.
 eval :: M.KindedModule -> Repl ()
 eval m = do
-  s    <- get
-  vctx <- liftIO (evalModule (valueCtx s) m)
-  put s{valueCtx = vctx}
+  s <- get
+  liftIO (try (evalModule (valueCtx s) m)) >>= \case
+    Right vctx -> put s{valueCtx = vctx}
+    Left e     -> liftIO (printException (source s) e)   -- TODO: keep the old env, or not?
 
 -- | Print the value bound to @it@ (an expression entered at the prompt
 -- becomes the binding @it = …@).
