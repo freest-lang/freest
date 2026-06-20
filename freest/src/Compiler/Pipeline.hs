@@ -34,18 +34,29 @@ import Data.Map qualified as Map
 import System.IO ( stderr, hPutStrLn )
 
 -- | Scope a parsed module against an existing scoping context, then kind
--- and type it. Returns the extended contexts and the new module's kinded
--- form (not merged with any prior module — composition into a running
--- 'KindedModule' is the caller's responsibility).
-validateModule :: ScopingCtx -> KindCtx -> TypeCtx -> M.ParsedModule
+-- and type it. The @prior@ kinded module supplies the data-level declarations
+-- already in scope (from earlier REPL inputs or a loaded module), so a new
+-- input may mention constructors, datatypes and type aliases declared earlier
+-- — notably in constructor patterns, which 'typeModule' resolves against the
+-- module's 'consDecls'. Only the new module's own definitions are type-checked.
+-- Returns the extended contexts and the new module's kinded form (its own
+-- declarations with the inherited ones folded in).
+validateModule :: ScopingCtx -> KindCtx -> TypeCtx -> M.KindedModule -> M.ParsedModule
                -> Validation (ScopingCtx, KindCtx, TypeCtx, M.KindedModule)
-validateModule sctx kctx tctx modl = do
+validateModule sctx kctx tctx prior modl = do
   (sctx', smodl) <- scopeModule' sctx modl
   (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec kmodl
-  (kmodl', kctx'', tctx') <- typeModule kctx' tctx kmodl
+  (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls prior kmodl)
   checkNoVarsInSessionPatterns kmodl'
   pure (sctx', kctx'', tctx', kmodl')
+  where 
+  inheritDecls prior m = m
+    { M.kindSigs  = M.kindSigs  m `Map.union` M.kindSigs  prior
+    , M.typeDecls = M.typeDecls m `Map.union` M.typeDecls prior
+    , M.dataDecls = M.dataDecls m `Map.union` M.dataDecls prior
+    , M.consDecls = M.consDecls m `Map.union` M.consDecls prior
+    }
 
 -- | A snapshot of all state produced by a successful module load:
 -- the source map (for error reporting), the running 'ValidationState',
@@ -99,7 +110,7 @@ loadM post paths =
       let srcs = Map.fromList [(p, lines s) | (p, s) <- inputs] in
       case do modules <- mapM (uncurry runParseModule) inputs
               runValidation emptyValidationState do
-                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx (mconcat modules)
+                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx M.emptyKindedModule (mconcat modules)
                 vs                        <- get
                 pure (srcs, vs, sctx, kctx, tctx, kmodl)
       of Left es -> do

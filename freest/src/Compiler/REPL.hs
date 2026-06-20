@@ -400,7 +400,7 @@ validateExp s =
 validateModule :: ReplState -> M.ParsedModule
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)
 validateModule s =
-  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s)
+  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s) (modl s)
 
 -- Evaluation; interface with module Interpreter.Eval
 
