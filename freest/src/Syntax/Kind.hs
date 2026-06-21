@@ -20,10 +20,17 @@ module Syntax.Kind
   , isChannel
   , isProper
   , depth
+  , kindArrow
+  , image
   )
 where 
 
 import Syntax.Base
+    ( Congruence(..),
+      Located(getSpan, setSpan),
+      Span,
+      VarLv,
+      Variable(external) )
 import Compiler.Bug ( internalError )
 
 import Data.List qualified as List
@@ -222,9 +229,10 @@ depth = \case
   Var{}       -> 0
   -- k -> internalError ("kind " ++ show k)
 
--- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
--- image :: Kind -> Kind
--- image = \case
---   k@Proper{} -> k
---   Arrow _ _ k -> image k
---   k -> internalError ("kind " ++ show k)
+-- | Split a curried 'Arrow' kind into its parameter kinds and result kind.
+kindArrow :: Kind -> ([Kind], Kind)
+kindArrow (Arrow _ k1 k2) = let (ks, k) = kindArrow k2 in (k1 : ks, k)
+kindArrow k               = ([], k)
+
+image :: Kind -> Kind
+image = snd . kindArrow

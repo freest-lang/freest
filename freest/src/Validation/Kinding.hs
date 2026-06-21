@@ -138,7 +138,7 @@ synth ctx = \case
   T.App s t ts -> do
     t' <- synth ctx t
     let k = TK.kindOf t'
-    let (ks, kn) = Expose.kindArrow k
+    let (ks, kn) = kindArrow k
     (_, ts') <- checkArgs t' (length ts) (length ks) ts ks kn
     pure $ TK.App s t' ts'
     where
@@ -603,9 +603,13 @@ runCheck ctx t k = runValidation emptyValidationState (check ctx t k)
 --     * 'Chan-Var'    — a self-reference is channel iff it has already been
 --                       visited along this path.
 --
--- Two extensions over Fig. 9 for the FreeST representation:
+-- Extensions over Fig. 9 for the FreeST representation:
 --
---     * An applied session quantifier is channel if its body is.
+--     * An applied session-like quantifier (prekind 'Session' or 'Channel')
+--       is channel if its body is. For an unresolved prekind ('VarPK'),
+--       the channel-ness depends on the constraint solver; a 'SubPrekind'
+--       constraint is emitted requiring the prekind to be a subtype of
+--       'Session', and the body is then walked as a candidate.
 --     * @μa@ is encoded as a 'T.TName' resolved against @tds@: only an
 --       'AppTName' whose head has a session ('S') or channel ('C') result
 --       prekind is a candidate; a head of result prekind 'Top' ('T') yields
@@ -613,32 +617,47 @@ runCheck ctx t k = runValidation emptyValidationState (check ctx t k)
 --       mark it visited and continue checking the looked-up body (any
 --       leading @Abs@ binder for the head's parameters is transparently
 --       stripped).
-chan :: M.KindSigs Scoped -> M.TypeDecls Scoped -> T.ScopedType -> Bool
-chan kinds tds = chan' Set.empty
+chan :: M.KindSigs Scoped -> M.TypeDecls Scoped -> T.ScopedType -> Validation Bool
+chan kinds tds = chan' Map.empty Set.empty
   where
-    chan' :: Set.Set Identifier -> T.ScopedType -> Bool
-    chan' visited = \case
-      T.End{}                      -> True
-      T.AppSemi _ t u              -> chan' visited t || chan' visited u
-      T.AppLinChoice _ _ lts       -> all (chan' visited . snd) lts
-      T.AppQuant _ _ Session _ _ t -> chan' visited t
-      T.AppDual _ t                -> chan' visited t   -- Lemma 4: duality preserves kind
+    -- 'env' maps type variables bound by an enclosing quantifier to their
+    -- binder kind; lets the 'T.Var' case recognise a channel-kinded bound
+    -- variable (e.g. @a@ inside @?type (a : 1C). a@).
+    chan' :: Map.Map Variable Kind -> Set.Set Identifier -> T.ScopedType -> Validation Bool
+    chan' env visited = \case
+      T.End{}                      -> pure True
+      T.Void _ k                   -> pure (isChannel k) -- Void carries its kind
+      T.AppMessage _ m _ _         -> pure (isUn m)
+      T.AppLinChoice _ _ lts       -> allM (chan' env visited . snd) lts
+      T.UnChoice{}                 -> pure True -- *⋆{ℓ} has kind *c
+      T.AppSemi _ t u              -> do
+        ct <- chan' env visited t
+        cu <- chan' env visited u
+        pure (ct || cu)
+      T.AppDual _ t                -> chan' env visited t -- Lemma 4: duality preserves kind
+      T.AppQuant s _ pk _ aks t ->
+        let env' = foldr (uncurry Map.insert) env aks in
+        case pk of
+          Top      -> pure False
+          VarPK _  -> emit (SubPrekind s pk Session) >> chan' env' visited t
+          _        -> chan' env' visited t
+      T.Var _ a -> pure $ maybe False isChannel (Map.lookup a env)
       T.AppTName _ i _
-        | isTopHead i              -> False
-        | i `Set.member` visited   -> True
+        | isTopHead i              -> pure False
+        | i `Set.member` visited   -> pure True
         | otherwise                -> case tds Map.!? i of
-            Just (_, T.Abs _ _ body) -> chan' (Set.insert i visited) body
-            Just (_, body)           -> chan' (Set.insert i visited) body
+            Just (_, T.Abs _ _ body) -> chan' env (Set.insert i visited) body
+            Just (_, body)           -> chan' env (Set.insert i visited) body
             Nothing                  -> internalError $
               "type name " ++ show i ++ " not in typeDecls"
-      _                            -> False
+      _                            -> pure False
 
     -- An 'AppTName' whose head's result prekind is 'Top' isn't a channel
     -- candidate, regardless of the body. The arrow leading up to the result
-    -- (for parameterised heads) is walked via 'Expose.kindArrow'.
+    -- (for parameterised heads) is walked via 'image'.
     isTopHead :: Identifier -> Bool
     isTopHead i = case kinds Map.!? i of
-      Just k -> case snd (Expose.kindArrow k) of
+      Just k -> case image k of
         Proper _ _ Top -> True
         _              -> False
       Nothing -> internalError $

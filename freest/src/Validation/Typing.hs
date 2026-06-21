@@ -1045,7 +1045,7 @@ typeModule kctx tctx modl = do
       where
         buildDConsType (ic, (it, ts)) = do
           case M.kindSigs modl Map.!? it of
-            Just k@(Expose.kindArrow -> (ks, _)) -> do
+            Just k@(K.kindArrow -> (ks, _)) -> do
               let (map fst -> as, _) = M.dataDecls modl Map.! it
                   aks = zip as ks
               t <- buildArrow (Map.fromList aks) aks k ts

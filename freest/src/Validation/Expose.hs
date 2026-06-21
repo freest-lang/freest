@@ -1,6 +1,17 @@
+{- |
+Module      :  Validation.Expose
+Copyright   :  © The FreeST Team
+Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
+
+Witness-extraction helpers used by the type checker to inspect a kinded
+type after 'Validation.Normalisation.normalise', recover the structural
+witness it expects (an arrow, a choice, a message, a session quantifier,
+a 'Wait' channel, …) and project out its components. On a shape mismatch
+each helper throws the appropriate 'UI.Error.Error' located at the
+inspecting expression or pattern.
+-}
 module Validation.Expose
-  ( kindArrow
-  , function
+  ( function
   , arrow
   , externalChoice
   , internalChoice
@@ -13,24 +24,21 @@ module Validation.Expose
 where
 
 import UI.Error
-import Validation.Base
-import Syntax.Base
+    ( Error(ExposeError, TypeMismatchExists, IllegalChoice) )
+import Validation.Base ( Validation )
+import Syntax.Base ( Identifier, Located(getSpan), Variable )
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise )
 
-import Data.Functor
-import Data.Bifunctor
+import Data.Functor ()
+import Data.Bifunctor ( Bifunctor(first) )
 import Data.Map qualified as Map
-import Control.Applicative
-import Control.Monad.Trans.Except
+import Control.Applicative ()
+import Control.Monad.Trans.Except ( throwE )
 import Control.Monad.State ( get, gets )
-
-kindArrow :: K.Kind -> ([K.Kind], K.Kind)
-kindArrow (K.Arrow _ k1 k2) = first (k1:) (kindArrow k2)
-kindArrow k = ([], k)
 
 function :: M.KindedModule -> E.KindedExp -> T.KindedType -> Validation T.KindedType
 function mod e t = do
