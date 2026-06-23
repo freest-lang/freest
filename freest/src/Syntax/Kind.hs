@@ -18,6 +18,7 @@ module Syntax.Kind
   , Meet(..)
   , isSession
   , isChannel
+  , isTop
   , isProper
   , depth
   , kindArrow
@@ -210,13 +211,16 @@ uc s = Proper s (Un s)  Channel
 
 -- 4. Utils
 
-isChannel, isSession, isProper :: Kind -> Bool
+isChannel, isSession, isTop, isProper :: Kind -> Bool
 
 isChannel (Proper _ _ Channel) = True
 isChannel _ = False
 
 isSession (Proper _ _ pk) = pk <: Session
 isSession _ = False
+
+isTop (Proper _ _ Top) = True
+isTop _ = False
 
 isProper = \case
   Proper{} -> True

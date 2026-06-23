@@ -209,9 +209,10 @@ scopeModule' ctx m = do
   (ctx, tds, dds) <- scopeTypeDataDecls ctx (M.typeDecls m) (M.dataDecls m)
   (ctx, cds) <- scopeConsDecls ctx dds (M.consDecls m)
   (ctx, lds) <- scopeDefs      ctx (M.definitions m)
-  forM_ (Map.toList kss) \(i, _) ->
-    unless (i `Map.member` tds || i `Map.member` dds) $
-      insertError (KSigLacksBinding (getSpan i) i)
+  Control.Monad.void $ Map.traverseWithKey
+    (\i _ -> unless (i `Map.member` tds || i `Map.member` dds) $
+               insertError (KSigLacksBinding (getSpan i) i))
+    kss
   return (ctx, m{ M.kindSigs    = kss
                 , M.typeDecls   = tds
                 , M.dataDecls   = dds
@@ -224,17 +225,34 @@ scopeModule :: ScopingCtx -> M.ParsedModule -> Validation M.ScopedModule
 scopeModule ctx m = snd <$> scopeModule' ctx m
 
 -- | For every @type@ or @data@ binding that has no kind signature, append a
--- fresh @ti : k@ entry to the parsed module's kind signatures, where @k@ is
--- a fresh kind variable. Bindings that already have a signature are untouched.
+-- fresh entry to the parsed module's kind signatures:
+--
+--     * A @type@ binding gets an opaque kind variable @K.Var s τ@. The
+--       arity isn't known up-front (recursive type aliases need CK-Rec to
+--       resolve their shape), so we don't commit to a 'Proper'-or-'Arrow'.
+--     * A @data@ binding gets an arrow-of-fresh-'Proper' kind whose arity
+--       matches the datatype's parameter count: each parameter contributes
+--       an 'Arrow' position with the parameter's own (annotated) kind, and
+--       the result is @Proper s (Sup [(_, φ)]) (VarPK ψ)@ with fresh @φ@
+--       and @ψ@. Justified by "no datatype is of prekind C or S": the
+--       result prekind is bound to 'Top' by CK-Rec's @SubPrekind T ψ@.
+--
+-- Bindings that already have a signature are untouched.
 insertMissingKindSigs :: M.ParsedModule -> Validation M.ParsedModule
 insertMissingKindSigs m = do
-  let existing = map fst (M.kindSigs m)
-      bindings = map fst (M.typeDecls m) ++ map fst (M.dataDecls m)
-      missing  = filter (`notElem` existing) bindings
-  fresh <- forM missing \ti -> do
+  let existing     = map fst (M.kindSigs m)
+      missingTypes = filter ((`notElem` existing) . fst) (M.typeDecls m)
+      missingDatas = filter ((`notElem` existing) . fst) (M.dataDecls m)
+  freshTypes <- forM missingTypes \(ti, _) -> do
     v <- freshInternal (mkDefaultVar "_κ" ti)
     return (ti, K.Var (getSpan ti) v)
-  return m{ M.kindSigs = M.kindSigs m ++ fresh }
+  freshDatas <- forM missingDatas \(ti, (aks, _)) -> do
+    let s = getSpan ti
+    φ <- freshInternal (mkDefaultVar "φ" ti)
+    ψ <- freshInternal (mkDefaultVar "ψ" ti)
+    let result = K.Proper s (K.Sup s [(ObjLv, φ)]) (K.VarPK ψ)
+    return (ti, foldr (K.Arrow s . snd) result aks)
+  return m{ M.kindSigs = M.kindSigs m ++ freshTypes ++ freshDatas }
 
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).

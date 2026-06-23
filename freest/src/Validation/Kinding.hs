@@ -46,7 +46,7 @@ import Validation.Base
     ( emptyValidationState, runValidation, Validation
     , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind )
 import Validation.Constraint
-    ( Constraint(SubPrekind, JoinMult, MeetPrekind, JoinPrekind) )
+    ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind) )
 import Validation.Expose qualified as Expose
 import Validation.Normalisation ( normalise )
 import Validation.Substitution ( subs, subsMultType )
@@ -328,9 +328,18 @@ kindModule ctx mod = do
                        -> Validation (M.ConsDecls Kinded)
         checkConsDecls k f ctx = do
           (m, cds') <- synthDataMult ctx cis
-          let k' = f (Proper (getSpan i) m Top)
+          let s  = getSpan i
+              k' = f (Proper s m Top)
+          -- CK-Rec for datatypes: m₂ <: m₁, υ₂ <: υ₁ (with υ₂ = T since no
+          -- datatype is of prekind S or C). The ψ = if chan then c else υ₁
+          -- branch of CK-Rec is dead for datatypes and is omitted.
+          case image k of
+            Proper _ m1 υ1 -> do
+              emit (SubMult    s m   m1)
+              emit (SubPrekind s Top υ1)
+            _ -> pure ()  -- declared sig is still a K.Var; nothing to emit
           unless (k' <: k)
-            (throwE (KindMismatch (getSpan i) k (TK.TName (getSpan i) k' i)))
+            (throwE (KindMismatch s k (TK.TName s k' i)))
           pure cds'
 
         synthDataMult :: KindCtx
@@ -635,7 +644,7 @@ chan kinds tds = chan' Map.empty Set.empty
         cu <- chan' env visited u
         pure (ct || cu)
       T.AppDual _ t                -> chan' env visited t -- Lemma 4: duality preserves kind
-      T.AppQuant s _ pk _ aks t ->
+      T.AppQuant s _ pk _ aks t    ->
         let env' = foldr (uncurry Map.insert) env aks in
         case pk of
           Top      -> pure False
@@ -652,13 +661,8 @@ chan kinds tds = chan' Map.empty Set.empty
               "type name " ++ show i ++ " not in typeDecls"
       _                            -> pure False
 
-    -- An 'AppTName' whose head's result prekind is 'Top' isn't a channel
-    -- candidate, regardless of the body. The arrow leading up to the result
-    -- (for parameterised heads) is walked via 'image'.
     isTopHead :: Identifier -> Bool
     isTopHead i = case kinds Map.!? i of
-      Just k -> case image k of
-        Proper _ _ Top -> True
-        _              -> False
+      Just k -> isTop (image k)
       Nothing -> internalError $
         "type name " ++ show i ++ " not in kindSigs"
