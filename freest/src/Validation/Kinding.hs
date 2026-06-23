@@ -119,7 +119,7 @@ synth ctx = \case
     pure $ TK.AppQuant s p pk m aks kt
   T.ForallM s m φs t -> TK.ForallM s m φs <$> synth ctx t
   -- Equations (including built-ins)
-  T.TName s i -> flip (TK.TName s) i <$> lookupKind' ctx i
+  T.TName s i -> flip (TK.TName s) i <$> lookupKind ctx i
   T.Tuple s ts -> do
     -- CK-Rcd: each component must be proper; emit φ = ⊔ℓ mℓ
     (ms, kts) <- unzip <$> forM ts (\t -> do
@@ -131,7 +131,7 @@ synth ctx = \case
   T.List s t -> do
     (_, _, t') <- checkProper ctx t
     pure $ TK.List s t'
-  T.DName s i -> flip (TK.DName s) i <$> lookupKind' ctx i
+  T.DName s i -> flip (TK.DName s) i <$> lookupKind ctx i
   -- Higher-order
   T.Var s a -> case ctx Map.!? Left a of
     Just k -> pure $ TK.fromVariable ObjLv a k
@@ -256,8 +256,8 @@ isStrictlySession t = case TK.kindOf t of
   (Proper _ _ Session) -> True
   _ -> False
 
-lookupKind' :: KindCtx -> Identifier -> Validation Kind
-lookupKind' ctx i = do 
+lookupKind :: KindCtx -> Identifier -> Validation Kind
+lookupKind ctx i = do 
   case ctx Map.!? Right i of
     Just k  -> pure k
     Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
@@ -272,7 +272,7 @@ kindModule ctx mod = do
                  , M.imports     = mod.imports
                  , M.kindSigs    = mod.kindSigs
                  , M.typeDecls   = tdecls
-                 , M.dataDecls     = D.DataDecls dcdecls (M.dataTypeDecls mod)
+                 , M.dataDecls   = D.DataDecls dcdecls (M.dataTypeDecls mod)
                  , M.definitions = []
                  }
   (_, lds) <- kindLetDecls (M.typeDecls mod') ctx' (M.definitions mod)
@@ -280,30 +280,42 @@ kindModule ctx mod = do
   where
     kindTypeDecl :: KindCtx -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
     kindTypeDecl ctx i (hasParams, t) = do
-      k <- lookupKind' ctx i
-      (hasParams,) <$> case t of
+      k  <- lookupKind ctx i
+      t' <- case t of
         T.Abs s aks u | hasParams -> do
           (aks', k') <- kindParams aks k
           u' <- check (Map.fromList (first Left <$> aks') `Map.union` ctx) u k' -- TODO: Map.empty'
           pure $ TK.Abs s aks' u'
           where
             kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
+            -- type Foo : 1S -> 1S
+            -- type Foo a = …         -- 'a' has Var-kind:
               first ((a, k1) :) <$> kindParams aks' k2
             kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
+            -- type Foo : 1S -> 1S
+            -- type Foo (a : 1T) = …  -- 'a' has concrete 1T
               checkK (TK.fromVariable ObjLv a k) k1
               first ((a, k) :) <$> kindParams aks' k2
             kindParams []  k' = pure ([], k')
+            kindParams aks (Var s _) = do
+            -- type Foo a = (a, a) w/o an explicit kind sig: 'a' has Var-kind
+            -- Assign a fresh kind to each unannotated parameter and a fresh proper kind to the
+            -- result.
+              aks' <- mapM (\case
+                (a, Var s' _) -> (a,) <$> freshKind s'
+                ak            -> pure ak) aks
+              k' <- freshKind s
+              pure (aks', k')
             kindParams aks _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
-
-        t' -> check ctx t' k-- TODO: Map.empty? 
-      -- pure (hasParams, t')
+        _ -> check ctx t k -- TODO: Map.empty?
+      pure (hasParams, t')
 
     kindDataConsDecls :: KindCtx
                       -> D.DataConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))
                       -> Validation D.KindedDataConsDecls
     kindDataConsDecls ctx dcdecls' (i, (aks, cis)) = do
-      k  <- lookupKind' ctx i
+      k  <- lookupKind ctx i
       cd <- checkDataDecl k id ctx aks k
       return (Map.union cd dcdecls')
       where
@@ -326,10 +338,9 @@ kindModule ctx mod = do
                        -> (Kind -> Kind)
                        -> KindCtx
                        -> Validation D.KindedDataConsDecls
-        checkConsDecls k f ctx = do
+        checkConsDecls k _ ctx = do
           (m, cds') <- synthDataMult ctx cis
-          let s  = getSpan i
-              k' = f (Proper s m Top)
+          let s = getSpan i
           -- CK-Rec for datatypes: m₂ <: m₁, υ₂ <: υ₁ (with υ₂ = T since no
           -- datatype is of prekind S or C). The ψ = if chan then c else υ₁
           -- branch of CK-Rec is dead for datatypes and is omitted.
@@ -338,20 +349,37 @@ kindModule ctx mod = do
               emit (SubMult    s m   m1)
               emit (SubPrekind s Top υ1)
             _ -> pure ()  -- declared sig is still a K.Var; nothing to emit
-          unless (k' <: k)
-            (throwE (KindMismatch s k (TK.TName s k' i)))
           pure cds'
 
         synthDataMult :: KindCtx
                       -> [Identifier]
                       -> Validation (Multiplicity, D.DataConsDecls Kinded)
-        synthDataMult ctx = foldM (\(m, acc) ci ->
-          case M.dataConsDecls mod Map.!? ci of
-            Just (snd -> ts) -> do
-              (m, ts') <- foldCheckProperJoin ctx m ts
-              return (m, Map.insert ci (i, ts') acc)
-            Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
-          (Un (getSpan i), Map.empty)
+        synthDataMult ctx cis = do
+          -- CK-Rcd analog for nominal datatypes: collect every field's
+          -- multiplicity across all constructors, emit φ_D = ⊔ field-mults,
+          -- and return the symbolic φ_D (a singleton 'Sup') as the
+          -- datatype's multiplicity.
+          let s = getSpan i
+          (msAll, cds) <- foldM step ([], Map.empty) cis
+          φ <- freshMultVar s
+          emit $ JoinMult s φ msAll
+          pure (Sup s [(ObjLv, φ)], cds)
+          where
+            step :: ([Multiplicity], D.DataConsDecls Kinded)
+                 -> Identifier
+                 -> Validation ([Multiplicity], D.DataConsDecls Kinded)
+            step (ms, cds) ci =
+              case M.dataConsDecls mod Map.!? ci of
+                Just (snd -> ts) -> do
+                  (msField, ts') <- foldM checkField ([], []) ts
+                  pure (ms ++ msField, Map.insert ci (i, ts') cds)
+                Nothing -> internalError ("constructor " ++ show ci ++ " not found")
+            checkField :: ([Multiplicity], [TK.KindedType])
+                       -> T.ScopedType
+                       -> Validation ([Multiplicity], [TK.KindedType])
+            checkField (ms, ts) t = do
+              (m', _, t') <- checkProper ctx t
+              pure (ms ++ [m'], ts ++ [t'])
 
 kindLetDecls :: D.KindedTypeDecls
              -> KindCtx
@@ -638,11 +666,11 @@ chan kinds tds = chan' Map.empty Set.empty
         case pk of
           Top      -> pure False
           VarPK _  -> emit (SubPrekind s pk Session) >> chan' env' visited t
-          _        -> chan' env' visited t
+          _        -> chan' env' visited t -- Session or Channel prekind
       T.Var _ a -> pure $ maybe False isChannel (Map.lookup a env)
       T.AppTName _ i _
-        | isTopHead i              -> pure False
         | i `Set.member` visited   -> pure True
+        | isTopHead i              -> pure False
         | otherwise                -> case tds Map.!? i of
             Just (_, T.Abs _ _ body) -> chan' env (Set.insert i visited) body
             Just (_, body)           -> chan' env (Set.insert i visited) body

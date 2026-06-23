@@ -1,5 +1,6 @@
 module EqDataAndCons where
 
+-- type T : *T
 data T = T
 
 main : T

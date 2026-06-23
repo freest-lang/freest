@@ -212,7 +212,7 @@ pattern AppSemi s t u <- T.AppSemi s _ _ t u
   where AppSemi s t u  = T.AppSemi s app semi t u
           where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2) 
                 (K.Proper _ m1 pk1) = kindOf t
-                (K.Proper _ m2 pk2) = kindOf u
+                (K.Proper _ m2 pk2) = kindOf u -- TODO: what if K.Var?
                 semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
             
 pattern AppDual :: Span -> KindedType -> KindedType
@@ -236,7 +236,7 @@ pattern AppVar s a k l ts <- T.AppVar s _ k l a ts
 pattern Tuple :: Span -> [KindedType] -> KindedType
 pattern Tuple s ts <- T.Tuple s _ _ ts 
   where Tuple s ts = T.Tuple s (K.Proper s m K.Top) app ts
-          where m = foldr (\(kindOf -> K.Proper _ m _) -> K.join m ) (K.Un s) ts
+          where m = foldr (\(kindOf -> K.Proper _ m _) -> K.join m ) (K.Un s) ts -- TODO: What if K.Var?
                 app = foldr (const $ K.Arrow s (K.lt s)) (K.Proper s m K.Top) ts
   
 pattern List :: Span -> KindedType -> KindedType
