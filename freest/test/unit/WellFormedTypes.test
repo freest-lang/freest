@@ -91,40 +91,6 @@ where
   type Bool : *T
   data Bool = True | False
 
--- Universal session quantifier (?type a : κ . T)
-
-case ?type (a : 1S). a : 1S
-
-case ?type (a : 1S). Skip : 1S
-
-case ?type (a : 1C). a : 1C
-
-case ?type (a : 1S). a ; Wait : 1C
-
-case ?type (a : 1S). !Int ; a : 1S
-
-case ?type (a : 1S). ?type (b : 1S). a ; b : 1S
-
-case ?type (a : 1S). ?type (b : 1S). a ; b ; Close : 1C
-
-case ?type (a : 1S). +{Left: a, Right: Skip} : 1S
-
--- Existential session quantifier (!type a : κ . T)
-
-case !type (a : 1S). a : 1S
-
-case !type (a : 1S). Skip : 1S
-
-case !type (a : 1C). a : 1C
-
-case !type (a : 1S). a ; Wait : 1C
-
-case !type (a : 1S). &{Left: a, Right: Close} : 1S
-
-case !type (a : 1S). !type (b : 1S). a ; b : 1S
-
-case !type (a : 1S). !type (b : 1S). a ; b ; Wait : 1C
-
 -- Type names
 
 case A : 1S
@@ -166,47 +132,6 @@ case Void @1C : 1T
 case Void @*C : 1T
 
 case Void @(1S -> *C) : 1C -> 1T
-
--- Multiplicity polymorphism
-
-case forall #m -*-> Int -m-> Int : *T
-
-case forall #m -1-> Int -m-> Int : 1T
-
-case forall #m -*-> forall #n -*-> Int -m-> Int -n-> Int : *T
-
-case forall #m #n -*-> Int -m+n-> Int : *T
-
-case forall #m -*-> Char -m-> Bool -m-> Int : *T
-where
-  type Bool : *T
-  data Bool = True | False
-
-case forall #m -*-> Wait -m-> Wait : *T
-
-case forall #m -*-> !Int -m-> ?Int : *T
-
-case forall #m -*-> (forall #n -*-> Int -n-> Int) -m-> Int -m-> Int : *T
-
--- ForallM-carrying session and channel types
-
-case !(forall #m -*-> Int -m-> Int) : 1S
-
-case ?(forall #m -*-> Int -m-> Int) : 1S
-
-case *!(forall #m -*-> Int -m-> Int) : *C
-
-case *?(forall #m -*-> Int -m-> Int) : *C
-
-case !(forall #m -*-> Int -m-> Int) ; ?(forall #n -*-> Int -n-> Int) : 1S
-
-case !(forall #m -*-> Int -m-> Int) ; Wait : 1C
-
-case ?(forall #m -*-> Int -m-> Int) ; Close : 1C
-
-case +{A: !(forall #m -*-> Int -m-> Int), B: Skip} : 1S
-
-case &{A: !(forall #m -*-> Int -m-> Int) ; Wait, B: Close} : 1C
 
 -- Recursive types
 
@@ -537,7 +462,39 @@ where
       NodeC: TreeC ; !(?Int ; Close) ; TreeC
     }
 
--- Forall / Dual
+-- Universal session quantifier (?type a : κ . T)
+
+case ?type (a : 1S). a : 1S
+
+case ?type (a : 1S). Skip : 1S
+
+case ?type (a : 1C). a : 1C
+
+case ?type (a : 1S). a ; Wait : 1C
+
+case ?type (a : 1S). !Int ; a : 1S
+
+case ?type (a : 1S). ?type (b : 1S). a ; b : 1S
+
+case ?type (a : 1S). ?type (b : 1S). a ; b ; Close : 1C
+
+case ?type (a : 1S). +{Left: a, Right: Skip} : 1S
+
+-- Existential session quantifier (!type a : κ . T)
+
+case !type (a : 1S). a : 1S
+
+case !type (a : 1S). Skip : 1S
+
+case !type (a : 1C). a : 1C
+
+case !type (a : 1S). a ; Wait : 1C
+
+case !type (a : 1S). &{Left: a, Right: Close} : 1S
+
+case !type (a : 1S). !type (b : 1S). a ; b : 1S
+
+case !type (a : 1S). !type (b : 1S). a ; b ; Wait : 1C
 
 case Dual (?type (a : 1S). a) : 1S
 
@@ -1540,6 +1497,47 @@ where
   type A a = +{Done: Skip, More: B a}
   type B b = +{Done: Skip, More: B b; A b}
 
+
+-- Multiplicity polymorphism
+
+case forall #m -*-> Int -m-> Int : *T
+
+case forall #m -1-> Int -m-> Int : 1T
+
+case forall #m -*-> forall #n -*-> Int -m-> Int -n-> Int : *T
+
+case forall #m #n -*-> Int -m+n-> Int : *T
+
+case forall #m -*-> Char -m-> Bool -m-> Int : *T
+where
+  type Bool : *T
+  data Bool = True | False
+
+case forall #m -*-> Wait -m-> Wait : *T
+
+case forall #m -*-> !Int -m-> ?Int : *T
+
+case forall #m -*-> (forall #n -*-> Int -n-> Int) -m-> Int -m-> Int : *T
+
+-- ForallM-carrying session and channel types
+
+case !(forall #m -*-> Int -m-> Int) : 1S
+
+case ?(forall #m -*-> Int -m-> Int) : 1S
+
+case *!(forall #m -*-> Int -m-> Int) : *C
+
+case *?(forall #m -*-> Int -m-> Int) : *C
+
+case !(forall #m -*-> Int -m-> Int) ; ?(forall #n -*-> Int -n-> Int) : 1S
+
+case !(forall #m -*-> Int -m-> Int) ; Wait : 1C
+
+case ?(forall #m -*-> Int -m-> Int) ; Close : 1C
+
+case +{A: !(forall #m -*-> Int -m-> Int), B: Skip} : 1S
+
+case &{A: !(forall #m -*-> Int -m-> Int) ; Wait, B: Close} : 1C
 
 case forall #m -*-> Int -m-> Int : *T
 
