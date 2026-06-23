@@ -37,6 +37,7 @@ import Validation.LocalInference.Substitution   qualified as LI
 import Validation.Normalisation ( normalise, tNameRedex, isWhnf, reduce )
 import Validation.Substitution ( subs, subsAll, subsMultType )
 import Validation.TypeEquivalence ( equivalent )
+import Validation.Expose qualified as Expose
 
 import Control.Exception (assert)
 import Control.Monad
@@ -1050,15 +1051,9 @@ typeModule kctx tctx modl = do
       Map.fromList <$> mapM buildDConsType cds
       where
         buildDConsType (ic, (it, ts)) = do
-<<<<<<< HEAD
-          case M.kindSigs modl Map.!? it of
-            Just k@(K.kindArrow -> (ks, _)) -> do
-              let (map fst -> as, _) = M.dataDecls modl Map.! it
-=======
           case kctx Map.!? Right it of
-            Just k@(Expose.kindArrow -> (ks, _)) -> do
+            Just k@(K.kindArrow -> (ks, _)) -> do
               let (map fst -> as, _) = D.ddTypes ddecls Map.! it
->>>>>>> origin/dev
                   aks = zip as ks
               t <- buildArrow (Map.fromList aks) aks k ts
               let (K.Proper _ m _) = T.kindOf t

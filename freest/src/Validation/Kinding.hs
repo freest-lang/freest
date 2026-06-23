@@ -48,7 +48,6 @@ import Validation.Base
     , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind )
 import Validation.Constraint
     ( Constraint(SubPrekind, JoinMult, MeetPrekind, JoinPrekind) )
-import Validation.Expose qualified as Expose
 import Validation.Normalisation ( normalise )
 import Validation.Substitution ( subs, subsMultType )
 
@@ -606,7 +605,7 @@ runCheck ctx t k = runValidation emptyValidationState (check ctx t k)
 --       mark it visited and continue checking the looked-up body (any
 --       leading @Abs@ binder for the head's parameters is transparently
 --       stripped).
-chan :: M.KindSigs Scoped -> M.TypeDecls Scoped -> T.ScopedType -> Validation Bool
+chan :: D.KindSigs Scoped -> D.TypeDecls Scoped -> T.ScopedType -> Validation Bool
 chan kinds tds = chan' Map.empty Set.empty
   where
     -- 'env' maps type variables bound by an enclosing quantifier to their

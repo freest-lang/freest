@@ -28,6 +28,7 @@ where
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
+import Syntax.Declarations qualified as D
 import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Validation.Substitution ( freeTypeVars )
