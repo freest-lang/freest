@@ -23,9 +23,9 @@ pair @a @b x y = \@(c : *T) (z : a -> b -> c) -> z x y
 intBoolPair : Int -> Bool -> Pair Int Bool
 intBoolPair = pair  @Int @Bool
 
-main : Char
-main = snd'  @Int @Char $
-       fst'  @(Pair Int Char)  @Bool $
-       pair  @(Pair Int Char)  @Bool (pair  @Int @Char 5 'c') False
+main : ()
+main = print 
+     $ snd'  @Int @Char 
+     $ fst'  @(Pair Int Char)  @Bool
+     $ pair  @(Pair Int Char)  @Bool (pair  @Int @Char 5 'c') False
 
--- main = snd' @Int @Bool $ pair @Int @Bool 5 False

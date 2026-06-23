@@ -65,6 +65,17 @@ data Pat
   | TypeInPat Span (Variable, Kind) Pat
   | AsPat Span Variable Pat
 
+instance Eq Pat where
+  IntPat _ i1 == IntPat _ i2 = i1 == i2
+  FloatPat _ d1 == FloatPat _ d2 = d1 == d2
+  CharPat _ c1 == CharPat _ c2 = c1 == c2
+  WildPat _ _ == WildPat _ _ = True
+  VarPat _ v1 == VarPat _ v2 = v1 == v2
+  PackPat _ vars1 pat1 == PackPat _ vars2 pat2 = vars1 == vars2 && pat1 == pat2
+  DConsPat _ id1 pat1 == DConsPat _ id2 pat2 = id1 == id2 && pat1 == pat2
+  ChoicePat _ id1 pat1 == ChoicePat _ id2 pat2 = id1 == id2 && pat1 == pat2
+  AsPat _ var1 pat1 == AsPat _ var2 pat2 = var1 == var2 && pat1 == pat2
+
 pattern NilPat :: Span -> Pat
 pattern NilPat s <- DConsPat s ((== mkNilId s) -> True) []
   where NilPat s =  DConsPat s (mkNilId s) []

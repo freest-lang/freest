@@ -1,4 +1,4 @@
 module ReceiveTypePatOnTypeOutChannel where
 
 foo : (!type (a : *T). Skip) -> ()
-foo (?@a. _) = ()
+foo (?type a. _) = ()

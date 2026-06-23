@@ -50,8 +50,8 @@ size s n =
 
 -- A sample interaction: counting the number of nodes in a stream;
 -- expect 7 on the console.
-main : Int
+main : ()
 main =
   let (c, s) = channel @StreamClient in
   fork (\(_:()) -1-> size s 0);
-  client c
+  print (client c)

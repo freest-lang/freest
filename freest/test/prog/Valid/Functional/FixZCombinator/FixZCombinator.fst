@@ -14,5 +14,5 @@ fact : Int -> Int
 fact = fixZcomb (\(f : Int -> Int) -> (\(n : Int) ->
   if n == 0 then 1 else n * f (n - 1)))
 
-main : Int
-main = fact 8
+main : ()
+main = print (fact 8)

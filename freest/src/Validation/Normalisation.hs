@@ -19,7 +19,7 @@ where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
-import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import Validation.Base ( unfold )
 import Validation.Substitution ( freeTypeVars, subs, subsAll, betaRule )
@@ -58,8 +58,8 @@ isWhnf = \case
 
 -- | One step type reduction (aka, the tau rules).
 --   Requires 'not (isWnhf t)'.
-reduce :: M.KindedModule -> T.KindedType -> T.KindedType
-reduce mod = \case
+reduce :: D.KindedTypeDecls -> T.KindedType -> T.KindedType
+reduce tdecls = \case
   -- 1. Sequential composition, the R-S* rules
     -- R-SNeut
   T.AppSemi _ T.Skip{} t -> t
@@ -78,7 +78,7 @@ reduce mod = \case
     where a = mkFreshVar s1 (freeTypeVars f `Set.union` freeTypeVars u)
           (K.Arrow _ (K.Arrow _ k _) _) = T.kindOf q
     -- R-SemiL
-  T.AppSemi s t u -> T.AppSemi s (reduce mod t) u
+  T.AppSemi s t u -> T.AppSemi s (reduce tdecls t) u
 
   -- 2. Dual, the R-D* rule
     -- R-DSkip
@@ -103,25 +103,25 @@ reduce mod = \case
     -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
     -- R-DAppR
-  T.AppDual s t -> T.AppDual s (reduce mod t)
+  T.AppDual s t -> T.AppDual s (reduce tdecls t)
 
   -- 3. β, μ, Void, AppL
     -- R-β
   T.App _ t@T.Abs{} us -> betaRule t us
     -- R-μ
-  T.TName _ _ name -> unfold mod name
+  T.TName _ _ name -> unfold tdecls name
     -- R-Void
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
     -- R-AppL
-  T.App s f ts -> T.App s (reduce mod f) ts
+  T.App s f ts -> T.App s (reduce tdecls f) ts
 
   -- 4. Should not happen
   t -> internalError $ "Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: M.KindedModule -> T.KindedType -> T.KindedType
-normalise mod = norm Set.empty
+normalise :: D.KindedTypeDecls -> T.KindedType -> T.KindedType
+normalise tdecls = norm Set.empty
   where
     norm :: Set.Set T.KindedType -> T.KindedType -> T.KindedType
     norm visited t
@@ -130,7 +130,7 @@ normalise mod = norm Set.empty
       -- N-Visited
       | reappears = T.Void (getSpan t) (T.kindOf t)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = norm visited' (reduce mod t)
+      | otherwise = norm visited' (reduce tdecls t)
       where
         u = tNameRedex t -- u is Maybe (µ∗F)
         reappears = maybe False   (`Set.member` visited) u

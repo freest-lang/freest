@@ -9,5 +9,5 @@ double, triple : Int -> Int
 double n = n * 2
 triple n = n * 3
 
-main : Int
-main = double x + triple y + z
+main : ()
+main = print (double x + triple y + z)

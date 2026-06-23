@@ -28,5 +28,5 @@ spec = mkTypeSpec
             return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
        Right (modl', t') -> whnfOrReduces `shouldBe` True
-        where whnfOrReduces = isWhnf t' || let !_ = reduce modl' t' in True
+        where whnfOrReduces = isWhnf t' || let !_ = reduce (M.typeDecls modl') t' in True
 

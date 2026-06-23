@@ -47,9 +47,5 @@ s1 =
   let c2 = startClient client2 in
   c1 || c2
 
-main : Bool
-main = s1
-
-
--- remove skips from the end
--- Type check : environment checks only the linear part (filter)
+main : ()
+main = print s1

@@ -6,5 +6,5 @@ g x = x
 f : Int -> Int
 f = g
 
-main : Int
-main = f 5
+main : ()
+main = print (f 5)

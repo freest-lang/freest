@@ -48,5 +48,5 @@ writeTree : Tree -> Dual TreeChannel -> ()
 writeTree tree writer =
   writer |> write tree |> close
 
-main : Tree
-main = forkWith (writeTree aTree) |> readTree
+main : ()
+main = forkWith (writeTree aTree) |> readTree |> print

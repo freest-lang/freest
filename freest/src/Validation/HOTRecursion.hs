@@ -10,7 +10,7 @@ module Validation.HOTRecursion (checkNoHOTRec, runCheckNoHOTRec) where
 
 import Syntax.Base (Identifier, Kinded, Variable, getSpan)
 import Syntax.Kind qualified as K
-import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as E
 import Validation.Base (Validation, runValidation, emptyValidationState)
@@ -22,8 +22,8 @@ import Data.Bifunctor (first)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 
-checkNoHOTRec :: M.KindedModule -> Validation ()
-checkNoHOTRec modl = void $ Map.traverseWithKey checkNoHOTRecDecl modl.typeDecls
+checkNoHOTRec :: D.KindedTypeDecls -> Validation ()
+checkNoHOTRec tdecls = void $ Map.traverseWithKey checkNoHOTRecDecl tdecls
   where
     checkNoHOTRecDecl i (hasParams, t) =
       checkNoHOTRecType Set.empty (T.kindOf t') i (map fst aks) t'
@@ -42,10 +42,10 @@ checkNoHOTRec modl = void $ Map.traverseWithKey checkNoHOTRecDecl modl.typeDecls
             []       []                   -> True
             (a : as) (T.Var _ _ _ b : ts) -> a == b && paramsEqToArgs as ts
             _      _                      -> False
-          t' = betaRule (snd $ modl.typeDecls Map.! i') ts
+          t' = betaRule (snd $ tdecls Map.! i') ts
       T.Abs _ _ t -> checkNoHOTRecType v k i as t
       T.App _ t ts -> forM_ (t : ts) (checkNoHOTRecType v k i as)
       _ -> return ()
 
-runCheckNoHOTRec :: M.KindedModule -> Either [E.Error] ()
-runCheckNoHOTRec modl = runValidation emptyValidationState (checkNoHOTRec modl)
+runCheckNoHOTRec :: D.KindedTypeDecls -> Either [E.Error] ()
+runCheckNoHOTRec tdecls = runValidation emptyValidationState (checkNoHOTRec tdecls)

@@ -19,5 +19,5 @@ spec = mkEquivalenceSpec
   ["test/unit/EquivalenceValid.test"]
   "Valid type equivalence tests" 
   \src (t, u, k, m) -> 
-    let g@(ps, [xs, ys]) = fromTypes m [t, u] 
+    let g@(ps, [xs, ys]) = fromTypes (M.typeDecls m) [t, u] 
     in if bisimilar ps xs ys then return () else expectationFailure (show t ++ "\n/=\n" ++ show u ++ "\n\n" ++ showGrammar g)

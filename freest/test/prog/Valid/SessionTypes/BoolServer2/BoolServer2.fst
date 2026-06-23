@@ -41,8 +41,8 @@ startClient client =
   fork (\(_ : ()) -1-> boolServer r);
   client w
 
-main : Bool
+main : ()
 main =
   let c1 = startClient client1 in
   let c2 = startClient client2 in
-  c1 || c2
+  print (c1 || c2)

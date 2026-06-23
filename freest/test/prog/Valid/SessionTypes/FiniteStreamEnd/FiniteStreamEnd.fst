@@ -22,8 +22,8 @@ foldServer sum c =
     &More c -> let (n, c) = receive c in
                foldServer (sum + n) c
 
-main : Int
+main : ()
 main = 
     let (s, c) = channel @Fold in
     fork (\(_ : ()) -1-> foldServer 0 s);
-    foldClient 4 c
+    print (foldClient 4 c)

@@ -36,8 +36,8 @@ mCounterADT = (@IntRef, ( \(_ : ())     -> intRef 0                -- new
               ) 
             : MCounter
 
-main : Int
-main = inc x; get x
+main : ()
+main = inc x; print (get x)
   where
     (@(c : *T), (new, get, inc)) = mCounterADT
     x = new ()

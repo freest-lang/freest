@@ -14,8 +14,8 @@ mathServer c =
       let (n2, c) = receive c in
       c |> send (n1 + n2) |> wait
 
-main : Int
+main : ()
 main =
   let (r,w) = channel @MathServer in
   fork (\(_ : ()) -1-> mathServer r);
-  w |> select Negate |> send 5 |> receiveAndClose
+  w |> select Negate |> send 5 |> receiveAndClose |> print

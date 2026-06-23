@@ -29,6 +29,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Validation.Substitution ( freeTypeVars )
 import Validation.Base
 import Syntax.Type.Unkinded qualified as T
@@ -206,16 +207,15 @@ scopeModule' :: ScopingCtx -> M.ParsedModule -> Validation (ScopingCtx, M.Scoped
 scopeModule' ctx m = do
   m <- insertMissingKindSigs m
   (ctx, kss) <- scopeKindSigs  ctx (M.kindSigs m)
-  (ctx, tds, dds) <- scopeTypeDataDecls ctx (M.typeDecls m) (M.dataDecls m)
-  (ctx, cds) <- scopeConsDecls ctx dds (M.consDecls m)
+  (ctx, tdecls, dtdecls) <- scopeTypeDataDecls ctx (M.typeDecls m) (M.dataTypeDecls m)
+  (ctx, dcdecls) <- scopeConsDecls ctx dtdecls (M.dataConsDecls m)
   (ctx, lds) <- scopeDefs      ctx (M.definitions m)
   forM_ (Map.toList kss) \(i, _) ->
-    unless (i `Map.member` tds || i `Map.member` dds) $
+    unless (i `Map.member` tdecls || i `Map.member` dtdecls) $
       insertError (KSigLacksBinding (getSpan i) i)
   return (ctx, m{ M.kindSigs    = kss
-                , M.typeDecls   = tds
-                , M.dataDecls   = dds
-                , M.consDecls   = cds
+                , M.typeDecls   = tdecls
+                , M.dataDecls     = D.DataDecls dcdecls dtdecls
                 , M.definitions = lds
                 })
 
@@ -229,7 +229,7 @@ scopeModule ctx m = snd <$> scopeModule' ctx m
 insertMissingKindSigs :: M.ParsedModule -> Validation M.ParsedModule
 insertMissingKindSigs m = do
   let existing = map fst (M.kindSigs m)
-      bindings = map fst (M.typeDecls m) ++ map fst (M.dataDecls m)
+      bindings = map fst (M.typeDecls m) ++ map fst (M.dataTypeDecls m)
       missing  = filter (`notElem` existing) bindings
   fresh <- forM missing \ti -> do
     v <- freshInternal (mkDefaultVar "_κ" ti)
@@ -238,8 +238,8 @@ insertMissingKindSigs m = do
 
 -- | Update a scoping context with a list of kind signatures
 -- (Kind signatures themselves do not need scoping).
-scopeKindSigs :: ScopingCtx -> M.KindSigs Parsed
-                 -> Validation (ScopingCtx, M.KindSigs Scoped)
+scopeKindSigs :: ScopingCtx -> D.KindSigs Parsed 
+                 -> Validation (ScopingCtx, D.KindSigs Scoped)
 scopeKindSigs ctx kss = do
   let es = Map.fromList [(i, [i]) | i <- kSigElems ctx]
       (es', ctx') = foldr scopeKindSig (es, ctx) kss
@@ -252,76 +252,76 @@ scopeKindSigs ctx kss = do
 -- | Insert @data@ and @type@ names in the scoping context, checking for
 -- duplicate declarations in the process.
 scopeTypeDataDecls :: ScopingCtx 
-                   -> M.TypeDecls Parsed
-                   -> M.DataDecls Parsed
-                   -> Validation (ScopingCtx, M.TypeDecls Scoped, M.DataDecls Scoped)
-scopeTypeDataDecls ctx tds dds = do
+                   -> D.TypeDecls Parsed
+                   -> D.DataTypeDecls Parsed
+                   -> Validation (ScopingCtx, D.TypeDecls Scoped, D.DataTypeDecls Scoped)
+scopeTypeDataDecls ctx tdecls dtdecls = do
   let es = Map.fromList [(i, [i]) | i <- tIdElems ctx ++ dIdElems ctx]
       (es' , ctx' ) = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
                                               (insertTId ti)) 
-                           (es, ctx) tds
+                           (es, ctx) tdecls
       (es'', ctx'') = foldr (\(ti, _) -> bimap (Map.insertWith (++) ti [ti]) 
                                               (insertDId ti)) 
-                           (es', ctx') dds
+                           (es', ctx') dtdecls
   forM_ es'' \is -> when (length is > 1) $
     throwE (MultipleTypeDecls (getSpan (head is)) is)
-  (ctx''' , tds') <- scopeTypeDecls ctx''  tds
-  (ctx'''', dds') <- scopeDataDecls ctx''' dds
-  return (ctx'''', tds', dds')
+  (ctx''' , tdecls') <- scopeTypeDecls ctx''  tdecls
+  (ctx'''', dtdecls') <- scopeDataDecls ctx''' dtdecls
+  return (ctx'''', tdecls', dtdecls')
 
 scopeConsDecls :: ScopingCtx
-               -> M.DataDecls Scoped
-               -> M.ConsDecls Parsed 
-               -> Validation (ScopingCtx, M.ConsDecls Scoped)
-scopeConsDecls ctx dds cds = do
+               -> D.DataTypeDecls Scoped
+               -> D.DataConsDecls Parsed 
+               -> Validation (ScopingCtx, D.DataConsDecls Scoped)
+scopeConsDecls ctx dtdecls dcdecls = do
   let es = Map.fromList [(i, [i]) | i <- cIdElems ctx]
       (es' , ctx') = foldr 
         (\(ci, _) -> bimap (Map.insertWith (++) ci [ci]) (insertCId ci))
-        (es, ctx) cds
+        (es, ctx) dcdecls
   forM_ es' \is -> when (length is > 1) $
     throwE (MultipleConsDecls (getSpan (head is)) is)
-  (ctx',) <$> foldM (scopeConsDecl ctx') Map.empty cds
+  (ctx',) <$> foldM (scopeConsDecl ctx') Map.empty dcdecls
   where
     scopeConsDecl :: ScopingCtx 
-                  -> M.ConsDecls Scoped 
+                  -> D.DataConsDecls Scoped 
                   -> (Identifier, (Identifier, [T.ParsedType])) 
-                  -> Validation (M.ConsDecls Scoped)
-    scopeConsDecl ctx' cds' (ci, (di, ts)) = do
-      let as = map fst (fst (dds Map.! di))
+                  -> Validation (D.DataConsDecls Scoped)
+    scopeConsDecl ctx' dcdecls' (ci, (di, ts)) = do
+      let as = map fst (fst (dtdecls Map.! di))
       ts' <- mapM (scopeType (fromTVarList as `union` ctx')) ts
-      return (Map.insert ci (di, ts') cds')
+      return (Map.insert ci (di, ts') dcdecls')
 
 -- | Scope a list of @data@ declarations, returning also the updated scoping
 -- context.
 scopeDataDecls :: ScopingCtx 
-               -> M.DataDecls Parsed
-               -> Validation (ScopingCtx, M.DataDecls Scoped)
+               -> D.DataTypeDecls Parsed
+               -> Validation (ScopingCtx, D.DataTypeDecls Scoped)
 scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
   where
-    scopeDataDecl (ctx', dds') dd@(ti, (unzip -> (as, ks), cis)) = do
+    scopeDataDecl (ctx', dtdecls') dd@(ti, (unzip -> (as, ks), cis)) = do
         -- Missing kind signatures are now filled in by 'insertMissingKindSigs'.
         -- unless (ti `memberKSig` ctx) do
         --   throwE (LacksKindSig (getSpan ti) ti)
         as'  <- mapM freshInternal as
         ks'  <- mapM (scopeKind ctx) ks
-        return (ctx', Map.insert ti (zip as' ks', cis) dds')
+        return (ctx', Map.insert ti (zip as' ks', cis) dtdecls')
     scopeConsDecls ctx = foldM (scopeConsDecl ctx) Map.empty
       where
-        scopeConsDecl ctx cds' (ci, ts) = do
+        scopeConsDecl ctx dcdecls' (ci, ts) = do
           ts' <- mapM (scopeType ctx) ts 
-          return (Map.insert ci ts' cds')
+          return (Map.insert ci ts' dcdecls')
 
 -- | Scope a list of @type@ declarations, returning also the updated scoping 
 -- context.
-scopeTypeDecls :: ScopingCtx -> M.TypeDecls Parsed
-               -> Validation (ScopingCtx, M.TypeDecls Scoped)
+scopeTypeDecls :: ScopingCtx -> D.TypeDecls Parsed
+               -> Validation (ScopingCtx, D.TypeDecls Scoped)
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
   where
-    scopeTypeDecl (ctx', tds') (ti, (n, t)) = do
+    scopeTypeDecl (ctx', tdecls') (ti, (n, t)) = do
       -- Missing kind signatures are now filled in by 'insertMissingKindSigs'.
       -- unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
       t'  <- scopeType ctx' t
-      return (ctx', Map.insert ti (n, t') tds')
+      return (ctx', Map.insert ti (n, t') tdecls')
 
 -- | Scope a list of @let@ declarations, returning also the updated scoping 
 -- context. Besides scoping the variables, this procedure also groups function

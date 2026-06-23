@@ -16,4 +16,4 @@ spec :: Spec
 spec = mkEquivalenceSpec
   ["test/unit/EquivalenceInvalid.test"]
   "Invalid equivalence tests" 
-  \src (t, u, k, m) -> equivalent m t u `shouldBe` False
+  \src (t, u, k, m) -> equivalent (M.typeDecls m) t u `shouldBe` False

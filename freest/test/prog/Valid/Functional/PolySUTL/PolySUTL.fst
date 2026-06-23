@@ -6,6 +6,6 @@ id' @a x = x
 f : Int -1-> Int
 f x = 2 * x
 
-main : Int
+main : ()
 main =
-  (id' @(Int -1-> Int) f) 5
+  print ((id' @(Int -1-> Int) f) 5)

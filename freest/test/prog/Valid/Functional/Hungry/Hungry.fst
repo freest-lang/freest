@@ -10,5 +10,3 @@ f n = f
 g : Hungry
 g = f 0 1 2 3 4 5
 
-main : Int
-main = 5

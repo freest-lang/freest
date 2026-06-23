@@ -42,8 +42,8 @@ fold : Fold -> ()
 fold (?type (a:*T). (?x ; c)) = fold' x c
   where
     fold' : forall (a:*T) -> a -> IFRepeat (?type (b:1S) . ?(a -> b -> a) ; ?b) (!a) -> ()
-    fold' x (&Done c) = c |> send x |> wait
-    fold' x (&More (?@(b:1S). (?f ; ?y; c))) = fold' (f x y) c
+    fold' @a x (&Done c) = c |> send x |> wait
+    fold' @a x (&More (?type (b:1S). (?f ; ?y; c))) = fold' (f x y) c
 
 showInt : Int -> String
 showInt = show

@@ -23,14 +23,14 @@ aTree = Node 1 (Node 2 (Node 8 Leaf
 
 getFromSingleton : [Tree] -> Tree
 getFromSingleton [x] = x
-getFromSingleton []  = print "Error: Premature EndOfStream"; Error
-getFromSingleton _   = print "Error: Extraneous elements in the stream after reading a full tree"; Error
+getFromSingleton []  = putStrLn "Error: Premature EndOfStream"; Error
+getFromSingleton _   = putStrLn "Error: Extraneous elements in the stream after reading a full tree"; Error
 
 getTwo : [Tree] -> ([Tree], (Tree, Tree))
 getTwo (l :: r :: xs) = (xs, (l, r))
-getTwo []             = print "Error: Empty stack on right subtree"; 
+getTwo []             = putStrLn "Error: Empty stack on right subtree"; 
                         ([] @Tree, (Error, Error))
-getTwo [l]            = print "Error: Empty stack on left subtree"; 
+getTwo [l]            = putStrLn "Error: Empty stack on left subtree"; 
                         ([] @Tree, (Error, l))
 
 -- Streams
