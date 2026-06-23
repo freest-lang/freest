@@ -17,6 +17,7 @@ module Compiler.Pipeline
   ) where
 
 import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Parser.Parser ( runParseModule )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
 import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
@@ -41,20 +42,21 @@ import System.IO ( stderr, hPutStrLn )
 -- module's 'dataConsDecls'. Only the new module's own definitions are type-checked.
 -- Returns the extended contexts and the new module's kinded form (its own
 -- declarations with the inherited ones folded in).
-validateModule :: ScopingCtx -> KindCtx -> TypeCtx -> M.KindedModule -> M.ParsedModule
+validateModule :: ScopingCtx -> KindCtx -> TypeCtx
+               -> D.KindedTypeDecls -> D.KindedDataDecls
+               -> M.ParsedModule
                -> Validation (ScopingCtx, KindCtx, TypeCtx, M.KindedModule)
-validateModule sctx kctx tctx prior modl = do
+validateModule sctx kctx tctx tdecls ddecls modl = do
   (sctx', smodl) <- scopeModule' sctx modl
   (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec (M.typeDecls kmodl)
-  (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls prior kmodl)
+  (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls kmodl)
   checkNoVarsInSessionPatterns (M.definitions kmodl')
   pure (sctx', kctx'', tctx', kmodl')
-  where 
-  inheritDecls prior m = m
-    { M.kindSigs  = M.kindSigs  m `Map.union` M.kindSigs  prior
-    , M.typeDecls = M.typeDecls m `Map.union` M.typeDecls prior
-    , M.dataDecls = M.dataDecls m <>          M.dataDecls prior
+  where
+  inheritDecls m = m
+    { M.typeDecls = M.typeDecls m `Map.union` tdecls
+    , M.dataDecls = M.dataDecls m <>          ddecls
     }
 
 -- | A snapshot of all state produced by a successful module load:
@@ -109,7 +111,7 @@ loadM post paths =
       let srcs = Map.fromList [(p, lines s) | (p, s) <- inputs] in
       case do modules <- mapM (uncurry runParseModule) inputs
               runValidation emptyValidationState do
-                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx M.emptyKindedModule (mconcat modules)
+                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx Map.empty D.emptyDataDecls (mconcat modules)
                 vs                        <- get
                 pure (srcs, vs, sctx, kctx, tctx, kmodl)
       of Left es -> do

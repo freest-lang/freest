@@ -18,7 +18,7 @@ module Parser.Unparser
 
 import Syntax.Base ( Variable, Identifier )  
 import Syntax.Kind qualified as K
-import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import Compiler.Bug ( internalError )
@@ -165,16 +165,16 @@ instance Unparse (T.Type x) where
         T.Out -> "+"
 
 -- | Unparse a datatype declaration, e.g. @data Tree a = Leaf | Node (Tree a) a (Tree a)@.
-unparseDataDef :: M.KindedModule -> Identifier -> String
-unparseDataDef kmodl i = case Map.lookup i (M.dataTypeDecls kmodl) of
+unparseDataDef :: D.KindedDataDecls -> Identifier -> String
+unparseDataDef ddecls i = case Map.lookup i (D.ddTypes ddecls) of
   Just (aks, cs) -> "data " ++ show i ++ paramStr aks ++ " = "
-                    ++ List.intercalate " | " (map (unparseCons kmodl) cs)
+                    ++ List.intercalate " | " (map (unparseCons ddecls) cs)
   Nothing        -> internalError $
     "datatype " ++ show i ++ " not found in module"
 
 -- | Unparse a single data constructor, e.g. @Node (Tree a) a (Tree a)@.
-unparseCons :: M.KindedModule -> Identifier -> String
-unparseCons kmodl cn = case Map.lookup cn (M.dataConsDecls kmodl) of
+unparseCons :: D.KindedDataDecls -> Identifier -> String
+unparseCons ddecls cn = case Map.lookup cn (D.ddCons ddecls) of
   Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
   Nothing      -> internalError $
     "constructor " ++ show cn ++ " not found in module"

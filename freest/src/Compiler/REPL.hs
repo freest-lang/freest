@@ -13,6 +13,7 @@ module Compiler.REPL
 
 import Syntax.Base ( getSpan, Variable, external )
 import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
@@ -68,7 +69,8 @@ data ReplState = ReplState
   , scopingCtx      :: Scoping.ScopingCtx
   , kindCtx         :: Kinding.KindCtx
   , typeCtx         :: Typing.TypeCtx
-  , modl            :: M.KindedModule
+  , tdecls          :: D.KindedTypeDecls
+  , ddecls          :: D.KindedDataDecls
   , valueCtx        :: ValueCtx
   }
 
@@ -82,7 +84,8 @@ emptyReplState = ReplState
   , scopingCtx      = Scoping.emptyScopingCtx
   , kindCtx         = Kinding.emptyKindCtx
   , typeCtx         = Typing.emptyTypeCtx
-  , modl            = M.emptyKindedModule
+  , tdecls          = Map.empty
+  , ddecls          = D.emptyDataDecls
   , valueCtx        = Map.empty
   }
 
@@ -98,7 +101,8 @@ instance Show ReplState where
     , "  scopingCtx = " ++ show (scopingCtx s)
     , "  kindCtx = " ++ show (kindCtx s)
     , "  typeCtx = " ++ show (typeCtx s)
-    , "  modl = " ++ show (modl s)
+    , "  tdecls = " ++ show (Map.keys (tdecls s))
+    , "  ddecls = " ++ show (Map.keys (D.ddTypes (ddecls s)))
     , "  valueCtx = " ++ show (Map.keys (valueCtx s))
     , "}"
     ]
@@ -166,7 +170,7 @@ runLoader loader =
       vctx <- liftIO (try (evalModule emptyValueCtx kmodl)) >>= \case
         Right v -> pure v
         Left e  -> liftIO (printException src e) >> pure emptyValueCtx   -- e.g. main failed at load
-      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl, valueCtx = vctx})
+      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, tdecls = M.typeDecls kmodl, ddecls = M.dataDecls kmodl, valueCtx = vctx})
 
 fin :: Repl ExitDecision
 fin = putLines [comeAgain] >> pure Exit
@@ -191,12 +195,12 @@ cmd src = do
     handleModule :: M.ParsedModule -> (M.KindedModule -> Repl ()) -> Repl ()
     handleModule m post =
       runValidate src validateModule m printREPLErrors \(sctx, kctx, tctx, kmodl) -> do
-        merged <- gets ((<> kmodl) . modl)
         modify (\s -> s
           { scopingCtx = sctx
           , kindCtx = kctx
           , typeCtx = tctx
-          , modl = merged})
+          , tdecls = M.typeDecls kmodl
+          , ddecls = M.dataDecls kmodl })
         eval kmodl
         post kmodl
 
@@ -225,17 +229,17 @@ handleType src = runPipeline src parseExp validateExp (printAs src)
 handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
     (\s (t, u) -> validateTypes s [t, u])
-    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (M.typeDecls (modl s)) t' u')])
+    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (tdecls s) t' u')])
 
 handleNormalise :: String -> Repl () -- freesti> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
-  (\[t'] -> get >>= \s -> putLines [unparse (normalise (M.typeDecls (modl s)) t')])
+  (\[t'] -> get >>= \s -> putLines [unparse (normalise (tdecls s) t')])
 
 handleGrammar :: String -> Repl () -- freesti> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
-  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (M.typeDecls (modl s)) ts')])
+  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (tdecls s) ts')])
 
 handleInfo :: String -> Repl () -- freesti> :i <id>
 handleInfo src = do
@@ -254,26 +258,25 @@ handleInfo src = do
             printAs src (TK.kindOf t)
           Left _ -> notInScope -- neither expression nor type variable
     Left _ -> case runLexer parseIdentifier path src of
-      Right i -> -- input is an uppercase name; look it up in the kinded module
-        let kmodl = modl s in
-        case Map.lookup i (M.dataConsDecls kmodl) of
+      Right i -> -- input is an uppercase name; look it up in the declarations
+        case Map.lookup i (D.ddCons (ddecls s)) of
           Just (parent, _) -> do -- it's a data constructor: print its parent and its type
             putLines [src ++ " is a constructor of datatype " ++ show parent]
             case Map.lookup (Right i) (typeCtx s) of
               Just t  -> printAs src t -- type known: print it
               Nothing -> pure ()       -- type absent from the context: skip
           Nothing
-            | Map.member i (M.dataTypeDecls kmodl) -> putLines -- it's a datatype: print kind sig and definition
+            | Map.member i (D.ddTypes (ddecls s)) -> putLines -- it's a datatype: print kind sig and definition
                 [ src ++ " is a datatype"
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
-                           (Map.lookup i (M.kindSigs kmodl))
-                , unparseDataDef kmodl i
+                           (Map.lookup (Right i) (kindCtx s))
+                , unparseDataDef (ddecls s) i
                 ]
-            | otherwise -> case Map.lookup i (M.typeDecls kmodl) of
+            | otherwise -> case Map.lookup i (tdecls s) of
               Just (hasParams, t) -> putLines -- it's a type name: print kind sig and definition
                 [ src ++ " is a type"
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
-                           (Map.lookup i (M.kindSigs kmodl))
+                           (Map.lookup (Right i) (kindCtx s))
                 , unparseTypeDef i hasParams t
                 ]
               Nothing -> notInScope -- not a constructor, datatype, or type name
@@ -391,8 +394,8 @@ validateTypes = mapM . validateType
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s =
   Scoping.scopeExp (scopingCtx s) 
-  >=> Kinding.kindExp (M.typeDecls (modl s)) (kindCtx s)
-  >=> Typing.synth (M.typeDecls (modl s)) (M.dataDecls (modl s)) (kindCtx s) (typeCtx s)
+  >=> Kinding.kindExp (tdecls s) (kindCtx s)
+  >=> Typing.synth (tdecls s) (ddecls s) (kindCtx s) (typeCtx s)
   >=> pure . \(_, t, _) -> t
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
@@ -400,7 +403,7 @@ validateExp s =
 validateModule :: ReplState -> M.ParsedModule
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)
 validateModule s =
-  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s) (modl s)
+  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s) (tdecls s) (ddecls s)
 
 -- Evaluation; interface with module Interpreter.Eval
 
