@@ -11,7 +11,7 @@ where
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import UI.Error
@@ -64,9 +64,9 @@ runValidation s v =
     Right x' | null errors -> Right x'
              | otherwise   -> Left errors
 
-unfold :: M.KindedModule -> Identifier -> TK.KindedType
-unfold mod i =
-  case M.typeDecls mod Map.!? i of
+unfold :: D.KindedTypeDecls -> Identifier -> TK.KindedType
+unfold tdecls i =
+  case tdecls Map.!? i of
     Just (_, u)  -> u
     Nothing -> internalError $ "name " ++ show i ++ " not in type declaration map"
 

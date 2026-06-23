@@ -38,7 +38,7 @@ import System.IO ( stderr, hPutStrLn )
 -- already in scope (from earlier REPL inputs or a loaded module), so a new
 -- input may mention constructors, datatypes and type aliases declared earlier
 -- — notably in constructor patterns, which 'typeModule' resolves against the
--- module's 'consDecls'. Only the new module's own definitions are type-checked.
+-- module's 'dataConsDecls'. Only the new module's own definitions are type-checked.
 -- Returns the extended contexts and the new module's kinded form (its own
 -- declarations with the inherited ones folded in).
 validateModule :: ScopingCtx -> KindCtx -> TypeCtx -> M.KindedModule -> M.ParsedModule
@@ -46,16 +46,15 @@ validateModule :: ScopingCtx -> KindCtx -> TypeCtx -> M.KindedModule -> M.Parsed
 validateModule sctx kctx tctx prior modl = do
   (sctx', smodl) <- scopeModule' sctx modl
   (kctx', kmodl) <- kindModule kctx smodl
-  checkNoHOTRec kmodl
+  checkNoHOTRec (M.typeDecls kmodl)
   (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls prior kmodl)
-  checkNoVarsInSessionPatterns kmodl'
+  checkNoVarsInSessionPatterns (M.definitions kmodl')
   pure (sctx', kctx'', tctx', kmodl')
   where 
   inheritDecls prior m = m
     { M.kindSigs  = M.kindSigs  m `Map.union` M.kindSigs  prior
     , M.typeDecls = M.typeDecls m `Map.union` M.typeDecls prior
-    , M.dataDecls = M.dataDecls m `Map.union` M.dataDecls prior
-    , M.consDecls = M.consDecls m `Map.union` M.consDecls prior
+    , M.dataDecls = M.dataDecls m <>          M.dataDecls prior
     }
 
 -- | A snapshot of all state produced by a successful module load:

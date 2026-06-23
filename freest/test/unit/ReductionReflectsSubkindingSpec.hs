@@ -32,5 +32,5 @@ spec = mkTypeSpec
        Right (modl', t') -> reductionReflectsKinding `shouldBe` True
         where
           reductionReflectsKinding = 
-            isWhnf t' || TK.kindOf (reduce modl' t') <: TK.kindOf t'
+            isWhnf t' || TK.kindOf (reduce (M.typeDecls modl') t') <: TK.kindOf t'
 

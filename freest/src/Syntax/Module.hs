@@ -9,7 +9,7 @@ modules.
 module Syntax.Module
   ( ParsedModule, ScopedModule, KindedModule, TypedModule
   , Module(..)
-  , KindSigs, TypeDecls, DataDecls, ConsDecls
+  , dataTypeDecls, dataConsDecls
   , setName
   , insertImport
   , insertKindSig
@@ -23,6 +23,7 @@ module Syntax.Module
 where
 
 import Syntax.Base
+import Syntax.Declarations
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type.Internal qualified as T
@@ -44,65 +45,16 @@ data Module p
            , kindSigs    :: KindSigs  p
            , typeDecls   :: TypeDecls p
            , dataDecls   :: DataDecls p
-           , consDecls   :: ConsDecls p
            , definitions :: [E.LetDecl p]
            }
 
--- | Phased association data structure. After parsing it is an association
--- list, in subsequent phases it is a map.
-type family ModuleAssoc p a b where
-  ModuleAssoc Parsed a b = [(a, b)]
-  ModuleAssoc p      a b = Map.Map a b
+-- | The datatype declarations of a module (projection of its 'dataDecls').
+dataTypeDecls :: Module p -> DataTypeDecls p
+dataTypeDecls = ddTypes . dataDecls
 
--- | Kind signatures, e.g. 
---
---   > type Tree : *T -> *T  
---   > type Stream : 1T -> 1S   
--- 
--- are represented as
---
---   > fromList [(Tree, *T -> *T), (Stream, 1T -> 1S)]
-type KindSigs p = ModuleAssoc p Identifier K.Kind
-
--- | Type constructor declarations, e.g.
---
---   > type Age = Int
---   > type Stream a = !a ; Stream a
--- 
--- or, in system Fµω,
--- 
---   > Age = Int
---   > Stream = λa. µs. !a ; s a
---
--- are represented as
---
---   > fromList [(Age, ([], Int)), (Stream, ([a], (!a ; Stream a))]
-type TypeDecls p = ModuleAssoc p Identifier (Bool, T.Type p)
-
--- | Datatype constructor declarations, e.g.,
---
---   > data Tree a = Leaf | Node (Tree a) a (Tree a)
---
--- or, in system Fµω,
--- 
---   > Tree = λa. µt. {Leaf, Node (t a) a (t a)}
---
--- are represented as
---
---   > fromList [(Tree, ([a], fromList [Leaf, Node]))]
-type DataDecls p = 
-  ModuleAssoc p Identifier ([(Variable, K.Kind)], [Identifier])
-
-
--- | Datatype constructor declarations, e.g.,
---
---   > data Tree a = Leaf | Node (Tree a) a (Tree a)
---
--- is represented after parsing and scoping as
---
---   > fromList [(Leaf, (Tree, [])), (Node, (Tree [Tree a, a, Tree a]))]
-type ConsDecls p = 
-  ModuleAssoc p Identifier (Identifier, [T.Type p])
+-- | The data constructor declarations of a module (projection of its 'dataDecls').
+dataConsDecls :: Module p -> DataConsDecls p
+dataConsDecls = ddCons . dataDecls
 
 setName :: [String] -> Module p -> Module p
 setName n m = m {name = Just n}
@@ -115,10 +67,11 @@ insertDataDecl ::  Identifier
                -> [(Identifier, [TU.ParsedType])]
                -> ParsedModule
                -> ParsedModule
-insertDataDecl i aks cds m = 
-  m{ dataDecls = dataDecls m ++ [(i, (aks, map fst cds))]
-   , consDecls = consDecls m ++ map (second (i,)) cds
-   }
+insertDataDecl i aks dcdecls m =
+  m{ dataDecls = DataDecls
+       { ddCons = dataConsDecls m ++ map (second (i,)) dcdecls
+       , ddTypes = dataTypeDecls m ++ [(i, (aks, map fst dcdecls))]
+       } }
 
 insertTypeDecl :: Identifier
                -> [(Variable, K.Kind)]
@@ -140,8 +93,7 @@ emptyParsedModule =
         , imports     = []
         , kindSigs    = []
         , typeDecls   = []
-        , dataDecls   = []
-        , consDecls   = []
+        , dataDecls   = DataDecls [] []
         , definitions = []
         }
 
@@ -151,8 +103,7 @@ emptyScopedModule =
         , imports     = []
         , kindSigs    = Map.empty
         , typeDecls   = Map.empty
-        , dataDecls   = Map.empty
-        , consDecls   = Map.empty
+        , dataDecls   = DataDecls Map.empty Map.empty
         , definitions = []
         }
 
@@ -162,8 +113,7 @@ emptyKindedModule =
         , imports     = []
         , kindSigs    = Map.empty
         , typeDecls   = Map.empty
-        , dataDecls   = Map.empty
-        , consDecls   = Map.empty
+        , dataDecls   = emptyDataDecls
         , definitions = []
         }
 
@@ -173,8 +123,8 @@ instance Semigroup ParsedModule where
           , imports     = imports     m1 ++ imports     m2
           , kindSigs    = kindSigs    m1 ++ kindSigs    m2
           , typeDecls   = typeDecls   m1 ++ typeDecls   m2
-          , dataDecls   = dataDecls   m1 ++ dataDecls   m2
-          , consDecls   = consDecls   m1 ++ consDecls   m2
+          , dataDecls   = DataDecls (dataConsDecls m1 ++ dataConsDecls m2)
+                                  (dataTypeDecls m1 ++ dataTypeDecls m2)
           , definitions = definitions m1 ++ definitions m2
           }
 
@@ -187,8 +137,8 @@ instance Semigroup ScopedModule where
           , imports     = imports     m1 ++          imports     m2
           , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
           , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
-          , dataDecls   = dataDecls   m1 `Map.union` dataDecls   m2
-          , consDecls   = consDecls   m1 `Map.union` consDecls   m2
+          , dataDecls   = DataDecls (dataConsDecls m1 `Map.union` dataConsDecls m2)
+                                  (dataTypeDecls m1 `Map.union` dataTypeDecls m2)
           , definitions = definitions m1 ++          definitions m2
           }
 
@@ -201,8 +151,7 @@ instance Semigroup KindedModule where
           , imports     = imports     m1 ++          imports     m2
           , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
           , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
-          , dataDecls   = dataDecls   m1 `Map.union` dataDecls   m2
-          , consDecls   = consDecls   m1 `Map.union` consDecls   m2
+          , dataDecls   = dataDecls   m1 <>          dataDecls   m2
           , definitions = definitions m1 ++          definitions m2
           }
 
@@ -210,7 +159,7 @@ instance Monoid KindedModule where
   mempty = emptyKindedModule
 
 instance Show ParsedModule where
-  show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
+  show m@Module{name,imports,kindSigs,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
       [ case name of 
           Nothing -> ""
@@ -218,7 +167,7 @@ instance Show ParsedModule where
       , List.intercalate "\n" (map showImport imports)
       , List.intercalate "\n" (map showKindSig kindSigs)
       , List.intercalate "\n" (map showTypeDecl typeDecls)
-      , List.intercalate "\n" (map showDataDecl dataDecls)
+      , List.intercalate "\n" (map showDataDecl (dataTypeDecls m))
       , List.intercalate "\n" (map show definitions)
       ]
     where 
@@ -234,7 +183,7 @@ instance Show ParsedModule where
         | otherwise = "type " ++ show i ++ " = " ++ show t
 
 instance Show ScopedModule where
-  show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
+  show m@Module{name,imports,kindSigs,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
       [ case name of 
           Nothing -> ""
@@ -242,7 +191,7 @@ instance Show ScopedModule where
       , List.intercalate "\n" (map showImport imports)
       , List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
       , List.intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
-      , List.intercalate "\n" (map showDataDecl $ Map.toList dataDecls)
+      , List.intercalate "\n" (map showDataDecl $ Map.toList (dataTypeDecls m))
       , List.intercalate "\n" (map show definitions)
       ]
     where 
@@ -258,7 +207,7 @@ instance Show ScopedModule where
         (i, (_, t)) -> "type " ++ show i ++ " = " ++ show t
 
 instance Show KindedModule where
-  show Module{name,imports,kindSigs,dataDecls,typeDecls,definitions} =
+  show m@Module{name,imports,kindSigs,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
       [ case name of 
           Nothing -> ""
@@ -266,7 +215,7 @@ instance Show KindedModule where
       , List.intercalate "\n" (map showImport imports)
       , List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
       , List.intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
-      , List.intercalate "\n" (map showDataDecl $ Map.toList dataDecls)
+      , List.intercalate "\n" (map showDataDecl $ Map.toList (dataTypeDecls m))
       , List.intercalate "\n" (map show definitions)
       ]
     where 

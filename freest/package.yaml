@@ -63,6 +63,7 @@ library:
     - Parser.Lexer
     - Paths_freest
     - Syntax.Base
+    - Syntax.Declarations
     - Syntax.Expression
     - Syntax.Kind
     - Syntax.Module

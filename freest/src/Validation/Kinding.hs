@@ -34,6 +34,7 @@ import Syntax.Base hiding (void)
 import Syntax.Expression qualified as E
 import Syntax.Kind
 import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as T
 import UI.Error
@@ -232,17 +233,16 @@ lookupKind' ctx i = do
 kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
 kindModule ctx mod = do
   let ctx' = Map.mapKeys Right mod.kindSigs `Map.union` ctx
-  tds <- Map.traverseWithKey (kindTypeDecl ctx') (M.typeDecls mod)
-  cds <- foldM (kindDataConsDecls ctx') Map.empty $ Map.toList $ M.dataDecls mod -- TODO: foldrWithKeyM
+  tdecls <- Map.traverseWithKey (kindTypeDecl ctx') (M.typeDecls mod)
+  dcdecls <- foldM (kindDataConsDecls ctx') Map.empty $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
   let mod' = mod { M.name        = mod.name
                  , M.imports     = mod.imports
                  , M.kindSigs    = mod.kindSigs
-                 , M.typeDecls   = tds
-                 , M.dataDecls   = mod.dataDecls
-                 , M.consDecls   = cds
+                 , M.typeDecls   = tdecls
+                 , M.dataDecls     = D.DataDecls dcdecls (M.dataTypeDecls mod)
                  , M.definitions = []
                  }
-  (_, lds) <- kindLetDecls mod' ctx' (M.definitions mod)
+  (_, lds) <- kindLetDecls (M.typeDecls mod') ctx' (M.definitions mod)
   return (ctx', mod'{M.definitions = lds})
   where
     kindTypeDecl :: KindCtx -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
@@ -266,20 +266,20 @@ kindModule ctx mod = do
       -- return (hasParams, t')
 
     kindDataConsDecls :: KindCtx
-                      -> M.ConsDecls Kinded
+                      -> D.DataConsDecls Kinded
                       -> (Identifier, ([(Variable, Kind)], [Identifier]))
-                      -> Validation (M.ConsDecls Kinded)
-    kindDataConsDecls ctx cds' (i, (aks, cis)) = do
+                      -> Validation D.KindedDataConsDecls
+    kindDataConsDecls ctx dcdecls' (i, (aks, cis)) = do
       k  <- lookupKind' ctx i
       cd <- checkDataDecl k id ctx aks k
-      return (Map.union cd cds')
+      return (Map.union cd dcdecls')
       where
         checkDataDecl :: Kind
                       -> (Kind -> Kind)
                       -> KindCtx
                       -> [(Variable, Kind)]
                       -> Kind
-                      -> Validation (M.ConsDecls Kinded)
+                      -> Validation D.KindedDataConsDecls
         checkDataDecl k f ctx [] _ = checkConsDecls k f ctx
         checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
           checkDataDecl k (f . Arrow s k1) (Map.insert (Left a) k1 ctx) aks' k2
@@ -292,47 +292,47 @@ kindModule ctx mod = do
         checkConsDecls :: Kind
                        -> (Kind -> Kind)
                        -> KindCtx
-                       -> Validation (M.ConsDecls Kinded)
+                       -> Validation D.KindedDataConsDecls
         checkConsDecls k f ctx = do
-          (m, cds') <- synthDataMult ctx cis
+          (m, dcdecls') <- synthDataMult ctx cis
           let k' = f (Proper (getSpan i) m Top)
           unless (k' <: k)
             (throwE (KindMismatch (getSpan i) k (TK.TName (getSpan i) k' i)))
-          return cds'
+          return dcdecls'
 
         synthDataMult :: KindCtx
                       -> [Identifier]
-                      -> Validation (Multiplicity, M.ConsDecls Kinded)
+                      -> Validation (Multiplicity, D.DataConsDecls Kinded)
         synthDataMult ctx = foldM (\(m, acc) ci ->
-          case M.consDecls mod Map.!? ci of
+          case M.dataConsDecls mod Map.!? ci of
             Just (snd -> ts) -> do
               (m, ts') <- foldCheckProperJoin ctx m ts
               return (m, Map.insert ci (i, ts') acc)
             Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
           (Un (getSpan i), Map.empty)
 
-kindLetDecls :: M.KindedModule
+kindLetDecls :: D.KindedTypeDecls
              -> KindCtx
              -> [E.LetDecl Scoped]
              -> Validation (KindCtx, [E.LetDecl Kinded])
-kindLetDecls kmodl kctx lds = do
-  (kctx, _, lds) <- foldM (kindLetDecl kmodl) (kctx, Map.empty, []) lds
+kindLetDecls tdecls kctx lds = do
+  (kctx, _, lds) <- foldM (kindLetDecl tdecls) (kctx, Map.empty, []) lds
   return (kctx, lds)
 
-kindLetDecl :: M.KindedModule
+kindLetDecl :: D.KindedTypeDecls
             -> (KindCtx, TypeCtx, [E.LetDecl Kinded])
             -> E.LetDecl Scoped
             -> Validation (KindCtx, TypeCtx, [E.LetDecl Kinded])
-kindLetDecl kmodl (kctx, tctxds, lds) = \case
+kindLetDecl tdecls (kctx, tctxds, lds) = \case
   E.ValDef p rhs -> do
-    rhs' <- kindRHS kmodl kctx rhs
-    (kctx', p') <- kindPat kmodl kctx p
+    rhs' <- kindRHS tdecls kctx rhs
+    (kctx', p') <- kindPat tdecls kctx p
     return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
   E.FnDef x psrhss -> do
     case tctxds Map.!? x of
       Just t -> do
         psrhss' <- forM psrhss \(psi, rhsi) ->
-          unwrap <$> kindFun kmodl x kctx tctxds (wrap psi) rhsi t
+          unwrap <$> kindFun tdecls x kctx tctxds (wrap psi) rhsi t
         return (kctx, tctxds, lds ++ [E.FnDef x psrhss'])
         where
           wrap   = map (mapLevel (, Nothing) (, Nothing) id)
@@ -344,11 +344,11 @@ kindLetDecl kmodl (kctx, tctxds, lds) = \case
     return (kctx, tctxds', lds ++ [E.TypeSig xs t'])
   E.Mutual lds' -> do
     let (sigs, fndefs) = List.partition (\case E.TypeSig{} -> True; _ -> False) lds'
-    (kctx',lds'') <- kindLetDecls kmodl kctx (sigs ++ fndefs)
+    (kctx',lds'') <- kindLetDecls tdecls kctx (sigs ++ fndefs)
     return (kctx', tctxds, lds ++ [E.Mutual lds''])
 
 kindFun :: Located e
-        => M.KindedModule
+        => D.KindedTypeDecls
         -> e
         -> KindCtx
         -> TypeCtx
@@ -356,7 +356,7 @@ kindFun :: Located e
         -> E.ScopedRHS
         -> TK.KindedType
         -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-kindFun kmodl e = kindFun' 0
+kindFun tdecls e = kindFun' 0
   where
     kindFun' :: Int
             -> KindCtx
@@ -365,8 +365,8 @@ kindFun kmodl e = kindFun' 0
             -> E.ScopedRHS
             -> TK.KindedType
             -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-    kindFun' i kctx tctxds ps rhs t = case (ps, normalise kmodl t) of
-      ([], _) -> ([],) <$> kindRHS kmodl kctx rhs
+    kindFun' i kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
+      ([], _) -> ([],) <$> kindRHS tdecls kctx rhs
       (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
         k' <- case mki of
           Just ki -> checkK (TK.fromVariable ObjLv ai ki) k >> return ki
@@ -379,7 +379,7 @@ kindFun kmodl e = kindFun' 0
             (_, _, tp') <- checkProper kctx tp
             return tp'
           Nothing -> pure u
-        (kctxi', p') <- kindPat kmodl kctx p
+        (kctxi', p') <- kindPat tdecls kctx p
         first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) kctxi' tctxds ps' rhs v
       (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
         first (MultLevel φ :) <$> kindFun' (i + 1) kctx tctxds ps' rhs 
@@ -400,25 +400,25 @@ kindFun kmodl e = kindFun' 0
           TypeLevel (a, mk) -> maybe (getSpan a) (spanFromTo a) mk
           MultLevel φ -> getSpan φ
 
-kindRHS :: M.KindedModule
+kindRHS :: D.KindedTypeDecls
         -> KindCtx -> E.RHS Scoped -> Validation (E.RHS Kinded)
-kindRHS kmodl kctx = \case
+kindRHS tdecls kctx = \case
   E.GuardedRHS es mlds -> do
     (kctx', mlds') <- case mlds of
-      Just lds -> second Just <$> kindLetDecls kmodl kctx lds
+      Just lds -> second Just <$> kindLetDecls tdecls kctx lds
       Nothing -> pure (kctx, Nothing)
-    es' <- mapM (bitraverse (kindExp kmodl kctx') (kindExp kmodl kctx')) es
+    es' <- mapM (bitraverse (kindExp tdecls kctx') (kindExp tdecls kctx')) es
     return $ E.GuardedRHS es' mlds'
   E.UnguardedRHS e mlds -> do
     (kctx', mlds') <- case mlds of
-      Just lds -> second Just <$> kindLetDecls kmodl kctx lds
+      Just lds -> second Just <$> kindLetDecls tdecls kctx lds
       Nothing -> pure (kctx, Nothing)
-    e' <- kindExp kmodl kctx' e
+    e' <- kindExp tdecls kctx' e
     return $ E.UnguardedRHS e' mlds'
 
-kindPat :: M.KindedModule 
+kindPat :: D.KindedTypeDecls 
         -> KindCtx -> E.Pat -> Validation (KindCtx, E.Pat)
-kindPat kmodl kctx = \case
+kindPat tdecls kctx = \case
   E.IntPat   s i -> pure (kctx, E.IntPat   s i)
   E.FloatPat s f -> pure (kctx, E.FloatPat s f)
   E.CharPat  s c -> pure (kctx, E.CharPat  s c)
@@ -427,43 +427,43 @@ kindPat kmodl kctx = \case
   E.VarPat   s x -> pure (kctx, E.VarPat   s x)
   E.PackPat s aks p -> 
     second (E.PackPat s aks) 
-    <$> kindPat kmodl (Map.fromList (first Left <$> aks) `Map.union` kctx) p
+    <$> kindPat tdecls (Map.fromList (first Left <$> aks) `Map.union` kctx) p
   E.NilPat   s   -> pure (kctx, E.NilPat   s  )
   E.ConsPat s p1 p2 -> do
-    (kctx' , p1') <- kindPat kmodl kctx p1
-    (kctx'', p2') <- kindPat kmodl kctx p2
+    (kctx' , p1') <- kindPat tdecls kctx p1
+    (kctx'', p2') <- kindPat tdecls kctx p2
     return (kctx'', E.ConsPat s p1' p2')
   E.TuplePat s ps -> do
     (kctx', ps') <- foldM (\(kctxi, psi) pi -> do
-        (kctxi', pi') <- kindPat kmodl kctxi pi
+        (kctxi', pi') <- kindPat tdecls kctxi pi
         return (kctxi', psi ++ [pi']))
       (kctx, []) ps
     return (kctx', E.TuplePat s ps')
   -- (C p1 ... pn)
   E.DConsPat s i ps -> do
     (kctx', ps') <- foldM (\(kctxi, psi) pi -> do
-        (kctxi', pi') <- kindPat kmodl kctxi pi
+        (kctxi', pi') <- kindPat tdecls kctxi pi
         return (kctxi', psi ++ [pi']))
       (kctx, []) ps
     return (kctx', E.DConsPat s i ps')
   E.WaitPat s       -> pure (kctx, E.WaitPat s)
   E.InPat s p1 p2 -> do
-    (kctx', p1') <- kindPat kmodl kctx p1
-    (kctx'', p2') <- kindPat kmodl kctx p2
+    (kctx', p1') <- kindPat tdecls kctx p1
+    (kctx'', p2') <- kindPat tdecls kctx p2
     return (kctx'', E.InPat s p1' p2')
   E.ChoicePat s i p -> 
     second (E.ChoicePat s i) 
-    <$> kindPat kmodl kctx p
+    <$> kindPat tdecls kctx p
   E.TypeInPat s (a, k) p -> 
     second (E.TypeInPat s (a, k)) 
-    <$> kindPat kmodl (Map.insert (Left a) k kctx) p
+    <$> kindPat tdecls (Map.insert (Left a) k kctx) p
   E.AsPat s x p -> 
     second (E.AsPat s x) 
-    <$> kindPat kmodl kctx p
+    <$> kindPat tdecls kctx p
 
-kindExp :: M.KindedModule 
+kindExp :: D.KindedTypeDecls 
         -> KindCtx -> E.ScopedExp -> Validation E.KindedExp
-kindExp kmodl kctx = \case
+kindExp tdecls kctx = \case
   E.Int   s i -> pure $ E.Int   s i
   E.Float s d -> pure $ E.Float s d
   E.Char  s c -> pure $ E.Char  s c
@@ -471,16 +471,16 @@ kindExp kmodl kctx = \case
   E.DCons s i -> pure $ E.DCons s i
   E.Var   s a -> pure $ E.Var   s a
   E.App s e args -> do
-    e' <- kindExp kmodl kctx e
+    e' <- kindExp tdecls kctx e
     args' <- forM args \case
-      ExpLevel  e -> ExpLevel  <$> kindExp kmodl kctx e
+      ExpLevel  e -> ExpLevel  <$> kindExp tdecls kctx e
       TypeLevel t -> TypeLevel <$> synth kctx t
       MultLevel m -> pure $ MultLevel m
     return $ E.App s e' args'
   E.Abs s pars m e -> do
     (kctx', pars') <- foldM (\(kctxi, parsi) -> \case
         ExpLevel  (p, t) -> do
-          (kctxi', p') <- kindPat kmodl kctxi p
+          (kctxi', p') <- kindPat tdecls kctxi p
           t' <- synth kctxi' t
           return (kctxi', parsi ++ [ExpLevel (p', t')])
         TypeLevel (a, k) -> do
@@ -489,32 +489,32 @@ kindExp kmodl kctx = \case
         MultLevel φ -> do
           return (kctxi, parsi ++ [MultLevel φ]))
       (kctx, []) pars
-    e' <- kindExp kmodl kctx' e
+    e' <- kindExp tdecls kctx' e
     pure $ E.Abs s pars' m e'
   E.Pack s' ts e -> 
     E.Pack s' <$> mapM (synth kctx) ts
-              <*> kindExp kmodl kctx e
+              <*> kindExp tdecls kctx e
   E.Asc s e t -> 
-    E.Asc s <$> kindExp kmodl kctx e 
+    E.Asc s <$> kindExp tdecls kctx e 
             <*> synth kctx t
   E.Let s lds e -> do
-    (kctx', lds') <- kindLetDecls kmodl kctx lds
-    e' <- kindExp kmodl kctx' e
+    (kctx', lds') <- kindLetDecls tdecls kctx lds
+    e' <- kindExp tdecls kctx' e
     return (E.Let s lds' e')
   E.Semi s e1 e2 -> 
-    E.Semi s <$> kindExp kmodl kctx e1
-             <*> kindExp kmodl kctx e2
+    E.Semi s <$> kindExp tdecls kctx e1
+             <*> kindExp tdecls kctx e2
   E.Case s e prhss -> do
-    e' <- kindExp kmodl kctx e
+    e' <- kindExp tdecls kctx e
     prhss' <- forM prhss \(pi, rhsi) -> do
-      (kctxi, pi') <- kindPat kmodl kctx pi
-      rhsi' <- kindRHS kmodl kctxi rhsi
+      (kctxi, pi') <- kindPat tdecls kctx pi
+      rhsi' <- kindRHS tdecls kctxi rhsi
       return (pi', rhsi')
     return $ E.Case s e' prhss'
   E.If s e1 e2 e3 ->
-    E.If s <$> kindExp kmodl kctx e1 
-           <*> kindExp kmodl kctx e2
-           <*> kindExp kmodl kctx e3
+    E.If s <$> kindExp tdecls kctx e1 
+           <*> kindExp tdecls kctx e2
+           <*> kindExp tdecls kctx e3
   E.Channel s t -> E.Channel s <$> synth kctx t
   E.Select s i -> pure $ E.Select s i
   E.SendType s t -> E.SendType s <$> synth kctx t
@@ -528,7 +528,7 @@ kindExp kmodl kctx = \case
 runKindModule :: M.ScopedModule -> Either [Error] (KindCtx, M.KindedModule)
 runKindModule modl = runValidation emptyValidationState do 
   (ctx, modl') <- kindModule Map.empty modl
-  checkNoHOTRec modl'
+  checkNoHOTRec (M.typeDecls modl')
   return (ctx, modl')
 
 -- | Run synthesis on type, building the initial validation state from a given

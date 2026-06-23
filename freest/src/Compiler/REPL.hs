@@ -225,17 +225,17 @@ handleType src = runPipeline src parseExp validateExp (printAs src)
 handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
     (\s (t, u) -> validateTypes s [t, u])
-    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (modl s) t' u')])
+    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (M.typeDecls (modl s)) t' u')])
 
 handleNormalise :: String -> Repl () -- freesti> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
-  (\[t'] -> get >>= \s -> putLines [unparse (normalise (modl s) t')])
+  (\[t'] -> get >>= \s -> putLines [unparse (normalise (M.typeDecls (modl s)) t')])
 
 handleGrammar :: String -> Repl () -- freesti> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
-  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (modl s) ts')])
+  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (M.typeDecls (modl s)) ts')])
 
 handleInfo :: String -> Repl () -- freesti> :i <id>
 handleInfo src = do
@@ -256,14 +256,14 @@ handleInfo src = do
     Left _ -> case runLexer parseIdentifier path src of
       Right i -> -- input is an uppercase name; look it up in the kinded module
         let kmodl = modl s in
-        case Map.lookup i (M.consDecls kmodl) of
+        case Map.lookup i (M.dataConsDecls kmodl) of
           Just (parent, _) -> do -- it's a data constructor: print its parent and its type
             putLines [src ++ " is a constructor of datatype " ++ show parent]
             case Map.lookup (Right i) (typeCtx s) of
               Just t  -> printAs src t -- type known: print it
-              Nothing -> pure ()        -- type absent from the context: skip
+              Nothing -> pure ()       -- type absent from the context: skip
           Nothing
-            | Map.member i (M.dataDecls kmodl) -> putLines -- it's a datatype: print kind sig and definition
+            | Map.member i (M.dataTypeDecls kmodl) -> putLines -- it's a datatype: print kind sig and definition
                 [ src ++ " is a datatype"
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
                            (Map.lookup i (M.kindSigs kmodl))
@@ -390,10 +390,10 @@ validateTypes = mapM . validateType
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s =
-  Scoping.scopeExp (scopingCtx s) >=>
-  Kinding.kindExp (modl s) (kindCtx s) >=>
-  Typing.synth (modl s) (kindCtx s) (typeCtx s) >=>
-  pure . \(_, t, _) -> t
+  Scoping.scopeExp (scopingCtx s) 
+  >=> Kinding.kindExp (M.typeDecls (modl s)) (kindCtx s)
+  >=> Typing.synth (M.typeDecls (modl s)) (M.dataDecls (modl s)) (kindCtx s) (typeCtx s)
+  >=> pure . \(_, t, _) -> t
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
 -- state, merging into the existing scoped module.

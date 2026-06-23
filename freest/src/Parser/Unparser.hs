@@ -166,7 +166,7 @@ instance Unparse (T.Type x) where
 
 -- | Unparse a datatype declaration, e.g. @data Tree a = Leaf | Node (Tree a) a (Tree a)@.
 unparseDataDef :: M.KindedModule -> Identifier -> String
-unparseDataDef kmodl i = case Map.lookup i (M.dataDecls kmodl) of
+unparseDataDef kmodl i = case Map.lookup i (M.dataTypeDecls kmodl) of
   Just (aks, cs) -> "data " ++ show i ++ paramStr aks ++ " = "
                     ++ List.intercalate " | " (map (unparseCons kmodl) cs)
   Nothing        -> internalError $
@@ -174,7 +174,7 @@ unparseDataDef kmodl i = case Map.lookup i (M.dataDecls kmodl) of
 
 -- | Unparse a single data constructor, e.g. @Node (Tree a) a (Tree a)@.
 unparseCons :: M.KindedModule -> Identifier -> String
-unparseCons kmodl cn = case Map.lookup cn (M.consDecls kmodl) of
+unparseCons kmodl cn = case Map.lookup cn (M.dataConsDecls kmodl) of
   Just (_, ts) -> show cn ++ concatMap ((' ' :) . unparse) ts
   Nothing      -> internalError $
     "constructor " ++ show cn ++ " not found in module"
