@@ -10,7 +10,6 @@ module Validation.SessionPattern ( checkNoVarsInSessionPatterns ) where
 
 import Syntax.Base ( Identifier, Level(..), Located(getSpan), Span )
 import Syntax.Expression qualified as E
-import Syntax.Module qualified as M
 import UI.Error ( Error(..) )
 import Validation.Base ( Validation, ValidationState(..), runValidation, emptyValidationState )
 
@@ -23,9 +22,9 @@ import Data.List qualified as List
 -- | Walk every 'Case' expression in the module's definitions and emit a
 -- 'MixedSessionVarPats' error whenever a group from 'groupBySession' contains
 -- a variable pattern.
-checkNoVarsInSessionPatterns :: M.KindedModule -> Validation ()
-checkNoVarsInSessionPatterns modl =
-  modify $ \s -> s{errors = errors s ++ concatMap collectInLetDecl (M.definitions modl)}
+checkNoVarsInSessionPatterns :: [E.KindedLetDecl] -> Validation ()
+checkNoVarsInSessionPatterns defs =
+  modify $ \s -> s{errors = errors s ++ concatMap collectInLetDecl defs}
 
 collectInLetDecl :: E.KindedLetDecl -> [Error]
 collectInLetDecl = \case

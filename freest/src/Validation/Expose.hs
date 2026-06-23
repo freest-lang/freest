@@ -29,7 +29,7 @@ import Validation.Base ( Validation )
 import Syntax.Base ( Identifier, Located(getSpan), Variable )
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise )
 
@@ -40,31 +40,35 @@ import Control.Applicative ()
 import Control.Monad.Trans.Except ( throwE )
 import Control.Monad.State ( get, gets )
 
-function :: M.KindedModule -> E.KindedExp -> T.KindedType -> Validation T.KindedType
-function mod e t = do
-  case normalise mod t of
+kindArrow :: K.Kind -> ([K.Kind], K.Kind)
+kindArrow (K.Arrow _ k1 k2) = first (k1:) (kindArrow k2)
+kindArrow k = ([], k)
+
+function :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation T.KindedType
+function tdecls e t = do
+  case normalise tdecls t of
     t'@(T.AppArrow s m u v) -> pure t'
     t'@(T.AppForall s m aks u) -> pure t'
     _ -> throwE (ExposeError (getSpan e) (Right e) "a function" t)
 
-arrow :: M.KindedModule -> E.KindedExp -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
-arrow mod e t = do
-  case normalise mod t of
+arrow :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
+arrow tdecls e t = do
+  case normalise tdecls t of
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
     _ -> throwE (ExposeError (getSpan e) (Right e) "a monomorphic function" t)
 
-exists :: M.KindedModule
+exists :: D.KindedTypeDecls
        -> Either E.Pat E.KindedExp
        -> T.KindedType 
        -> Validation ([(Variable, K.Kind)], T.KindedType)
-exists mod pe t = do
-  case normalise mod t of
+exists tdecls pe t = do
+  case normalise tdecls t of
     t'@(T.AppExists s aks u) -> pure (aks, u)
     _ -> throwE (TypeMismatchExists (getSpan pe) t pe) 
 
-externalChoice :: M.KindedModule -> E.Pat -> T.KindedType -> Identifier -> Validation T.KindedType
-externalChoice mod p t i = do
-  case normalise mod t of
+externalChoice :: D.KindedTypeDecls -> E.Pat -> T.KindedType -> Identifier -> Validation T.KindedType
+externalChoice tdecls p t i = do
+  case normalise tdecls t of
     T.AppLinChoice _ T.In lts -> case lookup i lts of
       Just ti -> return ti
       Nothing -> throwE (IllegalChoice (getSpan i) i t)
@@ -76,9 +80,9 @@ externalChoice mod p t i = do
       | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
     _ -> throwE (ExposeError (getSpan p) (Left p) "an external choice channel" t)
 
-internalChoice :: M.KindedModule -> E.KindedExp -> T.KindedType -> Identifier -> Validation T.KindedType
-internalChoice mod e t i = do
-  case normalise mod t of
+internalChoice :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Identifier -> Validation T.KindedType
+internalChoice tdecls e t i = do
+  case normalise tdecls t of
     T.AppLinChoice s T.Out its -> 
       case lookup i its of
         Just t' -> return t'
@@ -88,16 +92,16 @@ internalChoice mod e t i = do
       | otherwise    -> throwE (IllegalChoice s i t)
     _ -> throwE (ExposeError (getSpan e) (Right e) "an internal choice channel" t)
 
-output :: M.KindedModule -> E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
-output mod = message mod T.Out . Right
+output :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
+output tdecls = message tdecls T.Out . Right
 
-input :: M.KindedModule -> Either E.Pat E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
-input mod = message mod T.In
+input :: D.KindedTypeDecls -> Either E.Pat E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
+input tdecls = message tdecls T.In
 
-message :: M.KindedModule -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType 
+message :: D.KindedTypeDecls -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType 
         -> Validation (T.KindedType, T.KindedType)
-message mod p pe t = do
-  case normalise mod t of
+message tdecls p pe t = do
+  case normalise tdecls t of
     T.AppMessage s K.Lin{} p' u                    | p == p' -> return (u, T.Skip s)
     t'@(T.AppMessage s K.Un{}  p' u)               | p == p' -> return (u, t')
     T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> return (u, v)
@@ -105,25 +109,25 @@ message mod p pe t = do
     _ -> throwE (ExposeError (getSpan pe) pe msg t)
   where msg = "an " ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
 
-typeOutput :: M.KindedModule -> E.KindedExp -> T.KindedType 
+typeOutput :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType 
            -> Validation (Variable, K.Kind, T.KindedType)
-typeOutput mod = typeMsg mod T.Out . Right
+typeOutput tdecls = typeMsg tdecls T.Out . Right
 
-typeInput :: M.KindedModule -> Either E.Pat E.KindedExp -> T.KindedType 
+typeInput :: D.KindedTypeDecls -> Either E.Pat E.KindedExp -> T.KindedType 
           -> Validation (Variable, K.Kind, T.KindedType)
-typeInput mod = typeMsg mod T.In
+typeInput tdecls = typeMsg tdecls T.In
 
-typeMsg :: M.KindedModule -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType
+typeMsg :: D.KindedTypeDecls -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType
             -> Validation (Variable, K.Kind, T.KindedType)
-typeMsg mod p pe t = do
-  case normalise mod t of
+typeMsg tdecls p pe t = do
+  case normalise tdecls t of
     T.AppQuantS _ p' a k t' | p == p' -> return (a, k, t')
     _ -> throwE (ExposeError (getSpan pe) pe msg t)
   where msg = "a type-" ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
 
-wait :: M.KindedModule -> E.Pat -> T.KindedType -> Validation ()
-wait mod p t = do
-  case normalise mod t of
+wait :: D.KindedTypeDecls -> E.Pat -> T.KindedType -> Validation ()
+wait tdecls p t = do
+  case normalise tdecls t of
     T.End _ T.In -> return ()
     T.AppSemi _ (T.End _ T.In) _ -> return ()
     _ -> throwE (ExposeError (getSpan p) (Left p) "a `Wait` channel" t)

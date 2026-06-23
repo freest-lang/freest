@@ -10,6 +10,8 @@ module UI.Error
   ( Error(..)
   , Source
   , toMessage
+  , header
+  , snippet
   , showErrors -- for testing
   , printErrors
   )
@@ -30,6 +32,7 @@ import Data.List qualified as List
 import Data.Char qualified as Char
 import Data.Maybe ( fromMaybe )
 import Debug.Trace ( traceM )
+import System.IO ( stderr, hPutStrLn )
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -232,8 +235,11 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
         caretsFrom = map (const '^')
         (ws, li') = List.span Char.isSpace li
 
+header :: Located a => String -> a -> String
+header sort (getSpan -> s) = show s ++ ": " ++ sort ++ ":"
+
 errorHeader :: Located a => a -> String
-errorHeader (getSpan -> s) = show s ++ ": error:"
+errorHeader = header "error"
 
 makeError :: Located a => Source -> a -> String -> String
 makeError src (getSpan -> s) msg =
@@ -528,7 +534,7 @@ showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)
 
 printErrors :: Source -> [Error] -> IO ()
-printErrors src es = putStrLn $ showErrors src es
+printErrors src es = hPutStrLn stderr $ showErrors src es
 
 -- | The ordinal 'String' of an 'Integral'.
 ordinal :: (Integral a, Show a) => a -> String

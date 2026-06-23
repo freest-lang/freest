@@ -31,4 +31,4 @@ spec = mkTypeSpec
     of Left es  -> expectationFailure (showErrors src es)
        Right (modl', t') -> translateToGrammar `shouldBe` True
         where translateToGrammar = length (showGrammar g) > 1
-              g@(productions, _) = fromTypes modl' [t']
+              g@(productions, _) = fromTypes (M.typeDecls modl') [t']

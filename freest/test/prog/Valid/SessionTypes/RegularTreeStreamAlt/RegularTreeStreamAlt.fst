@@ -141,7 +141,7 @@ badClientSendOnlyValue c =
 
 -- ==== MAIN ====
 -- This main acts as the server that receives the Tree sent by a client
-main : Tree
+main : ()
 main =
   let (w, r) = channel @TreeC in
   fork (\(_ : ()) -1-> treeClient w);
@@ -150,4 +150,4 @@ main =
   --fork $ badClientSendExtraLeaf w;
   --fork $ badClientForgotRight w;
   --fork $ badClientSendOnlyValue w;
-  receiveTree r
+  receiveTree r |> print

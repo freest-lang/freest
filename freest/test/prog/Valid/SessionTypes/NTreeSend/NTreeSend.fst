@@ -85,10 +85,10 @@ aTree = Node 0 $ Cons (Node 1 $ Cons (Node 7 $ Cons (Node 13 Nil)
 clientSendTree : TreeChannel;Close -> ()
 clientSendTree c = c |> sendTree aTree |> close
 
-main : Tree
+main : ()
 main =
   let (client, server) = channel @(TreeChannel;Close) in
   fork (\(_ : ()) -1-> clientSendTree client);
   let (t, server) = receiveTree server in
   wait server;
-  t
+  print t

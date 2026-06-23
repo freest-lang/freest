@@ -32,7 +32,7 @@ homepage, version, freeSTiPrompt, moduleLoaded, noModuleLoaded,
   failedToLoadModule, preludeNotLoaded, comeAgain :: String
 homepage           = "https://freest-lang.github.io/"
 version            = "The FreeST Compiler, version " ++ showVersion Paths.version ++ ", " ++ homepage
-freeSTiPrompt      = "freesti"
+freeSTiPrompt      = "freest"
 moduleLoaded       = "Ok, one module loaded."
 noModuleLoaded     = "Ok, no modules loaded."
 preludeNotLoaded   = "Ok, Prelude not loaded."

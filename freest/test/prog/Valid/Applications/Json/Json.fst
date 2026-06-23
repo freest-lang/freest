@@ -119,10 +119,10 @@ mutual
       &Empty c ->
         (EmptyArray, c)
 
-main : Object 
+main : () 
 main =
   let (w, r) = channel @(ObjectChannel; Close) in
   fork (\(_ : ()) -1-> writeObject json w |> close);
   let (obj, r) = readObject r in
   wait r;
-  obj
+  print obj

@@ -70,8 +70,8 @@ evaluate s l =
 
 -- A sample interaction: evaluating an arithmetic expression;
 -- expect 26 on the console.
-main : Int
+main : ()
 main =
   let (c, s) = channel @StreamClient in
   let _ = fork (\(_ : ()) -1-> evaluate s Nil) in
-  client c
+  print (client c)

@@ -22,6 +22,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Names
 import Syntax.Type.Kinded qualified as T
 import UI.Error
@@ -36,6 +37,7 @@ import Validation.LocalInference.Substitution   qualified as LI
 import Validation.Normalisation ( normalise, tNameRedex, isWhnf, reduce )
 import Validation.Substitution ( subs, subsAll, subsMultType )
 import Validation.TypeEquivalence ( equivalent )
+import Validation.Expose qualified as Expose
 
 import Control.Exception (assert)
 import Control.Monad
@@ -98,9 +100,9 @@ typeCtxDifference kctx tctx1 tctx2 = do
 -- | Synthesis for expressions. Given kind and type contexts, it synthesizes 
 -- the type of an expression, returning its type and the updated type context 
 -- without the linear variables consumed in it.
-synth :: M.KindedModule -> KindCtx -> TypeCtx -> E.KindedExp
+synth :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> E.KindedExp
       -> Validation (E.KindedExp, T.KindedType, TypeCtx)
-synth modl kctx tctx = \case
+synth tdecls ddecls kctx tctx = \case
   e@(E.Int s _)    -> pure (e, T.Int s   , tctx)
   e@(E.Float s _)  -> pure (e, T.Float s , tctx)
   e@(E.Char s _)   -> pure (e, T.Char s  , tctx)
@@ -108,7 +110,7 @@ synth modl kctx tctx = \case
   -- Tuples, (e1 ... , en)
   E.Tuple s es -> do
     (es', ts, tctx') <- foldM (\(esi, tsi, tctxi) ei -> do
-        (ei', ti, tctxi') <- synth modl kctx tctxi ei
+        (ei', ti, tctxi') <- synth tdecls ddecls kctx tctxi ei
         return (List.snoc esi ei', List.snoc tsi ti, tctxi'))
       ([], [], tctx) es
     return (E.Tuple s es', T.Tuple s ts, tctx')
@@ -118,9 +120,9 @@ synth modl kctx tctx = \case
     pure (e, T.List s t, tctx)
   -- Cons, (::) @a e1 e2
   E.Cons s e1 e2 -> do
-    (e1', t1, tctx') <- synth modl kctx tctx e1
+    (e1', t1, tctx') <- synth tdecls ddecls kctx tctx e1
     let t = T.List s t1
-    (e2', tctx') <- check modl kctx tctx' e2 t
+    (e2', tctx') <- check tdecls ddecls kctx tctx' e2 t
     return (E.Cons s e1' e2', t, tctx') 
   e@(E.DCons s i) -> do
     (t, tctx') <- lookupType kctx tctx (Right i)
@@ -132,9 +134,9 @@ synth modl kctx tctx = \case
     case as of
       [] -> throwE (CannotSynthesiseSelect s' i)
       (ExpLevel  e : as') -> do
-        (e', u, tctx') <- synth modl kctx tctx e
-        ui <- Expose.internalChoice modl e u i
-        (as'', t, tctx'') <- checkArgsQL 1 modl kctx tctx' ui as'
+        (e', u, tctx') <- synth tdecls ddecls kctx tctx e
+        ui <- Expose.internalChoice tdecls e u i
+        (as'', t, tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' ui as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _  ) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -142,9 +144,9 @@ synth modl kctx tctx = \case
     case as of
       [] -> throwE (CannotSynthesiseSendType s)
       (ExpLevel e : as') -> do
-        (e', u, tctx') <- synth modl kctx tctx e
-        (a, _, u') <- Expose.typeOutput modl e u
-        (as'', t, tctx'') <- checkArgsQL 1 modl kctx tctx' (subs a t u') as'
+        (e', u, tctx') <- synth tdecls ddecls kctx tctx e
+        (a, _, u') <- Expose.typeOutput tdecls e u
+        (as'', t, tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' (subs a t u') as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -152,26 +154,26 @@ synth modl kctx tctx = \case
     case as of
       [] -> throwE (CannotSynthesiseReceiveType s)
       (ExpLevel e : as') -> do
-        (e', u, tctx') <- synth modl kctx tctx e
-        (a, k, u') <- Expose.typeInput modl (Right e) u
+        (e', u, tctx') <- synth tdecls ddecls kctx tctx e
+        (a, k, u') <- Expose.typeInput tdecls (Right e) u
         let v = T.AppExists (spanFromTo f e) [(a, k)] u'
-        (as'', t, tctx'') <- checkArgsQL 1 modl kctx tctx' v as'
+        (as'', t, tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' v as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s h as    -> do
-    (h', t, tctx') <- synth modl kctx tctx h
-    (as', u, tctx'') <- checkArgsQL 0 modl kctx tctx' t as
+    (h', t, tctx') <- synth tdecls ddecls kctx tctx h
+    (as', u, tctx'') <- checkArgsQL 0 tdecls ddecls kctx tctx' t as
     return (E.App s h' as', u, tctx'')
   e@(E.Abs s ps m e') -> synthAbs kctx tctx ps
     where
       synthAbs kctxi tctxi = \case
         [] -> do
-          (e'', t, tctx') <- synth modl kctxi tctxi e'
+          (e'', t, tctx') <- synth tdecls ddecls kctxi tctxi e'
           return (E.Abs s ps m e'', t, tctx')
         ExpLevel (pi, ti) : ps' -> do
           Kinding.checkProperK ti
-          (kctxi', tctxp) <- checkPat modl kctxi pi ti
+          (kctxi', tctxp) <- checkPat tdecls ddecls kctxi pi ti
           (e'', ti', tctxi') <- synthAbs kctxi' (Map.union tctxp tctxi) ps'
           tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
@@ -196,35 +198,35 @@ synth modl kctx tctx = \case
           return (e'', ti'', tctxi')
   E.Pack s ts e -> throwE (CannotSynthesisePack s e)
   E.Asc s e t -> do
-    (e', tctx') <- check modl kctx tctx e t
+    (e', tctx') <- check tdecls ddecls kctx tctx e t
     return (E.Asc s e' t, t, tctx')
   E.Let s ds e -> do
-    (ds', tctxds, kctx', tctx') <- checkDecls modl kctx tctx ds
-    (e', t, tctxe) <- synth modl kctx' tctx' e
+    (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
+    (e', t, tctxe) <- synth tdecls ddecls kctx' tctx' e
     (E.Let s ds' e', t,) <$> typeCtxDifference kctx' tctxe tctxds
   E.Semi s e1 e2 -> do
-    (e1', t, tctx') <- synth modl kctx tctx e1
+    (e1', t, tctx') <- synth tdecls ddecls kctx tctx e1
     when (Kinding.isRestricted t) do
       throwE (KindMismatch s (K.ut se1) t)
-    (e2', u, tctx'') <- synth modl kctx tctx' e2
+    (e2', u, tctx'') <- synth tdecls ddecls kctx tctx' e2
     return (E.Semi s e1' e2', u, tctx'')
     where se1 = getSpan e1
   e@(E.Case s e' cs@((p1, rhs1) : cs'))   -> do
     -- TODO: detect redundant and incomplete patterns
-    (e'', t, tctx') <- synth modl kctx tctx e'
-    (kctxp1, tctxp1) <- checkPat modl kctx p1 t
-    (rhs1', t1, tctxrhs1) <- synthRHS modl kctxp1 (tctxp1 `Map.union` tctx') (Right e') rhs1
+    (e'', t, tctx') <- synth tdecls ddecls kctx tctx e'
+    (kctxp1, tctxp1) <- checkPat tdecls ddecls kctx p1 t
+    (rhs1', t1, tctxrhs1) <- synthRHS tdecls ddecls kctxp1 (tctxp1 `Map.union` tctx') (Right e') rhs1
     tctx1 <- typeCtxDifference kctxp1 tctxrhs1 tctxp1
     (unzip -> (cs'', tctxis)) <- forM cs' \(pi, rhsi) -> do
-      (kctxpi, tctxpi) <- checkPat modl kctx pi t
-      (rhsi', tctxrhsi) <- checkRHS modl kctxpi (tctxpi `Map.union` tctx') (Right e') rhsi t1
+      (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi t
+      (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctxpi (tctxpi `Map.union` tctx') (Right e') rhsi t1
       ((pi, rhsi') ,) <$> typeCtxDifference kctxpi tctxrhsi tctxpi
     checkEquivTypeCtxsCase (Right e) (tctx1 : tctxis)
     return (E.Case s e'' ((p1, rhs1') : cs''), t1, tctx1)
   e@(E.If s e1 e2 e3) -> do
-    (e1', tctx1) <- check modl kctx tctx e1 (T.Bool (getSpan e1))
-    (e2', t2, tctx2) <- synth modl kctx tctx1 e2
-    (e3', tctx3) <- check modl kctx tctx1 e3 t2
+    (e1', tctx1) <- check tdecls ddecls kctx tctx e1 (T.Bool (getSpan e1))
+    (e2', t2, tctx2) <- synth tdecls ddecls kctx tctx1 e2
+    (e3', tctx3) <- check tdecls ddecls kctx tctx1 e3 t2
     checkEquivTypeCtxsCase (Right e) [tctx2, tctx3]
     return (E.If s e1' e2' e3', t2, tctx2)
   e@(E.Channel s t) -> do
@@ -241,26 +243,26 @@ synth modl kctx tctx = \case
 -- pattern/expression where the RHS occurs in, for error messages), this 
 -- function synthesizes the type of a RHS, returning its type and the updated
 -- type context without the linear variables consumed in it.
-synthRHS :: M.KindedModule
+synthRHS :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
          -> Either (Either Variable E.Pat) E.KindedExp
          -> E.RHS Kinded
          -> Validation (E.KindedRHS, T.KindedType, TypeCtx)
-synthRHS modl kctx tctx fep = \case
+synthRHS tdecls ddecls kctx tctx fep = \case
   E.GuardedRHS ((g1, e1) : ges) ds -> do
     (ds', tctxds, kctx', tctx') <- case ds of
       Nothing -> pure (Nothing, Map.empty, kctx, tctx)
       Just ds -> do
-        (ds', tctxds, kctx', tctx') <- checkDecls modl kctx tctx ds
+        (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
-    (g1', tctxg1) <- check modl kctx' tctx' g1 (T.Bool (getSpan g1))
+    (g1', tctxg1) <- check tdecls ddecls kctx' tctx' g1 (T.Bool (getSpan g1))
     checkEquivTypeCtxsGuard tctxg1 tctx'
-    (e1', t1, tctxe1) <- synth modl kctx' tctxg1 e1
+    (e1', t1, tctxe1) <- synth tdecls ddecls kctx' tctxg1 e1
     (unzip -> (ges', tctxes)) <- forM ges \(gi, ei) -> do
-      (gi', tctxgi) <- check modl kctx' tctx' gi (T.Bool (getSpan gi))
+      (gi', tctxgi) <- check tdecls ddecls kctx' tctx' gi (T.Bool (getSpan gi))
       checkEquivTypeCtxsGuard tctxgi tctx'
-      (ei', tctxei) <- check modl kctx' tctxgi ei t1
+      (ei', tctxei) <- check tdecls ddecls kctx' tctxgi ei t1
       return ((gi', ei'), tctxei)
     checkEquivTypeCtxsCase fep (tctxe1 : tctxes)
     tctx'' <- typeCtxDifference kctx' tctxe1 tctxds
@@ -269,75 +271,75 @@ synthRHS modl kctx tctx fep = \case
     (mds', tctxds, kctx', tctx') <- case mds of
       Nothing -> pure (Nothing, Map.empty, kctx, tctx)
       Just ds -> do
-        (ds', tctxds, kctx', tctx') <- checkDecls modl kctx tctx ds
+        (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
-    (e', t, tctx'') <- synth modl kctx' tctx' e
+    (e', t, tctx'') <- synth tdecls ddecls kctx' tctx' e
     (E.UnguardedRHS e' mds', t,) <$> typeCtxDifference kctx' tctx'' tctxds
 
 -- | Check-against for expressions. Given kind and type contexts, it checks
 -- whether an expression has a given type, throwing an error if it does not.
 -- Returns the updated type context without the linear variables consumed in 
 -- the expression.
-check :: M.KindedModule -> KindCtx -> TypeCtx -> E.KindedExp -> T.KindedType
+check :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> E.KindedExp -> T.KindedType
       -> Validation (E.KindedExp, TypeCtx)
-check modl kctx tctx e t = case e of
+check tdecls ddecls kctx tctx e t = case e of
   E.Int s _   -> do
-    checkEquivTypes modl (Left e) t (T.Int s)
+    checkEquivTypes tdecls ddecls (Left e) t (T.Int s)
     return (e, tctx)
   E.Float s _ -> do 
-    checkEquivTypes modl (Left e) t (T.Float s)
+    checkEquivTypes tdecls ddecls (Left e) t (T.Float s)
     return (e, tctx)
   E.Char s _  -> do
-    checkEquivTypes modl (Left e) t (T.Char s)
+    checkEquivTypes tdecls ddecls (Left e) t (T.Char s)
     return (e, tctx)
   E.String s _ -> do
-    checkEquivTypes modl (Left e) t (T.List s (T.Char s))
+    checkEquivTypes tdecls ddecls (Left e) t (T.List s (T.Char s))
     return (e, tctx)
   -- Tuples, (e1 ... , en)
   E.Tuple s es ->
-    case normalise modl t of
+    case normalise tdecls t of
       T.Tuple _ ts | length es == length ts -> do
         (es', tctx') <- foldM (\(esi, tctx') (ei, ti) -> 
-            first (List.snoc esi) <$> check modl kctx tctx' ei ti) 
+            first (List.snoc esi) <$> check tdecls ddecls kctx tctx' ei ti) 
           ([], tctx) (zip es ts)
         return (E.Tuple s es', tctx')
       _ -> do
-        (_, u, _) <- synth modl kctx tctx e
+        (_, u, _) <- synth tdecls ddecls kctx tctx e
         throwE (TypeMismatch s t u (Left e))
   -- Nil, [] @a
   E.Nil s u -> do
     Kinding.checkProperK u
-    case (normalise modl t, normalise modl u) of
+    case (normalise tdecls t, normalise tdecls u) of
       (T.List _ t', u') -> do
-        checkEquivTypes modl (Left e) t' u'
+        checkEquivTypes tdecls ddecls (Left e) t' u'
         return (e, tctx)
       _ -> throwE (TypeMismatch s t (T.List (getSpan u) u) (Left e))
     -- Cons, (::) @a e1 e2
   E.Cons s e1 e2 ->
-    case normalise modl t of
+    case normalise tdecls t of
       T.List _ t' -> do
-        (e1', tctx') <- check modl kctx tctx e1 t'
-        (e2', tctx'') <- check modl kctx tctx' e2 t
+        (e1', tctx') <- check tdecls ddecls kctx tctx e1 t'
+        (e2', tctx'') <- check tdecls ddecls kctx tctx' e2 t
         return (E.Cons s e1' e2', tctx'')
       _ -> do
-        (_, u, _) <- synth modl kctx tctx e
+        (_, u, _) <- synth tdecls ddecls kctx tctx e
         throwE (TypeMismatch s t u (Left e))
   E.DCons s i      -> do
     (u,tctx') <- lookupType kctx tctx (Right i)
-    --   checkEquivTypes modl (Left e) t u >> return (e, tctx') -- no bare-head app inference
-    checkApp modl kctx e s e u tctx' [] t                       -- bare-head app inference
+    --   checkEquivTypes tdecls ddecls (Left e) t u >> return (e, tctx') -- no bare-head app inference
+    checkApp tdecls ddecls kctx e s e u tctx' [] t                       -- bare-head app inference
   E.Var s x       -> do
     (u, tctx') <- lookupType kctx tctx (Left x)
-    --   checkEquivTypes modl (Left e) t u >> return (e, tctx') -- no bare-head app inference
-    checkApp modl kctx e s e u tctx' [] t                       -- bare-head app inference
+    --   checkEquivTypes tdecls ddecls (Left e) t u >> return (e, tctx') -- no bare-head app inference
+    checkApp tdecls ddecls kctx e s e u tctx' [] t                       -- bare-head app inference
   E.App s h@(E.Select s' i) args ->
     case args of
       [] -> throwE (CannotSynthesiseSelect s' i)
       (ExpLevel  e' : args') -> do
-        (e'', u, tctx') <- synth modl kctx tctx e'
-        ui <- Expose.internalChoice modl e' u i
-        (args'', t', tctx'') <- checkArgsQL 1 modl kctx tctx' ui args'
-        checkEquivTypes modl (Left e) t t'
+        (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
+        ui <- Expose.internalChoice tdecls e' u i
+        (args'', t', tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' ui args'
+        checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _  ) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -345,10 +347,10 @@ check modl kctx tctx e t = case e of
     case args of
       [] -> throwE (CannotSynthesiseSendType s')
       (ExpLevel e' : args') -> do
-        (e'', v, tctx') <- synth modl kctx tctx e'
-        (a, _, v') <- Expose.typeOutput modl e' v
-        (args'', t', tctx'') <- checkArgsQL 1 modl kctx tctx' (subs a u v') args'
-        checkEquivTypes modl (Left e) t t'
+        (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
+        (a, _, v') <- Expose.typeOutput tdecls e' v
+        (args'', t', tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' (subs a u v') args'
+        checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -356,34 +358,34 @@ check modl kctx tctx e t = case e of
     case args of
       [] -> throwE (CannotSynthesiseReceiveType s)
       (ExpLevel e' : args') -> do
-        (e'', u, tctx') <- synth modl kctx tctx e'
-        (a, k, u') <- Expose.typeInput modl (Right e') u
+        (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
+        (a, k, u') <- Expose.typeInput tdecls (Right e') u
         let v = T.AppExists (spanFromTo h e') [(a, k)] u'
-        (args'', t', tctx'') <- checkArgsQL 1 modl kctx tctx' v args'
-        checkEquivTypes modl (Left e) t t'
+        (args'', t', tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' v args'
+        checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s h args -> do
-    (h', t', tctx') <- synth modl kctx tctx h
-    checkApp modl kctx e s h' t' tctx' args t
+    (h', t', tctx') <- synth tdecls ddecls kctx tctx h
+    checkApp tdecls ddecls kctx e s h' t' tctx' args t
   E.Abs s pars m e' -> do
-    checkFun modl kctx tctx (Right e) pars' (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
+    checkFun tdecls ddecls kctx tctx (Right e) pars' (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
       (E.UnguardedRHS e'' Nothing, tctx') -> return (E.Abs s pars m e'', tctx')
       _ -> internalError "elaborated abstraction cannot be guarded"
     where
       pars' = map (mapLevel (second Just) (second Just) id) pars
   E.Pack s ts e' ->
-    case normalise modl t of
+    case normalise tdecls t of
       T.AppExists _ aks t' -> first (E.Pack s ts) <$> checkPack ts aks t'
         where
         checkPack = \cases
           [] [] u ->
-            check modl kctx tctx e' u
+            check tdecls ddecls kctx tctx e' u
           [] aksi@((ai, _) : _) u ->
-            check modl kctx tctx e' (T.AppExists (spanFromTo ai u) aksi u)
+            check tdecls ddecls kctx tctx e' (T.AppExists (spanFromTo ai u) aksi u)
           tsi@(ti : _) [] u ->
-            case normalise modl u of
+            case normalise tdecls u of
               T.AppExists _ bks u' -> checkPack tsi bks u'
               _ -> throwE (TypeMismatchExists (spanFromTo ti u) u (Right e'))
           (ti : tsi') ((ai, ki) : aksi') u -> do
@@ -391,50 +393,50 @@ check modl kctx tctx e t = case e of
             checkPack tsi' aksi' (subs ai ti u)
       _ -> throwE (TypeMismatchExists s t (Right e'))
   E.Asc s e u -> do
-    checkEquivTypes modl (Left e) t u
-    (e', tctx') <- check modl kctx tctx e u
+    checkEquivTypes tdecls ddecls (Left e) t u
+    (e', tctx') <- check tdecls ddecls kctx tctx e u
     return (E.Asc s e' u, tctx')
   E.Let s ds e' -> do
-    (ds', tctxds, kctx', tctx') <- checkDecls modl kctx tctx ds
-    (e'', tctx'') <- check modl kctx' tctx' e' t
+    (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
+    (e'', tctx'') <- check tdecls ddecls kctx' tctx' e' t
     (E.Let s ds' e'',) <$> typeCtxDifference kctx' tctx'' tctxds
   E.Semi s e1 e2 -> do
-    (e1', t1, tctx') <- synth modl kctx tctx e1
+    (e1', t1, tctx') <- synth tdecls ddecls kctx tctx e1
     Kinding.checkK t1 (K.Proper (getSpan e1) (K.Un $ getSpan e1) K.Top)
-    first (E.Semi s e1') <$> check modl kctx tctx' e2 t
+    first (E.Semi s e1') <$> check tdecls ddecls kctx tctx' e2 t
   E.Case s e' psrhss -> do
-    (e'', u, tctx') <- synth modl kctx tctx e'
+    (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
     (unzip -> (psrhss', tctxs)) <- forM psrhss \(pi, rhsi) -> do
-      (kctxpi, tctxpi) <- checkPat modl kctx pi u
+      (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi u
       let kctx' = kctxpi `Map.union` kctx
-      (rhsi', tctxrhsi) <- checkRHS modl kctx' (tctxpi `Map.union` tctx') (Right e) rhsi t
+      (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctx' (tctxpi `Map.union` tctx') (Right e) rhsi t
       ((pi, rhsi'),) <$> typeCtxDifference kctx' tctxrhsi tctxpi
     checkEquivTypeCtxsCase (Right e) tctxs
     return (E.Case s e'' psrhss', head tctxs)
   E.If s e1 e2 e3 -> do
-    (e1', tctx1) <- check modl kctx tctx  e1 (T.Bool s)
-    (e2', tctx2) <- check modl kctx tctx1 e2 t
-    (e3', tctx3) <- check modl kctx tctx1 e3 t
+    (e1', tctx1) <- check tdecls ddecls kctx tctx  e1 (T.Bool s)
+    (e2', tctx2) <- check tdecls ddecls kctx tctx1 e2 t
+    (e3', tctx3) <- check tdecls ddecls kctx tctx1 e3 t
     checkEquivTypeCtxsCase (Right e) [tctx2, tctx3]
     return (E.If s e1' e2' e3', tctx2)
   E.Channel s u -> do
     Kinding.checkChannel u
-    case normalise modl t of
+    case normalise tdecls t of
       T.Tuple _ [t1,t2] -> do
-        checkEquivTypes modl (Left e) u t1
-        checkEquivTypes modl (Left e) (T.AppDual (getSpan u) u) t2
+        checkEquivTypes tdecls ddecls (Left e) u t1
+        checkEquivTypes tdecls ddecls (Left e) (T.AppDual (getSpan u) u) t2
         return (e, tctx)
       _ -> do
-        (_, u, _) <- synth modl kctx tctx e
+        (_, u, _) <- synth tdecls ddecls kctx tctx e
         throwE (TypeMismatch s t u (Left e))
   E.Select s i -> do
-    case normalise modl t of
+    case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        case normalise modl t1 of
+        case normalise tdecls t1 of
           T.AppLinChoice _ T.Out t1s ->
             case lookup i t1s of
               Just t1i -> do
-                checkEquivTypes modl (Left e)
+                checkEquivTypes tdecls ddecls (Left e)
                   (T.AppArrow s' m t1 t1i)
                   (T.AppArrow s' m t1 t2 )
                 return (e, tctx)
@@ -442,22 +444,22 @@ check modl kctx tctx e t = case e of
           _ -> throwE (TypeMismatchSelect s t i e)
       _ -> throwE (TypeMismatchSelect s t i e)
   E.SendType s u -> do
-    case normalise modl t of
+    case normalise tdecls t of
       T.AppArrow s m t1 t2 -> do
-        case normalise modl t2 of
+        case normalise tdecls t2 of
           T.AppQuantS s T.Out a k t2' -> do
-            checkEquivTypes modl (Left e)
+            checkEquivTypes tdecls ddecls (Left e)
               (T.AppArrow s m t1 (subs a u t2'))
               (T.AppArrow s m t1 t2)
             return (e, tctx)
           _ -> throwE (TypeMismatchSendType s t)
       _ -> throwE (TypeMismatchSendType s t)
   E.ReceiveType s -> do
-    case normalise modl t of
+    case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        case normalise modl t2 of
+        case normalise tdecls t2 of
           T.AppQuantS s'' T.In a k t2' -> do
-            checkEquivTypes modl (Left e)
+            checkEquivTypes tdecls ddecls (Left e)
               (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t2'))
               (T.AppArrow s' m t1 t2)
             return (e, tctx)
@@ -470,9 +472,9 @@ check modl kctx tctx e t = case e of
 -- are in scope in subsequent declarations. It returns two contexts: one
 -- containing only the bindings introduced by the declarations, and the
 -- type context given initially, updated with the new bindings.
-checkDecls :: M.KindedModule -> KindCtx -> TypeCtx -> [E.LetDecl Kinded]
+checkDecls :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> [E.LetDecl Kinded]
            -> Validation ([E.LetDecl Kinded], TypeCtx, KindCtx, TypeCtx)
-checkDecls modl kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
+checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
   where
     checkDecl (ds, tctxds, kctxi, tctxi) = \case
       d@(E.TypeSig xs t) -> do
@@ -485,7 +487,7 @@ checkDecls modl kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
                )
       E.ValDef p@(E.VarPat _ x) rhs -- TODO: generalize for all pats, using something like patType :: Pat -> Maybe Type
         | Just u <- tctxi Map.!? Left x -> do
-            (rhs', tctx'') <- checkRHS modl kctxi tctxi (Left (Right p)) rhs u
+            (rhs', tctx'') <- checkRHS tdecls ddecls kctxi tctxi (Left (Right p)) rhs u
             let tctxp = Map.singleton (Left x) u
             return ( List.snoc ds (E.ValDef p rhs')
                    , tctxp `Map.union` tctxds
@@ -493,11 +495,11 @@ checkDecls modl kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
                    , tctxp `Map.union` tctx''
                    )
       E.ValDef p rhs -> do
-        (rhs', trhs, tctx'') <- synthRHS modl kctxi tctxi (Left (Right p)) rhs
-        (kctxp, tctxp) <- checkPat modl kctxi p trhs
+        (rhs', trhs, tctx'') <- synthRHS tdecls ddecls kctxi tctxi (Left (Right p)) rhs
+        (kctxp, tctxp) <- checkPat tdecls ddecls kctxi p trhs
         forM_ (Map.assocs tctxp) \case
           (Left x, t) -> forM_ (tctxi Map.!? Left x) \u ->
-            checkEquivTypes modl (Left (E.Var (getSpan x) x)) u t
+            checkEquivTypes tdecls ddecls (Left (E.Var (getSpan x) x)) u t
           _ -> return ()
         return ( List.snoc ds (E.ValDef p rhs')
                , tctxp `Map.union` tctxds
@@ -507,7 +509,7 @@ checkDecls modl kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
       E.FnDef f psrhss -> do
         t <- lookupFunType tctxi f
         (unzip -> (psrhss', tctxs)) <- forM psrhss \(psj, rhsj) ->
-          first (psj,) <$> checkFun modl kctxi tctxi (Left f) (prepareParams psj) Nothing rhsj t
+          first (psj,) <$> checkFun tdecls ddecls kctxi tctxi (Left f) (prepareParams psj) Nothing rhsj t
         checkEquivTypeCtxsCase (Left (Left f)) tctxs
         return ( List.snoc ds (E.FnDef f psrhss')
                , tctxds
@@ -523,7 +525,7 @@ checkDecls modl kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
           E.TypeSig xs t | Kinding.isRestricted t ->
             forM_ xs \x -> throwE (RestrictedFunInMutual (getSpan x) x t)
           _ -> return ()
-        (ds'', tctxds', kctxi', tctx') <- checkDecls modl kctxi tctxi (sigs ++ fndefs)
+        (ds'', tctxds', kctxi', tctx') <- checkDecls tdecls ddecls kctxi tctxi (sigs ++ fndefs)
         return (List.snoc ds (E.Mutual ds''), Map.union tctxds' tctxds, kctxi', tctx')
 
 
@@ -542,29 +544,30 @@ checkInstPrekind t = go (T.kindOf t)
 
 -- | Check a (synthesised) head applied to a possibly empty
 -- argument list against the expected type.
-checkApp :: M.KindedModule -> KindCtx -> E.KindedExp -> Span
+checkApp :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> E.KindedExp -> Span
          -> E.KindedExp -> T.KindedType -> TypeCtx
          -> [Level E.KindedExp T.KindedType K.Multiplicity] -> T.KindedType
          -> Validation (E.KindedExp, TypeCtx)
-checkApp modl kctx e s h' t' tctx' args t = do
-  let inst = case normalise modl t of
+checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
+  let inst = case normalise tdecls t of
         T.AppForall{} -> instantiate
         T.ForallM{}   -> instantiate
         _             -> instantiateResult
-  (args', mcs, kivs, us, t'') <- inst 0 modl kctx tctx' t' args
-  (mcs', θ') <- LTI.match e modl t t''
+  (args', mcs, kivs, us, t'') <- inst 0 tdecls ddecls kctx tctx' t' args
+  (mcs', θ') <- LTI.match e tdecls t t''
   θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
     Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
     Right θ''   -> return (θ'' <> θ')
   forM_ kivs \(k, w) -> checkInstPrekind (LI.applySubs θ w) k
-  checkEquivTypes modl (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
-  (args'', tctx'') <- checkValArgs modl kctx θ tctx' args' us
+  checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
+  (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
 
 -- | Check function arguments while inferring type and multiplicity applications
 -- using the Quick Look method.
 checkArgsQL :: Int
-            -> M.KindedModule
+            -> D.KindedTypeDecls
+            -> D.KindedDataDecls
             -> KindCtx
             -> TypeCtx
             -> T.KindedType
@@ -572,34 +575,34 @@ checkArgsQL :: Int
             -> Validation ( [Level (E.Exp Kinded) T.KindedType K.Multiplicity]
                           , T.KindedType
                           , TypeCtx)
-checkArgsQL i modl kctx tctx t args = do
-  (args', mcs, kivs, us, t') <- instantiate i modl kctx tctx t args
+checkArgsQL i tdecls ddecls kctx tctx t args = do
+  (args', mcs, kivs, us, t') <- instantiate i tdecls ddecls kctx tctx t args
   θ <- LMI.solveMultConstraints mcs >>= \case
     Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
     Right θ     -> return θ
   forM_ kivs \(k, t) -> checkInstPrekind (LI.applySubs θ t) k
-  (args'', tctx') <- checkValArgs modl kctx θ tctx args' us
+  (args'', tctx') <- checkValArgs tdecls ddecls kctx θ tctx args' us
   return (args'', LI.applySubs θ t', tctx')
 
 -- | Check value arguments agains a list of types, applying a substitution to
 -- the types. The substitution is also used to substitute variables in non-value
 -- arguments.
-checkValArgs :: M.KindedModule 
+checkValArgs :: D.KindedTypeDecls -> D.KindedDataDecls
              -> KindCtx 
              -> LI.Substitution 
              -> TypeCtx
              -> [Level (E.Exp Kinded) T.KindedType K.Multiplicity] 
              -> [T.KindedType]
              -> Validation ([Level (E.Exp Kinded) T.KindedType K.Multiplicity], TypeCtx)
-checkValArgs modl kctx θ tctxi = \cases
+checkValArgs tdecls ddecls kctx θ tctxi = \cases
   [] [] -> return ([], tctxi)
   (ExpLevel  ei : argsi) (ui : usi) -> do
-    (ei', tctxi') <- check modl kctx tctxi ei (LI.applySubs θ ui)
-    first (ExpLevel ei' :) <$> checkValArgs modl kctx θ tctxi' argsi usi
+    (ei', tctxi') <- check tdecls ddecls kctx tctxi ei (LI.applySubs θ ui)
+    first (ExpLevel ei' :) <$> checkValArgs tdecls ddecls kctx θ tctxi' argsi usi
   (TypeLevel ti : argsi) usi ->
-    first (TypeLevel (LI.applySubs θ ti) :) <$> checkValArgs modl kctx θ tctxi argsi usi
+    first (TypeLevel (LI.applySubs θ ti) :) <$> checkValArgs tdecls ddecls kctx θ tctxi argsi usi
   (MultLevel m : argsi) usi ->
-    first (MultLevel (LI.applySubsMult θ m) :) <$> checkValArgs modl kctx θ tctxi argsi usi
+    first (MultLevel (LI.applySubsMult θ m) :) <$> checkValArgs tdecls ddecls kctx θ tctxi argsi usi
   args us -> internalError ("instantiation argument/type mismatch: " ++ show args ++ "/" ++ show us)
 
 -- | Check for functions. Simultaneously walks down a list of parameters and 
@@ -608,7 +611,7 @@ checkValArgs modl kctx θ tctxi = \cases
 -- more parameters, the RHS is checked against the type and the resulting type
 -- context is returned. If a multiplicity is provided (e.g., that of a lambda 
 -- expression), then it is checked against each of the function types inspected.
-checkFun :: M.KindedModule
+checkFun :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
          -> Either Variable (E.Exp Kinded)
@@ -617,14 +620,14 @@ checkFun :: M.KindedModule
          -> E.KindedRHS
          -> T.KindedType
          -> Validation (E.KindedRHS, TypeCtx)
-checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
+checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
   where
     checkFun' :: Int -> KindCtx -> TypeCtx -> [Level (E.Pat, Maybe T.KindedType) (Variable, Maybe K.Kind) Variable] -> T.KindedType -> Validation (E.KindedRHS, TypeCtx)
     checkFun' i kctxi tctxi ps' t' =
-      case (ps', normalise modl t') of
+      case (ps', normalise tdecls t') of
         -- no more parameters, check RHS
         ([], t') -> do
-          checkRHS modl kctxi tctxi fpe rhs t'
+          checkRHS tdecls ddecls kctxi tctxi fpe rhs t'
         -- regular cases
         (TypeLevel (ai, mki) : ps'', T.AppForall s' m ((a, k) : aks) u) -> do
           ki <- case mki of
@@ -643,13 +646,13 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           case mti of
             Just ti -> do
               Kinding.checkProperK ti
-              checkEquivTypes modl (Right pi) ti u
+              checkEquivTypes tdecls ddecls (Right pi) ti u
             Nothing -> return ()
           case mm of
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo pi fe) fe i m m')
             Nothing -> return ()
-          (kctxp, tctxp) <- checkPat modl kctxi pi u
+          (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
           let kctxi' = Map.union kctxp kctxi
           (rhs', tctxi') <- checkFun' (i + 1) kctxi' (Map.union tctxp tctxi) ps'' v
           tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
@@ -686,41 +689,41 @@ checkFun modl kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
 -- | Check-against for patterns. Given a kind context, it checks whether a 
 -- pattern can match a given type, throwing an error if it cannot. It returns a 
 -- type context containing exclusively the variables introduced in the pattern.
-checkPat :: M.KindedModule
+checkPat :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> E.Pat
          -> T.KindedType
          -> Validation (KindCtx, TypeCtx) -- ????
-checkPat modl kctx p t = case p of
+checkPat tdecls ddecls kctx p t = case p of
   -- 0
   E.IntPat    s _   -> do
-    checkEquivTypes modl (Right p) t (T.Int s)
+    checkEquivTypes tdecls ddecls (Right p) t (T.Int s)
     pure (kctx, Map.empty)
   -- 0.0
   E.FloatPat  s _   -> do
-    checkEquivTypes modl (Right p) t (T.Float s)
+    checkEquivTypes tdecls ddecls (Right p) t (T.Float s)
     pure (kctx, Map.empty)
   -- 'a'
   E.CharPat   s _   -> do
-    checkEquivTypes modl (Right p) t (T.Char s)
+    checkEquivTypes tdecls ddecls (Right p) t (T.Char s)
     pure (kctx, Map.empty)
   -- "abc"
   E.StringPat s _   -> do
-    checkEquivTypes modl (Right p) t (T.List s (T.Char s))
+    checkEquivTypes tdecls ddecls (Right p) t (T.List s (T.Char s))
     pure (kctx, Map.empty)
   -- x
   E.VarPat    s x   -> pure (kctx, Map.singleton (Left x) t)
   -- (@t1, ..., @tn, p)
   E.PackPat s aks p ->
-    case normalise modl t of
+    case normalise tdecls t of
       t'@(T.AppExists _ bks t'') -> checkPackPat kctx t'' aks bks
       t' -> throwE (TypeMismatchExists (getSpan p) t (Left p))
     where
       checkPackPat kctx' u = \cases
-        [] [] -> checkPat modl kctx' p u
+        [] [] -> checkPat tdecls ddecls kctx' p u
         [] bks@((b, _) : _) ->
-          checkPat modl kctx' p (T.AppExists (spanFromTo b u) bks u)
-        aks@((a, k) : _) [] -> case normalise modl u of
+          checkPat tdecls ddecls kctx' p (T.AppExists (spanFromTo b u) bks u)
+        aks@((a, k) : _) [] -> case normalise tdecls u of
           u'@(T.AppExists _ bks u'') -> checkPackPat kctx' u'' aks bks
           u' -> throwE (TypeMismatchExists (spanFromTo a p) u
             (Left $ E.PackPat (spanFromTo a p) aks p))
@@ -732,93 +735,93 @@ checkPat modl kctx p t = case p of
     return (kctx, Map.empty)
   -- []
   E.NilPat s        ->
-    case normalise modl t of
+    case normalise tdecls t of
       T.List _ _ -> return (kctx, Map.empty)
       t' -> throwE (TypeMismatchList (getSpan p) t (Right p))
   -- (p1 :: p2)
   E.ConsPat s p1 p2 ->
-    case normalise modl t of
+    case normalise tdecls t of
       t'@(T.List s t'') -> do
-        (kctx' , tctxp1) <- checkPat modl kctx p1 t''
-        (kctx'', tctxp2) <- checkPat modl kctx' p2 t'
+        (kctx' , tctxp1) <- checkPat tdecls ddecls kctx p1 t''
+        (kctx'', tctxp2) <- checkPat tdecls ddecls kctx' p2 t'
         return (kctx'', Map.union tctxp1 tctxp2)
       t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
   -- (p1 ... , pn)
   E.TuplePat s ps -> do
-    case normalise modl t of
+    case normalise tdecls t of
       t'@(T.Tuple s ts) -> do
         foldM (\(kctx', tctxi) (pi, ti) ->
-            second (Map.union tctxi) <$> checkPat modl kctx' pi ti)
+            second (Map.union tctxi) <$> checkPat tdecls ddecls kctx' pi ti)
           (kctx, Map.empty) (zip ps ts)
       t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
   -- (C p1 ... pn)
   E.DConsPat s i ps -> do
-    (i', ts) <- case M.consDecls modl Map.!? i of
+    (i', ts) <- case D.ddCons ddecls Map.!? i of
       Just ias -> return ias
       Nothing  -> throwE (ConsOutOfScope (getSpan i) i)
-    aks <- case M.dataDecls modl Map.!? i' of
+    aks <- case D.ddTypes ddecls Map.!? i' of
       Just (aks, _) -> return aks
       Nothing -> internalError ("constructor " ++ show i ++ " has no associated data declaration")
-    k <- case M.kindSigs modl Map.!? i' of
+    k <- case kctx Map.!? Right i' of
       Just k -> return k
       Nothing -> internalError ("data type " ++ show i' ++ " has no associated kind signature")
-    case normalise modl t of
+    case normalise tdecls t of
       T.AppDName _ _ i'' us | i' == i'' -> do
         let ts' = map (subsAll (map fst aks) us) ts
         let (lts', lps) = (length ts', length ps)
         when (lts' /= lps) (throwE (DConsPatArgMismatch (getSpan p) i lts' lps))
         foldM (\(kctx', tctxi) (pi, ti) ->
-            second (Map.union tctxi) <$> checkPat modl kctx' pi ti)
+            second (Map.union tctxi) <$> checkPat tdecls ddecls kctx' pi ti)
           (kctx, Map.empty) (zip ps ts')
       t' -> throwE
         (TypeMismatch (getSpan p) t
           (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable ObjLv a k)) aks)) (Right p))
   -- Wait
   E.WaitPat s -> do
-    Expose.wait modl p t
+    Expose.wait tdecls p t
     return (kctx, Map.empty)
   -- ?p; p
   E.InPat s p1 p2 -> do
-    (t1, t2) <- Expose.input modl (Left p) t
-    (kctx' , tctxp1) <- checkPat modl kctx p1 t1
-    (kctx'', tctxp2) <- checkPat modl kctx' p2 t2
+    (t1, t2) <- Expose.input tdecls (Left p) t
+    (kctx' , tctxp1) <- checkPat tdecls ddecls kctx p1 t1
+    (kctx'', tctxp2) <- checkPat tdecls ddecls kctx' p2 t2
     return (kctx'', Map.union tctxp1 tctxp2)
-  -- ?@a. p
+  -- ?type a. p
   E.TypeInPat s (a, k) p' -> do
-    (b, k', t') <- Expose.typeInput modl (Left p) t
+    (b, k', t') <- Expose.typeInput tdecls (Left p) t
     Kinding.checkSubkindOf (T.fromVariable ObjLv a k) k k'
-    checkPat modl (Map.insert (Left a) k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
+    checkPat tdecls ddecls (Map.insert (Left a) k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
   -- (&C p)
   E.ChoicePat s i p' -> do
-    ti <- Expose.externalChoice modl p t i
-    checkPat modl kctx p' ti
+    ti <- Expose.externalChoice tdecls p t i
+    checkPat tdecls ddecls kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
     when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
-    second (Map.insert (Left x) t) <$> checkPat modl kctx p' t
+    second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
 -- pattern/expression where the RHS occurs in, for error messages), this 
 -- function checks the type of a RHS against a given type, returning the 
 -- updated type context without the linear variables consumed in it.
-checkRHS :: M.KindedModule
+checkRHS :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
          -> Either (Either Variable E.Pat) E.KindedExp
          -> E.KindedRHS
          -> T.KindedType
          -> Validation (E.KindedRHS, TypeCtx)
-checkRHS modl kctx tctx ep rhs t = case rhs of
+checkRHS tdecls ddecls kctx tctx ep rhs t = case rhs of
   E.GuardedRHS ges mds -> do
     (mds', tctxds, kctx', tctx')  <- case mds of
       Nothing -> pure (Nothing, Map.empty, kctx, tctx)
       Just ds -> do
-        (ds', tctxds, kctx', tctx') <- checkDecls modl kctx tctx ds
+        (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
     (unzip -> (ges', tctxes)) <- forM ges \(gj, ej) -> do
-      (gj', tctxgj) <- check modl kctx' tctx' gj (T.Bool (getSpan gj))
+      (gj', tctxgj) <- check tdecls ddecls kctx' tctx' gj (T.Bool (getSpan gj))
       checkEquivTypeCtxsGuard tctxgj tctx'
-      (ej', tctxej) <- check modl kctx' tctxgj ej t
+      (ej', tctxej) <- check tdecls ddecls kctx' tctxgj ej t
       return ((gj', ej'), tctxej)
     checkEquivTypeCtxsCase ep tctxes
     (E.GuardedRHS ges' mds',) <$> typeCtxDifference kctx' (head tctxes) tctxds
@@ -826,20 +829,20 @@ checkRHS modl kctx tctx ep rhs t = case rhs of
     (mds', tctxds, kctx', tctx')  <- case mds of
       Nothing -> pure (Nothing, Map.empty, kctx, tctx)
       Just ds -> do
-        (ds', tctxds, kctx', tctx') <- checkDecls modl kctx tctx ds
+        (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
-    (e', tctx'') <- check modl kctx' tctx' e t
+    (e', tctx'') <- check tdecls ddecls kctx' tctx' e t
     (E.UnguardedRHS e' mds',) <$> typeCtxDifference kctx' tctx'' tctxds
 
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
 -- if they are not. An expression or pattern is provided to locate the error.
-checkEquivTypes :: M.KindedModule
+checkEquivTypes :: D.KindedTypeDecls -> D.KindedDataDecls
                 -> Either E.KindedExp E.Pat
                 -> T.KindedType
                 -> T.KindedType
                 -> Validation ()
-checkEquivTypes modl eop t1 t2 =
-  unless (equivalent modl t1 t2) $
+checkEquivTypes tdecls ddecls eop t1 t2 =
+  unless (equivalent tdecls t1 t2) $
     throwE (TypeMismatch (getSpan eop) t1 t2 eop)
 
 -- | Type context equivalence. Checks if two type contexts contain the same
@@ -896,7 +899,8 @@ checkEquivTypeCtxsGuard tctx1 tctx2 = do
 -- arguments leave in the result (instSigma in QL).
 instantiate, instantiateResult
             :: Int
-            -> M.KindedModule
+            -> D.KindedTypeDecls
+            -> D.KindedDataDecls
             -> KindCtx
             -> TypeCtx
             -> T.KindedType
@@ -907,13 +911,14 @@ instantiateResult = instantiateWith True
 
 instantiateWith :: Bool
             -> Int
-            -> M.KindedModule
+            -> D.KindedTypeDecls
+            -> D.KindedDataDecls
             -> KindCtx
             -> TypeCtx
             -> T.KindedType
             -> [Level E.KindedExp T.KindedType K.Multiplicity]
             -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], [T.KindedType], T.KindedType)
-instantiateWith instResult i modl kctx tctx t1 args = do
+instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
   (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] args
   let kivs' = map (second (LI.applySubs θ)) kivs
       mcs'  = flip concatMap kivs' \(k, t) -> LMI.kindSubConstraints (T.kindOf t) k
@@ -928,7 +933,7 @@ instantiateWith instResult i modl kctx tctx t1 args = do
                  -> [(K.Kind, T.KindedType)]
                  -> [Level E.KindedExp T.KindedType K.Multiplicity]
                  -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], LI.Substitution, [T.KindedType], T.KindedType)
-    instantiate' i t kivs args = case (normalise modl t, args) of
+    instantiate' i t kivs args = case (normalise tdecls t, args) of
       -- I-AllType
       (T.AppForall s m ((a, k) : aks) t1, TypeLevel t2 : args') -> do
         (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ((k, t2) : kivs) args'
@@ -970,62 +975,62 @@ instantiateWith instResult i modl kctx tctx t1 args = do
           quickLook :: E.Exp Kinded -> T.KindedType -> Validation (LMI.MultConstraints, LI.Substitution)
           quickLook = \cases
             e@E.Tuple{} _ -> do
-              (_, t2, tctx') <- synth modl kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 modl kctx tctx' t2 []
-              LTI.match e modl t1 t3
+              (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              LTI.match e tdecls t1 t3
             e@E.Nil{}   _ -> do
-              (_, t2, tctx') <- synth modl kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 modl kctx tctx' t2 []
-              LTI.match e modl t1 t3
+              (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              LTI.match e tdecls t1 t3
             e@E.Cons{}  _ -> do
-              (_, t2, tctx') <- synth modl kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 modl kctx tctx' t2 []
-              LTI.match e modl t1 t3
+              (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              LTI.match e tdecls t1 t3
             e@(E.App s f@(E.Select s' i) args) t1 -> case args of
               [] -> throwE (CannotSynthesiseSelect s' i)
               (ExpLevel  e : args') -> do
-                (_, u1, tctx') <- synth modl kctx tctx e
-                t2 <- Expose.internalChoice modl e u1 i
-                (_, _, _, _, t3) <- instantiate 1 modl kctx tctx' t2 args'
-                LTI.match e modl t1 t3
+                (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
+                t2 <- Expose.internalChoice tdecls e u1 i
+                (_, _, _, _, t3) <- instantiate 1 tdecls ddecls kctx tctx' t2 args'
+                LTI.match e tdecls t1 t3
               (arg : _) -> 
                 throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App s h@(E.SendType s' t0) args) t1 -> 
               case args of
                 [] -> throwE (CannotSynthesiseSendType s')
                 (ExpLevel e : args') -> do
-                  (_, u1, tctx') <- synth modl kctx tctx e
-                  (a, _, t2) <- Expose.typeOutput modl e u1
-                  (_, _, _, _, t3) <- instantiate 1 modl kctx tctx' (subs a t0 t2) args'
-                  LTI.match e modl t1 t3
+                  (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
+                  (a, _, t2) <- Expose.typeOutput tdecls e u1
+                  (_, _, _, _, t3) <- instantiate 1 tdecls ddecls kctx tctx' (subs a t0 t2) args'
+                  LTI.match e tdecls t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App s f@(E.ReceiveType s') args) t2 ->
               case args of
                 [] -> throwE (CannotSynthesiseReceiveType s)
                 (ExpLevel e : args') -> do
-                  (_, u1, tctx') <- synth modl kctx tctx e
-                  (a, k, t2') <- Expose.typeInput modl (Right e) u1
+                  (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
+                  (a, k, t2') <- Expose.typeInput tdecls (Right e) u1
                   let t2 = T.AppExists (spanFromTo f e) [(a, k)] t2
-                  (_, _, _, _, t3) <- instantiate 1 modl kctx tctx' t2 args'
-                  LTI.match e modl t1 t3
+                  (_, _, _, _, t3) <- instantiate 1 tdecls ddecls kctx tctx' t2 args'
+                  LTI.match e tdecls t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App _ h args) t1 -> do
-              (_, t2, tctx') <- synth modl kctx tctx h
-              (_, _, _, us, t3) <- instantiate 0 modl kctx tctx' t2 args
-              LTI.match e modl t1 t3
+              (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
+              (_, _, _, us, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 args
+              LTI.match e tdecls t1 t3
             h@(E.Var _ x) t1 -> do
-              (_, t2, tctx') <- synth modl kctx tctx h
-              (_, _, _, us, t3) <- instantiate 0 modl kctx tctx' t2 []
-              LTI.match e modl t1 t3
+              (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
+              (_, _, _, us, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              LTI.match e tdecls t1 t3
             e (T.Var _ k InstLv iv) -> do
-              (_, t2, _) <- synth modl kctx tctx e
+              (_, t2, _) <- synth tdecls ddecls kctx tctx e
               return (LMI.kindSubConstraints (T.kindOf t2) k, LI.subsType iv t2)
             e t1 -> do
-              (_, t2, tctx') <- synth modl kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 modl kctx tctx' t2 []
-              LTI.match e modl t1 t3
+              (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              LTI.match e tdecls t1 t3
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)
       (t, as) -> 
@@ -1034,19 +1039,21 @@ instantiateWith instResult i modl kctx tctx t1 args = do
 typeModule :: KindCtx -> TypeCtx -> M.KindedModule -> Validation (M.KindedModule, KindCtx, TypeCtx)
 typeModule kctx tctx modl = do
   tctx' <- flip Map.union tctx <$> buildDConsCtx
-  (ds, tctxds, kctx', tctx'') <- checkDecls modl kctx tctx' (M.definitions modl)
+  (ds, tctxds, kctx', tctx'') <- checkDecls tdecls ddecls kctx tctx' (M.definitions modl)
   _ <- typeCtxDifference kctx' tctxds tctx''
   return (modl{M.definitions=ds}, kctx', tctx'')
   where
+    tdecls = M.typeDecls modl
+    ddecls = M.dataDecls modl
     buildDConsCtx :: Validation TypeCtx
     buildDConsCtx = do
-      let cds = Map.assocs $ M.consDecls modl
+      let cds = Map.assocs $ D.ddCons ddecls
       Map.fromList <$> mapM buildDConsType cds
       where
         buildDConsType (ic, (it, ts)) = do
-          case M.kindSigs modl Map.!? it of
+          case kctx Map.!? Right it of
             Just k@(K.kindArrow -> (ks, _)) -> do
-              let (map fst -> as, _) = M.dataDecls modl Map.! it
+              let (map fst -> as, _) = D.ddTypes ddecls Map.! it
                   aks = zip as ks
               t <- buildArrow (Map.fromList aks) aks k ts
               let (K.Proper _ m _) = T.kindOf t

@@ -25,8 +25,8 @@ rcvInt acc c =
       let (i, c) = receive c in
       rcvInt (acc+i) c
 
-main : Int
+main : ()
 main =
   let (w, r) = channel @DD in
   fork (\(_ : ()) -1-> sendInt 0 w); 
-  rcvInt 0 r
+  print (rcvInt 0 r)

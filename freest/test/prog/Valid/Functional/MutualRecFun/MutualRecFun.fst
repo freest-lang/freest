@@ -12,5 +12,5 @@ mutual
     | n > 0     = even (n - 1)
     | otherwise = even (n + 1)
 
-main : Bool
-main = even 84
+main : ()
+main = print (even 84)

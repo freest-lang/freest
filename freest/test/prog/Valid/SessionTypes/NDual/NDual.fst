@@ -12,10 +12,10 @@ rcvInt : forall (a : 1S) -> (Dual DD); a -> (Int, a)
 rcvInt @a c = receive c
 
 
-main : Int
+main : ()
 main =
   let (w,r) = channel @(DD; Close) in
   fork (\(_ : ()) -1-> w |> sendInt |> close);
   let (i, r) = rcvInt r in
   wait r;
-  i
+  print i

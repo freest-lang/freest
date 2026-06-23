@@ -13,6 +13,7 @@ module Compiler.REPL
 
 import Syntax.Base ( getSpan, Variable, external )
 import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Syntax.Expression qualified as E
@@ -27,7 +28,10 @@ import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Compiler.Pipeline qualified as Pipeline
+import Interpreter.Value ( ValueCtx, emptyValueCtx )
+import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
+import Interpreter.Exception ( printException )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
 import Data.List qualified as List
@@ -52,6 +56,7 @@ import System.Console.Repline
   )
 import System.Exit ( exitSuccess )
 import Control.Monad.Except (runExceptT)
+import Control.Exception (try)
 
 -- The state of the REPL
 
@@ -64,7 +69,8 @@ data ReplState = ReplState
   , scopingCtx      :: Scoping.ScopingCtx
   , kindCtx         :: Kinding.KindCtx
   , typeCtx         :: Typing.TypeCtx
-  , modl            :: M.KindedModule
+  , tdecls          :: D.KindedTypeDecls
+  , ddecls          :: D.KindedDataDecls
   , valueCtx        :: ValueCtx
   }
 
@@ -78,7 +84,8 @@ emptyReplState = ReplState
   , scopingCtx      = Scoping.emptyScopingCtx
   , kindCtx         = Kinding.emptyKindCtx
   , typeCtx         = Typing.emptyTypeCtx
-  , modl            = M.emptyKindedModule
+  , tdecls          = Map.empty
+  , ddecls          = D.emptyDataDecls
   , valueCtx        = Map.empty
   }
 
@@ -94,8 +101,9 @@ instance Show ReplState where
     , "  scopingCtx = " ++ show (scopingCtx s)
     , "  kindCtx = " ++ show (kindCtx s)
     , "  typeCtx = " ++ show (typeCtx s)
-    , "  modl = " ++ show (modl s)
-    , "  valueCtx = " ++ show (valueCtx s)
+    , "  tdecls = " ++ show (Map.keys (tdecls s))
+    , "  ddecls = " ++ show (Map.keys (D.ddTypes (ddecls s)))
+    , "  valueCtx = " ++ show (Map.keys (valueCtx s))
     , "}"
     ]
 
@@ -152,13 +160,17 @@ ini = do
             | otherwise         -> liftIO Pipeline.loadNoModule
 
 -- | Run a loader action and, on success, replace the validation/scoping/type
--- contexts and module in the REPL state with whatever the loader produced.
+-- contexts and module in the REPL state with whatever the loader produced, and
+-- evaluate the loaded module into a fresh value environment.
 runLoader :: IO (Maybe (Source, ValidationState, Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)) -> Repl ()
 runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
-    Just (src, vs, sctx, kctx, tctx, kmodl) ->
-      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, modl = kmodl})
+    Just (src, vs, sctx, kctx, tctx, kmodl) -> do
+      vctx <- liftIO (try (evalModule emptyValueCtx kmodl)) >>= \case
+        Right v -> pure v
+        Left e  -> liftIO (printException src e) >> pure emptyValueCtx   -- e.g. main failed at load
+      modify (\s -> s{source = src, validationState = vs, scopingCtx = sctx, kindCtx = kctx, typeCtx = tctx, tdecls = M.typeDecls kmodl, ddecls = M.dataDecls kmodl, valueCtx = vctx})
 
 fin :: Repl ExitDecision
 fin = putLines [comeAgain] >> pure Exit
@@ -169,27 +181,28 @@ cmd src = do
   modify (\s -> s{source = Map.insert path (lines src) (source s)})
   -- First try a bare expression, bound to 'it'
   case runLexer parseItDecl path (src ++ "\n") of
-    Right m1 -> handleModule m1 (putLines ["Printing the value of variable 'it'"])
+    Right m1 -> handleModule m1 printIt
     Left es1 ->
       -- Otherwise try a (possibly multi-line) block of let declarations
       case runLexer (pushStartCode layoutSC >> parseDeclList) path (src ++ "\n") of
-        Right m2 -> handleModule m2 (pure ())
+        Right m2 -> handleModule m2 (const (pure ()))
         Left es2 -> printREPLErrors -- Lexer/parser errors
           (if getSpan (head es1) > getSpan (head es2) then es1 else es2)
   where
     -- | Validate parsed declarations. On success: update the remaining state
-    -- fields, evaluate, run 'post'. On failure: report the errors.
-    handleModule :: M.ParsedModule -> Repl () -> Repl ()
+    -- fields, evaluate, run 'post' on the typed module. On failure: report the
+    -- errors.
+    handleModule :: M.ParsedModule -> (M.KindedModule -> Repl ()) -> Repl ()
     handleModule m post =
       runValidate src validateModule m printREPLErrors \(sctx, kctx, tctx, kmodl) -> do
-        merged <- gets ((<> kmodl) . modl)
         modify (\s -> s
           { scopingCtx = sctx
           , kindCtx = kctx
           , typeCtx = tctx
-          , modl = merged})
+          , tdecls = M.typeDecls kmodl
+          , ddecls = M.dataDecls kmodl })
         eval kmodl
-        post
+        post kmodl
 
 -- Handling the various options
 
@@ -216,17 +229,17 @@ handleType src = runPipeline src parseExp validateExp (printAs src)
 handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
     (\s (t, u) -> validateTypes s [t, u])
-    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (modl s) t' u')])
+    (\[t', u'] -> get >>= \s -> putLines [show (equivalent (tdecls s) t' u')])
 
 handleNormalise :: String -> Repl () -- freesti> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
-  (\[t'] -> get >>= \s -> putLines [unparse (normalise (modl s) t')])
+  (\[t'] -> get >>= \s -> putLines [unparse (normalise (tdecls s) t')])
 
 handleGrammar :: String -> Repl () -- freesti> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
-  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (modl s) ts')])
+  (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (tdecls s) ts')])
 
 handleInfo :: String -> Repl () -- freesti> :i <id>
 handleInfo src = do
@@ -245,26 +258,25 @@ handleInfo src = do
             printAs src (TK.kindOf t)
           Left _ -> notInScope -- neither expression nor type variable
     Left _ -> case runLexer parseIdentifier path src of
-      Right i -> -- input is an uppercase name; look it up in the kinded module
-        let kmodl = modl s in
-        case Map.lookup i (M.consDecls kmodl) of
+      Right i -> -- input is an uppercase name; look it up in the declarations
+        case Map.lookup i (D.ddCons (ddecls s)) of
           Just (parent, _) -> do -- it's a data constructor: print its parent and its type
             putLines [src ++ " is a constructor of datatype " ++ show parent]
             case Map.lookup (Right i) (typeCtx s) of
               Just t  -> printAs src t -- type known: print it
-              Nothing -> pure ()        -- type absent from the context: skip
+              Nothing -> pure ()       -- type absent from the context: skip
           Nothing
-            | Map.member i (M.dataDecls kmodl) -> putLines -- it's a datatype: print kind sig and definition
+            | Map.member i (D.ddTypes (ddecls s)) -> putLines -- it's a datatype: print kind sig and definition
                 [ src ++ " is a datatype"
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
-                           (Map.lookup i (M.kindSigs kmodl))
-                , unparseDataDef kmodl i
+                           (Map.lookup (Right i) (kindCtx s))
+                , unparseDataDef (ddecls s) i
                 ]
-            | otherwise -> case Map.lookup i (M.typeDecls kmodl) of
+            | otherwise -> case Map.lookup i (tdecls s) of
               Just (hasParams, t) -> putLines -- it's a type name: print kind sig and definition
                 [ src ++ " is a type"
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
-                           (Map.lookup i (M.kindSigs kmodl))
+                           (Map.lookup (Right i) (kindCtx s))
                 , unparseTypeDef i hasParams t
                 ]
               Nothing -> notInScope -- not a constructor, datatype, or type name
@@ -381,29 +393,34 @@ validateTypes = mapM . validateType
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s =
-  Scoping.scopeExp (scopingCtx s) >=>
-  Kinding.kindExp (modl s) (kindCtx s) >=>
-  Typing.synth (modl s) (kindCtx s) (typeCtx s) >=>
-  pure . \(_, t, _) -> t
+  Scoping.scopeExp (scopingCtx s) 
+  >=> Kinding.kindExp (tdecls s) (kindCtx s)
+  >=> Typing.synth (tdecls s) (ddecls s) (kindCtx s) (typeCtx s)
+  >=> pure . \(_, t, _) -> t
 
 -- | Scope, kind and type-check a parsed module against the REPL's current
 -- state, merging into the existing scoped module.
 validateModule :: ReplState -> M.ParsedModule
                 -> Validation (Scoping.ScopingCtx, Kinding.KindCtx, Typing.TypeCtx, M.KindedModule)
 validateModule s =
-  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s)
+  Pipeline.validateModule (scopingCtx s) (kindCtx s) (typeCtx s) (tdecls s) (ddecls s)
 
--- Evaluation; interface with module Eval
+-- Evaluation; interface with module Interpreter.Eval
 
-type Value = ()
-type ValueCtx = Map.Map Variable Value
-
+-- | Evaluate a parsed-and-typed module: extend the value environment with its
+-- definitions (running their side effects), threading it through the state.
 eval :: M.KindedModule -> Repl ()
 eval m = do
-  putLines ["Evaluating..."]
   s <- get
-  vctx <- collectLetDecls (valueCtx s) m
-  put s{valueCtx = vctx}
+  liftIO (try (evalModule (valueCtx s) m)) >>= \case
+    Right vctx -> put s{valueCtx = vctx}
+    Left e     -> liftIO (printException (source s) e)   -- TODO: keep the old ctx, or not?
 
-collectLetDecls :: ValueCtx -> M.KindedModule -> Repl ValueCtx
-collectLetDecls env _ = pure env
+-- | Print the value bound to @it@ (an expression entered at the prompt
+-- becomes the binding @it = …@).
+printIt :: M.KindedModule -> Repl ()
+printIt kmodl = do
+  vctx <- gets valueCtx
+  case [ var | E.ValDef (E.VarPat _ var) _ <- M.definitions kmodl, external var == "it" ] of
+    itVar : _ -> mapM_ (\v -> putLines [unparse v]) (Map.lookup itVar vctx)
+    []        -> pure ()

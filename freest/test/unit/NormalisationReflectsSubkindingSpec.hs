@@ -31,6 +31,6 @@ spec = mkTypeSpec
     of Left es  -> expectationFailure (showErrors src es)
        Right (modl', t') -> if normalisationReflectsKinding 
           then  return ()
-          else expectationFailure ("T = " ++ show t' ++ "\nU = " ++ show (normalise modl' t'))
+          else expectationFailure ("T = " ++ show t' ++ "\nU = " ++ show (normalise (M.typeDecls modl') t'))
         where normalisationReflectsKinding = 
-                TK.kindOf (normalise modl' t') <: TK.kindOf t'
+                TK.kindOf (normalise (M.typeDecls modl') t') <: TK.kindOf t'

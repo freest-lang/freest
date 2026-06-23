@@ -38,8 +38,8 @@ client1 c =
   c |> select Done |> close;
   y
 
-main : Bool
+main : ()
 main =
   let (w, r) = channel @BoolClient in
   fork (\(_ : ()) -1-> boolServer r);
-  client1 w
+  print (client1 w)

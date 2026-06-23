@@ -55,8 +55,8 @@ client c = c |> select Add
              |> send 9 
              |> receiveAndWait
 
-main : Int
+main : ()
 main =
   let (w, r) = channel @(Dual TermChannel; !Int; Close) in
   fork (\(_ : ()) -1-> computeService w);
-  client r
+  print (client r)

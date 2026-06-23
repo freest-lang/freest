@@ -4,4 +4,4 @@ f : ()
 f {- comment -} = ()
 
 main : ()
-main {- comment -} = ()
+main {- comment -} = print ()

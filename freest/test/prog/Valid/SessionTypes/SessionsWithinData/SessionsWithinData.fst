@@ -9,8 +9,8 @@ read t =
     One c -> wait c; 5
     Two c -> receiveAndWait c
 
-main : Int
+main : ()
 main =
   let (w, r) = channel @(!Int;Close) in
   fork (\(_ : ()) -1-> send 10 w |> close);
-  read $ Two r
+  Two r |> read |> print

@@ -29,4 +29,4 @@ spec = mkTypeSpec
             return (modl', t')
     of Left es  -> expectationFailure (showErrors src es)
        Right (modl', t') -> normYieldsWhnf `shouldBe` True
-        where normYieldsWhnf = isWhnf (normalise modl' t')
+        where normYieldsWhnf = isWhnf (normalise (M.typeDecls modl') t')

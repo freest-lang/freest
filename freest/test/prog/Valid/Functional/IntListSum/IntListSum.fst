@@ -12,6 +12,5 @@ sum'' l =
     Nil -> 0
     Cons x y -> x + sum'' y
 
-main : Int
-main = sum' (Cons 5 (Cons 7 (Cons 2 (Cons 6 (Cons 3 Nil)))))
-
+main : ()
+main = print (sum' (Cons 5 (Cons 7 (Cons 2 (Cons 6 (Cons 3 Nil))))))

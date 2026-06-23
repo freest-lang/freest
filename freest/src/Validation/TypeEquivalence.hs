@@ -16,7 +16,7 @@ where
 
 import Syntax.Base
 import Syntax.Kind qualified as K
-import Syntax.Module qualified as M
+import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Kinding ( runSynth, KindCtx )
@@ -34,19 +34,19 @@ import Data.Map.Strict qualified as Map
 import Prelude hiding ( Word, words )
 import Debug.Trace ( trace )
 
-equivalent :: M.KindedModule -> T.KindedType -> T.KindedType -> Bool
-equivalent mod t u = t == u || bisimilar ps xs ys
-  where (ps, [xs, ys]) = fromTypes mod [t, u]
+equivalent :: D.KindedTypeDecls -> T.KindedType -> T.KindedType -> Bool
+equivalent tdecls t u = t == u || bisimilar ps xs ys
+  where (ps, [xs, ys]) = fromTypes tdecls [t, u]
 
 -- TODO: this function generates productions for unreachable nonterminals,
 -- for example as in type T with 'type T = Int'.
-fromTypes :: M.KindedModule -> [T.KindedType] -> (Productions, [Word])
-fromTypes mod ts =
+fromTypes :: D.KindedTypeDecls -> [T.KindedType] -> (Productions, [Word])
+fromTypes tdecls ts =
   -- trace ("\n\nTypes:   " ++ show ts ++
   --        "\n"++showGrammar (xss, productions s)) $
   (productions s, xss)
   where
-    (xss, s) = runState (mapM word ts) (initial mod)
+    (xss, s) = runState (mapM word ts) (initial tdecls)
 
 word :: T.KindedType -> TransState Word
 word t = wasVisited t >>= \case
@@ -107,8 +107,8 @@ word' = \case
       zip (map show [1..]) (map (++ [bottom]) words)
   -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
-    modl <- gets modl
-    let u = normalise modl t
+    tdecls <- gets typeDecls
+    let u = normalise tdecls t
     case u of
       -- W-μSkip, t normalises to Skip
       T.Skip{} -> pure []
@@ -137,8 +137,8 @@ word' = \case
           ]
       _ -> do
         -- W-τ, t reduces
-        modl <- gets modl
-        word (reduce modl t)
+        tdecls <- gets typeDecls
+        word (reduce tdecls t)
 
 isProperType :: T.KindedType -> Bool
 isProperType t = case T.kindOf t of
@@ -169,17 +169,17 @@ data TState = TState
   { productions :: Productions
   , nextIndex :: Int
   , visited :: Visited
-  , modl :: M.KindedModule
+  , typeDecls :: D.KindedTypeDecls
   , nextKindIndex :: Int
   , kindIndices :: Map.Map K.Kind (Int, Int)
   }
 
-initial :: M.KindedModule -> TState
-initial modl = TState
+initial :: D.KindedTypeDecls -> TState
+initial tdecls = TState
   { productions = Map.empty
   , nextIndex = succ bottom -- 0 is for bottom
   , visited = Map.empty
-  , modl = modl
+  , typeDecls = tdecls
   , nextKindIndex = -2
   , kindIndices = Map.empty
   }
@@ -209,8 +209,8 @@ addVisited t y = do
   -- trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
   modify $ \s -> s { visited = Map.insert t y (visited s) }
 
-getTypeDecls :: TransState (M.TypeDecls Kinded)
-getTypeDecls = gets (M.typeDecls . modl)
+getTypeDecls :: TransState (D.KindedTypeDecls)
+getTypeDecls = gets typeDecls
 
 -- TODO: Add only if needed
 addProduction :: Nonterminal -> Terminal -> Word -> TransState ()

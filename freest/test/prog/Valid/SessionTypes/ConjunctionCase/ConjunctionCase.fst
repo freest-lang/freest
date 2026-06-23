@@ -31,4 +31,4 @@ falseAndTrue =
     in fork @() (\(_:()) -1-> trueC  c1w) ;
        fork @() (\(_:()) -1-> falseC c2w) ;
        fork @() (\(_:()) -1-> andc' c1r c2r cw) ;
-       print $ toBool cr
+       putStrLn $ toBool cr

@@ -35,8 +35,5 @@ startClient client =
   fork (\(_ : ()) -1-> boolServer r);
   client w
 
-main : Bool
-main = startClient client1
-
--- remove skips from the end
--- Type check : environment checks only the linear part (filter)
+main : ()
+main = print (startClient client1)

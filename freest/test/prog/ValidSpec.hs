@@ -15,12 +15,13 @@ import Compiler.FreeST ( runFreeST )
 import UI.CLI
 import ProgSpecUtils
 
-import Control.Exception
+import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
 import Control.Monad ( void )
-import Data.List ( intercalate, isPrefixOf )
+import Data.List ( intercalate, isPrefixOf, dropWhileEnd )
+import System.Environment ( getExecutablePath )
 import System.Exit ( ExitCode(..) )
-import System.IO ( stdout, stderr )
-import System.IO.Silently
+import System.IO ( Handle, hIsEOF, hGetChar )
+import System.Process
 import System.Timeout
 import Test.Hspec
 import Test.HUnit ( assertFailure )
@@ -43,31 +44,64 @@ test dir (testFile, exp) =
      case res of
       Timeout -> doExpectationsMatch "<timeout>" exp
       Failed  -> void $ assertFailure out
-      Passed  -> return () -- doExpectationsMatch out exp
+      Passed  -> doExpectationsMatch out exp
 
 pendingMessage :: String -> Expectation
 pendingMessage =  pendingWith . intercalate "\n\t" . tail . lines
- 
+
 doExpectationsMatch :: String -> String -> Expectation
 doExpectationsMatch out exp =
-  filter (/= '\n') out `shouldBe` filter (/= '\n') exp
+  dropWhileEnd (== '\n') out `shouldBe` dropWhileEnd (== '\n') exp
   
+-- | Run a single program in a *throwaway child process* (this same test binary
+-- re-executed with @--run-one@), so that the I/O server threads the Prelude
+-- forks are reaped by the OS when the child exits, rather than leaking across
+-- the whole suite. The child is killed if it exceeds the timeout. Returns the
+-- captured stdout (for comparison against the @.expected@ file) on success, or a
+-- failure report including the child's stderr on a non-zero exit.
 testOne :: FilePath -> IO (String, TestResult)
-testOne file = hCapture [stdout, stderr] $
-   catches runTest
-    [ Handler (\(e :: ExitCode) -> exitProgram e)
-    , Handler (\(_ :: SomeException) -> pure Failed)
-    ]
- where
-  exitProgram :: ExitCode -> IO TestResult
-  exitProgram ExitSuccess = pure Passed
-  exitProgram _           = pure Failed
+testOne file = do
+  self <- getExecutablePath
+  res  <- timeout timeInMicro $
+    withCreateProcess
+      (proc self ["--run-one", file])
+        { std_in = NoStream, std_out = CreatePipe, std_err = CreatePipe }
+      $ \_ (Just hout) (Just herr) ph -> do
+          -- capture each pipe on its own thread so the child never blocks on a
+          -- full pipe; 'capture' bounds memory even if the program loops printing
+          ovar <- newEmptyMVar
+          evar <- newEmptyMVar
+          _ <- forkIO (capture hout >>= putMVar ovar)
+          _ <- forkIO (capture herr >>= putMVar evar)
+          code <- waitForProcess ph
+          (,,) code <$> takeMVar ovar <*> takeMVar evar
+  pure $ case res of
+    Nothing                    -> ("<timeout>", Timeout)
+    Just (ExitSuccess, out, _) -> (out, Passed)
+    Just (_, _, err)           -> (failureReport err, Failed)
+  where
+    -- errors (load/type/runtime) all go to stderr; show them, with a repro hint
+    failureReport err =
+      err ++ "(rerun:  prog --run-one " ++ file ++ ")"
 
-  runTest :: IO TestResult
-  runTest = do
-    res <- timeout timeInMicro (runFreeST defaultRunOpts{filePath = Just file})
-    case res of Just _  -> pure Passed
-                Nothing -> pure Timeout
+-- | Child-process entry point (invoked as @prog --run-one <file>@): interpret a
+-- single program and exit with its status, which the parent reads back.
+runOne :: FilePath -> IO ()
+runOne file = runFreeST defaultRunOpts{filePath = Just file}
+
+-- | Read a handle to EOF (so the child never blocks on a full pipe), retaining
+-- only the first 'outputCap' characters so the parent stays memory-bounded even
+-- if the program loops printing.
+capture :: Handle -> IO String
+capture h = go (0 :: Int) []
+  where
+    go n acc = hIsEOF h >>= \case
+      True  -> pure (reverse acc)
+      False -> do c <- hGetChar h
+                  go (n + 1) (if n < outputCap then c : acc else acc)
+
+outputCap :: Int
+outputCap = 64 * 1024
 
 -- n microseconds (1/10^6 seconds).
 timeInMicro :: Int

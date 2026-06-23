@@ -26,5 +26,5 @@ seven = doubleInt (\(x : Int) -> x + 2) 3
 
 thirteen = doubleIntArrowInt doubleInt (\(x : Int) -> x + 2) 5
 
-main : Int
-main = quadruple  @Int (\(x : Int) -> x + 2) 3
+main : ()
+main = print $ quadruple  @Int (\(x : Int) -> x + 2) 3

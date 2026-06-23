@@ -8,5 +8,5 @@ type ListSend = +{ConsC: !Int;ListSend , NilC: Skip}
 
 type ListComposed = Arrow -> ListSend
 
-main : Int
-main = 2
+main : ()
+main = print 2

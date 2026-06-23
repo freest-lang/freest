@@ -8,6 +8,7 @@ f (?(?x    ; Wait) ; Wait) = print x
 main =
   let (inr,   inw)   = channel @(?Int ; Wait)
       (ininr, ininw) = channel @(?(?Int ; Wait) ; Wait)
-  in fork @() (\(_:()) -1-> f ininr) ;
-     ininw |> send inr |> close ;
-     inw |> send 3 |> close
+  in fork (\(_ : ()) -1-> 
+       ininw |> send inr |> close ;
+       inw |> send 3 |> close);
+     f ininr

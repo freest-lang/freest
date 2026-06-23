@@ -28,5 +28,5 @@ spec = mkTypeSpec
         if nt' == nnt' then return () 
         else expectationFailure (show nt' ++ "\n/=\n" ++ show nnt')-- `shouldBe` True
         where
-          nt'  = normalise modl' t' 
-          nnt' = normalise modl' nt'
+          nt'  = normalise (M.typeDecls modl') t' 
+          nnt' = normalise (M.typeDecls modl') nt'
