@@ -44,7 +44,7 @@ betaRule (TK.Abs s aks t) us
         m = length us
         v = subsAll (map fst aks) us t
 
--- 2. Type variable substitution
+-- 2. Type substitution
 
 -- | The set of free variables occurring in a type.
 freeTypeVars :: T.Type x -> Set.Set Variable
@@ -180,3 +180,5 @@ allMultVarsMult :: K.Multiplicity -> Set.Set Variable
 allMultVarsMult = \case
   K.Sup _ lvφs -> Set.fromList $ map snd lvφs
   _            -> Set.empty
+
+  -- 4. Kind Substitution

@@ -45,11 +45,14 @@ import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
     ( emptyValidationState, runValidation, Validation
+    , constraints
     , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind )
 import Validation.Constraint
     ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind) )
 import Validation.Expose qualified as Expose
+import Validation.KindSubstitution qualified as KS
 import Validation.Normalisation ( normalise )
+import Validation.Unification qualified as Unification
 import Validation.Substitution ( subs, subsMultType )
 
 import Control.Monad.Identity ( Identity(..) )
@@ -64,7 +67,9 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
 import Data.Set qualified as Set
+import Data.Maybe ( fromMaybe )
 import Validation.HOTRecursion (checkNoHOTRec)
+import Debug.Trace ( traceM )
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map (Either Variable Identifier) Kind
@@ -257,7 +262,7 @@ isStrictlySession t = case TK.kindOf t of
   _ -> False
 
 lookupKind :: KindCtx -> Identifier -> Validation Kind
-lookupKind ctx i = do 
+lookupKind ctx i = do
   case ctx Map.!? Right i of
     Just k  -> pure k
     Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
@@ -276,7 +281,14 @@ kindModule ctx mod = do
                  , M.definitions = []
                  }
   (_, lds) <- kindLetDecls (M.typeDecls mod') ctx' (M.definitions mod)
-  return (ctx', mod'{M.definitions = lds})
+  cs <- gets constraints
+  traceM $ "Constraints gathered by kindModule:\n  "
+    ++ List.intercalate "\n  " (map show (Set.toList cs))
+  -- Solve the constraints and apply the resulting substitution to every
+  -- kind annotation in the module.
+  let σ = fromMaybe KS.emptySubstitution (Unification.unify cs)
+  traceM $ "Substitution: " ++ show σ
+  return (ctx', KS.applyKindedModule σ mod'{M.definitions = lds})
   where
     kindTypeDecl :: KindCtx -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
     kindTypeDecl ctx i (hasParams, t) = do
@@ -452,14 +464,14 @@ kindFun tdecls e = kindFun' 0
         (kctxi', p') <- kindPat tdecls kctx p
         first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) kctxi' tctxds ps' rhs v
       (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
-        first (MultLevel φ :) <$> kindFun' (i + 1) kctx tctxds ps' rhs 
-          ((if null φs then id else TK.ForallM s' m φs) $ 
+        first (MultLevel φ :) <$> kindFun' (i + 1) kctx tctxds ps' rhs
+          ((if null φs then id else TK.ForallM s' m φs) $
             subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u)
       (pi : ps', TK.AppArrow _ _ u _) ->
         throwE (UnexpectedParam (paramSpan pi) i (ExpLevel  u ) (voidLevel pi))
       (pi : ps', TK.AppForall _ _ ((_, k) : _) u) ->
         throwE (UnexpectedParam (paramSpan pi) i (TypeLevel k ) (voidLevel pi))
-      (pi : ps', TK.ForallM{}) -> 
+      (pi : ps', TK.ForallM{}) ->
         throwE (UnexpectedParam (paramSpan pi) i (MultLevel ()) (voidLevel pi))
       (as, t') -> do
         throwE (ExpectsTooManyArgs (getSpan e) t (i + length as) i)
@@ -486,7 +498,7 @@ kindRHS tdecls kctx = \case
     e' <- kindExp tdecls kctx' e
     return $ E.UnguardedRHS e' mlds'
 
-kindPat :: D.KindedTypeDecls 
+kindPat :: D.KindedTypeDecls
         -> KindCtx -> E.Pat -> Validation (KindCtx, E.Pat)
 kindPat tdecls kctx = \case
   E.IntPat   s i -> pure (kctx, E.IntPat   s i)
@@ -495,8 +507,8 @@ kindPat tdecls kctx = \case
   E.StringPat s t -> pure (kctx, E.StringPat s t)
   E.WildPat  s x -> pure (kctx, E.WildPat  s x)
   E.VarPat   s x -> pure (kctx, E.VarPat   s x)
-  E.PackPat s aks p -> 
-    second (E.PackPat s aks) 
+  E.PackPat s aks p ->
+    second (E.PackPat s aks)
     <$> kindPat tdecls (Map.fromList (first Left <$> aks) `Map.union` kctx) p
   E.NilPat   s   -> pure (kctx, E.NilPat   s  )
   E.ConsPat s p1 p2 -> do
@@ -521,17 +533,17 @@ kindPat tdecls kctx = \case
     (kctx', p1') <- kindPat tdecls kctx p1
     (kctx'', p2') <- kindPat tdecls kctx p2
     return (kctx'', E.InPat s p1' p2')
-  E.ChoicePat s i p -> 
-    second (E.ChoicePat s i) 
+  E.ChoicePat s i p ->
+    second (E.ChoicePat s i)
     <$> kindPat tdecls kctx p
-  E.TypeInPat s (a, k) p -> 
-    second (E.TypeInPat s (a, k)) 
+  E.TypeInPat s (a, k) p ->
+    second (E.TypeInPat s (a, k))
     <$> kindPat tdecls (Map.insert (Left a) k kctx) p
-  E.AsPat s x p -> 
-    second (E.AsPat s x) 
+  E.AsPat s x p ->
+    second (E.AsPat s x)
     <$> kindPat tdecls kctx p
 
-kindExp :: D.KindedTypeDecls 
+kindExp :: D.KindedTypeDecls
         -> KindCtx -> E.ScopedExp -> Validation E.KindedExp
 kindExp tdecls kctx = \case
   E.Int   s i -> pure $ E.Int   s i
@@ -561,17 +573,17 @@ kindExp tdecls kctx = \case
       (kctx, []) pars
     e' <- kindExp tdecls kctx' e
     pure $ E.Abs s pars' m e'
-  E.Pack s' ts e -> 
+  E.Pack s' ts e ->
     E.Pack s' <$> mapM (synth kctx) ts
               <*> kindExp tdecls kctx e
-  E.Asc s e t -> 
-    E.Asc s <$> kindExp tdecls kctx e 
+  E.Asc s e t ->
+    E.Asc s <$> kindExp tdecls kctx e
             <*> synth kctx t
   E.Let s lds e -> do
     (kctx', lds') <- kindLetDecls tdecls kctx lds
     e' <- kindExp tdecls kctx' e
     return (E.Let s lds' e')
-  E.Semi s e1 e2 -> 
+  E.Semi s e1 e2 ->
     E.Semi s <$> kindExp tdecls kctx e1
              <*> kindExp tdecls kctx e2
   E.Case s e prhss -> do
@@ -582,7 +594,7 @@ kindExp tdecls kctx = \case
       return (pi', rhsi')
     return $ E.Case s e' prhss'
   E.If s e1 e2 e3 ->
-    E.If s <$> kindExp tdecls kctx e1 
+    E.If s <$> kindExp tdecls kctx e1
            <*> kindExp tdecls kctx e2
            <*> kindExp tdecls kctx e3
   E.Channel s t -> E.Channel s <$> synth kctx t
@@ -596,7 +608,7 @@ kindExp tdecls kctx = \case
 --     * a list of errors, if any was encountered;
 --     * the given module, otherwise.
 runKindModule :: M.ScopedModule -> Either [Error] (KindCtx, M.KindedModule)
-runKindModule modl = runValidation emptyValidationState do 
+runKindModule modl = runValidation emptyValidationState do
   (ctx, modl') <- kindModule Map.empty modl
   checkNoHOTRec (M.typeDecls modl')
   return (ctx, modl')

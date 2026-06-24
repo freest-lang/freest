@@ -78,10 +78,12 @@ library:
     - Validation.Expose
     - Validation.HOTRecursion
     - Validation.Kinding
+    - Validation.KindSubstitution
     - Validation.Normalisation
     - Validation.Substitution
     - Validation.TypeEquivalence
     - Validation.Typing
+    - Validation.Unification
 
 executables:
   freest:
