@@ -25,6 +25,7 @@ import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Syntax.Names
 import Syntax.Type.Kinded qualified as T
+import Syntax.Provenance ( Origin(..), Reason(..) )
 import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
@@ -135,7 +136,7 @@ synth tdecls ddecls kctx tctx = \case
       (ExpLevel  e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
         ui <- Expose.internalChoice tdecls e u i
-        (as'', t, tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' ui as'
+        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _  ) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -145,7 +146,7 @@ synth tdecls ddecls kctx tctx = \case
       (ExpLevel e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
         (a, _, u') <- Expose.typeOutput tdecls e u
-        (as'', t, tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' (subs a t u') as'
+        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a t u') as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -156,13 +157,13 @@ synth tdecls ddecls kctx tctx = \case
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
         (a, k, u') <- Expose.typeInput tdecls (Right e) u
         let v = T.AppExists (spanFromTo f e) [(a, k)] u'
-        (as'', t, tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' v as'
+        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s h as    -> do
     (h', t, tctx') <- synth tdecls ddecls kctx tctx h
-    (as', u, tctx'') <- checkArgsQL 0 tdecls ddecls kctx tctx' t as
+    (as', u, tctx'') <- checkArgsQL 0 s tdecls ddecls kctx tctx' t as
     return (E.App s h' as', u, tctx'')
   e@(E.Abs s ps m e') -> synthAbs kctx tctx ps
     where
@@ -339,7 +340,7 @@ check tdecls ddecls kctx tctx e t = case e of
       (ExpLevel  e' : args') -> do
         (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
         ui <- Expose.internalChoice tdecls e' u i
-        (args'', t', tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' ui args'
+        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui args'
         checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _  ) ->
@@ -350,7 +351,7 @@ check tdecls ddecls kctx tctx e t = case e of
       (ExpLevel e' : args') -> do
         (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
         (a, _, v') <- Expose.typeOutput tdecls e' v
-        (args'', t', tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' (subs a u v') args'
+        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a u v') args'
         checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
@@ -362,7 +363,7 @@ check tdecls ddecls kctx tctx e t = case e of
         (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
         (a, k, u') <- Expose.typeInput tdecls (Right e') u
         let v = T.AppExists (spanFromTo h e') [(a, k)] u'
-        (args'', t', tctx'') <- checkArgsQL 1 tdecls ddecls kctx tctx' v args'
+        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v args'
         checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
@@ -557,7 +558,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
   (args', mcs, kivs, us, t'') <- inst 0 tdecls ddecls kctx tctx' t' args
   (mcs', θ') <- LTI.match e tdecls t t''
   θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
-    Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
+    Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ''   -> return (θ'' <> θ')
   forM_ kivs \(k, w) -> checkInstPrekind (LI.applySubs θ w) k
   checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
@@ -567,6 +568,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
 -- | Check function arguments while inferring type and multiplicity applications
 -- using the Quick Look method.
 checkArgsQL :: Int
+            -> Span
             -> D.KindedTypeDecls
             -> D.KindedDataDecls
             -> KindCtx
@@ -576,10 +578,10 @@ checkArgsQL :: Int
             -> Validation ( [Level (E.Exp Kinded) T.KindedType K.Multiplicity]
                           , T.KindedType
                           , TypeCtx)
-checkArgsQL i tdecls ddecls kctx tctx t args = do
+checkArgsQL i s tdecls ddecls kctx tctx t args = do
   (args', mcs, kivs, us, t') <- instantiate i tdecls ddecls kctx tctx t args
   θ <- LMI.solveMultConstraints mcs >>= \case
-    Left (l, r) -> throwE (CannotSatisfyMultConstraint (getSpan l) l r)
+    Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ     -> return θ
   forM_ kivs \(k, t) -> checkInstPrekind (LI.applySubs θ t) k
   (args'', tctx') <- checkValArgs tdecls ddecls kctx θ tctx args' us
@@ -1044,14 +1046,18 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
                 arrowConstraints = \cases
                   [] _ -> []
                   (ExpLevel{}  : ps') (T.AppArrow _ m' _ v) ->
-                    (m', m) : arrowConstraints ps' (normalise tdecls v)
+                    eqOf FromArrow m' : arrowConstraints ps' (normalise tdecls v)
                   (TypeLevel{} : ps') (T.AppForall s m' (_:aks) v) ->
-                    (m', m) : arrowConstraints ps' if null aks then v
-                                                   else T.AppForall s m' aks v
+                    eqOf FromForall m' : arrowConstraints ps'
+                      (if null aks then v else T.AppForall s m' aks v)
                   (MultLevel{} : ps') (T.ForallM s m' (_:φs) v) ->
-                    (m', m) : arrowConstraints ps' if null φs then v
-                                                   else T.ForallM s m' φs v
+                    eqOf FromForall m' : arrowConstraints ps'
+                      (if null φs then v else T.ForallM s m' φs v)
                   _ _ -> [] -- error deferred to checking
+                -- the arrow/quantifier multiplicity m' must match the lambda's
+                -- declared multiplicity m; tag each side with its provenance
+                eqOf reason m' = LMI.MultEquation m' (Origin (getSpan m') reason)
+                                                  m  (Origin (getSpan m) FromLambda)
             e t1 ->
               do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e

@@ -2,6 +2,10 @@
 -- (i.e., equations in a 01-bounded join-semilattice)
 module Validation.LocalInference.Multiplicities
   ( MultConstraints
+  , MultEquation(..)
+  , multEq
+  , kindEq
+  , arrowEq
   , kindEqConstraints
   , kindSubConstraints
   , solveMultConstraints
@@ -12,6 +16,7 @@ module Validation.LocalInference.Multiplicities
 import Syntax.Base
 import Syntax.Kind (Multiplicity(..), pattern Un)
 import Syntax.Kind qualified as K
+import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.Base (Validation, incCounter)
 import Validation.LocalInference.Substitution (Substitution(..), emptySubs, subsMult)
 
@@ -25,19 +30,29 @@ import Compiler.Bug (internalError)
 
 type MultConstraints = [MultEquation]
 
-type MultEquation = (Multiplicity, Multiplicity)
+-- | An equation between two multiplicities.
+data MultEquation = MultEquation Multiplicity Origin Multiplicity Origin
+
+-- | Build an equation between two multiplicities.
+multEq :: Reason -> Multiplicity -> Multiplicity -> MultEquation
+multEq r m1 m2 = MultEquation m1 (Origin (getSpan m1) r) m2 (Origin (getSpan m2) r)
+
+-- | Specialized builders for multiplicity equations-
+kindEq, arrowEq :: Multiplicity -> Multiplicity -> MultEquation
+kindEq  = multEq FromKind
+arrowEq = multEq FromArrow
 
 kindEqConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindEqConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [(m1, m2)]
-  (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindEqConstraints k11 k21 
+  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [kindEq m1 m2]
+  (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindEqConstraints k11 k21
                                           ++ kindEqConstraints k12 k22
   _ _ -> []
 
 kindSubConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindSubConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [(K.join m1 m2, m2)]
-  (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11 
+  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [kindEq (K.join m1 m2) m2]
+  (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
                                           ++ kindSubConstraints k12 k22
   _ _ -> []
 
@@ -61,12 +76,13 @@ solve eqs = do
   bfs = \cases
     []                (st : _) -> Right st
     []                []       -> internalError "multiplicity unification: no states"
-    (mc@(l, r) : mcs) sts      -> case next of
-      [] -> Left case substituted of (l', r', _) : _ -> (l',r'); [] -> mc
+    (mc@(MultEquation l ol r or') : mcs) sts -> case next of
+      [] -> Left case substituted of (eq', _) : _ -> eq'; [] -> mc
       _  -> bfs mcs next
-      where 
-        substituted = [(apply sub l, apply sub r, st) | st@(SolverState sub _) <- sts]
-        next        = [st' | (l', r', st) <- substituted
+      where
+        substituted = [(MultEquation (apply sub l) ol (apply sub r) or', st)
+                      | st@(SolverState sub _) <- sts]
+        next        = [st' | (MultEquation l' _ r' _, st) <- substituted
                            , st'          <- solveOne l' r' st]
 
   solveOne :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
@@ -171,7 +187,7 @@ defaultUnbound :: MultConstraints -> Substitution -> Substitution
 defaultUnbound eqs sub@(Θ ivtms) =
   let bound = Set.fromList [φ | (φ, _) <- ivtms]
       ivE   = Set.fromList
-                [ φ | (l, r) <- eqs
+                [ φ | MultEquation l _ r _ <- eqs
                     , Sup _ lvφs <- [l, r]
                     , (InstLv, φ) <- lvφs
                 ]

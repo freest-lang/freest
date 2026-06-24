@@ -11,8 +11,8 @@ import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
 import Validation.Base (Validation, incCounter)
-import Validation.LocalInference.Multiplicities 
-  (MultConstraints, kindEqConstraints, kindSubConstraints)
+import Validation.LocalInference.Multiplicities
+  (MultConstraints, kindEq, arrowEq, kindEqConstraints, kindSubConstraints)
 import Validation.LocalInference.Substitution
   (Substitution, emptySubs, subsMult, subsType)
 import Validation.Normalisation 
@@ -119,13 +119,13 @@ match e tdecls = match' e tdecls Set.empty Set.empty
            || T.isAppLinChoice t1 && T.isAppLinChoice t2
             )
         -> foldMatch e tdecls bindings visited (mcs, emptySubs) t1s t2s
-        where mcs = [(m1, m2) | (T.Arrow _ m1, T.Arrow _ m2) <- [(t1', t2')]]
+        where mcs = [arrowEq m1 m2 | (T.Arrow _ m1, T.Arrow _ m2) <- [(t1', t2')]]
       -- M-Quant
       (T.AppQuant s1 p1 pk1 m1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 pk2 m2 ((a2, k2) : aks2) t2')
         | p1 == p2 && pk1 == pk2
         -> first (mcs ++) <$> match' e tdecls (Set.insert (a1, a2) bindings) visited
             (T.AppQuant s1 p1 pk1 m1 aks1 t1') (T.AppQuant s2 p2 pk2 m2 aks2 t2')
-        where mcs = kindEqConstraints k1 k2 ++ [(m1, m2) | p1 == T.In && pk1 == K.Top]
+        where mcs = kindEqConstraints k1 k2 ++ [kindEq m1 m2 | p1 == T.In && pk1 == K.Top]
       -- M-Var
       (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings

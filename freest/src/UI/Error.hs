@@ -22,6 +22,7 @@ import Parser.Unparser
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
+import Syntax.Provenance ( Origin(..), Reason(..) )
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Compiler.Bug ( internalError )
@@ -43,7 +44,7 @@ data Error
       K.Multiplicity 
       K.Multiplicity
   | CannotInferHigherKindedTypeApp Span K.Kind
-  | CannotSatisfyMultConstraint Span K.Multiplicity K.Multiplicity
+  | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesisePat Span E.Pat
   | CannotSynthesiseReceiveType Span
@@ -123,7 +124,7 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
-    CannotSatisfyMultConstraint s _ _ -> s
+    CannotSatisfyMultConstraint s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesisePat s _ -> s
     CannotSynthesiseReceiveType s -> s
@@ -200,9 +201,21 @@ lookupSrc src fp = fromMaybe
   (internalError $ "file not in source map: " ++ fp)
   (src Map.!? fp)
 
+-- | Collapse the standard-library install path to a stable, readable suffix,
+-- e.g. ".../share/.../StandardLib/Prelude.fst" becomes "StandardLib/Prelude.fst".
+prettyPath :: FilePath -> FilePath
+prettyPath fp =
+  case [ rest | t <- List.tails fp, Just rest <- [List.stripPrefix "StandardLib/" t] ] of
+    (rest : _) -> "StandardLib/" ++ rest
+    []         -> fp
+
+-- | A span rendered like 'show', but with 'prettyPath' applied to its file.
+prettySpan :: Span -> String
+prettySpan s = prettyPath (filepath s) ++ drop (length (filepath s)) (show s)
+
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
-  unlines ([ spaces (n + 1) ++ show s | showSpan ] ++
+  unlines ([ spaces (n + 1) ++ prettySpan s | showSpan ] ++
            [ spaces n ++ sep
            , rpad n ' ' (show sl) ++ sep ++ l
            , spaces n ++ sep ++ spaces (sc - 1)
@@ -238,7 +251,7 @@ multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
         (ws, li') = List.span Char.isSpace li
 
 header :: Located a => String -> a -> String
-header sort (getSpan -> s) = show s ++ ": " ++ sort ++ ":"
+header sort (getSpan -> s) = prettySpan s ++ ": " ++ sort ++ ":"
 
 errorHeader :: Located a => a -> String
 errorHeader = header "error"
@@ -265,9 +278,29 @@ toMessage src = \case
   CannotInferHigherKindedTypeApp s k -> makeError src s
     ("Cannot infer type application for a type of kind " ++ bt (unparse k))
     ++ "Please provide all type arguments before this one"
-  CannotSatisfyMultConstraint s m1 m2 -> makeError src s
-    "Cannot satisfy multiplicity constraints"
-    ++ "(Cannot unify " ++ bt (unparse m1) ++ " with " ++ bt (unparse m2) ++ ")"
+  CannotSatisfyMultConstraint s m1 o1 m2 o2 -> makeError src s
+    "Could not infer consistent multiplicities for this application"
+    ++ "Could not match multiplicity "
+    ++ showSide m1 o1
+    ++ "with multiplicity " ++ showSide m2 o2
+    where
+      showSide m (Origin sp r) =
+        bt (unparse m) ++ " (" ++ adj m ++ "), from " ++ showReason r
+        ++ locate sp
+      locate sp@(Span fp _ _)
+        | Map.member fp src = ":\n" ++ snippet src sp True
+        | otherwise         = "\n"
+      adj = \case
+        K.Lin{} -> "linear"
+        K.Un{}  -> "unrestricted"
+        _       -> ""
+      showReason = \case
+        FromArrow            -> "an arrow type"
+        FromForall           -> "a quantifier"
+        FromKind             -> "a kind"
+        FromLambda           -> "a lambda expression"
+        FromInferred         -> "an inferred multiplicity"
+        Derived (Origin _ r) -> showReason r
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesisePat s p -> makeError src s
