@@ -55,7 +55,11 @@ module Syntax.Type.Kinded
   , T.isAppDName
   , kindOf
   , isProper
+  , isRestricted
+  , isStrictlyChannel
+  , isStrictlySession
   , smartApp
+  , appK
   )
 where
 
@@ -144,7 +148,7 @@ pattern Var s k l a <- T.Var s k l a
 pattern Abs :: Span -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern Abs s aks t <- T.Abs s _ aks t
   where Abs s aks t = T.Abs s k aks t
-          where k = foldr (K.Arrow s . snd ) (kindOf t) aks
+          where k = foldr (K.Arrow s . snd) (kindOf t) aks
 
 pattern App :: Span -> KindedType -> [KindedType] -> KindedType
 pattern App s t ts <- T.App s _ t ts
@@ -158,6 +162,13 @@ pattern App s t ts <- T.App s _ t ts
             Tuple s ts -> Tuple s ts
             List s t -> List s t
             t -> t
+
+-- | Build an 'App' with an explicit result kind, bypassing the smart
+-- constructor's 'kindArrow' peel. Used by CT-App in kinding, where the
+-- function's kind is not yet ground and the result kind is a fresh
+-- metavariable that the unifier will later refine via 'kindSubs'.
+appK :: Span -> K.Kind -> KindedType -> [KindedType] -> KindedType
+appK = T.App
 
 pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
 pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
@@ -269,8 +280,17 @@ kindOf = \case
   T.DName _ k _ -> k
   T.Void _ k _ -> k
 
-isProper :: KindedType -> Bool
+isProper, isRestricted, isStrictlyChannel, isStrictlySession :: KindedType -> Bool
 isProper = K.isProper . kindOf
+isRestricted t = case kindOf t of
+  (K.Proper _ K.Un{} _) -> False
+  _                     -> True
+isStrictlyChannel t = case kindOf t of
+  (K.Proper _ _ K.Channel) -> True
+  _                        -> False
+isStrictlySession t = case kindOf t of
+  (K.Proper _ _ K.Session) -> True
+  _                        -> False
 
 smartApp :: Span -> KindedType -> [KindedType] -> KindedType
 smartApp s (App x t ts) us = App s t (ts ++ us)

@@ -20,6 +20,8 @@ module Syntax.Kind
   , isChannel
   , isTop
   , isProper
+  , isGround
+  , isVarPK
   , depth
   , kindArrow
   , image
@@ -143,11 +145,15 @@ instance Meet Prekind where
   meet _       _       = Top
 
 instance Show Prekind where
-  show = \case 
+  show = \case
     Top     -> "T"
     Session -> "S"
     Channel -> "C"
     VarPK ψ -> external ψ
+
+isVarPK :: Prekind -> Bool
+isVarPK VarPK{} = True
+isVarPK _       = False
 
 -- 3. Kinds
 
@@ -177,12 +183,13 @@ instance Ord Kind where
 instance Join Kind where
   join (Proper s m1 pk1) (Proper _ m2 pk2) = 
     Proper s (join m1 m2) (join pk1 pk2)
-  join _ _ = internalError "join of non-proper kinds"
+  join k1 k2 = internalError $ "join of non-proper kinds: " ++ show k1 ++ " and " ++ show k2
 
 instance Subsort Kind where
   Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
   Arrow _ k11 k12 <: Arrow _ k21 k22 = k21 <: k11 && k12 <: k22
-  Var _ τ1        <: Var _ τ2        = τ1 == τ2
+  k1@Var{}        <: k2              = internalError $ "subkind on kind variable: " ++ show k1 ++ " <: " ++ show k2
+  k1              <: k2@Var{}        = internalError $ "subkind on kind variable: " ++ show k1 ++ " <: " ++ show k2
   _               <: _               = False
 
 instance Located Kind where
@@ -193,11 +200,11 @@ instance Located Kind where
     Proper _ m pk -> Proper s m pk 
     Arrow _ k1 k2 -> Arrow s k1 k2 
   
--- for debugging
+-- for internal errors
 instance Show Kind where
   show = \case 
-    Proper _ m1 pk -> show m1 ++ " " ++ show pk
-    Arrow  _ k1 k2 -> "(" ++ show k1 ++ "->" ++ show k2 ++ ")"
+    Proper _ m1 pk -> show m1 ++ show pk
+    Arrow  _ k1 k2 -> "(" ++ show k1 ++ " -> " ++ show k2 ++ ")"
     Var    _ τ     -> show τ
 
 -- | Abbreviations for the six proper kinds
@@ -226,12 +233,21 @@ isProper = \case
   Proper{} -> True
   _        -> False
 
+-- | A kind is ground when it contains no 'Var' anywhere in its structure.
+-- Useful as a precondition before calling '(<:)', which raises an internal
+-- error on a 'Var' leaf.
+isGround :: Kind -> Bool
+isGround = \case
+  Proper{}    -> True
+  Arrow _ k1 k2 -> isGround k1 && isGround k2
+  Var{}       -> False
+
 depth :: Kind -> Int
 depth = \case
   Proper{}    -> 0
   Arrow _ _ k -> 1 + depth k
-  Var{}       -> 0
-  -- k -> internalError ("kind " ++ show k)
+  -- Var{}       -> 0
+  k -> internalError ("kind " ++ show k)
 
 -- | Split a curried 'Arrow' kind into its parameter kinds and result kind.
 kindArrow :: Kind -> ([Kind], Kind)

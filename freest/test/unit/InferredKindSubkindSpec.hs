@@ -7,7 +7,8 @@ import Syntax.Type.Unkinded qualified as TU
 import Syntax.Type.Kinded qualified as TK
 import UI.Error (showErrors)
 import UnitSpecUtils (mkTypeSpec, errorsAreFailures)
-import Validation.Kinding (runKindModule, runSynth)
+import Validation.Kinding (runKindModule, runSynthAndSolve)
+import Validation.KindSubstitution qualified as KS
 
 import Control.Monad (unless)
 import Test.Hspec (Spec, expectationFailure, hspec)
@@ -47,18 +48,21 @@ spec = mkTypeSpec
     (_, Nothing, _) ->
       expectationFailure "Ill formed test case: missing kind annotation"
     (t, Just k, m) ->
-      case runKindModule m >>= \(kctx, _) -> runSynth kctx (eraseKinds t) of
+      case runKindModule m >>= \(kctx, _) -> runSynthAndSolve kctx (eraseKinds t) of
         Left es  -> expectationFailure (showErrors src es)
-        Right kt ->
-          let k' = TK.kindOf kt in
-          unless (k' K.<: k) $ expectationFailure $
-            "inferred kind `" ++ show k' ++ "` is not a subkind of the declared kind `"
-            ++ show k ++ "`"
+        Right (kt, σ) ->
+          let k' = KS.applyKind σ (TK.kindOf kt) in
+          if not (K.isGround k')
+            then expectationFailure $
+              "inferred kind `" ++ show k' ++ "` is still unresolved after solving for type " ++ show t ++ "\n" ++ show σ
+            else unless (k' K.<: k) $ expectationFailure $
+              "inferred kind `" ++ show k' ++ "` is not a subkind of the declared kind `"
+              ++ show k ++ "`\n" ++ show σ
 
 -- | Replace every concrete kind annotation in a type by a fresh kind variable.
 -- Annotations occur on 'TU.Abs' binders and on 'TU.Void'.
 eraseKinds :: TU.ScopedType -> TU.ScopedType
-eraseKinds = fst . erase 0
+eraseKinds = fst . erase (-10)
   where
     erase :: Int -> TU.ScopedType -> (TU.ScopedType, Int)
     erase n = \case
@@ -91,4 +95,4 @@ eraseKinds = fst . erase 0
     variseKind :: Int -> K.Kind -> (K.Kind, Int)
     variseKind n = \case
       k@K.Var{} -> (k, n)
-      k         -> (K.Var (getSpan k) (Variable (getSpan k) "κ" n), n + 1)
+      k         -> (K.Var (getSpan k) (Variable (getSpan k) "κ" n), n - 1)

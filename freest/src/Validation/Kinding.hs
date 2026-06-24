@@ -19,9 +19,6 @@ module Validation.Kinding
   , checkPrekind
   , checkSession
   , checkChannel
-  , isRestricted
-  , isStrictlySession
-  , isStrictlyChannel
   , KindCtx
   , emptyKindCtx
   , kindModule
@@ -29,6 +26,7 @@ module Validation.Kinding
   , kindLetDecls -- freesti
   , runKindModule
   , runSynth
+  , runSynthAndSolve
   , runCheck
   , chan
   )
@@ -48,7 +46,8 @@ import Validation.Base
     , constraints
     , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind )
 import Validation.Constraint
-    ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind) )
+    ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind, KindEq)
+    , Constraints )
 import Validation.Expose qualified as Expose
 import Validation.KindSubstitution qualified as KS
 import Validation.Normalisation ( normalise )
@@ -142,18 +141,29 @@ synth ctx = \case
     Just k -> pure $ TK.fromVariable ObjLv a k
     Nothing -> throwE (TypeVarOutOfScope s a)
   T.App s t ts -> do
-    t' <- synth ctx t
-    let k = TK.kindOf t'
-    let (ks, kn) = kindArrow k
-    (_, ts') <- checkArgs t' (length ts) (length ks) ts ks kn
-    pure $ TK.App s t' ts'
+    kt <- synth ctx t
+    let kF = TK.kindOf kt
+    if isGround kF
+      then do
+        let (ks, kn) = kindArrow kF
+        (_, ts') <- checkArgs kt (length ts) (length ks) ts ks kn
+        pure $ TK.App s kt ts'
+      else do
+        -- CT-App: defer arrow decomposition. Synth each argument, fabricate
+        -- a fresh kind variable for the result, and emit a single 'KindEq'
+        -- tying the function's kind to @k_arg₁ → … → k_argₙ → τ_X@.
+        kts <- traverse (synth ctx) ts
+        τ_X <- freshKind s
+        let kArrow = foldr (Arrow s) τ_X (map TK.kindOf kts)
+        emit $ KindEq s kF kArrow
+        pure $ TK.appK s τ_X kt kts
     where
       checkArgs :: TK.KindedType -> Int -> Int -- error info
                 -> [T.ScopedType] -> [Kind] -> Kind
                 -> Validation (Kind, [TK.KindedType])
       checkArgs _ _ _ [] ks kn = pure
         (foldr (\k k' -> Arrow (spanFromTo k k') k k') kn ks, [])
-      checkArgs t' nargs npars ts [] kn = do
+      checkArgs t' nargs npars ts [] kn =
         throwE (TooManyKArgs (spanFromTo (head ts) (last ts)) t' kn npars nargs)
       checkArgs t' nargs npars (ti : ts) (ki : ks) kn = do
         ti' <- check ctx ti ki
@@ -162,15 +172,15 @@ synth ctx = \case
     let ctx' = Map.fromList (first Left <$> aks) `Map.union` ctx
     TK.Abs s aks <$> synth ctx' t
 
--- | Check a type against a given kind.
+-- | Check a type against a given kind. TODO: can we have more cases here?
 check :: KindCtx -> T.ScopedType -> Kind -> Validation TK.KindedType
 check ctx t k = do
   kt <- synth ctx t
-  checkSubkindOf kt (TK.kindOf kt) k
+  checkK kt k
   pure kt
 
 checkK :: TK.KindedType -> Kind -> Validation ()
-checkK t = checkSubkindOf t (TK.kindOf t)
+checkK kt = checkSubkindOf kt (TK.kindOf kt)
 
 -- | Calculate the join of the multiplicities of a list of types, starting
 -- from a given multiplicity. Throws an error if a non-proper type is
@@ -231,35 +241,65 @@ checkPrekindK t pk = do
     throwE (PrekindMismatch (getSpan t) pk t (Proper (getSpan t) m pk'))
   pure (m, pk')
 
-isVarPK :: Prekind -> Bool
-isVarPK VarPK{} = True
-isVarPK _       = False
-
--- | Check if the kind of a type is a subkind of another. If not, throw an 
--- error located at the type.
+-- | Check that one kind is a subkind of another. Walks 'Arrow' structure
+-- (contravariantly in the parameter, covariantly in the result) so that the
+-- leaves are either both 'Proper' (checked directly with @('<:')@) or include
+-- a 'Var' on at least one side (deferred to the constraint solver as a
+-- 'SubMult'/'SubPrekind' pair via 'emitDecomposed'). When one side is an
+-- 'Arrow' and the other a 'Var', refine the 'Var' to a fresh @τ_a → τ_b@
+-- shape via a 'KindEq' constraint and recurse — this lets a kind metavariable
+-- be inferred as an arrow when it is applied as one. The lattice @('<:')@ on
+-- 'K.Kind' raises an internal error on a 'K.Var', so we must never let it
+-- reach an unsolved leaf.
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
-checkSubkindOf t k' k = unless (k' <: k) $
-    throwE (KindMismatch (getSpan t) k t)
+checkSubkindOf t = \cases
+  (Arrow _ k11 k12) (Arrow _ k21 k22) -> checkSubkindOf t k21 k11 >> checkSubkindOf t k12 k22
+  k1@Proper{}       k2@Proper{}       -> unless (k1 <: k2) $ throwE (KindMismatch (getSpan t) k2 t)
+  k1@Var{}          k2@Proper{}       -> emitDecomposed k1 k2
+  k1@Proper{}       k2@Var{}          -> emitDecomposed k1 k2
+  k1@Var{}          k2@Var{}          -> emitDecomposed k1 k2
+  k1@(Arrow s _ _)  k2@Var{}          -> refineVarToArrow s k1 k2
+  k1@Var{}          k2@(Arrow s _ _)  -> refineVarToArrow s k1 k2
+  _                 k2                -> throwE (KindMismatch (getSpan t) k2 t)
+  where
+    -- The 'Var' side is refined to a fresh @τ_a → τ_b@ via 'KindEq'; then we
+    -- recurse so the contravariant/covariant decomposition fires.
+    refineVarToArrow s k1 k2 = do
+      τ_a <- freshKind s
+      τ_b <- freshKind s
+      let arr = Arrow s τ_a τ_b
+      case (k1, k2) of
+        (Var{}, _) -> emit (KindEq s k1 arr) >> checkSubkindOf t arr k2
+        (_, Var{}) -> emit (KindEq s k2 arr) >> checkSubkindOf t k1  arr
+        _          -> internalError "refineVarToArrow: no Var side"
+
+-- | Replace each 'K.Var' by a fresh 'Proper' kind and emit the resulting
+-- @m₁ <: m₂@ and @υ₁ <: υ₂@ constraints. Helper for 'checkSubkindOf'; only
+-- called on leaves where at least one side is a 'Var', so the other side is
+-- always 'Proper' (never an 'Arrow'). For each 'Var' side, additionally emit
+-- a 'KindEq' tying the variable to the fresh @Proper m pk@ so the unifier
+-- records the binding in 'kindSubs'.
+emitDecomposed :: Kind -> Kind -> Validation ()
+emitDecomposed k1 k2 = do
+  (s, m1, pk1) <- promote k1
+  (_, m2, pk2) <- promote k2
+  emit (SubMult    s m1  m2)
+  emit (SubPrekind s pk1 pk2)
+  where
+    promote :: Kind -> Validation (Span, Multiplicity, Prekind)
+    promote (Proper s m pk) = pure (s, m, pk)
+    promote k@(Var s _)     = do
+      m  <- freshMult s
+      pk <- freshPrekind s
+      emit (KindEq s k (Proper s m pk))
+      pure (s, m, pk)
+    promote k               = internalError $ "unexpected Arrow kind " ++ show k
 
 -- | Check if the kind of a type is a subkind of another in a contravariant 
 -- position. If not, throw an error located at the type.
-checkSubkindOf' :: TK.KindedType -> Kind -> Kind -> Validation ()
-checkSubkindOf' t k' k = unless (k' <: k) $
-     throwE (KindMismatch (getSpan t) k' t)
-
-isRestricted, isStrictlyChannel, isStrictlySession :: TK.KindedType -> Bool
-
-isRestricted t = case TK.kindOf t of
-  (Proper _ Un{} _) -> False
-  _ -> True
-
-isStrictlyChannel t = case TK.kindOf t of
-  (Proper _ _ Channel) -> True
-  _ -> False
-
-isStrictlySession t = case TK.kindOf t of
-  (Proper _ _ Session) -> True
-  _ -> False
+-- checkSubkindOf' :: TK.KindedType -> Kind -> Kind -> Validation ()
+-- checkSubkindOf' t k' k = unless (k' <: k) $
+--      throwE (KindMismatch (getSpan t) k' t)
 
 lookupKind :: KindCtx -> Identifier -> Validation Kind
 lookupKind ctx i = do
@@ -286,7 +326,7 @@ kindModule ctx mod = do
     ++ List.intercalate "\n  " (map show (Set.toList cs))
   -- Solve the constraints and apply the resulting substitution to every
   -- kind annotation in the module.
-  let σ = fromMaybe KS.emptySubstitution (Unification.unify cs)
+  σ <- solveConstraints cs
   traceM $ "Substitution: " ++ show σ
   return (ctx', KS.applyKindedModule σ mod'{M.definitions = lds})
   where
@@ -620,6 +660,30 @@ runKindModule modl = runValidation emptyValidationState do
 --     * a kind synthesized from the type, otherwise.
 runSynth :: KindCtx -> T.ScopedType -> Either [Error] TK.KindedType -- TODO: this function will be deprecated
 runSynth ctx t = runValidation emptyValidationState (synth ctx t)
+
+-- | Like 'runSynth', but additionally solves the constraints gathered during
+-- synthesis and returns the resulting 'KS.Substitution' alongside the kinded
+-- type. Callers that need a concrete kind (rather than a bare 'K.Var') should
+-- apply the substitution with 'KS.applyKind' before inspecting it.
+runSynthAndSolve :: KindCtx -> T.ScopedType
+                 -> Either [Error] (TK.KindedType, KS.Substitution)
+runSynthAndSolve ctx t = runValidation emptyValidationState do
+  kt <- synth ctx t
+  cs <- gets constraints
+  σ  <- solveConstraints cs
+  pure (kt, σ)
+
+-- | Run the kind-inference 'Unification.unify' on the gathered constraints,
+-- throwing 'UnifyFailed' if the constraints have no solution. The error span
+-- is taken from an arbitrary failing constraint (constraint sets that reach
+-- the solver are non-empty whenever the solver can fail).
+solveConstraints :: Constraints -> Validation KS.Substitution
+solveConstraints cs = case Unification.unify cs of
+  Just σ  -> pure σ
+  Nothing -> throwE (UnifyFailed s cs)
+    where s = maybe (internalError "empty constraint set rejected by unify")
+                    (getSpan . fst)
+                    (Set.minView cs)
 
 -- | Run checking on a type against a kind, building the initial validation 
 -- state from a given module. This returns either:

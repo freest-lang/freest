@@ -24,7 +24,7 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Validation.Constraint qualified as C
 import Validation.KindSubstitution
-    ( Substitution(..), emptySubstitution, applyMult, applyPrekind )
+    ( Substitution(..), emptySubstitution, applyMult, applyPrekind, applyKind )
 
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
@@ -102,6 +102,41 @@ unifyOne σ (c : rest)   = case c of
   C.MeetPrekind _ ψ ps ->
     let glb = foldr (K.meet . applyPrekind σ) K.Top ps
     in unifyOne (updatePrekind ψ glb σ) rest
+  C.KindEq s k1 k2 -> case (applyKind σ k1, applyKind σ k2) of
+    -- Decompose 'Arrow' structurally.
+    (K.Arrow _ a1 b1, K.Arrow _ a2 b2) ->
+      unifyOne σ (C.KindEq s a1 a2 : C.KindEq s b1 b2 : rest)
+    -- Var = Var of the same identity: already equal, nothing to do.
+    (K.Var _ τ1, K.Var _ τ2) | τ1 == τ2 -> unifyOne σ rest
+    -- Var on either side: bind in 'kindSubs' (with an occurs check).
+    (K.Var _ τ, k)
+      | occursIn τ k -> Nothing
+      | otherwise    -> unifyOne (updateKind τ k σ) rest
+    (k, K.Var _ τ)
+      | occursIn τ k -> Nothing
+      | otherwise    -> unifyOne (updateKind τ k σ) rest
+    -- Leaf 'Proper' = 'Proper': two-way 'SubMult'/'SubPrekind'.
+    (K.Proper _ m1 pk1, K.Proper _ m2 pk2) ->
+      unifyOne σ ( C.SubMult    s m1  m2
+                 : C.SubMult    s m2  m1
+                 : C.SubPrekind s pk1 pk2
+                 : C.SubPrekind s pk2 pk1
+                 : rest )
+    -- Shape mismatch (e.g. 'Arrow' vs 'Proper'): unsolvable.
+    _ -> Nothing
+
+-- | Update σ at @τ@ by binding the kind variable to the given kind. The
+-- value is assumed to already have been 'applyKind'-ed by σ at the call
+-- site, so the resulting substitution is idempotent for @τ@.
+updateKind :: Variable -> K.Kind -> Substitution -> Substitution
+updateKind τ k σ = σ { kindSubs = Map.insert τ k (kindSubs σ) }
+
+-- | Occurs check: does the kind variable @τ@ appear anywhere in @k@?
+occursIn :: Variable -> K.Kind -> Bool
+occursIn τ = \case
+  K.Var _ τ'      -> τ == τ'
+  K.Arrow _ k1 k2 -> occursIn τ k1 || occursIn τ k2
+  K.Proper{}      -> False
 
 -- | Update σ at @φ@ by the meet of the new value with the current one,
 -- mirroring substitution composition (Definition 5).

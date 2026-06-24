@@ -24,7 +24,7 @@ module Validation.Constraint
   ) where
 
 import Syntax.Base ( Located(..), Span, Variable )
-import Syntax.Kind ( Multiplicity, Prekind )
+import Syntax.Kind ( Kind, Multiplicity, Prekind )
 
 import Data.List qualified as List
 import qualified Data.Set as Set
@@ -45,6 +45,11 @@ data Constraint
   | JoinMult Span Variable [Multiplicity]
     -- ^ @φ = ⊔_{ℓ∈L} m_ℓ@ — the multiplicity variable @φ@ is the join of
     -- the given multiplicities.
+  | KindEq Span Kind Kind
+    -- ^ @k₁ = k₂@ — kind equality, emitted by CT-App when the function's
+    -- kind is not fully known. The solver decomposes 'Arrow' structure,
+    -- binds kind metavariables via 'kindSubs', and reduces a leaf
+    -- 'Proper' = 'Proper' to two-way 'SubMult'/'SubPrekind' constraints.
 
 -- | A constraint set.
 type Constraints = Set.Set Constraint
@@ -56,28 +61,31 @@ instance Show Constraint where
     MeetPrekind _ ψ vs -> show ψ ++ " = ⊓ {" ++ List.intercalate ", " (map show vs) ++ "}"
     JoinPrekind _ ψ vs -> show ψ ++ " = ⊔ {" ++ List.intercalate ", " (map show vs) ++ "}"
     JoinMult _ φ ms    -> show φ ++ " = ⊔ {" ++ List.intercalate ", " (map show ms) ++ "}"
+    KindEq _ k1 k2     -> show k1 ++ " = " ++ show k2
 
 -- | Span-blind: the source position is metadata, not part of a constraint's
 -- identity (so two constraints that differ only in location compare equal).
 instance Eq Constraint where
   (==) = \cases
-    (SubMult _ m1 m2)     (SubMult _ m1' m2')     -> m1 == m1' && m2 == m2'
-    (SubPrekind _ v1 v2)  (SubPrekind _ v1' v2')  -> v1 == v1' && v2 == v2'
-    (MeetPrekind _ ψ vs)  (MeetPrekind _ ψ' vs')  -> ψ  == ψ'  && vs == vs'
-    (JoinPrekind _ ψ vs)  (JoinPrekind _ ψ' vs')  -> ψ  == ψ'  && vs == vs'
-    (JoinMult _ φ ms)     (JoinMult _ φ' ms')     -> φ  == φ'  && ms == ms'
-    _                     _                       -> False
+    (SubMult _ m1 m2)     (SubMult _ m1' m2')    -> m1 == m1' && m2 == m2'
+    (SubPrekind _ v1 v2)  (SubPrekind _ v1' v2') -> v1 == v1' && v2 == v2'
+    (MeetPrekind _ ψ vs)  (MeetPrekind _ ψ' vs') -> ψ  == ψ'  && vs == vs'
+    (JoinPrekind _ ψ vs)  (JoinPrekind _ ψ' vs') -> ψ  == ψ'  && vs == vs'
+    (JoinMult _ φ ms)     (JoinMult _ φ' ms')    -> φ  == φ'  && ms == ms'
+    (KindEq _ k1 k2)      (KindEq _ k1' k2')     -> k1 == k1' && k2 == k2'
+    _                     _                      -> False
 
 -- | Span-blind ordering, by constructor index then by payload. Required for
 -- 'Constraints' (a 'Set').
 instance Ord Constraint where
   compare = \cases
-    (SubMult _ m1 m2)     (SubMult _ m1' m2')     -> compare (m1, m2) (m1', m2')
-    (SubPrekind _ v1 v2)  (SubPrekind _ v1' v2')  -> compare (v1, v2) (v1', v2')
-    (MeetPrekind _ ψ vs)  (MeetPrekind _ ψ' vs')  -> compare (ψ, vs)  (ψ',  vs')
-    (JoinPrekind _ ψ vs)  (JoinPrekind _ ψ' vs')  -> compare (ψ, vs)  (ψ',  vs')
-    (JoinMult _ φ ms)     (JoinMult _ φ' ms')     -> compare (φ, ms)  (φ',  ms')
-    c1                    c2                      -> compare (rank c1) (rank c2)
+    (SubMult _ m1 m2)    (SubMult _ m1' m2')    -> compare (m1, m2) (m1', m2')
+    (SubPrekind _ v1 v2) (SubPrekind _ v1' v2') -> compare (v1, v2) (v1', v2')
+    (MeetPrekind _ ψ vs) (MeetPrekind _ ψ' vs') -> compare (ψ, vs)  (ψ',  vs')
+    (JoinPrekind _ ψ vs) (JoinPrekind _ ψ' vs') -> compare (ψ, vs)  (ψ',  vs')
+    (JoinMult _ φ ms)    (JoinMult _ φ' ms')    -> compare (φ, ms)  (φ',  ms')
+    (KindEq _ k1 k2)     (KindEq _ k1' k2')     -> compare (k1, k2) (k1', k2')
+    c1                   c2                     -> compare (rank c1) (rank c2)
     where
       rank :: Constraint -> Int
       rank = \case
@@ -86,6 +94,7 @@ instance Ord Constraint where
         MeetPrekind{} -> 2
         JoinPrekind{} -> 3
         JoinMult{}    -> 4
+        KindEq{}      -> 5
 
 instance Located Constraint where
   getSpan = \case
@@ -94,6 +103,7 @@ instance Located Constraint where
     MeetPrekind s _ _ -> s
     JoinPrekind s _ _ -> s
     JoinMult    s _ _ -> s
+    KindEq      s _ _ -> s
 
   setSpan s = \case
     SubMult     _ m1 m2 -> SubMult     s m1 m2
@@ -101,3 +111,4 @@ instance Located Constraint where
     MeetPrekind _ ψ  vs -> MeetPrekind s ψ  vs
     JoinPrekind _ ψ  vs -> JoinPrekind s ψ  vs
     JoinMult    _ φ  ms -> JoinMult    s φ  ms
+    KindEq      _ k1 k2 -> KindEq      s k1 k2

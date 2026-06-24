@@ -24,6 +24,7 @@ module Validation.KindSubstitution
   , applyPrekind
   , applyKind
   , applyType
+  , applyKindedType
   , applyModule
   , applyKindedModule
   ) where
@@ -33,6 +34,7 @@ import Syntax.Declarations qualified as D
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Type.Internal qualified as T
+import Syntax.Type.Kinded () -- for the @XType Kinded = K.Kind@ instance
 
 import Data.Bifunctor ( second )
 import Data.Map.Strict qualified as Map
@@ -88,9 +90,9 @@ applyKind σ = \case
   K.Proper s m pk -> K.Proper s (applyMult σ m) (applyPrekind σ pk)
   K.Arrow s k1 k2 -> K.Arrow s (applyKind σ k1) (applyKind σ k2)
 
--- | Apply a substitution to a type, descending into every embedded
--- 'K.Multiplicity', 'K.Prekind' and 'K.Kind' annotation. Phase-polymorphic
--- — the @XType x@ slot is passed through unchanged.
+-- | Apply a substitution to a 'Scoped' type, descending into every embedded
+-- 'K.Multiplicity', 'K.Prekind' and 'K.Kind' annotation. The @XType Scoped@
+-- slot is 'Void' and is passed through unchanged.
 applyType :: Substitution -> T.Type x -> T.Type x
 applyType σ = \case
   T.Int s x                 -> T.Int s x
@@ -112,6 +114,34 @@ applyType σ = \case
   T.Abs s x aks t           -> T.Abs s x (map (second (applyKind σ)) aks) (applyType σ t)
   T.App s x t ts            -> T.App s x (applyType σ t) (map (applyType σ) ts)
 
+-- | Apply a substitution to a 'Kinded' type. Like 'applyType', but also
+-- substitutes the embedded @K.Kind@ annotation (the @XType Kinded@ slot) on
+-- every node, so that residual kind metavariables introduced by CT-App and
+-- bound in 'kindSubs' are rewritten to their solved value.
+applyKindedType :: Substitution -> T.Type Kinded -> T.Type Kinded
+applyKindedType σ = walk
+  where
+    k = applyKind σ
+    walk = \case
+      T.Int s x                 -> T.Int s (k x)
+      T.Float s x               -> T.Float s (k x)
+      T.Char s x                -> T.Char s (k x)
+      T.Arrow s x m             -> T.Arrow s (k x) (applyMult σ m)
+      T.Quant s x p pk m        -> T.Quant s (k x) p (applyPrekind σ pk) (applyMult σ m)
+      T.ForallM s x m φs t      -> T.ForallM s (k x) (applyMult σ m) φs (walk t)
+      T.Void s x kd             -> T.Void s (k x) (k kd)
+      T.Skip s x                -> T.Skip s (k x)
+      T.End s x p               -> T.End s (k x) p
+      T.Message s x m p         -> T.Message s (k x) (applyMult σ m) p
+      T.Choice s x m p ls       -> T.Choice s (k x) (applyMult σ m) p ls
+      T.Semi s x                -> T.Semi s (k x)
+      T.Dual s x                -> T.Dual s (k x)
+      T.TName s x i             -> T.TName s (k x) i
+      T.DName s x i             -> T.DName s (k x) i
+      T.Var s x lv a            -> T.Var s (k x) lv a
+      T.Abs s x aks t           -> T.Abs s (k x) (map (second k) aks) (walk t)
+      T.App s x t ts            -> T.App s (k x) (walk t) (map walk ts)
+
 -- | Apply a substitution to every kind annotation in a scoped module:
 -- kind signatures, type-decl bodies, datatype parameter kinds, and
 -- constructor field types. Expression-level annotations inside
@@ -132,22 +162,19 @@ applyModule σ m = m
       }
 
 -- | Apply a substitution to every kind annotation in a kinded module —
--- the same shape as 'applyModule' specialised to the 'Kinded' phase.
---
--- NOTE: this descends into 'Quant', 'AppQuant', 'Abs', 'Void' etc. via
--- 'applyType', but does /not/ touch the @K.Kind@ stored in each kinded
--- node's @XType@ slot (the embedded "kind-of-this-type" annotation).
--- A future enhancement would walk those too.
+-- the same shape as 'applyModule' specialised to the 'Kinded' phase. Uses
+-- 'applyKindedType' so the @K.Kind@ stored in each node's @XType@ slot is
+-- also rewritten (CT-App leaves residual kind metavariables there).
 applyKindedModule :: Substitution -> M.KindedModule -> M.KindedModule
 applyKindedModule σ m = m
-  { M.kindSigs  = fmap (applyKind σ)             (M.kindSigs  m)
-  , M.typeDecls = fmap (second (applyType σ))    (M.typeDecls m)
+  { M.kindSigs  = fmap (applyKind σ)                  (M.kindSigs  m)
+  , M.typeDecls = fmap (second (applyKindedType σ))   (M.typeDecls m)
   , M.dataDecls = applyDataDecls (M.dataDecls m)
   }
   where
     applyDataDecls :: D.DataDecls Kinded -> D.DataDecls Kinded
     applyDataDecls dds = D.DataDecls
-      { D.ddCons  = fmap (second (map (applyType σ))) (D.ddCons  dds)
+      { D.ddCons  = fmap (second (map (applyKindedType σ))) (D.ddCons  dds)
       , D.ddTypes = fmap (\(aks, cs) -> (map (second (applyKind σ)) aks, cs))
                          (D.ddTypes dds)
       }

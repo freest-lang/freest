@@ -72,7 +72,7 @@ lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier
            -> Validation (T.KindedType, TypeCtx)
 lookupType kctx tctx xi = case tctx Map.!? xi of
   Just t -> do
-    return (t, if Kinding.isRestricted t then Map.delete xi tctx else tctx)
+    return (t, if T.isRestricted t then Map.delete xi tctx else tctx)
   Nothing -> case xi of
     Left  x -> throwE (VarOutOfScope (getSpan x) x)
     Right i -> throwE (ConsOutOfScope (getSpan i) i)
@@ -91,7 +91,7 @@ typeCtxDifference :: KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
 typeCtxDifference kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just t  -> do
-        when (Kinding.isRestricted t) do
+        when (T.isRestricted t) do
           throwE (LinVarAtEndOfScope (getSpan x) x t)
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
@@ -206,7 +206,7 @@ synth tdecls ddecls kctx tctx = \case
     (E.Let s ds' e', t,) <$> typeCtxDifference kctx' tctxe tctxds
   E.Semi s e1 e2 -> do
     (e1', t, tctx') <- synth tdecls ddecls kctx tctx e1
-    when (Kinding.isRestricted t) do
+    when (T.isRestricted t) do
       throwE (KindMismatch s (K.ut se1) t)
     (e2', u, tctx'') <- synth tdecls ddecls kctx tctx' e2
     return (E.Semi s e1' e2', u, tctx'')
@@ -522,7 +522,7 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
         let (sigs, fndefs) =
               List.partition (\case E.TypeSig{} -> True; _ -> False) ds'
         forM_ sigs \case
-          E.TypeSig xs t | Kinding.isRestricted t ->
+          E.TypeSig xs t | T.isRestricted t ->
             forM_ xs \x -> throwE (RestrictedFunInMutual (getSpan x) x t)
           _ -> return ()
         (ds'', tctxds', kctxi', tctx') <- checkDecls tdecls ddecls kctxi tctxi (sigs ++ fndefs)
@@ -731,7 +731,7 @@ checkPat tdecls ddecls kctx p t = case p of
           Kinding.checkK (T.fromVariable ObjLv a k') k
           checkPackPat (Map.insert (Left a) k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
   E.WildPat  s _    -> do
-    when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
+    when (T.isRestricted t) (throwE (NonLinPat s p t))
     return (kctx, Map.empty)
   -- []
   E.NilPat s        ->
@@ -797,7 +797,7 @@ checkPat tdecls ddecls kctx p t = case p of
     checkPat tdecls ddecls kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
-    when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
+    when (T.isRestricted t) (throwE (NonLinPat s p t))
     second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
@@ -1063,7 +1063,7 @@ typeModule kctx tctx modl = do
             buildArrow kctx aks k = \case
               []       -> pure (returnType aks k)
               (t : ts) -> do
-                u <- (if Kinding.isRestricted t
+                u <- (if T.isRestricted t
                   then buildLinArrow
                   else buildArrow) kctx aks k ts
                 let s = spanFromTo t u

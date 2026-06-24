@@ -24,6 +24,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
+import Validation.Constraint qualified as C
 import Compiler.Bug ( internalError )
 
 import Data.List ( intercalate, nub )
@@ -114,6 +115,8 @@ data Error
       (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
   | MixedSessionVarPats Span E.Pat E.Pat
+  | UnifyFailed Span C.Constraints
+    -- ^ Kind-inference constraints have no solution.
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -175,6 +178,7 @@ instance Located Error where
     PolymorphicTypeRecursion s _ _ _ -> s
     HigherOrderTypeRHS s _ -> s
     MixedSessionVarPats s _ _ -> s
+    UnifyFailed s _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -503,6 +507,9 @@ toMessage src = \case
     ++ "  variable pattern:\n"
     ++ snippet src vp True
     ++ "(Session and variable patterns cannot appear together in the same match)"
+  UnifyFailed s cs -> makeError src s $
+    "Unsolvable kind-inference constraints:\n  "
+    ++ intercalate "\n  " (map show (foldr (:) [] cs))
   where
     thirdPerson = \case 1 -> "it"; _ -> "them"
 
