@@ -31,9 +31,9 @@ main: Int
 main =
   let c = forkWith (cell 0) in
   let (r, w) = channel @*?IntCellSession in
-  fork (\(_ : ()) -1-> read c);
-  fork (\(_ : ()) -1-> read c);
-  fork (\(_ : ()) -1-> write 5 c); 
-  fork (\(_ : ()) -1-> write 6 c); 
+  fork (\_ -1-> read c);
+  fork (\_ -1-> read c);
+  fork (\_ -1-> write 5 c); 
+  fork (\_ -1-> write 6 c); 
   sleep 10000;
   read c

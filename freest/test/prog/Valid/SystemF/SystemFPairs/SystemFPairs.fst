@@ -12,13 +12,13 @@ type Pair : *T -> *T -> *T
 type Pair a b = forall (c : *T) -> (a -> b -> c) -> c
 
 fst' : forall (a : *T) (b : *T) -> Pair a b -> a
-fst' @a @b p = p  @a (\(x : a) (_ : b) -> x)
+fst' @a @b p = p  @a (\x _ -> x)
 
 snd' : forall (a : *T) (b : *T) -> Pair a b -> b
-snd' @a @b p = p  @b (\(_ : a) (y : b) -> y)
+snd' @a @b p = p  @b (\_ y -> y)
 
 pair : forall (a : *T) (b : *T) -> a -> b -> Pair a b
-pair @a @b x y = \@(c : *T) (z : a -> b -> c) -> z x y
+pair @a @b x y = \@(c : *T) z -> z x y
 
 intBoolPair : Int -> Bool -> Pair Int Bool
 intBoolPair = pair  @Int @Bool

@@ -102,7 +102,7 @@ receiveList c = receiveListAux Empty c
 main : ()
 main =
   let (r, w) = channel @TabuadaServer in
-  fork (\(_ : ()) -1-> initTabuadaServer r) ; 
+  fork (\_ -1-> initTabuadaServer r) ; 
   let (result, c) = select TabuadaSimples w 
                     |> send 4 
                     |> receiveList in

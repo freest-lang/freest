@@ -76,6 +76,6 @@ reverseE n c =
 main : ()
 main =
   let (r, w) = channel @(EStack;Wait) in
-  fork (\(_ : ()) -1-> eStack r |> wait);
+  fork (\_ -1-> eStack r |> wait);
   reverseE 10 w
   -- reverseThree w

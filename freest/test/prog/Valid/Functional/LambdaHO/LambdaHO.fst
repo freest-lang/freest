@@ -4,4 +4,4 @@ f : (Int -> Int) -> Int
 f g = g (g 5)
 
 main : ()
-main = print (f (\(x : Int) -> x + 1))
+main = print (f (\x -> x + 1))

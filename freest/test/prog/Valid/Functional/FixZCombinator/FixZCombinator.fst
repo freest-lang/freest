@@ -8,11 +8,11 @@ type X a = (X a) -> a -> a
 
 fixZcomb : forall (a : *T) -> ((a -> a) -> (a -> a)) -> (a -> a)
 fixZcomb @a f =
-  (\(x : X a) -> f (\(z : a) -> x x z))
-  (\(x : X a) -> f (\(z : a) -> x x z))
+  (\(x : X a) -> f (\z -> x x z))
+  (\x -> f (\z -> x x z))
 
 fact : Int -> Int
-fact = fixZcomb (\(f : Int -> Int) -> (\(n : Int) ->
+fact = fixZcomb (\f -> (\n ->
   if n == 0 then 1 else n * f (n - 1)))
 
 main : ()

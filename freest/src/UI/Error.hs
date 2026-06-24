@@ -45,6 +45,7 @@ data Error
   | CannotInferHigherKindedTypeApp Span K.Kind
   | CannotSatisfyMultConstraint Span K.Multiplicity K.Multiplicity
   | CannotSynthesisePack Span E.KindedExp
+  | CannotSynthesisePat Span E.Pat
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
   | CannotSynthesiseSendType Span
@@ -124,6 +125,7 @@ instance Located Error where
     CannotInferHigherKindedTypeApp s _ -> s
     CannotSatisfyMultConstraint s _ _ -> s
     CannotSynthesisePack s _ -> s
+    CannotSynthesisePat s _ -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
     CannotSynthesiseSendType s -> s
@@ -268,6 +270,9 @@ toMessage src = \case
     ++ "(Cannot unify " ++ bt (unparse m1) ++ " with " ++ bt (unparse m2) ++ ")"
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
+  CannotSynthesisePat s p -> makeError src s
+    ("Could not infer a type for pattern " ++ bt (show p))
+    ++ "Consider giving it a type annotation: " ++ bt ("(" ++ show p ++ " : T)")
   CannotSynthesiseReceiveType s -> makeError src s
     "Could not infer a type for this `receiveType` expression"
   CannotSynthesiseSelect s id -> makeError src s

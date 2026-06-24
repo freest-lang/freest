@@ -117,8 +117,8 @@ mainForward : ()
 mainForward =
   let (out1, in1) = channel @(D; Close) in
   let (out2, in2) = channel @(D; Close) in
-  fork (\(_ : ()) -1-> out1 |> writeLtLtGtGtLtGt |> close);
-  fork (\(_ : ()) -1-> 
+  fork (\_ -1-> out1 |> writeLtLtGtGtLtGt |> close);
+  fork (\_ -1-> 
       let (c1, c2) = forwardD in1 out2 in 
       wait c1;
       close c2
@@ -131,9 +131,9 @@ main =
   let (out1, in1) = channel @(D; Close) in
   let (out2, in2) = channel @(D; Close) in
   let (out3, in3) = channel @(D; Close) in
-  fork (\(_ : ()) -1-> out1 |> writeLtLtGtGtLtGt |> close);
-  fork (\(_ : ()) -1-> out2 |> writeLtLtGtLtGtGt |> close);
-  fork (\(_ : ()) -1-> 
+  fork (\_ -1-> out1 |> writeLtLtGtGtLtGt |> close);
+  fork (\_ -1-> out2 |> writeLtLtGtLtGtGt |> close);
+  fork (\_ -1-> 
       let (c1, c2, c3) = concatD in1 in2 out3 in
       wait c1; 
       wait c2; 

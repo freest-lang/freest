@@ -559,11 +559,11 @@ ExpListComma :: { [E.ParsedExp] }
   : Exp ',' ExpListComma { $1 : $3 }
   | Exp                  { [$1] }
 
-TypedPat :: { (E.Pat, T.ParsedType) }
-  : '(' Pat ':' Type ')' { ($2, $4) }
-  -- | PatPrimary { ($1, ?) } -- TODO: type inference var?
+TypedPat :: { (E.Pat, Maybe T.ParsedType) }
+  : '(' Pat ':' Type ')' { ($2, Just $4) }
+  | PatPrimary           { ($1, Nothing) }
 
-ExpParamsArrow :: { ([Level (E.Pat, T.ParsedType) (Variable, K.Kind) Variable], K.Multiplicity) } 
+ExpParamsArrow :: { ([Level (E.Pat, Maybe T.ParsedType) (Variable, K.Kind) Variable], K.Multiplicity) }
   :     TypedPat  ExpParamsArrow { first (ExpLevel  $1 :) $2 }
   | '@' KindedVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
   | '#' MultVar   ExpParamsArrow { first (MultLevel $2 :) $3 }

@@ -13,12 +13,12 @@ type Bool' = forall (b : *T) -> b -> b -> b
 
 true, false : Bool'
 
-true  = \@(a : *T) -> \(t : a) -> \(f : a) -> t
+true  = \@(a : *T) -> \t -> \f -> t
 
-false = \@(a : *T) -> \(t : a) -> \(f : a) -> f
+false = \@(a : *T) -> \t -> \f -> f
 
 not' : Bool' -> Bool'
-not' = \(b : Bool') -> \@(a : *T) -> \(t : a) -> \(f : a) -> b @a f t
+not' = \b -> \@(a : *T) -> \t -> \f -> b @a f t
 
 -- Abbreviated versions of the above
 
@@ -32,7 +32,7 @@ true'  @b t _ = t
 false' @b _ f = f
 
 not'' : forall (b : *T) -> Bool'' b -> Bool'' b
-not'' @b b = \(t : b) (f : b) -> b f t
+not'' @b b = \t f -> b f t
 
 -- Destructor
 

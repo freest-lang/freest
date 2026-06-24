@@ -33,7 +33,7 @@ tl @a s = snd (s ())
 -- Construct a stream
 
 upFrom : Int -> Stream Int
-upFrom n = (\ (_ : ()) -> (n, upFrom (n + 1)))
+upFrom n = (\ _ -> (n, upFrom (n + 1)))
 
 -- The third element in the upFrom 0 stream
 

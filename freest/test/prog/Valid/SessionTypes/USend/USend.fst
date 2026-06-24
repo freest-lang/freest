@@ -21,8 +21,8 @@ main =
   let (s1, r1) = channel @(!Int;Close)
       (s2, r2) = channel @(!Int;Close)
       sendFive = unsend 5 in
-  fork (\(_ : ()) -1-> close (sendFive () s1));
-  fork (\(_ : ()) -1-> close (sendFive () s2));
+  fork (\_ -1-> close (sendFive () s1));
+  fork (\_ -1-> close (sendFive () s2));
 -- Now let's try with send, rather than unsend:
   -- let sendFive = send @Int 5 @Close in
   -- fork (\(_ : ()) -1-> sendFive s1 |> close);

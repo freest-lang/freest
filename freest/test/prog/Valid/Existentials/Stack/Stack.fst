@@ -13,9 +13,9 @@ type StackADT =
 stackADT : StackADT
 stackADT = ( @[Int]
            , ( [] @Int                             -- new -- CANNOT INFER
-             , \(x : Int) (xs : [Int]) -> x :: xs  -- push
-             , \(xs : [Int]) -> (head xs, tail xs) -- pop
-             , \(xs : [Int]) -> xs                 -- toList
+             , \x xs -> x :: xs  -- push
+             , \xs -> (head xs, tail xs) -- pop
+             , \xs -> xs                 -- toList
              )
            )
          : StackADT

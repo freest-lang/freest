@@ -27,7 +27,7 @@ bagServer : State -> Dual SharedBag -> Void@*T
 bagServer state serverChannel =
   let (clientSide, serverSide) = channel @Bag in
   send_ clientSide serverChannel;
-  fork (\(_ : ()) -1-> handleClient state serverSide);
+  fork (\_ -1-> handleClient state serverSide);
   bagServer state serverChannel
 
 -- | An empty shared bag
@@ -50,8 +50,8 @@ get q = receive_ q |> select Get |> receiveAndClose
 main : Int
 main =
   let (clientSide, serverSide) = channel @SharedBag in
-  fork (\(_ : ()) -1-> emptyBagServer serverSide);
-  fork (\(_ : ()) -1-> put 7 clientSide);
-  fork (\(_ : ()) -1-> put 5 clientSide);
-  fork (\(_ : ()) -1-> put 1 clientSide);
+  fork (\_ -1-> emptyBagServer serverSide);
+  fork (\_ -1-> put 7 clientSide);
+  fork (\_ -1-> put 5 clientSide);
+  fork (\_ -1-> put 1 clientSide);
   get clientSide + get clientSide

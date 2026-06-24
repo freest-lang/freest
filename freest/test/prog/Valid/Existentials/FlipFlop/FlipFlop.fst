@@ -11,8 +11,8 @@ counterADT : Counter
 counterADT = 
   ( @Int
   , ( 1                    -- new
-    , \(i : Int) -> i      -- get
-    , \(i : Int) -> succ i -- inc
+    , \i -> i      -- get
+    , \i -> succ i -- inc
     )
   ) 
   : Counter
@@ -24,9 +24,9 @@ flipFlopADT : FlipFlop
 flipFlopADT = 
   ( @c 
   , ( new                      -- new
-    , \(c : c) -> even (get c) -- read
-    , \(c : c) -> inc c        -- toggle
-    , \(c : c) -> new          -- reset
+    , \c -> even (get c) -- read
+    , \c -> inc c        -- toggle
+    , \c -> new          -- reset
     )
   ) 
   : FlipFlop

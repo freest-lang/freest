@@ -48,7 +48,7 @@ aList = Cons 5 (Cons 3 (Cons 7 (Cons 1 Nil)))
 main : ()
 main = 
   let (w, r) = channel @(IListW;Close) in
-  fork (\(_ : ()) -1-> iListW aList w |> close);
+  fork (\_ -1-> iListW aList w |> close);
   let (i, r) = iLength' r in 
   wait r;
   print i

@@ -22,7 +22,7 @@ falseAndTrue =
     let (c1r, c1w) = channel @BoolC
         (c2r, c2w) = channel @BoolC
         (cr,  cw)  = channel @BoolC
-    in fork @() (\(_:()) -1-> trueC  c1w) ;
-       fork @() (\(_:()) -1-> falseC c2w) ;
-       fork @() (\(_:()) -1-> andc c1r c2r cw) ;
+    in fork @() (\_ -1-> trueC  c1w) ;
+       fork @() (\_ -1-> falseC c2w) ;
+       fork @() (\_ -1-> andc c1r c2r cw) ;
        putStrLn $ toBool cr

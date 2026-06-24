@@ -9,5 +9,5 @@ receiveInt c = receiveAndWait c
 main : ()
 main =
   let (w,r) = channel @(Dual !Int;Wait) in
-  fork (\(_ : ()) -1-> sendInt r);
+  fork (\_ -1-> sendInt r);
   print (receiveInt w)

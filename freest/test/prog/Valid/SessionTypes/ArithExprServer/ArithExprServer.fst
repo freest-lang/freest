@@ -58,5 +58,5 @@ client c = c |> select Add
 main : ()
 main =
   let (w, r) = channel @(Dual TermChannel; !Int; Close) in
-  fork (\(_ : ()) -1-> computeService w);
+  fork (\_ -1-> computeService w);
   print (client r)

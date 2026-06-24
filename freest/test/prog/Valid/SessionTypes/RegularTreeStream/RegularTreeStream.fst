@@ -85,7 +85,7 @@ main : Tree
 main =
   let (w, r) = channel @(Stream ; Close) in
   -- fork (\(_ : ()) -1-> sendTree aTree w);   -- No error
-  fork (\(_ : ()) -1-> writeNothing w);             -- Error: Premature EndOfStream
+  fork (\_ -1-> writeNothing w);             -- Error: Premature EndOfStream
   -- fork (\(_ : ()) -1-> writeTooMuch w);      -- Error: Extraneous elements in the stream after reading a full tree
   -- fork (\(_ : ()) -1-> writeRootTreeOnly w); -- "Error: Empty stack on right subtree"
   -- fork (\(_ : ()) -1-> writeLeftTreeOnly w); -- "Error: Empty stack on left subtree",

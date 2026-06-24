@@ -38,7 +38,7 @@ anIntlist = cons @Int 5 $ cons @Int 9 $ cons @Int 2 $ cons @Int 8 $ cons @Int 9 
 
 -- Function head' takes the head of a non-empty list and diverges otherwise
 head' : forall (a : *T) -> List a -> a
-head' @a l = (l @(() -> a) (\(hd : a) (tl : () -> a) (_ : ()) -> hd) (diverge @a)) ()
+head' @a l = (l @(() -> a) (\hd tl _ -> hd) (diverge @a)) ()
 -- head' = \(a : *T) (l : List a) ->
 --        (l @(() -> a) (\(hd : a) (tl : () -> a) (_ : ()) -> hd) (diverge @a)) () -- extended version
   where diverge : forall (a : *T) -> () -> a
@@ -46,7 +46,7 @@ head' @a l = (l @(() -> a) (\(hd : a) (tl : () -> a) (_ : ()) -> hd) (diverge @a
 
 -- The null predicate: is the list empty?
 null : forall (a : *T) -> List a -> Bool
-null @a l = l @Bool (\(hd : a) (tl : Bool) -> False) True
+null @a l = l @Bool (\hd tl -> False) True
 -- null = \@(a : *T) (l : List a) -> l @Bool (\(hd : a) (tl : Bool) -> False) True -- extended version
 
 mainNull : Bool
@@ -60,7 +60,7 @@ mainChars = head' @Char twoChars -- null  @Char (nil  @Char)
 
 -- Converting to String
 toString : forall (a:*T) -> List a -> String
-toString @a xs = xs @String (\(x:a) (s:String) -> show x ++ "::" ++ s) "[]"
+toString @a xs = xs @String (\x s -> show x ++ "::" ++ s) "[]"
 
 -- Pairs in preparation for the tail function
 
@@ -68,19 +68,19 @@ type Pair : *T -> *T -> *T
 type Pair a b = forall (c : *T) -> (a -> b -> c) -> c
 
 pair : forall (a : *T) (b : *T) -> a -> b -> Pair a b
-pair @a @b x y = \@(c : *T) (f : a -> b -> c) -> f x y
+pair @a @b x y = \@(c : *T) f -> f x y
 
 fst'  : forall (a : *T) (b : *T) -> Pair a b -> a
-fst' @a @b p = p @a (\(f : a) (s : b) -> f)
+fst' @a @b p = p @a (\f s -> f)
 
 snd'  : forall (a : *T) (b : *T) -> Pair a b -> b
-snd' @a @b p = p @b (\(f : a) (s : b) -> s)
+snd' @a @b p = p @b (\f s -> s)
 
 -- Function tail' takes the tail of a non-empty list.
 tail' : forall (a : *T) -> List a -> List a
 tail' @a l = (fst' @(List a) @(List a) (
             l @(Pair (List a) (List a))
-              (\(h : a) (t : Pair (List a) (List a)) ->
+              (\h t ->
                 pair @(List a) @(List a)
                   (snd' @(List a) @(List a) t)
                   (cons @a h (snd' @(List a) @(List a) t)))
@@ -91,7 +91,7 @@ mainTail = head' @Char $ tail'  @Char twoChars
 
 -- The length of a list, given as a primitive Int
 length' : forall (a : *T) -> List a -> Int
-length' @a l = l  @Int (\(_ : a) -> succ) 0
+length' @a l = l  @Int (\_ -> succ) 0
 
 mainLength : Int
 mainLength = length' @Char twoChars
@@ -118,7 +118,7 @@ main = print $ length' @Char $ replicate' @Char four 'a'
 -- sorting
 insert : Int -> List Int -> List Int
 insert x xs = xs @(List Int)
-  (\(hd:Int) (tl:List Int) ->
+  (\hd tl ->
     if x > hd then cons @Int hd tl else cons @Int x (cons @Int hd (tail' @Int tl)))
   (cons @Int x (nil @Int))
 

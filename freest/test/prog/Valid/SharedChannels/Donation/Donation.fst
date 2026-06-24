@@ -61,7 +61,7 @@ helpSavingTheWolf d =
   of
     &Accepted d ->
       let p = receiveAndClose d in 
-      fork (\(_ : ()) -1-> donate p "Benefactor1" "2345" 5);
+      fork (\_ -1-> donate p "Benefactor1" "2345" 5);
       donate p "Benefactor3" "1004" 10
     &Denied d ->
       putStrLn $ receiveAndClose d
@@ -115,7 +115,7 @@ server k n fj p ds
   | k == 0    = waitFor n (snd fj)
   | otherwise =
     let d = accept ds in
-    fork (\(_ : ()) -1-> setup "<default>" 0000 (fst fj) p d);
+    fork (\_ -1-> setup "<default>" 0000 (fst fj) p d);
     server (k - 1) n fj p ds
 
 donationServer : Int -> Int -> DonationS -> ()
@@ -131,7 +131,7 @@ main =
   let (ds, dc) = channel @DonationS in
   let noOfClients = 3 in
   let noOfDonations = 4 in
-  fork (\(_ : ()) -1-> helpSavingTheWolf dc);
-  fork (\(_ : ()) -1-> wrongYear dc);
-  fork (\(_ : ()) -1-> helpSavingTheWolf dc);
+  fork (\_ -1-> helpSavingTheWolf dc);
+  fork (\_ -1-> wrongYear dc);
+  fork (\_ -1-> helpSavingTheWolf dc);
   donationServer noOfClients noOfDonations ds

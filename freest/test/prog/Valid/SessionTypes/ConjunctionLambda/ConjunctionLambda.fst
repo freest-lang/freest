@@ -5,19 +5,19 @@ type BoolC = &{True: Wait, False: Wait}
 
 andc' : BoolC -> BoolC -1-> Dual BoolC -1-> ()
 andc' =
-    \(c1 : BoolC) -> case c1 of
+    \c1 -> case c1 of
         &True  c1 ->
-            \(c2 : BoolC) -1-> case c2 of
+            \c2 -1-> case c2 of
                 &True  c2 ->
-                    \(c : Dual BoolC) -1-> c |> select True  |> close ; wait c1 ; wait c2
+                    \c -1-> c |> select True  |> close ; wait c1 ; wait c2
                 &False c2 ->
-                    \(c : Dual BoolC) -1->  c |> select False |> close ; wait c1 ; wait c2
+                    \c -1->  c |> select False |> close ; wait c1 ; wait c2
         &False c1 ->
-            \(c2 : BoolC) -1-> case c2 of
+            \c2 -1-> case c2 of
                 &True  c2 ->
-                    \(c : Dual BoolC) -1->  c |> select False |> close ; wait c1 ; wait c2
+                    \c -1->  c |> select False |> close ; wait c1 ; wait c2
                 &False c2 ->
-                    \(c : Dual BoolC) -1->  c |> select False |> close ; wait c1 ; wait c2
+                    \c -1->  c |> select False |> close ; wait c1 ; wait c2
 
 trueC, falseC : Dual BoolC -> ()
 trueC  c = c |> select True  |> close
@@ -32,7 +32,7 @@ falseAndTrue =
     let (c1r, c1w) = channel @BoolC
         (c2r, c2w) = channel @BoolC
         (cr,  cw)  = channel @BoolC
-    in fork @() (\(_:()) -1-> trueC  c1w) ;
-       fork @() (\(_:()) -1-> falseC c2w) ;
-       fork @() (\(_:()) -1-> andc' c1r c2r cw) ;
+    in fork @() (\_ -1-> trueC  c1w) ;
+       fork @() (\_ -1-> falseC c2w) ;
+       fork @() (\_ -1-> andc' c1r c2r cw) ;
        putStrLn $ toBool cr

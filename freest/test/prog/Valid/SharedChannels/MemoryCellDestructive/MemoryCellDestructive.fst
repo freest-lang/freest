@@ -20,10 +20,10 @@ sleep n = if n == 0 then () else sleep (n - 1)
 main: Int
 main =
   let (w, r) = channel @IntCell in
-  fork (\(_ : ()) -1-> read r);
-  fork (\(_ : ()) -1-> read r);
-  fork (\(_ : ()) -1-> write 4 w); -- comment this line for a deadlock
-  fork (\(_ : ()) -1-> write 5 w); 
-  fork (\(_ : ()) -1-> write 6 w); 
+  fork (\_ -1-> read r);
+  fork (\_ -1-> read r);
+  fork (\_ -1-> write 4 w); -- comment this line for a deadlock
+  fork (\_ -1-> write 5 w); 
+  fork (\_ -1-> write 6 w); 
   sleep 10000;
   read r

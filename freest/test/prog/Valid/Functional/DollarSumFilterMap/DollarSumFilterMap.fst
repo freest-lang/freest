@@ -22,5 +22,5 @@ xs : List
 xs = Cons 7 $ Cons 8 $ Cons (-1) $ Cons 1 $ Cons 6 $ Cons 5 Nil
 
 main : ()
-main = print (sum $ filter (\(x : Int) -> x > 10) $ map (\(y : Int) -> y * 2) xs)
+main = print (sum $ filter (\x -> x > 10) $ map (\y -> y * 2) xs)
 

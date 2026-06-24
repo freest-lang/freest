@@ -418,7 +418,7 @@ scopeExp ctx = \case
       scopeAbsParam = \cases 
         (ctx', pars') (ExpLevel  (p, t)) -> do
           (_, p') <- scopePat ctx' emptyScopingCtx p
-          t' <- scopeType ctx' t
+          t' <- traverse (scopeType ctx') t
           let ctx'' = insertPatVars p' ctx'
           return (ctx'', pars' ++ [ExpLevel (p', t')])
         (ctx', pars') (TypeLevel (a, k)) -> do

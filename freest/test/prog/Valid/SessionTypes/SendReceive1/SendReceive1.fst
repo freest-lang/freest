@@ -8,5 +8,5 @@ client c =
 main : ()
 main =
   let (w, r) = channel @(?Int; !Bool; Wait) in
-  fork (\(_ : ()) -1-> client w);
+  fork (\_ -1-> client w);
   r |> send (-5) |> receiveAndClose |> print

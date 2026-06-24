@@ -41,5 +41,5 @@ client1 c =
 main : ()
 main =
   let (w, r) = channel @BoolClient in
-  fork (\(_ : ()) -1-> boolServer r);
+  fork (\_ -1-> boolServer r);
   print (client1 w)

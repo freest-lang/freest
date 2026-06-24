@@ -53,5 +53,5 @@ size s n =
 main : ()
 main =
   let (c, s) = channel @StreamClient in
-  fork (\(_:()) -1-> size s 0);
+  fork (\_ -1-> size s 0);
   print (client c)

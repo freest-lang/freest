@@ -32,6 +32,6 @@ storeClient name cakeStore =
 main : ()
 main =
     let (c, s) = channel @CakeStore in
-    fork (\(_ : ()) -1-> storeClient "Ami" c);
-    fork (\(_ : ()) -1-> storeClient "Boe" c);
+    fork (\_ -1-> storeClient "Ami" c);
+    fork (\_ -1-> storeClient "Boe" c);
     runCakeStore s True

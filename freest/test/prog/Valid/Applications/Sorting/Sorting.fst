@@ -77,13 +77,13 @@ sortingServer @a xs c =
         -- Nil is never reached
         Nil -> (Nil, send 36042069 c)
     &Ascending c ->
-      (quicksort (\(x : Int) -> (\(y : Int) -> x < y)) xs, c)
+      (quicksort (\x -> (\y -> x < y)) xs, c)
     &Descending c ->
-      (quicksort (\(x : Int) -> (\(y : Int) -> x > y)) xs, c)
+      (quicksort (\x -> (\y -> x > y)) xs, c)
 
 -- Putting it all together
 main : ()
 main =
   let (w, r) = channel @(OrderingChannel; Wait) in
-  fork (\(_ : ()) -1-> sortingServer Nil r |> snd |> close);
+  fork (\_ -1-> sortingServer Nil r |> snd |> close);
   client w

@@ -34,10 +34,10 @@ four    @a z s0 s1 = z |> s1 |> s0 |> s0       -- .100
 fifteen @a z s0 s1 = z |> s1 |> s1 |> s1 |> s1 -- .11111
 
 isZero : Bin -> Bool
-isZero n = n @Bool True (\(_ : Bool) -> False) (\(_ : Bool) -> False)
+isZero n = n @Bool True (\_ -> False) (\_ -> False)
 
 toInt : Bin -> Int
-toInt n = n @Int 0 (\(x : Int) -> 2 * x) (\(x : Int) -> 2 * x + 1)
+toInt n = n @Int 0 (\x -> 2 * x) (\x -> 2 * x + 1)
 
 -- succ' : Bin -> Bin
 -- succ' n = \@(a : *T) -> (one @a) (\(s0 : a -> a) -> s0 n @a) (\(s1 : a->a) -> s1 n@a)

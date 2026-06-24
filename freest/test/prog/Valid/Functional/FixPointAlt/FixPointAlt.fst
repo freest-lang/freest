@@ -11,7 +11,7 @@ fix' : forall (a : *T) -> ((a -> a) -> (a -> a)) -> a -> a
 fix' @a f x = f (fix' f) x
 
 fact : Int -> Int
-fact = fix' (\(f : Int -> Int) -> (\(n : Int) ->
+fact = fix' (\f -> (\n ->
   if n == 0 then 1 else n * f (n - 1)))
 
 main : ()

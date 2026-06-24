@@ -25,5 +25,5 @@ foldServer sum c =
 main : ()
 main = 
     let (s, c) = channel @Fold in
-    fork (\(_ : ()) -1-> foldServer 0 s);
+    fork (\_ -1-> foldServer 0 s);
     print (foldClient 4 c)

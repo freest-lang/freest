@@ -73,5 +73,5 @@ evaluate s l =
 main : ()
 main =
   let (c, s) = channel @StreamClient in
-  let _ = fork (\(_ : ()) -1-> evaluate s Nil) in
+  let _ = fork (\_ -1-> evaluate s Nil) in
   print (client c)

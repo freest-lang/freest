@@ -19,5 +19,5 @@ sumFives c =
 main : ()
 main =
   let (w, r) = channel @Chan in
-  let _ = fork (\(_ : ()) -1-> fives 32 w) in
+  let _ = fork (\_ -1-> fives 32 w) in
   print (sumFives r)

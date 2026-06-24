@@ -481,7 +481,7 @@ kindExp tdecls kctx = \case
     (kctx', pars') <- foldM (\(kctxi, parsi) -> \case
         ExpLevel  (p, t) -> do
           (kctxi', p') <- kindPat tdecls kctxi p
-          t' <- synth kctxi' t
+          t' <- traverse (synth kctxi') t
           return (kctxi', parsi ++ [ExpLevel (p', t')])
         TypeLevel (a, k) -> do
           let kctxi' = Map.insert (Left a) k kctxi

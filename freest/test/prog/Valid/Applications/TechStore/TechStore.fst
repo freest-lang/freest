@@ -13,5 +13,5 @@ setupStore bank =
   -- buy
   let buyQueue = initQueue () in
   let stockMap = fst (channel @*?()) in
-  fork (\(_ : ()) -1-> buyWorker buyQueue stockMap bank)
+  fork (\_ -1-> buyWorker buyQueue stockMap bank)
 

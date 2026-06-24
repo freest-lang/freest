@@ -12,24 +12,24 @@ type Nat : *T
 type Nat = forall (a : *T) -> (a -> a) -> a -> a
 
 zero : Nat 
-zero = \@(a : *T) (s : a -> a) (z : a) -> z
+zero = \@(a : *T) s z -> z
 
 succ', square : Nat -> Nat
-succ' n = \@(a : *T) (s : a -> a) (z : a) -> s (n @a s z)
+succ' n = \@(a : *T) s z -> s (n @a s z)
 
-square n = \@(a : *T) (s : a -> a) (z : a) -> n  @a (n  @a s) z
+square n = \@(a : *T) s z -> n  @a (n  @a s) z
 
 plus, plus', times, expr : Nat -> Nat -> Nat
 plus m n = m  @Nat succ' n
 
-plus' m n = \@(a : *T) (s : a -> a) (z : a) -> m  @a s (n  @a s z)
+plus' m n = \@(a : *T) s z -> m  @a s (n  @a s z)
 
-times m n = \@(a : *T) (s : a -> a) -> n  @a (m  @a s)
+times m n = \@(a : *T) s -> n  @a (m  @a s)
 
-expr m n = \@(a : *T) (f : a -> a) -> n  @(a -> a) (m  @a) f
+expr m n = \@(a : *T) f -> n  @(a -> a) (m  @a) f
 
 isZero : Nat -> Bool
-isZero n = n  @Bool (\(_ : Bool) -> False) True
+isZero n = n  @Bool (\_ -> False) True
 
 -- Pairs of natural numbers for the predecessor
 
@@ -37,12 +37,12 @@ type Pair : *T
 type Pair = (Nat -> Nat -> Nat) -> Nat
 
 fst', snd' : Pair -> Nat
-fst' p = p (\(m : Nat) (_ : Nat) -> m)
+fst' p = p (\m _ -> m)
 
-snd' p = p (\(_ : Nat) (n : Nat) -> n)
+snd' p = p (\_ n -> n)
 
 pair : Nat -> Nat -> Pair
-pair m n = \(z : Nat -> Nat -> Nat) -> z m n
+pair m n = \z -> z m n
 
 shift : Pair -> Pair
 shift p = pair (succ' (fst' p)) (fst' p)
@@ -53,7 +53,7 @@ pred' n = snd' (n  @Pair shift (pair zero zero))
 -- Testing
 
 toInt : Nat -> Int
-toInt n = n  @Int (\(x : Int) -> x + 1) 0
+toInt n = n  @Int (\x -> x + 1) 0
 
 zero', one, two, three, four : Nat
 

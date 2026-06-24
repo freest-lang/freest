@@ -24,6 +24,6 @@ main : ()
 main =
   let (o, i) = channel @(ListOut; Close) 
       xs = Cons 2 (Cons 3 (Cons 4 (Cons 5 Nil))) in
-  fork (\(_ : ()) -1-> o |> sendList xs |> close);
+  fork (\_ -1-> o |> sendList xs |> close);
   let (ys, Wait) = rcvList i in
   print ys

@@ -8,9 +8,9 @@ module SystemFWarmUps where
 
 double, quadruple : forall (a : *T) -> (a -> a) -> a -> a
 
-double = \@(a : *T) (f : a -> a) (x : a) -> f (f x)
+double = \@(a : *T) f x -> f (f x)
 
-quadruple = \@(a : *T) (f : a -> a) -> double @(a -> a) (double  @a) f
+quadruple = \@(a : *T) f -> double @(a -> a) (double  @a) f
 
 doubleInt : (Int -> Int) -> Int -> Int
 doubleInt = double  @Int
@@ -22,9 +22,9 @@ five, seven, thirteen : Int
 
 five = id  @Int 5
 
-seven = doubleInt (\(x : Int) -> x + 2) 3
+seven = doubleInt (\x -> x + 2) 3
 
-thirteen = doubleIntArrowInt doubleInt (\(x : Int) -> x + 2) 5
+thirteen = doubleIntArrowInt doubleInt (\x -> x + 2) 5
 
 main : ()
-main = print $ quadruple  @Int (\(x : Int) -> x + 2) 3
+main = print $ quadruple  @Int (\x -> x + 2) 3

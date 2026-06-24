@@ -26,5 +26,5 @@ main : ()
 main =
   let (w1, r1) = channel @(!Char;Close) in
   let (w2, r2) = channel @(!Bool;Close) in
-  fork (\(_ : ()) -1-> writer w1 w2);
+  fork (\_ -1-> writer w1 w2);
   print (reader r1 r2)

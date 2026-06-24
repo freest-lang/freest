@@ -29,9 +29,9 @@ type MCounter : *T
 type MCounter = (exists (a : *T), (() -> a, a -> Int, a -> ()))
 
 mCounterADT : MCounter
-mCounterADT = (@IntRef, ( \(_ : ())     -> intRef 0                -- new
-                        , \(x : IntRef) -> read x                  -- get
-                        , \(x : IntRef) -> write (succ (read x)) x -- inc
+mCounterADT = (@IntRef, ( \_     -> intRef 0                -- new
+                        , \x -> read x                  -- get
+                        , \x -> write (succ (read x)) x -- inc
                         )
               ) 
             : MCounter

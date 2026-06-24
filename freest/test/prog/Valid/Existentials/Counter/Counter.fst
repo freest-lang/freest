@@ -9,8 +9,8 @@ type Counter = (exists (a : *T), (a, a -> Int, a -> a))
 
 counterADT : Counter
 counterADT = (@Int, ( 1 
-                    , \(i : Int) -> i
-                    , \(i : Int) -> succ i
+                    , \i -> i
+                    , \i -> succ i
                     )
              ) 
            : Counter

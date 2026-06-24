@@ -170,7 +170,9 @@ synth tdecls ddecls kctx tctx = \case
         [] -> do
           (e'', t, tctx') <- synth tdecls ddecls kctxi tctxi e'
           return (E.Abs s ps m e'', t, tctx')
-        ExpLevel (pi, ti) : ps' -> do
+        ExpLevel (pi, Nothing) : _ ->
+          throwE (CannotSynthesisePat (getSpan pi) pi)
+        ExpLevel (pi, Just ti) : ps' -> do
           Kinding.checkProperK ti
           (kctxi', tctxp) <- checkPat tdecls ddecls kctxi pi ti
           (e'', ti', tctxi') <- synthAbs kctxi' (Map.union tctxp tctxi) ps'
@@ -373,7 +375,7 @@ check tdecls ddecls kctx tctx e t = case e of
       (E.UnguardedRHS e'' Nothing, tctx') -> return (E.Abs s pars m e'', tctx')
       _ -> internalError "elaborated abstraction cannot be guarded"
     where
-      pars' = map (mapLevel (second Just) (second Just) id) pars
+      pars' = map (mapLevel id (second Just) id) pars
   E.Pack s ts e' ->
     case normalise tdecls t of
       T.AppExists _ aks t' -> first (E.Pack s ts) <$> checkPack ts aks t'
@@ -1026,10 +1028,41 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
             e (T.Var _ k InstLv iv) -> do
               (_, t2, _) <- synth tdecls ddecls kctx tctx e
               return (LMI.kindSubConstraints (T.kindOf t2) k, LI.subsType iv t2)
-            e t1 -> do
-              (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
-              LTI.match e tdecls t1 t3
+            -- EXPERIMENTAL (SEE ORIGINAL BELOW)
+            -- Try to synthesise the lambda (works when its parameters are
+            -- annotated), recovering full instantiation constraints. If it
+            -- cannot be synthesised, its declared multiplicity is still known:
+            -- match it against the expected arrows so multiplicity instantiation
+            -- variables get solved, and defer the rest to checkValArgs.
+            e@(E.Abs _ ps m _) t1 ->
+              do
+                (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+                (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+                LTI.match e tdecls t1 t3
+              `catchE` \_ -> return (arrowConstraints ps (normalise tdecls t1), mempty)
+              where
+                arrowConstraints = \cases
+                  [] _ -> []
+                  (ExpLevel{}  : ps') (T.AppArrow _ m' _ v) ->
+                    (m', m) : arrowConstraints ps' (normalise tdecls v)
+                  (TypeLevel{} : ps') (T.AppForall s m' (_:aks) v) ->
+                    (m', m) : arrowConstraints ps' if null aks then v
+                                                   else T.AppForall s m' aks v
+                  (MultLevel{} : ps') (T.ForallM s m' (_:φs) v) ->
+                    (m', m) : arrowConstraints ps' if null φs then v
+                                                   else T.ForallM s m' φs v
+                  _ _ -> [] -- error deferred to checking
+            e t1 ->
+              do
+                (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+                (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+                LTI.match e tdecls t1 t3
+              `catchE` \_ -> return ([], mempty)
+            -- ORIGINAL
+            -- e t1 -> do
+            --   (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
+            --   (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+            --   LTI.match e tdecls t1 t3
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)
       (t, as) -> 

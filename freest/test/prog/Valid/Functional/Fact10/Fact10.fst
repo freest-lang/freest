@@ -22,7 +22,7 @@ rt @a @b x f = f x
 main : ()
 main =
   let (w, r) = channel @(Choice;Close) in
-  fork (\(_ : ()) -1-> w |> sendInt 10 |> close);
+  fork (\_ -1-> w |> sendInt 10 |> close);
   let (i, r) = rcvInt 1 r in 
   wait r;
   print i

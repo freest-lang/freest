@@ -12,5 +12,5 @@ read t =
 main : ()
 main =
   let (w, r) = channel @(!Int;Close) in
-  fork (\(_ : ()) -1-> send 10 w |> close);
+  fork (\_ -1-> send 10 w |> close);
   Two r |> read |> print

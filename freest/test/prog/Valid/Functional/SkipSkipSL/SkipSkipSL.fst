@@ -6,5 +6,5 @@ f x = close x; 1
 main : ()
 main = 
     let (c, s) = channel @(Skip;Skip;Close) in
-    fork (\(_ : ()) -1-> wait s);
+    fork (\_ -1-> wait s);
     print (f c)

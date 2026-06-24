@@ -66,7 +66,7 @@ xs = Node 1 (Node 2 (Node 8 Leaf
 main : ()
 main =
   let (w, r) = channel @(TreeC Int; Wait) in
-  fork (\(_ : ()) -1-> treeSum r |> snd |> close);
+  fork (\_ -1-> treeSum r |> snd |> close);
   let (t, w) = transform xs w in
   wait w;
   print t

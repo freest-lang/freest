@@ -33,5 +33,5 @@ client1 w = w |> select Or
 main : ()
 main =
   let (w,r) = channel @BoolClient in
-  fork (\(_:()) -1-> boolServer r);
+  fork (\_ -1-> boolServer r);
   print (client1 w)

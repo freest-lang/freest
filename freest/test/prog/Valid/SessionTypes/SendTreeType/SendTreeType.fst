@@ -38,7 +38,7 @@ xs = Node 7 (Node 5 Leaf Leaf) (Node 9 (Node 11 Leaf Leaf) (Node 15 Leaf Leaf))
 main : ()
 main =
   let (writer, reader) = channel @(TreeChannel;Close) in
-  fork (\(_ : ()) -1-> write xs writer |> close);
+  fork (\_ -1-> write xs writer |> close);
   let (ys, reader) = read reader in 
   wait reader;
   print ys

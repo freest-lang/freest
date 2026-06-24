@@ -8,6 +8,6 @@ main : ()
 main =
   let (r, w) = channel @(Skip;Wait) in
   let (i, s) = mkPair 4 r in
-  fork (\(_ : ()) -1-> close w);
-  fork (\(_ : ()) -1-> wait s);
+  fork (\_ -1-> close w);
+  fork (\_ -1-> wait s);
   print (mkPair i True)
