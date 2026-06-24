@@ -44,7 +44,7 @@ import Compiler.Bug ( internalError )
 import Validation.Base
     ( emptyValidationState, runValidation, Validation
     , constraints
-    , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind )
+    , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind, freshKindVar )
 import Validation.Constraint
     ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind, KindEq)
     , Constraints )
@@ -151,10 +151,13 @@ synth ctx = \case
       else do
         -- CT-App: defer arrow decomposition. Synth each argument, fabricate
         -- a fresh kind variable for the result, and emit a single 'KindEq'
-        -- tying the function's kind to @k_arg₁ → … → k_argₙ → τ_X@.
+        -- tying the function's kind to @k_arg₁ → … → k_argₙ → τ_X@. Note
+        -- 'freshKindVar' (not 'freshKind') — we want a bare 'K.Var' the
+        -- unifier can bind via 'kindSubs', not a 'Proper' that the initial
+        -- substitution would default to @1T@.
         kts <- traverse (synth ctx) ts
-        τ_X <- freshKind s
-        let kArrow = foldr (Arrow s) τ_X (map TK.kindOf kts)
+        τ_X <- freshKindVar s
+        let kArrow = foldr (Arrow s . TK.kindOf) τ_X kts
         emit $ KindEq s kF kArrow
         pure $ TK.appK s τ_X kt kts
     where
@@ -265,8 +268,8 @@ checkSubkindOf t = \cases
     -- The 'Var' side is refined to a fresh @τ_a → τ_b@ via 'KindEq'; then we
     -- recurse so the contravariant/covariant decomposition fires.
     refineVarToArrow s k1 k2 = do
-      τ_a <- freshKind s
-      τ_b <- freshKind s
+      τ_a <- freshKindVar s
+      τ_b <- freshKindVar s
       let arr = Arrow s τ_a τ_b
       case (k1, k2) of
         (Var{}, _) -> emit (KindEq s k1 arr) >> checkSubkindOf t arr k2

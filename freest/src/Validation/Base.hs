@@ -21,6 +21,7 @@ module Validation.Base
   , freshMult
   , freshPrekind
   , freshKind
+  , freshKindVar
   )
 where
 
@@ -119,6 +120,14 @@ freshPrekind s = K.VarPK <$> freshPrekindVar s
 -- fresh multiplicity and prekind variables.
 freshKind :: Span -> Validation K.Kind
 freshKind s = K.Proper s <$> freshMult s <*> freshPrekind s
+
+-- | A fresh /whole-kind/ metavariable @K.Var s τₙ@. Unlike 'freshKind', this
+-- yields a 'K.Var' the unifier can bind via 'kindSubs' (rather than a
+-- 'Proper' that defaults to @1T@). Use it for CT-App's result-kind slot and
+-- anywhere else the kind is genuinely unknown and may be inferred to be an
+-- 'Arrow'.
+freshKindVar :: Span -> Validation K.Kind
+freshKindVar s = K.Var s . Variable s "κ" <$> incCounter
 
 -- getKind :: M.KindedModule -> Identifier -> K.Kind
 -- getKind mod i =
