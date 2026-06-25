@@ -139,16 +139,20 @@ synth ctx = \case
         (_, ts') <- checkArgs kt (length ts) (length ks) ts ks kn
         pure $ TK.App s kt ts'
       else do
-        -- CT-App: defer arrow decomposition. Synth each argument, fabricate
-        -- a fresh kind variable for the result, and emit a single 'KindEq'
-        -- tying the function's kind to @k_arg₁ → … → k_argₙ → τ_X@. Note
-        -- 'freshKindVar' (not 'freshKind') — we want a bare 'K.Var' the
-        -- unifier can bind via 'kindSubs', not a 'Proper' that the initial
-        -- substitution would default to @1T@.
-        kts <- traverse (synth ctx) ts
-        τ_X <- freshKindVar s
-        let kArrow = foldr (Arrow s . TK.kindOf) τ_X kts
-        emit $ KindEq s kF kArrow
+        -- CT-App: the function kind is not yet ground. Give it an arrow shape
+        -- over FRESH domain variables (a 'KindEq'), then relate each argument
+        -- to its domain by SUBKINDING — @k_argᵢ <: k_domᵢ@ — mirroring the
+        -- ground branch's 'check'. Using the argument kinds directly as the
+        -- domains (as a 'KindEq' equality) would force @domain = argument@,
+        -- rejecting an argument whose kind is a proper subkind of the domain.
+        -- 'freshKindVar' (not 'freshKind') keeps each domain a bare 'K.Var'
+        -- the unifier can bind — including to an arrow for higher-kinded args.
+        kts   <- traverse (synth ctx) ts
+        kDoms <- traverse (const (freshKindVar s)) ts
+        τ_X   <- freshKindVar s
+        emit $ KindEq s kF (foldr (Arrow s) τ_X kDoms)
+        forM_ (zip kts kDoms) \(kt', kDom) ->
+          checkSubkindOf kt' (TK.kindOf kt') kDom
         pure $ TK.appK s τ_X kt kts
     where
       checkArgs :: TK.KindedType -> Int -> Int -- error info
@@ -308,7 +312,12 @@ checkSubkindOf t = \cases
     | otherwise                       -> emitDecomposed k1 k2
   k1@Var{}          k2@Proper{}       -> emitDecomposed k1 k2
   k1@Proper{}       k2@Var{}          -> emitDecomposed k1 k2
-  k1@Var{}          k2@Var{}          -> emitDecomposed k1 k2
+  -- Two unknown whole-kind variables: we cannot yet tell whether they are
+  -- proper or higher-kinded (arrow), so committing both to 'Proper' (via
+  -- 'emitDecomposed') is wrong when either turns out to be an arrow — e.g. a
+  -- higher-kinded argument. Unify them instead; the shape, once discovered
+  -- from other constraints, then flows to both sides.
+  k1@(Var s _)      k2@Var{}          -> emit (KindEq s k1 k2)
   k1@(Arrow s _ _)  k2@Var{}          -> refineVarToArrow s k1 k2
   k1@Var{}          k2@(Arrow s _ _)  -> refineVarToArrow s k1 k2
   _                 k2                -> throwE (KindMismatch (getSpan t) k2 t)

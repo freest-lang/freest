@@ -130,7 +130,7 @@ unifyOne σ (c : rest)   = case c of
   C.MeetPrekind _ ψ ps ->
     let glb = foldr (K.meet . applyPrekind σ) K.Top ps
     in unifyOne (updatePrekind ψ glb σ) rest
-  C.KindEq s k1 k2 -> case (applyKind σ k1, applyKind σ k2) of
+  C.KindEq s k1 k2 -> case (chaseShape σ k1, chaseShape σ k2) of
     -- Decompose 'Arrow' structurally.
     (K.Arrow _ a1 b1, K.Arrow _ a2 b2) ->
       unifyOne σ (C.KindEq s a1 a2 : C.KindEq s b1 b2 : rest)
@@ -158,6 +158,25 @@ unifyOne σ (c : rest)   = case c of
 -- site, so the resulting substitution is idempotent for @τ@.
 updateKind :: Variable -> K.Kind -> Substitution -> Substitution
 updateKind τ k σ = σ { kindSubs = Map.insert τ k (kindSubs σ) }
+
+-- | Resolve a kind's whole-kind metavariables — chasing @kindSubs@ to a
+-- fixpoint, with a visited-set cycle guard — but leave multiplicity and prekind
+-- variables /intact/. Used to decompose a 'C.KindEq': the leaf @Proper@s must
+-- keep their @φ@/@ψ@ variables so the resulting two-way 'C.SubMult'/'C.SubPrekind'
+-- constraints can still /lower/ them. Using 'applyKind' here instead would
+-- freeze each such variable at its default (e.g. @φ ↦ 1@) before the equality
+-- has a chance to constrain it, turning a satisfiable equation into an
+-- unsatisfiable ground check like @1 <: *@.
+chaseShape :: Substitution -> K.Kind -> K.Kind
+chaseShape σ = go Set.empty
+  where
+    go seen = \case
+      k@(K.Var _ τ)
+        | τ `Set.member` seen -> k
+        | otherwise           ->
+            maybe k (go (Set.insert τ seen)) (Map.lookup τ (kindSubs σ))
+      K.Arrow s k1 k2 -> K.Arrow s (go seen k1) (go seen k2)
+      k@K.Proper{}    -> k
 
 -- | Occurs check: does the kind variable @τ@ appear anywhere in @k@?
 occursIn :: Variable -> K.Kind -> Bool
