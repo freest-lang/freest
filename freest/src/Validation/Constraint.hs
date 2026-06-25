@@ -45,6 +45,12 @@ data Constraint
   | JoinMult Span Variable [Multiplicity]
     -- ^ @φ = ⊔_{ℓ∈L} m_ℓ@ — the multiplicity variable @φ@ is the join of
     -- the given multiplicities.
+  | SeqMult Span Variable Multiplicity Multiplicity Prekind
+    -- ^ @φ = if υ₁ = C then m₁ else m₁ ⊔ m₂@ — the CK-Seq result
+    -- multiplicity, conditional on the (possibly still-unsolved) prekind
+    -- @υ₁@ of the left operand of a @;@. When @υ₁@ resolves to 'Channel' the
+    -- continuation does not contribute, so the multiplicity is @m₁@ alone;
+    -- otherwise it is the join @m₁ ⊔ m₂@.
   | KindEq Span Kind Kind
     -- ^ @k₁ = k₂@ — kind equality, emitted by CT-App when the function's
     -- kind is not fully known. The solver decomposes 'Arrow' structure,
@@ -61,6 +67,8 @@ instance Show Constraint where
     MeetPrekind _ ψ vs -> show ψ ++ " = ⊓ {" ++ List.intercalate ", " (map show vs) ++ "}"
     JoinPrekind _ ψ vs -> show ψ ++ " = ⊔ {" ++ List.intercalate ", " (map show vs) ++ "}"
     JoinMult _ φ ms    -> show φ ++ " = ⊔ {" ++ List.intercalate ", " (map show ms) ++ "}"
+    SeqMult _ φ m1 m2 v1 -> show φ ++ " = if " ++ show v1 ++ " = C then " ++ show m1
+                            ++ " else " ++ show m1 ++ " ⊔ " ++ show m2
     KindEq _ k1 k2     -> show k1 ++ " = " ++ show k2
 
 -- | Span-blind: the source position is metadata, not part of a constraint's
@@ -72,6 +80,8 @@ instance Eq Constraint where
     (MeetPrekind _ ψ vs)  (MeetPrekind _ ψ' vs') -> ψ  == ψ'  && vs == vs'
     (JoinPrekind _ ψ vs)  (JoinPrekind _ ψ' vs') -> ψ  == ψ'  && vs == vs'
     (JoinMult _ φ ms)     (JoinMult _ φ' ms')    -> φ  == φ'  && ms == ms'
+    (SeqMult _ φ m1 m2 v) (SeqMult _ φ' m1' m2' v') ->
+      φ == φ' && m1 == m1' && m2 == m2' && v == v'
     (KindEq _ k1 k2)      (KindEq _ k1' k2')     -> k1 == k1' && k2 == k2'
     _                     _                      -> False
 
@@ -84,6 +94,8 @@ instance Ord Constraint where
     (MeetPrekind _ ψ vs) (MeetPrekind _ ψ' vs') -> compare (ψ, vs)  (ψ',  vs')
     (JoinPrekind _ ψ vs) (JoinPrekind _ ψ' vs') -> compare (ψ, vs)  (ψ',  vs')
     (JoinMult _ φ ms)    (JoinMult _ φ' ms')    -> compare (φ, ms)  (φ',  ms')
+    (SeqMult _ φ m1 m2 v) (SeqMult _ φ' m1' m2' v') ->
+      compare (φ, m1, m2, v) (φ', m1', m2', v')
     (KindEq _ k1 k2)     (KindEq _ k1' k2')     -> compare (k1, k2) (k1', k2')
     c1                   c2                     -> compare (rank c1) (rank c2)
     where
@@ -94,7 +106,8 @@ instance Ord Constraint where
         MeetPrekind{} -> 2
         JoinPrekind{} -> 3
         JoinMult{}    -> 4
-        KindEq{}      -> 5
+        SeqMult{}     -> 5
+        KindEq{}      -> 6
 
 instance Located Constraint where
   getSpan = \case
@@ -103,6 +116,7 @@ instance Located Constraint where
     MeetPrekind s _ _ -> s
     JoinPrekind s _ _ -> s
     JoinMult    s _ _ -> s
+    SeqMult     s _ _ _ _ -> s
     KindEq      s _ _ -> s
 
   setSpan s = \case
@@ -111,4 +125,5 @@ instance Located Constraint where
     MeetPrekind _ ψ  vs -> MeetPrekind s ψ  vs
     JoinPrekind _ ψ  vs -> JoinPrekind s ψ  vs
     JoinMult    _ φ  ms -> JoinMult    s φ  ms
+    SeqMult     _ φ m1 m2 v -> SeqMult s φ m1 m2 v
     KindEq      _ k1 k2 -> KindEq      s k1 k2

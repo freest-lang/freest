@@ -54,12 +54,15 @@ module Syntax.Type.Kinded
   , T.isAppQuant
   , T.isAppDName
   , kindOf
+  , setKind
   , isProper
   , isRestricted
   , isStrictlyChannel
   , isStrictlySession
   , smartApp
   , appK
+  , appSemiK
+  , appLinChoiceK
   )
 where
 
@@ -170,6 +173,20 @@ pattern App s t ts <- T.App s _ t ts
 appK :: Span -> K.Kind -> KindedType -> [KindedType] -> KindedType
 appK = T.App
 
+-- | Build an 'AppSemi' with an explicitly-supplied node kind @nodeK@, bypassing
+-- the 'AppSemi' pattern synonym's @meet@/@join@ kind computation (which is
+-- partial on prekind variables). Used during kind inference, where @nodeK@ is a
+-- fresh @Proper φ ψ@ whose components the constraint solver later resolves.
+appSemiK :: Span -> K.Kind -> KindedType -> KindedType -> KindedType
+appSemiK s nodeK t u = T.AppSemi s nodeK opK t u
+  where opK = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) nodeK)
+
+-- | As 'appSemiK', for 'AppLinChoice': build with an explicit node kind,
+-- bypassing the synonym's @join@ over branch prekinds.
+appLinChoiceK :: Span -> K.Kind -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
+appLinChoiceK s nodeK p lts = T.AppLinChoice s nodeK opK p lts
+  where opK = foldr (const $ K.Arrow s (K.ls s)) nodeK lts
+
 pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
 pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
   where AppQuantS s p a k t  = T.AppQuantS s k' (K.Arrow s abs k') abs p a k t
@@ -279,6 +296,31 @@ kindOf = \case
   T.TName _ k _ -> k
   T.DName _ k _ -> k
   T.Void _ k _ -> k
+
+-- | Replace a node's top-level kind annotation (the 'XType' slot), keeping the
+-- rest of the node intact. The dual of 'kindOf'; mirrors 'setSpan'. Used by
+-- kind inference to write a freshly-promoted 'K.Proper' kind back onto a node
+-- whose synthesised kind was still a bare 'K.Var'.
+setKind :: K.Kind -> KindedType -> KindedType
+setKind k = \case
+  T.Int s _            -> T.Int s k
+  T.Float s _          -> T.Float s k
+  T.Char s _           -> T.Char s k
+  T.Arrow s _ m        -> T.Arrow s k m
+  T.Quant s _ p pk m   -> T.Quant s k p pk m
+  T.ForallM s _ m φs t -> T.ForallM s k m φs t
+  T.Skip s _           -> T.Skip s k
+  T.End s _ p          -> T.End s k p
+  T.Message s _ m p    -> T.Message s k m p
+  T.Choice s _ m p ls  -> T.Choice s k m p ls
+  T.Semi s _           -> T.Semi s k
+  T.Dual s _           -> T.Dual s k
+  T.Var s _ lv a       -> T.Var s k lv a
+  T.Abs s _ aks t      -> T.Abs s k aks t
+  T.App s _ t ts       -> T.App s k t ts
+  T.TName s _ i        -> T.TName s k i
+  T.DName s _ i        -> T.DName s k i
+  T.Void s _ kd        -> T.Void s k kd
 
 isProper, isRestricted, isStrictlyChannel, isStrictlySession :: KindedType -> Bool
 isProper = K.isProper . kindOf

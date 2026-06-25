@@ -28,6 +28,7 @@ module Validation.Kinding
   , runSynth
   , runSynthAndSolve
   , runCheck
+  , runCheckAndSolve
   , chan
   )
 where
@@ -44,9 +45,9 @@ import Compiler.Bug ( internalError )
 import Validation.Base
     ( emptyValidationState, runValidation, Validation
     , constraints
-    , emit, freshMultVar, freshPrekindVar, freshMult, freshPrekind, freshKind, freshKindVar )
+    , emit, freshMultVar, freshPrekindVar, freshKind, freshKindVar, promoteVar )
 import Validation.Constraint
-    ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind, KindEq)
+    ( Constraint(SubMult, SubPrekind, JoinMult, MeetPrekind, JoinPrekind, SeqMult, KindEq)
     , Constraints )
 import Validation.Expose qualified as Expose
 import Validation.KindSubstitution qualified as KS
@@ -91,28 +92,17 @@ synth ctx = \case
   T.Message s m p -> pure $ TK.Message s m p
   T.UnChoice s p ls -> pure $ TK.UnChoice s p ls
   T.AppLinChoice s p lts -> do
-    -- CK-Ch: emit υℓ<:s for each branch and ψ = ⊔ℓ υℓ; result kind is 1ψ
-    (lts', pks) <- unzip <$> forM lts (\(i, t) -> do
+    brs <- forM lts \(i, t) -> do
       (_, pk, u) <- checkSession ctx t
-      emit $ SubPrekind s pk Session
-      pure ((i, u), pk))
-    ψ <- freshPrekindVar s
-    emit $ JoinPrekind s ψ pks
-    pure $ TK.AppLinChoice s p lts'
+      pure (i, pk, u)
+    mkAppLinChoice s p brs
   T.End s p -> pure $ TK.End s p
   T.Skip s -> pure $ TK.Skip s
   T.Void s k -> pure $ TK.Void s k
   T.AppSemi s t u -> do
-    -- CK-Seq: emit υ₁<:s, υ₂<:s, φ = m₁⊔m₂, ψ = υ₁⊓υ₂
-    (m1, pk1, t') <- checkSession ctx t
-    (m2, pk2, u') <- checkSession ctx u
-    emit $ SubPrekind s pk1 Session
-    emit $ SubPrekind s pk2 Session
-    φ <- freshMultVar s
-    ψ <- freshPrekindVar s
-    emit $ JoinMult    s φ [m1, m2]
-    emit $ MeetPrekind s ψ [pk1, pk2]
-    pure $ TK.AppSemi s t' u'
+    t' <- checkSession ctx t
+    u' <- checkSession ctx u
+    mkAppSemi s t' u'
   T.AppDual s t -> do
     (_, _, t') <- checkSession ctx t
     pure $ TK.AppDual s t'
@@ -175,6 +165,54 @@ synth ctx = \case
     let ctx' = Map.fromList (first Left <$> aks) `Map.union` ctx
     TK.Abs s aks <$> synth ctx' t
 
+-- | CK-Seq constructor for @t ; u@. Emits the constraints relating the result
+-- kind to the operands and builds the node with kind @Proper φ ψ@: @φ@ the
+-- channel-conditional result multiplicity ('SeqMult'), @ψ@ the meet of the
+-- operand prekinds ('MeetPrekind'). Supersedes the 'TK.AppSemi' synonym's
+-- @meet@/@join@ computation, which is partial on prekind variables.
+mkAppSemi :: Span
+          -> (Multiplicity, Prekind, TK.KindedType)
+          -> (Multiplicity, Prekind, TK.KindedType)
+          -> Validation TK.KindedType
+mkAppSemi s (m1, pk1, t') (m2, pk2, u') = do
+  emit $ SubPrekind s pk1 Session
+  emit $ SubPrekind s pk2 Session
+  if groundMP m1 pk1 && groundMP m2 pk2
+    -- Operands fully resolved: let the 'TK.AppSemi' synonym compute the node
+    -- kind eagerly, exactly as before. Keeps non-inference callers (which read
+    -- the kind without running the solver) working on ground input.
+    then pure $ TK.AppSemi s t' u'
+    -- A component is still a variable: defer the result kind to the solver.
+    else do
+      φ <- freshMultVar s
+      ψ <- freshPrekindVar s
+      emit $ SeqMult     s φ m1 m2 pk1
+      emit $ MeetPrekind s ψ [pk1, pk2]
+      pure $ TK.appSemiK s (Proper s (Sup s [(ObjLv, φ)]) (VarPK ψ)) t' u'
+
+-- | CK-Ch constructor for @⋆{ℓ: tℓ}@. Each branch must be a session type; the
+-- result kind is @Proper 1 ψ@ with @ψ@ the join of the branch prekinds
+-- ('JoinPrekind'). The multiplicity is always 'Lin', so — unlike 'mkAppSemi' —
+-- no conditional multiplicity constraint is needed.
+mkAppLinChoice :: Span -> T.Polarity
+               -> [(Identifier, Prekind, TK.KindedType)]
+               -> Validation TK.KindedType
+mkAppLinChoice s p brs = do
+  forM_ brs \(_, pk, _) -> emit $ SubPrekind s pk Session
+  if all (\(_, pk, _) -> not (isVarPK pk)) brs
+    -- All branch prekinds resolved: eager synonym (multiplicity is always Lin).
+    then pure $ TK.AppLinChoice s p [(i, u) | (i, _, u) <- brs]
+    else do
+      ψ <- freshPrekindVar s
+      emit $ JoinPrekind s ψ [pk | (_, pk, _) <- brs]
+      pure $ TK.appLinChoiceK s (Proper s (Lin s) (VarPK ψ)) p [(i, u) | (i, _, u) <- brs]
+
+-- | A multiplicity/prekind pair is ground (fully resolved) when neither side is
+-- an unsolved metavariable, so a kind built from them needs no constraint
+-- solving. Used to keep the eager construction path for non-inference callers.
+groundMP :: Multiplicity -> Prekind -> Bool
+groundMP m pk = (isLin m || isUn m) && not (isVarPK pk)
+
 -- | Check a type against a given kind. TODO: can we have more cases here?
 check :: KindCtx -> T.ScopedType -> Kind -> Validation TK.KindedType
 check ctx t k = do
@@ -202,14 +240,18 @@ foldCheckProperJoin ctx m = foldM checkProperJoin (m, [])
 checkProper :: KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
 checkProper ctx t = synth ctx t >>= \t' -> case TK.kindOf t' of
     Proper _ mult pk -> pure (mult, pk, t')
-    Var s _          -> (\m pk -> (m, pk, t')) <$> freshMult s <*> freshPrekind s
+    Var s τ          -> do
+      (m, pk) <- promoteVar s τ
+      pure (m, pk, TK.setKind (Proper s m pk) t')
     k                -> throwE (ProperKindMismatch (getSpan t) t' k)
 
 -- | As 'checkProper', but on an already-kinded type.
 checkProperK :: TK.KindedType -> Validation (Multiplicity, Prekind, TK.KindedType)
 checkProperK t = case TK.kindOf t of
     Proper _ m pk -> pure (m, pk, t)
-    Var s _       -> (\m pk -> (m, pk, t)) <$> freshMult s <*> freshPrekind s
+    Var s τ       -> do
+      (m, pk) <- promoteVar s τ
+      pure (m, pk, TK.setKind (Proper s m pk) t)
     k             -> throwE (ProperKindMismatch (getSpan t) t k)
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
@@ -257,7 +299,13 @@ checkPrekindK t pk = do
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t = \cases
   (Arrow _ k11 k12) (Arrow _ k21 k22) -> checkSubkindOf t k21 k11 >> checkSubkindOf t k12 k22
-  k1@Proper{}       k2@Proper{}       -> unless (k1 <: k2) $ throwE (KindMismatch (getSpan t) k2 t)
+  k1@Proper{}       k2@Proper{}
+    -- Both leaves fully concrete: decide the subkinding eagerly, as before.
+    | concrete k1 && concrete k2      -> unless (k1 <: k2) $ throwE (KindMismatch (getSpan t) k2 t)
+    -- A 'VarPK'/variable-multiplicity component survives (e.g. a promoted
+    -- binder): @('<:')@ would reject the variable outright, so defer the
+    -- @m₁<:m₂@ / @υ₁<:υ₂@ pair to the solver instead.
+    | otherwise                       -> emitDecomposed k1 k2
   k1@Var{}          k2@Proper{}       -> emitDecomposed k1 k2
   k1@Proper{}       k2@Var{}          -> emitDecomposed k1 k2
   k1@Var{}          k2@Var{}          -> emitDecomposed k1 k2
@@ -265,6 +313,10 @@ checkSubkindOf t = \cases
   k1@Var{}          k2@(Arrow s _ _)  -> refineVarToArrow s k1 k2
   _                 k2                -> throwE (KindMismatch (getSpan t) k2 t)
   where
+    -- A 'Proper' kind is concrete when neither its multiplicity nor its
+    -- prekind is an unsolved metavariable, so @('<:')@ may be applied directly.
+    concrete (Proper _ m pk) = (isLin m || isUn m) && not (isVarPK pk)
+    concrete _               = False
     -- The 'Var' side is refined to a fresh @τ_a → τ_b@ via 'KindEq'; then we
     -- recurse so the contravariant/covariant decomposition fires.
     refineVarToArrow s k1 k2 = do
@@ -291,10 +343,8 @@ emitDecomposed k1 k2 = do
   where
     promote :: Kind -> Validation (Span, Multiplicity, Prekind)
     promote (Proper s m pk) = pure (s, m, pk)
-    promote k@(Var s _)     = do
-      m  <- freshMult s
-      pk <- freshPrekind s
-      emit (KindEq s k (Proper s m pk))
+    promote (Var s τ)       = do
+      (m, pk) <- promoteVar s τ
       pure (s, m, pk)
     promote k               = internalError $ "unexpected Arrow kind " ++ show k
 
@@ -674,6 +724,17 @@ runSynthAndSolve ctx t = runValidation emptyValidationState do
   kt <- synth ctx t
   cs <- gets constraints
   traceM $ "Constraints gathered by runSynthAndSolve:\n  "
+    ++ List.intercalate "\n  " (map show (Set.toList cs))
+  σ  <- solveConstraints cs
+  pure (kt, σ)
+
+runCheckAndSolve :: KindCtx -> T.ScopedType -> Kind
+                 -> Either [Error] (TK.KindedType, KS.Substitution)
+runCheckAndSolve ctx t k = runValidation emptyValidationState do
+  kt <- synth ctx t
+  checkSubkindOf kt (TK.kindOf kt) k 
+  cs <- gets constraints
+  traceM $ "Constraints gathered by runCheckAndSolve:\n  "
     ++ List.intercalate "\n  " (map show (Set.toList cs))
   σ  <- solveConstraints cs
   pure (kt, σ)

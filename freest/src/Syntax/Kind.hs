@@ -149,7 +149,7 @@ instance Show Prekind where
     Top     -> "T"
     Session -> "S"
     Channel -> "C"
-    VarPK ψ -> external ψ
+    VarPK ψ -> show ψ
 
 isVarPK :: Prekind -> Bool
 isVarPK VarPK{} = True

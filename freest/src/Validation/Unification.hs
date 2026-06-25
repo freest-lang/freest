@@ -55,9 +55,19 @@ multVarsOf = foldMap go
     go = \case
       C.SubMult _ m1 m2 -> mvm m1 <> mvm m2
       C.JoinMult _ φ ms -> Set.insert φ (foldMap mvm ms)
+      C.SeqMult _ φ m1 m2 _ -> Set.insert φ (mvm m1 <> mvm m2)
+      C.KindEq _ k1 k2  -> kmv k1 <> kmv k2
       _                 -> Set.empty
     mvm (K.Sup _ lvφs) = Set.fromList (map snd lvφs)
     mvm _              = Set.empty
+    -- Multiplicity variables embedded in a 'KindEq' kind (e.g. the fresh
+    -- @φ@ a promotion introduces via @κ = Proper φ ψ@): collect them so the
+    -- initial substitution gives each a default, rather than leaving a raw
+    -- 'K.Sup' var that 'applyMult' can't resolve.
+    kmv = \case
+      K.Proper _ m _ -> mvm m
+      K.Arrow _ a b  -> kmv a <> kmv b
+      K.Var{}        -> Set.empty
 
 -- | The set of prekind variables mentioned by a constraint set.
 prekindVarsOf :: C.Constraints -> Set.Set Variable
@@ -67,9 +77,18 @@ prekindVarsOf = foldMap go
       C.SubPrekind _  p1 p2 -> pkv p1 <> pkv p2
       C.MeetPrekind _ ψ  ps -> Set.insert ψ (foldMap pkv ps)
       C.JoinPrekind _ ψ  ps -> Set.insert ψ (foldMap pkv ps)
+      C.SeqMult _ _ _ _ v   -> pkv v
+      C.KindEq _ k1 k2      -> kpv k1 <> kpv k2
       _                     -> Set.empty
     pkv (K.VarPK ψ) = Set.singleton ψ
     pkv _           = Set.empty
+    -- Prekind variables embedded in a 'KindEq' kind (the fresh @ψ@ from a
+    -- @κ = Proper φ ψ@ promotion): collect so they default to @T@ instead of
+    -- surviving as a raw 'K.VarPK' that 'K.meet' then chokes on.
+    kpv = \case
+      K.Proper _ _ pk -> pkv pk
+      K.Arrow _ a b   -> kpv a <> kpv b
+      K.Var{}         -> Set.empty
 
 -- | Process every constraint once in sequence, tightening σ via 'compose'
 -- on the update cases (@φ <: m@, @ψ <: υ@, joins, meets) and checking
@@ -96,6 +115,15 @@ unifyOne σ (c : rest)   = case c of
   C.JoinMult s φ ms ->
     let lub = foldr (K.join . applyMult σ) (K.Sup s []) ms
     in unifyOne (updateMult φ lub σ) rest
+  -- CK-Seq result multiplicity: @φ = if υ₁ = C then m₁ else m₁ ⊔ m₂@.
+  -- As the fixpoint drives υ₁ down toward 'K.Channel', the right-hand side
+  -- only decreases (since @m₁ <: m₁⊔m₂@), so 'updateMult' (a meet/GLB) lands
+  -- on the correct value regardless of iteration order.
+  C.SeqMult _ φ m1 m2 pk1 ->
+    let m = if applyPrekind σ pk1 == K.Channel
+              then applyMult σ m1
+              else K.join (applyMult σ m1) (applyMult σ m2)
+    in unifyOne (updateMult φ m σ) rest
   C.JoinPrekind _ ψ ps ->
     let lub = foldr (K.join . applyPrekind σ) K.Top ps
     in unifyOne (updatePrekind ψ lub σ) rest

@@ -22,6 +22,7 @@ module Validation.Base
   , freshPrekind
   , freshKind
   , freshKindVar
+  , promoteVar
   )
 where
 
@@ -32,7 +33,7 @@ import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import UI.Error
-import Validation.Constraint ( Constraint, Constraints )
+import Validation.Constraint ( Constraint(KindEq), Constraints )
 import Validation.Substitution ( subs )
 import Compiler.Bug ( internalError )
 
@@ -50,6 +51,10 @@ data ValidationState = ValidationState
   { errors      :: [Error]
   , counter     :: Int
   , constraints :: Constraints
+  , promotions  :: Map.Map Variable (K.Multiplicity, K.Prekind)
+    -- ^ Memo table for 'promoteVar': records the fresh @(m, pk)@ pair each
+    -- whole-kind metavariable @κ@ was promoted to, so repeated promotions of
+    -- the same @κ@ reuse one 'K.Proper' kind instead of minting unrelated ones.
   }
 
 -- | The empty validation state. No errors, fresh counter at 0, no constraints.
@@ -58,6 +63,7 @@ emptyValidationState = ValidationState
   { errors      = []
   , counter     = 0
   , constraints = Set.empty
+  , promotions  = Map.empty
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
@@ -128,6 +134,28 @@ freshKind s = K.Proper s <$> freshMult s <*> freshPrekind s
 -- 'Arrow'.
 freshKindVar :: Span -> Validation K.Kind
 freshKindVar s = K.Var s . Variable s "κ" <$> incCounter
+
+-- | Promote a whole-kind metavariable @κ@ to a fresh proper kind @m·pk@,
+-- /idempotently/. The first promotion of a given @κ@ mints fresh multiplicity
+-- and prekind variables, records the binding in 'promotions', and emits the
+-- equating constraint @κ = m·pk@ (a 'KindEq'); later promotions of the same
+-- @κ@ return the previously-minted pair without emitting again.
+--
+-- Idempotency matters: a kind variable can be reached from several positions
+-- (e.g. a quantifier-bound @a : κ@ used in two operands of @;@, or promoted
+-- once in 'checkProper' and again in 'checkSubkindOf'). Minting a fresh pair
+-- per occurrence would tie @κ@ to two unrelated @Proper@ kinds, which the
+-- unifier then glues by /equality/ — the source of spurious @1 = *@ clashes.
+-- Promoting to a single pair keeps every occurrence in agreement.
+promoteVar :: Span -> Variable -> Validation (K.Multiplicity, K.Prekind)
+promoteVar s τ = gets promotions >>= \ps -> case ps Map.!? τ of
+  Just mpk -> pure mpk
+  Nothing  -> do
+    m  <- freshMult s
+    pk <- freshPrekind s
+    emit (KindEq s (K.Var s τ) (K.Proper s m pk))
+    modify $ \st -> st { promotions = Map.insert τ (m, pk) (promotions st) }
+    pure (m, pk)
 
 -- getKind :: M.KindedModule -> Identifier -> K.Kind
 -- getKind mod i =

@@ -7,7 +7,7 @@ import Syntax.Type.Unkinded qualified as TU
 import Syntax.Type.Kinded qualified as TK
 import UI.Error (showErrors)
 import UnitSpecUtils (mkTypeSpec, errorsAreFailures)
-import Validation.Kinding (runKindModule, runSynthAndSolve)
+import Validation.Kinding (runKindModule, runSynthAndSolve, runCheckAndSolve)
 import Validation.KindSubstitution qualified as KS
 
 import Control.Monad (unless)
@@ -49,7 +49,7 @@ spec = mkTypeSpec
     (_, Nothing, _) ->
       expectationFailure "Ill formed test case: missing kind annotation"
     (t, Just k, m) ->
-      case runKindModule m >>= \(kctx, _) -> runSynthAndSolve kctx (eraseKinds t) of
+      case runKindModule m >>= \(kctx, _) -> runCheckAndSolve kctx (eraseKinds t) k of
         Left es  -> expectationFailure (showErrors src es)
         Right (kt, σ) ->
           let k' = KS.applyKind σ (TK.kindOf kt) in
