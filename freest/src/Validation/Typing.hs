@@ -555,7 +555,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
         T.AppForall{} -> instantiate
         T.ForallM{}   -> instantiate
         _             -> instantiateResult
-  (args', mcs, kivs, us, t'') <- inst 0 tdecls ddecls kctx tctx' t' args
+  (args', mcs, kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
   (mcs', θ') <- LTI.match e tdecls t t''
   θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
@@ -579,7 +579,7 @@ checkArgsQL :: Int
                           , T.KindedType
                           , TypeCtx)
 checkArgsQL i s tdecls ddecls kctx tctx t args = do
-  (args', mcs, kivs, us, t') <- instantiate i tdecls ddecls kctx tctx t args
+  (args', mcs, kivs, us, t') <- instantiate s i tdecls ddecls kctx tctx t args
   θ <- LMI.solveMultConstraints mcs >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ     -> return θ
@@ -639,7 +639,9 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Nothing -> return k
           case mm of
             Just m' -> unless (m' == m) do
-              throwE (ArrowMultMismatch (spanFromTo ai fe) fe i m m')
+              throwE (ArrowMultMismatch (spanFromTo ai fe) fe i
+                       m (Origin (getSpan m) FromForall)
+                       m' (Origin (getSpan m') FromLambda))
             Nothing -> return ()
           (rhs', tctxi') <- checkFun' (i + 1) (Map.insert (Left ai) ki kctxi) tctxi ps''
             (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv ai ki) u)
@@ -653,7 +655,9 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Nothing -> return ()
           case mm of
             Just m' -> unless (m' == m) do
-              throwE (ArrowMultMismatch (spanFromTo pi fe) fe i m m')
+              throwE (ArrowMultMismatch (spanFromTo pi fe) fe i
+                       m (Origin (getSpan m) FromArrow)
+                       m' (Origin (getSpan m') FromLambda))
             Nothing -> return ()
           (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
           let kctxi' = Map.union kctxp kctxi
@@ -664,7 +668,9 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
         (MultLevel φi : ps'', T.ForallM s' m (φ : φs) u) -> do
           case mm of
             Just m' -> unless (m' == m) do
-              throwE (ArrowMultMismatch (spanFromTo φi fe) fe i m m')
+              throwE (ArrowMultMismatch (spanFromTo φi fe) fe i
+                       m (Origin (getSpan m) FromForall)
+                       m' (Origin (getSpan m') FromLambda))
             Nothing -> return ()
           (rhs', tctxi') <- checkFun' (i + 1) kctxi tctxi ps''
             ((if null φs then id else T.ForallM s' m φs) $ 
@@ -901,7 +907,8 @@ checkEquivTypeCtxsGuard tctx1 tctx2 = do
 -- 'instantiateResult' additionally instantiates the leading quantifiers the
 -- arguments leave in the result (instSigma in QL).
 instantiate, instantiateResult
-            :: Int
+            :: Span
+            -> Int
             -> D.KindedTypeDecls
             -> D.KindedDataDecls
             -> KindCtx
@@ -913,6 +920,7 @@ instantiate       = instantiateWith False
 instantiateResult = instantiateWith True
 
 instantiateWith :: Bool
+            -> Span
             -> Int
             -> D.KindedTypeDecls
             -> D.KindedDataDecls
@@ -921,7 +929,7 @@ instantiateWith :: Bool
             -> T.KindedType
             -> [Level E.KindedExp T.KindedType K.Multiplicity]
             -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], [T.KindedType], T.KindedType)
-instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
+instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
   (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] args
   let kivs' = map (second (LI.applySubs θ)) kivs
       mcs'  = flip concatMap kivs' \(k, t) -> LMI.kindSubConstraints (T.kindOf t) k
@@ -945,7 +953,7 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
       (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
         let sp = case args of { [] -> s; (arg : rest) -> foldl spanFromTo (getSpan arg) rest }
         unless (K.isProper k) do
-          throwE (CannotInferHigherKindedTypeApp sp k)
+          throwE (CannotInferHigherKindedTypeApp useSpan k)
         tiv <- LI.freshInstVarT sp k
         (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ((k, tiv) : kivs) args
         return (TypeLevel tiv : args'', eqs, kivs, θ, us, u)
@@ -979,22 +987,22 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
           quickLook = \cases
             e@E.Tuple{} _ -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
             e@E.Nil{}   _ -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
             e@E.Cons{}  _ -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-              (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
             e@(E.App s f@(E.Select s' i) args) t1 -> case args of
               [] -> throwE (CannotSynthesiseSelect s' i)
               (ExpLevel  e : args') -> do
                 (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                 t2 <- Expose.internalChoice tdecls e u1 i
-                (_, _, _, _, t3) <- instantiate 1 tdecls ddecls kctx tctx' t2 args'
+                (_, _, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
                 LTI.match e tdecls t1 t3
               (arg : _) -> 
                 throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -1004,7 +1012,7 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
                 (ExpLevel e : args') -> do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                   (a, _, t2) <- Expose.typeOutput tdecls e u1
-                  (_, _, _, _, t3) <- instantiate 1 tdecls ddecls kctx tctx' (subs a t0 t2) args'
+                  (_, _, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs a t0 t2) args'
                   LTI.match e tdecls t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
@@ -1015,17 +1023,17 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                   (a, k, t2') <- Expose.typeInput tdecls (Right e) u1
                   let t2 = T.AppExists (spanFromTo f e) [(a, k)] t2
-                  (_, _, _, _, t3) <- instantiate 1 tdecls ddecls kctx tctx' t2 args'
+                  (_, _, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
                   LTI.match e tdecls t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App _ h args) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
-              (_, _, _, us, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 args
+              (_, _, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 args
               LTI.match e tdecls t1 t3
             h@(E.Var _ x) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
-              (_, _, _, us, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+              (_, _, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
             e (T.Var _ k InstLv iv) -> do
               (_, t2, _) <- synth tdecls ddecls kctx tctx e
@@ -1039,7 +1047,7 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
             e@(E.Abs _ ps m _) t1 ->
               do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-                (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+                (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
                 LTI.match e tdecls t1 t3
               `catchE` \_ -> return (arrowConstraints ps (normalise tdecls t1), mempty)
               where
@@ -1061,13 +1069,13 @@ instantiateWith instResult i tdecls ddecls kctx tctx t1 args = do
             e t1 ->
               do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-                (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+                (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
                 LTI.match e tdecls t1 t3
               `catchE` \_ -> return ([], mempty)
             -- ORIGINAL
             -- e t1 -> do
             --   (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-            --   (_, _, _, _, t3) <- instantiate 0 tdecls ddecls kctx tctx' t2 []
+            --   (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
             --   LTI.match e tdecls t1 t3
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)

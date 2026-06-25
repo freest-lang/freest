@@ -37,12 +37,12 @@ import System.IO ( stderr, hPutStrLn )
 
 -- | The errors that can be found in a FreeST program.
 data Error
-  = ArrowMultMismatch 
-      Span 
-      (Either Variable E.KindedExp) 
+  = ArrowMultMismatch
+      Span
+      (Either Variable E.KindedExp)
       Int
-      K.Multiplicity 
-      K.Multiplicity
+      K.Multiplicity Origin
+      K.Multiplicity Origin
   | CannotInferHigherKindedTypeApp Span K.Kind
   | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
@@ -122,7 +122,7 @@ instance Located Error where
   -- | Returns the span of an 'Error', i.e., where the error occurs in the
   -- source code.
   getSpan = \case
-    ArrowMultMismatch s _ _ _ _ -> s
+    ArrowMultMismatch s _ _ _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
     CannotSatisfyMultConstraint s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
@@ -262,45 +262,25 @@ makeError src (getSpan -> s) msg =
 
 toMessage :: Source -> Error -> String
 toMessage src = \case
-  ArrowMultMismatch s xe i m m' -> makeError src s
-    ("Expected " ++ showMult m ++ ", but got " ++ showMult m'
-      ++ " instead"
-      ++ (if i > 0
-          then " (on the " ++ ordinal (i + 1) ++ " parameter of this "
-            ++ (case xe of Left _ -> "function definition" -- should not occur
-                           Right _ -> "expression") ++ ")"
-          else ""))
+  ArrowMultMismatch s xe i m om m' om' -> makeError src s
+    ("Multiplicity mismatch" ++ onParam)
+    ++ "expected " ++ multSide src m om
+    ++ "but got " ++ multSide src m' om'
     where
-      showMult = \case
-        K.Lin{}   -> "a linear function"
-        K.Un{}    -> "an unrestricted function"
-        m@K.Sup{} -> "a function with multiplicity " ++ bt (unparse m)
+      onParam
+        | i > 0 = " (on the " ++ ordinal (i + 1) ++ " parameter of this "
+                  ++ (case xe of Left _  -> "function definition" -- should not occur
+                                 Right _ -> "expression") ++ ")"
+        | otherwise = ""
   CannotInferHigherKindedTypeApp s k -> makeError src s
-    ("Cannot infer type application for a type of kind " ++ bt (unparse k))
-    ++ "Please provide all type arguments before this one"
+    "Cannot infer a higher-kinded type argument"
+    ++ "The type parameter has kind " ++ bt (unparse k) ++ ", declared at"
+    ++ locateSpan src (getSpan k)
+    ++ "Higher-kinded type arguments are not inferred; please provide them explicitly"
   CannotSatisfyMultConstraint s m1 o1 m2 o2 -> makeError src s
     "Could not infer consistent multiplicities for this application"
-    ++ "Could not match multiplicity "
-    ++ showSide m1 o1
-    ++ "with multiplicity " ++ showSide m2 o2
-    where
-      showSide m (Origin sp r) =
-        bt (unparse m) ++ " (" ++ adj m ++ "), from " ++ showReason r
-        ++ locate sp
-      locate sp@(Span fp _ _)
-        | Map.member fp src = ":\n" ++ snippet src sp True
-        | otherwise         = "\n"
-      adj = \case
-        K.Lin{} -> "linear"
-        K.Un{}  -> "unrestricted"
-        _       -> ""
-      showReason = \case
-        FromArrow            -> "an arrow type"
-        FromForall           -> "a quantifier"
-        FromKind             -> "a kind"
-        FromLambda           -> "a lambda expression"
-        FromInferred         -> "an inferred multiplicity"
-        Derived (Origin _ r) -> showReason r
+    ++ "Could not match multiplicity " ++ multSide src m1 o1
+    ++ "with multiplicity " ++ multSide src m2 o2
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesisePat s p -> makeError src s
@@ -542,31 +522,56 @@ toMessage src = \case
     ++ snippet src vp True
     ++ "(Session and variable patterns cannot appear together in the same match)"
   where
-    thirdPerson = \case 1 -> "it"; _ -> "them"
+  thirdPerson = \case 1 -> "it"; _ -> "them"
 
-    prettyModifiedPlural w q  = \case
-      0 -> "no "   ++ q ++ " " ++ w ++ "s"
-      1 -> "1 "    ++ q ++ " " ++ w
-      n -> show n ++ " " ++ q ++ " " ++ w ++ "s"
-    
-    prettyModifiedArgs = prettyModifiedPlural "argument"
-    prettyArgs         = prettyModifiedArgs ""
-    prettyMoreArgs     = prettyModifiedArgs "more"
-    prettyLessArgs     = prettyModifiedArgs "less"
+  prettyModifiedPlural w q  = \case
+    0 -> "no "   ++ q ++ " " ++ w ++ "s"
+    1 -> "1 "    ++ q ++ " " ++ w
+    n -> show n ++ " " ++ q ++ " " ++ w ++ "s"
+  
+  prettyModifiedArgs = prettyModifiedPlural "argument"
+  prettyArgs         = prettyModifiedArgs ""
+  prettyMoreArgs     = prettyModifiedArgs "more"
+  prettyLessArgs     = prettyModifiedArgs "less"
 
-    prettyMoreParams = prettyModifiedPlural "parameter" "more"
+  prettyMoreParams = prettyModifiedPlural "parameter" "more"
 
-    bt s = "`" ++ s ++ "`"
+  bt s = "`" ++ s ++ "`"
 
-    prettyVarCons = \case
-      Left x -> "variable " ++ bt (external x)
-      Right i -> "constructor " ++ bt (show i)
+  prettyVarCons = \case
+    Left x -> "variable " ++ bt (external x)
+    Right i -> "constructor " ++ bt (show i)
 
-    prettyPk = \case
-      K.Top     -> "type"
-      K.Session -> "session type"
-      K.Channel -> "channel type"
-      K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
+  prettyPk = \case
+    K.Top     -> "type"
+    K.Session -> "session type"
+    K.Channel -> "channel type"
+    K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
+
+  -- | Render one side of a multiplicity (mis)match: the multiplicity, what it is,
+  -- where it came from, and a snippet of its origin (when in the source).
+  multSide :: Source -> K.Multiplicity -> Origin -> String
+  multSide src m (Origin sp r) =
+    bt (unparse m) ++ " (" ++ multAdj m ++ "), from " ++ reason r ++ locateSpan src sp
+    where 
+    multAdj = \case
+      K.Lin{} -> "linear"
+      K.Un{}  -> "unrestricted"
+      _       -> ""
+    reason = \case
+      FromArrow            -> "an arrow type"
+      FromForall           -> "a quantifier"
+      FromKind             -> "a kind"
+      FromLambda           -> "a lambda expression"
+      FromInferred         -> "an inferred multiplicity"
+      Derived (Origin _ r) -> reason r
+
+  -- | A snippet of the origin span, unless it is not in the source (e.g. an
+  -- inferred multiplicity), in which case just end the line.
+  locateSpan :: Source -> Span -> String
+  locateSpan src sp@(Span fp _ _)
+    | Map.member fp src = ":\n" ++ snippet src sp True
+    | otherwise         = "\n"
 
 showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)
