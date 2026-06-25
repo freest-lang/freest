@@ -22,7 +22,7 @@ import Parser.Unparser
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Provenance ( Origin(..), Reason(..) )
+import Syntax.Provenance ( Origin(..) )
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
 import Compiler.Bug ( internalError )
@@ -263,7 +263,7 @@ makeError src (getSpan -> s) msg =
 toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m om m' om' -> makeError src s
-    ("Multiplicity mismatch" ++ onParam)
+    ("Multiplicity mismatch:" ++ onParam)
     ++ "expected " ++ multSide src m om
     ++ "but got " ++ multSide src m' om'
     where
@@ -447,9 +447,15 @@ toMessage src = \case
           E.If{}   -> " conditional expression"
           _        -> "n expression") ++ "\n"
       ++ snippet src fpe True)
-  TypeMismatch s t u _ -> makeError src s
-    ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with actual type " ++ bt (unparse u))
+  TypeMismatch s t u _ -> makeError src s "Type mismatch:"
+    ++ "Couldn't match expected type " ++ bt (unparse t) ++ fromClause s src t
+    ++ "with actual type " ++ bt (unparse u) ++ fromClause s src u
+    where
+    fromClause primary src ty
+      | sp == primary                      = "\n"
+      | not (Map.member (filepath sp) src) = "\n"
+      | otherwise                          = ", from:\n" ++ snippet src sp True
+      where sp = getSpan ty
   TypeMismatchExists s t poe -> makeError src s
     ("Couldn't match expected type " ++ bt (show t) ++ " with a package "
       ++ case poe of Left  p -> "pattern"
@@ -548,23 +554,15 @@ toMessage src = \case
     K.Channel -> "channel type"
     K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
 
-  -- | Render one side of a multiplicity (mis)match: the multiplicity, what it is,
-  -- where it came from, and a snippet of its origin (when in the source).
+  -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String
-  multSide src m (Origin sp r) =
-    bt (unparse m) ++ " (" ++ multAdj m ++ "), from " ++ reason r ++ locateSpan src sp
-    where 
-    multAdj = \case
-      K.Lin{} -> "linear"
-      K.Un{}  -> "unrestricted"
+  multSide src m (Origin sp _) =
+    bt (unparse m) ++ multAdj ++ locateSpan src sp
+    where
+    multAdj = case m of
+      K.Lin{} -> " (linear)"
+      K.Un{}  -> " (unrestricted)"
       _       -> ""
-    reason = \case
-      FromArrow            -> "an arrow type"
-      FromForall           -> "a quantifier"
-      FromKind             -> "a kind"
-      FromLambda           -> "a lambda expression"
-      FromInferred         -> "an inferred multiplicity"
-      Derived (Origin _ r) -> reason r
 
   -- | A snippet of the origin span, unless it is not in the source (e.g. an
   -- inferred multiplicity), in which case just end the line.

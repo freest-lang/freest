@@ -348,12 +348,13 @@ TypePrimary :: { T.ParsedType }
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 
 Type :: { T.ParsedType }
-  : Type MultArrow Type %prec ARROW { T.AppArrow (fst $2) (snd $2) $1 $3 }
+  : Type MultArrow Type %prec ARROW { T.AppArrow (spanFromTo $1 $3) (snd $2) $1 $3 }
   | TypeNotArrow { $1 }
 
 TypeNotArrow
   : 'forall' MultOrKindedVars MultArrow Type %prec ARROW
-    { foldr (\cases { (Left φs  ) t -> T.ForallM   (spanFromTo (head φs)        t) (snd $3) φs  t 
+    { setSpan (spanFromTo $1 $4) $
+      foldr (\cases { (Left φs  ) t -> T.ForallM   (spanFromTo (head φs)        t) (snd $3) φs  t
                     ; (Right aks) t -> T.AppForall (spanFromTo (fst $ head aks) t) (snd $3) aks t
                     })
             $4 $2
