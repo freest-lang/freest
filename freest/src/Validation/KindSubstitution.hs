@@ -38,6 +38,7 @@ import Syntax.Type.Kinded () -- for the @XType Kinded = K.Kind@ instance
 
 import Data.Bifunctor ( second )
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 
 -- | A substitution maps each kind of metavariable that can appear in a
 -- 'K.Kind' to its resolved value:
@@ -82,13 +83,22 @@ applyPrekind σ = \case
   K.VarPK ψ -> Map.findWithDefault (K.VarPK ψ) ψ (prekindSubs σ)
   pk        -> pk
 
--- | Apply a substitution to a kind. Descends into 'K.Proper' and
--- 'K.Arrow'; substitutes whole-kind metavariables via @kindSubs@.
+-- | Apply a substitution to a kind. Descends into 'K.Proper' and 'K.Arrow';
+-- substitutes whole-kind metavariables via @kindSubs@. A @kindSubs@ binding may
+-- itself mention further metavariables (e.g. @κ ↦ κ₀ -> κ₁@ with @κ₀ ↦ 1T@), so
+-- the 'K.Var' case re-applies the substitution to the looked-up kind, composing
+-- the chain to a fixpoint. The visited set breaks any (ill-formed) cycle,
+-- leaving the offending variable unresolved rather than looping.
 applyKind :: Substitution -> K.Kind -> K.Kind
-applyKind σ = \case
-  k@(K.Var _ τ)   -> Map.findWithDefault k τ (kindSubs σ)
-  K.Proper s m pk -> K.Proper s (applyMult σ m) (applyPrekind σ pk)
-  K.Arrow s k1 k2 -> K.Arrow s (applyKind σ k1) (applyKind σ k2)
+applyKind σ = go Set.empty
+  where
+    go seen = \case
+      k@(K.Var _ τ)
+        | τ `Set.member` seen -> k
+        | otherwise           ->
+            maybe k (go (Set.insert τ seen)) (Map.lookup τ (kindSubs σ))
+      K.Proper s m pk -> K.Proper s (applyMult σ m) (applyPrekind σ pk)
+      K.Arrow s k1 k2 -> K.Arrow s (go seen k1) (go seen k2)
 
 -- | Apply a substitution to a 'Scoped' type, descending into every embedded
 -- 'K.Multiplicity', 'K.Prekind' and 'K.Kind' annotation. The @XType Scoped@
