@@ -208,6 +208,13 @@ instance Show Kind where
     Var    _ τ     -> show τ
 
 -- | Abbreviations for the six proper kinds
+  --   1T
+  --  /  \
+  -- *T   1S
+  --  \  /  \ 
+  --   *S   1C
+  --     \  /
+  --      *C
 lt, ut, ls, us, lc, uc :: Span -> Kind
 lt s = Proper s (Lin s) Top 
 ut s = Proper s (Un s)  Top 

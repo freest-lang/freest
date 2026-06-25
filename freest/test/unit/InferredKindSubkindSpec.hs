@@ -12,6 +12,7 @@ import Validation.KindSubstitution qualified as KS
 
 import Control.Monad (unless)
 import Test.Hspec (Spec, expectationFailure, hspec)
+import Parser.Unparser (Unparse(unparse))
 
 main :: IO ()
 main = hspec spec
@@ -54,7 +55,12 @@ spec = mkTypeSpec
           let k' = KS.applyKind σ (TK.kindOf kt) in
           if not (K.isGround k')
             then expectationFailure $
-              "inferred kind `" ++ show k' ++ "` is still unresolved after solving for type " ++ show t ++ "\n" ++ show σ
+              "Inferred kind is still unresolved after solving\n" ++
+              "Original kind " ++ unparse k ++ "\n" ++
+              "Inferred kind " ++ unparse k' ++ "\n" ++
+              "Original type " ++ unparse t ++ "\n" ++
+              "Erased type   " ++ unparse (eraseKinds t) ++ "\n" ++
+              show σ
             else unless (k' K.<: k) $ expectationFailure $
               "inferred kind `" ++ show k' ++ "` is not a subkind of the declared kind `"
               ++ show k ++ "`\n" ++ show σ

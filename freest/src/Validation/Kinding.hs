@@ -673,6 +673,8 @@ runSynthAndSolve :: KindCtx -> T.ScopedType
 runSynthAndSolve ctx t = runValidation emptyValidationState do
   kt <- synth ctx t
   cs <- gets constraints
+  traceM $ "Constraints gathered by runSynthAndSolve:\n  "
+    ++ List.intercalate "\n  " (map show (Set.toList cs))
   σ  <- solveConstraints cs
   pure (kt, σ)
 
