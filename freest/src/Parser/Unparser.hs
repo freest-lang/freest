@@ -88,7 +88,7 @@ instance Unparse K.Kind where
       where
         l = bracket (fragment k1) LeftAssoc arrowRator
         r = bracket (fragment k2) RightAssoc arrowRator
-    K.Var _ τ       -> (maxRator, show τ)
+    K.Var _ _ τ     -> (maxRator, show τ)
 
 instance Unparse Variable where
   fragment a = (maxRator, show a)

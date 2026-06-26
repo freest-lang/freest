@@ -145,7 +145,7 @@ subsMultKind :: VarLv -> Variable -> K.Multiplicity -> K.Kind -> K.Kind
 subsMultKind lv φ m = \case
   K.Proper s m' pk -> K.Proper s (subsMultMult lv φ m m') pk
   K.Arrow s k1 k2  -> K.Arrow s (subsMultKind lv φ m k1) (subsMultKind lv φ m k2)
-  K.Var s τ -> K.Var s τ
+  K.Var s lv' τ -> K.Var s lv' τ
 
 subsMultMult :: VarLv -> Variable -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity
 subsMultMult lv φ m = \case

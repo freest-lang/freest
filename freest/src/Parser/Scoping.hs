@@ -597,7 +597,7 @@ scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
 scopeKind ctx = \case
     K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind ctx k1 <*> scopeKind ctx k2
     K.Proper s m pk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopePrekind pk
-    K.Var s τ       -> K.Var s    <$> scopeKVar τ
+    K.Var s lv τ    -> K.Var s lv <$> scopeKVar τ
   where
     scopePrekind (K.VarPK ψ) = do
       ψ' <- freshInternal ψ

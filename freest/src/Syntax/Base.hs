@@ -23,6 +23,7 @@ module Syntax.Base
   , firstInternal
   , defaultInternal
   , VarLv (..)
+  , solvable
   -- Level
   , Level (..)
   , mapLevel
@@ -183,10 +184,16 @@ mkFreshVar s = unusedVar [firstInternal..] (mkDefaultVar "_γ" s)
 -- object-level variables and metavariables. The only metavariables for now are
 -- instantiation variables, used during local type inference. In the future we
 -- may have, e.g., unification variables for more general type inference.
-data VarLv 
+data VarLv
   = ObjLv -- ^ Object-level variable
-  | InstLv -- ^ Instantiation-level variable
+  | InstLv -- ^ Instantiation-level variable (local type inference)
+  | UnifLv -- ^ Unification variable (kind inference)
   deriving (Eq, Ord, Show)
+
+-- | Whether a variable at this level may be solved by inference. Object-level
+-- variables are rigid; instantiation and unification variables are solvable.
+solvable :: VarLv -> Bool
+solvable = (/= ObjLv)
 
 -- 4 _ Levels
 

@@ -540,8 +540,8 @@ checkInstPrekind t = go (T.kindOf t)
     go (K.Proper _ m pk1) (K.Proper s _ pk2)
       | not (pk1 K.<: pk2) = throwE (PrekindMismatch (getSpan t) pk2 t (K.Proper s m pk1))
     go (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) = go k21 k11 >> go k12 k22
-    go (K.Var _ _) _ = internalError "unhandled kind variable"
-    go _ (K.Var _ _) = internalError "unhandled kind variable"
+    go (K.Var _ _ _) _ = internalError "unhandled kind variable"
+    go _ (K.Var _ _ _) = internalError "unhandled kind variable"
     go _ _ = return ()
 
 -- | Check a (synthesised) head applied to a possibly empty

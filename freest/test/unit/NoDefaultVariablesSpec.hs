@@ -44,7 +44,7 @@ instance NoDefaultVariables K.Kind where
   noDefault = \case
     K.Proper _ m pk -> noDefault m && noDefault pk
     K.Arrow _ k1 k2 -> noDefault k1 && noDefault k2
-    K.Var _ a       -> noDefault a
+    K.Var _ _ a     -> noDefault a
 
 instance NoDefaultVariables T.ScopedType where
   noDefault = \case

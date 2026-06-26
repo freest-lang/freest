@@ -98,8 +98,9 @@ solve eqs = do
     Lin{}      -> Set.empty
     Sup _ lvφs -> Set.fromList lvφs
 
-  collapseSide m (SolverState sub n) = do 
-    (InstLv, φ) <- Set.toList (atoms m)
+  collapseSide m (SolverState sub n) = do
+    (lv, φ) <- Set.toList (atoms m)
+    guard (solvable lv)
     return $ SolverState (Map.insert φ (Lin (getSpan m)) sub) n
 
   unifySup :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
@@ -109,12 +110,12 @@ solve eqs = do
         as2   = atoms m2
         only1 = Set.difference as1 as2
         only2 = Set.difference as2 as1
-        ovsL  = [φ | (ObjLv,  φ) <- Set.toList only1]
-        ovsR  = [φ | (ObjLv,  φ) <- Set.toList only2]
-        ivsL  = [φ | (InstLv, φ) <- Set.toList only1]
-        ivsR  = [φ | (InstLv, φ) <- Set.toList only2]
-        ivs2   = [φ | (InstLv, φ) <- Set.toList as2]
-        ivs1   = [φ | (InstLv, φ) <- Set.toList as1]
+        ovsL  = [φ | (ObjLv, φ) <- Set.toList only1]
+        ovsR  = [φ | (ObjLv, φ) <- Set.toList only2]
+        ivsL  = [φ | (lv, φ) <- Set.toList only1, solvable lv]
+        ivsR  = [φ | (lv, φ) <- Set.toList only2, solvable lv]
+        ivs2   = [φ | (lv, φ) <- Set.toList as2, solvable lv]
+        ivs1   = [φ | (lv, φ) <- Set.toList as1, solvable lv]
     guard (null ovsL || not (null ivs2))   -- left-only ObjLv needs absorber on right
     guard (null ovsR || not (null ivs1))   -- right-only ObjLv needs absorber on left
     assignL <- assignTo ovsL ivs2

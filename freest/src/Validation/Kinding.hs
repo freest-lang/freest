@@ -67,18 +67,18 @@ emptyKindCtx :: KindCtx
 emptyKindCtx = Map.empty
 
 -- | Resolve a (possibly omitted) type-binder kind annotation. A 'Nothing' is
--- replaced by a fresh placeholder kind variable here, in the kinding phase,
--- keeping manufactured placeholders out of the parser and scoper.
--- TODO(kind inference): mint a UnifLv metavariable and solve it instead.
+-- replaced by a fresh unification ('UnifLv') kind variable, born here in the
+-- kinding phase, keeping manufactured placeholders out of the parser and
+-- scoper. The constraint solver fills it in later.
 resolveBndKind :: (Variable, Maybe Kind) -> Validation (Variable, Kind)
 resolveBndKind (a, Just k)  = pure (a, k)
-resolveBndKind (a, Nothing) = (a,) <$> freshPlaceholderKind a
+resolveBndKind (a, Nothing) = (a,) <$> freshUnifKind a
 
--- | A fresh placeholder kind variable (see 'resolveBndKind').
-freshPlaceholderKind :: Located e => e -> Validation Kind
-freshPlaceholderKind (getSpan -> s) = do
+-- | A fresh unification kind variable (see 'resolveBndKind').
+freshUnifKind :: Located e => e -> Validation Kind
+freshUnifKind (getSpan -> s) = do
   i <- incCounter
-  pure $ Var s (Variable s ("τ" ++ show i) i)
+  pure $ Var s UnifLv (Variable s ("τ" ++ show i) i)
 
 -- | Synthesize the (minimal?) kind of a type.
 synth :: KindCtx -> T.ScopedType -> Validation TK.KindedType
