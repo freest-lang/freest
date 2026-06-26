@@ -66,6 +66,20 @@ type TypeCtx = Map.Map Variable TK.KindedType
 emptyKindCtx :: KindCtx
 emptyKindCtx = Map.empty
 
+-- | Resolve a (possibly omitted) type-binder kind annotation. A 'Nothing' is
+-- replaced by a fresh placeholder kind variable here, in the kinding phase,
+-- keeping manufactured placeholders out of the parser and scoper.
+-- TODO(kind inference): mint a UnifLv metavariable and solve it instead.
+resolveBndKind :: (Variable, Maybe Kind) -> Validation (Variable, Kind)
+resolveBndKind (a, Just k)  = pure (a, k)
+resolveBndKind (a, Nothing) = (a,) <$> freshPlaceholderKind a
+
+-- | A fresh placeholder kind variable (see 'resolveBndKind').
+freshPlaceholderKind :: Located e => e -> Validation Kind
+freshPlaceholderKind (getSpan -> s) = do
+  i <- incCounter
+  pure $ Var s (Variable s ("τ" ++ show i) i)
+
 -- | Synthesize the (minimal?) kind of a type.
 synth :: KindCtx -> T.ScopedType -> Validation TK.KindedType
 synth ctx = \case
@@ -94,9 +108,10 @@ synth ctx = \case
     return (TK.AppDual s t')
   -- Polymorphism
   T.AppQuant s p pk m aks t -> do
-    let ctx' = Map.fromList (first Left <$> aks) `Map.union` ctx
+    aks' <- mapM resolveBndKind aks
+    let ctx' = Map.fromList (first Left <$> aks') `Map.union` ctx
     (_, _, kt) <- checkPrekind ctx' t pk
-    return $ TK.AppQuant s p pk m aks kt
+    return $ TK.AppQuant s p pk m aks' kt
   T.ForallM s m φs t -> TK.ForallM s m φs <$> synth ctx t
   -- Equations (including built-ins)
   T.TName s i -> flip (TK.TName s) i <$> lookupKind' ctx i
@@ -130,8 +145,9 @@ synth ctx = \case
         ti' <- check ctx ti ki
         second (ti' :) <$> checkArgs t' nargs npars ts ks kn
   T.Abs s aks t -> do
-    let ctx' = Map.fromList (first Left <$> aks) `Map.union` ctx
-    TK.Abs s aks <$> synth ctx' t
+    aks' <- mapM resolveBndKind aks
+    let ctx' = Map.fromList (first Left <$> aks') `Map.union` ctx
+    TK.Abs s aks' <$> synth ctx' t
 
 -- | Check a type against a given kind.
 check :: KindCtx -> T.ScopedType -> Kind -> Validation TK.KindedType
@@ -234,12 +250,12 @@ kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
 kindModule ctx mod = do
   let ctx' = Map.mapKeys Right mod.kindSigs `Map.union` ctx
   tdecls <- Map.traverseWithKey (kindTypeDecl ctx') (M.typeDecls mod)
-  dcdecls <- foldM (kindDataConsDecls ctx') Map.empty $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
+  (dcdecls, kdtdecls) <- foldM (kindDataDecls ctx') (Map.empty, Map.empty) $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
   let mod' = mod { M.name        = mod.name
                  , M.imports     = mod.imports
                  , M.kindSigs    = mod.kindSigs
                  , M.typeDecls   = tdecls
-                 , M.dataDecls     = D.DataDecls dcdecls (M.dataTypeDecls mod)
+                 , M.dataDecls     = D.DataDecls dcdecls kdtdecls
                  , M.definitions = []
                  }
   (_, lds) <- kindLetDecls (M.typeDecls mod') ctx' (M.definitions mod)
@@ -254,9 +270,9 @@ kindModule ctx mod = do
           u' <- check (Map.fromList (first Left <$> aks') `Map.union` ctx) u k' -- TODO: Map.empty'
           return $ TK.Abs s aks' u'
           where
-            kindParams ((a, Var _ _) : aks') (Arrow _ k1 k2) =
+            kindParams ((a, Nothing) : aks') (Arrow _ k1 k2) =
               first ((a, k1) :) <$> kindParams aks' k2
-            kindParams ((a, k) : aks') (Arrow _ k1 k2) = do
+            kindParams ((a, Just k) : aks') (Arrow _ k1 k2) = do
               checkK (TK.fromVariable ObjLv a k) k1
               first ((a, k) :) <$> kindParams aks' k2
             kindParams []  k' = pure ([], k')
@@ -265,27 +281,30 @@ kindModule ctx mod = do
         t' -> check ctx t' k-- TODO: Map.empty? 
       -- return (hasParams, t')
 
-    kindDataConsDecls :: KindCtx
-                      -> D.DataConsDecls Kinded
-                      -> (Identifier, ([(Variable, Kind)], [Identifier]))
-                      -> Validation D.KindedDataConsDecls
-    kindDataConsDecls ctx dcdecls' (i, (aks, cis)) = do
+    -- Kind a single datatype declaration, returning both its (kinded)
+    -- constructor declarations and its parameters resolved against the kind
+    -- signature (an omitted parameter kind is read off the signature's arrow).
+    kindDataDecls :: KindCtx
+                  -> (D.DataConsDecls Kinded, D.DataTypeDecls Kinded)
+                  -> (Identifier, ([(Variable, Maybe Kind)], [Identifier]))
+                  -> Validation (D.DataConsDecls Kinded, D.DataTypeDecls Kinded)
+    kindDataDecls ctx (dcAcc, dtAcc) (i, (aks, cis)) = do
       k  <- lookupKind' ctx i
-      cd <- checkDataDecl k id ctx aks k
-      return (Map.union cd dcdecls')
+      (cd, aks') <- checkDataDecl k id ctx aks k
+      return (Map.union cd dcAcc, Map.insert i (aks', cis) dtAcc)
       where
         checkDataDecl :: Kind
                       -> (Kind -> Kind)
                       -> KindCtx
-                      -> [(Variable, Kind)]
+                      -> [(Variable, Maybe Kind)]
                       -> Kind
-                      -> Validation D.KindedDataConsDecls
-        checkDataDecl k f ctx [] _ = checkConsDecls k f ctx
-        checkDataDecl k f ctx ((a, Var _ _) : aks') (Arrow s k1 k2) =
-          checkDataDecl k (f . Arrow s k1) (Map.insert (Left a) k1 ctx) aks' k2
-        checkDataDecl k f ctx ((a, k') : aks') (Arrow s k1 k2) = do
+                      -> Validation (D.KindedDataConsDecls, [(Variable, Kind)])
+        checkDataDecl k f ctx [] _ = (, []) <$> checkConsDecls k f ctx
+        checkDataDecl k f ctx ((a, Nothing) : aks') (Arrow s k1 k2) =
+          second ((a, k1) :) <$> checkDataDecl k (f . Arrow s k1) (Map.insert (Left a) k1 ctx) aks' k2
+        checkDataDecl k f ctx ((a, Just k') : aks') (Arrow s k1 k2) = do
           checkK (TK.fromVariable ObjLv a k') k1
-          checkDataDecl k (f . Arrow s k') (Map.insert (Left a) k' ctx) aks' k2
+          second ((a, k') :) <$> checkDataDecl k (f . Arrow s k') (Map.insert (Left a) k' ctx) aks' k2
         checkDataDecl k f ctx aks Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
 

@@ -11,6 +11,7 @@ polymorphic context-free session types.
 module Syntax.Type.Internal
   ( Polarity(..)
   , XType
+  , XBndKind
   , Type( ..
         , AppQuant
         , AppForall
@@ -65,6 +66,10 @@ import Data.Void (Void)
 
 type family XType x
 
+-- | The kind annotation on a type-variable binder. Optional in the source
+-- phases and resolved to a concrete kind after kinding.
+type family XBndKind x
+
 data Polarity = In | Out
   deriving (Eq, Ord)
 
@@ -97,10 +102,10 @@ data Type x
   | DName Span (XType x) Identifier
   -- Non-constants
   | Var Span (XType x) VarLv Variable
-  | Abs Span (XType x) [(Variable, K.Kind)] (Type x)
+  | Abs Span (XType x) [(Variable, XBndKind x)] (Type x)
   | App Span (XType x) (Type x) [Type x]
 
-deriving instance (Ord (XType x)) => Ord (Type x)
+deriving instance (Ord (XType x), Ord (XBndKind x)) => Ord (Type x)
 
 -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/pattern_synonyms.html
 -- (also, consider OverloadedLists:
@@ -112,17 +117,17 @@ deriving instance (Ord (XType x)) => Ord (Type x)
 --           | null φs   = t
 --           | otherwise = ForallM' s x m φs t
 
-pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, K.Kind)] -> Type x -> Type x
+pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, XBndKind x)] -> Type x -> Type x
 pattern AppQuant s x1 x2 x3 p pk m aks t <- App s x1 (Quant _ x2 p pk m) [Abs _ x3 aks t]
   where AppQuant s x1 x2 x3 p pk m aks t 
           | null aks  = t 
           | otherwise = App s x1 (Quant s x2 p pk m) [Abs s x3 aks t]
 
-pattern AppForall :: Span -> XType x -> XType x -> XType x -> K.Multiplicity -> [(Variable, K.Kind)] -> Type x -> Type x
+pattern AppForall :: Span -> XType x -> XType x -> XType x -> K.Multiplicity -> [(Variable, XBndKind x)] -> Type x -> Type x
 pattern AppForall s x1 x2 x3 m aks t <- AppQuant s x1 x2 x3 In K.Top m aks t
   where AppForall s x1 x2 x3 m aks t =  AppQuant s x1 x2 x3 In K.Top m aks t
 
-pattern AppExists :: Span -> XType x -> XType x -> XType x -> [(Variable, K.Kind)] -> Type x -> Type x
+pattern AppExists :: Span -> XType x -> XType x -> XType x -> [(Variable, XBndKind x)] -> Type x -> Type x
 pattern AppExists s x1 x2 x3 aks t <- AppQuant s x1 x2 x3 Out K.Top _ aks t
   where AppExists s x1 x2 x3 aks t =  AppQuant s x1 x2 x3 Out K.Top existsMult aks t
 
@@ -137,7 +142,7 @@ pattern AppMessage :: Span -> XType x -> XType x -> K.Multiplicity -> Polarity -
 pattern AppMessage s x1 x2 m p t <- App s x1 (Message _ x2 m p) [t]
   where AppMessage s x1 x2 m p t  = App s x1 (Message s x2 m p) [t]
 
-pattern AppQuantS :: Span -> XType x -> XType x -> XType x -> Polarity -> Variable -> K.Kind -> Type x -> Type x
+pattern AppQuantS :: Span -> XType x -> XType x -> XType x -> Polarity -> Variable -> XBndKind x -> Type x -> Type x
 pattern AppQuantS s x1 x2 x3 p a k t <- App s x1 (Quant _ x2 p K.Session K.Lin{}) [Abs _ x3 [(a, k)] t]
   where AppQuantS s x1 x2 x3 p a k t  = App s x1 (Quant s x2 p K.Session (K.Lin s)) [Abs s x3 [(a, k)] t]
 
@@ -254,7 +259,7 @@ instance Dual (Type x) where
   dual t@Void{} = t
 
 -- for debugging
-instance Show (Type x) where
+instance Show (XBndKind x) => Show (Type x) where
   show = \case
    -- Functional types
     Int{}     -> "Int"
@@ -301,10 +306,10 @@ instance Show (Type x) where
       showQuant = \case In -> "forall"; Out -> "exists"
       showAbs aks sep t =
         unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t
-instance Eq (Type x) where
+instance Eq (XBndKind x) => Eq (Type x) where
   (==) = congruent M.empty
 
-instance Congruence (Type x) where
+instance Eq (XBndKind x) => Congruence (Type x) where
   -- Functional types
   congruent m = \cases
     Int{} Int{} -> True

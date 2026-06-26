@@ -28,6 +28,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Unkinded qualified as TU
+import Syntax.Type.Kinded () -- for the XBndKind Kinded/Typed type instances
 
 import Data.Bifunctor (second)
 import Data.List qualified as List
@@ -63,7 +64,7 @@ insertImport :: [String] -> Module p -> Module p
 insertImport i m = m{imports = i : imports m}
 
 insertDataDecl ::  Identifier
-               -> [(Variable, K.Kind)]
+               -> [(Variable, Maybe K.Kind)]
                -> [(Identifier, [TU.ParsedType])]
                -> ParsedModule
                -> ParsedModule
@@ -74,7 +75,7 @@ insertDataDecl i aks dcdecls m =
        } }
 
 insertTypeDecl :: Identifier
-               -> [(Variable, K.Kind)]
+               -> [(Variable, Maybe K.Kind)]
                -> TU.ParsedType
                -> ParsedModule
                -> ParsedModule

@@ -68,10 +68,12 @@ import Compiler.Bug (internalError)
 import Data.List (intercalate)
 
 type instance T.XType Kinded = K.Kind
+type instance T.XBndKind Kinded = K.Kind
 
 type KindedType = T.Type Kinded
 
 type instance T.XType Typed = K.Kind
+type instance T.XBndKind Typed = K.Kind
 
 type TypedType = T.Type Typed
 

@@ -287,8 +287,8 @@ scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
     scopeDataDecl (ctx', dtdecls') dd@(ti, (unzip -> (as, ks), cis)) = do
         unless (ti `memberKSig` ctx) do
           throwE (LacksKindSig (getSpan ti) ti)
-        as'  <- mapM freshInternal as 
-        ks'  <- mapM (scopeKind ctx) ks
+        as'  <- mapM freshInternal as
+        ks'  <- mapM (traverse (scopeKind ctx)) ks
         return (ctx', Map.insert ti (zip as' ks', cis) dtdecls')
     scopeConsDecls ctx = foldM (scopeConsDecl ctx) Map.empty
       where
@@ -540,12 +540,6 @@ insertPatVars p ctx =
       E.AsPat _ x p     -> Set.insert (ExpLevel x) (patVars p)
       _                 -> Set.empty
 
--- | Generate a fresh kind inference variable.
-freshKVar :: Located a => a -> Validation K.Kind
-freshKVar (getSpan -> s) = do
-  i <- incCounter
-  return $ K.Var s (Variable s  ("τ"++show i) i)
-
 -- | Scope a type.
 scopeType :: ScopingCtx -> T.ParsedType -> Validation T.ScopedType
 scopeType ctx = \case
@@ -581,7 +575,7 @@ scopeType ctx = \case
       Nothing -> T.Var s <$> freshInternal a
   T.Abs s (unzip -> (as, ks)) t -> do
     as' <- mapM freshInternal as
-    ks' <- mapM (scopeKind ctx) ks
+    ks' <- mapM (traverse (scopeKind ctx)) ks
     T.Abs s (zip as' ks') <$> scopeType (fromTVarList as' `union` ctx) t
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
@@ -595,8 +589,7 @@ scopeAndQuantifyType ctx t = do
   if null fvt'
     then return t'
     else do
-      aks <- mapM (\a -> (a,) <$> freshKVar a) 
-        $ List.sortBy (compare `on` getSpan) fvt'
+      let aks = map (, Nothing) $ List.sortBy (compare `on` getSpan) fvt'
       scopeType ctx $ T.AppForall (getSpan t) (K.Un $ getSpan t) aks t
 
 -- | Scope a kind.

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 {- |
 Module      :  Parser.Unparser
 Copyright   :  © The FreeST Team
@@ -91,7 +92,15 @@ instance Unparse K.Kind where
 
 instance Unparse Variable where
   fragment a = (maxRator, show a)
-instance Unparse (T.Type x) where
+
+instance Unparse (Variable, K.Kind) where
+  fragment (a, k) = (maxRator, "(" ++ show a ++ " : " ++ unparse k ++ ")")
+
+instance Unparse (Variable, Maybe K.Kind) where
+  fragment (a, Nothing) = fragment a
+  fragment (a, Just k)  = fragment (a, k)
+
+instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
   fragment = \case 
     T.Int  _ _ -> (maxRator, "Int")
     T.Float _ _ -> (maxRator, "Float")
@@ -158,8 +167,7 @@ instance Unparse (T.Type x) where
       polarity = \case
         T.In  -> "?"
         T.Out -> "!"
-      bindings = 
-        unwords . map \(a, k) -> "(" ++ show a ++ " : " ++ unparse k ++ ")"
+      bindings = unwords . map unparse
       view = \case
         T.In  -> "&"
         T.Out -> "+"

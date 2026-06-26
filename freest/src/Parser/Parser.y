@@ -325,8 +325,8 @@ TypePrimary :: { T.ParsedType }
                 -- { T.DName (spanFromTo $1 $3) (mkTupleId $2 (spanFromTo $1 $3)) }
   | '(' MultArrow ')'  { T.Arrow (spanFromTo $1 $3) (snd $2) }
   | '(' Type MultArrow ')' { T.App (spanFromTo $1 $4) (uncurry T.Arrow $3) [$2] }
-  | '(' MultArrow Type ')' { let {s = spanFromTo $1 $4; a = mkDefaultVar "_a" s} 
-                         in T.Abs s [(a, K.lt s)] (T.App s (uncurry T.Arrow $2) [T.Var s a, $3]) }
+  | '(' MultArrow Type ')' { let {s = spanFromTo $1 $4; a = mkDefaultVar "_a" s}
+                         in T.Abs s [(a, Just (K.lt s))] (T.App s (uncurry T.Arrow $2) [T.Var s a, $3]) }
   | '(' Polarity ')'     {let {s = spanFromTo $1 $3} in T.Message s (K.Lin s) (snd $2)}
   | '(' '*' Polarity ')' {let {s = spanFromTo $1 $4} in T.Message s (K.Un  s) (snd $3)}
   -- | '(' Type ';' ')' -- TODO: sections
@@ -360,7 +360,7 @@ TypeNotArrow
             $4 $2
                                                              }
   | '(' 'exists' KindedVars ',' Type ')' { T.AppExists (spanFromTo $1 $6) $3 $5 }
-  | Polarity 'type' KindedVar '.' Type %prec SEMI { let (a, k) = $3 in T.AppQuantS (spanFromTo (fst $1) $5) (snd $1) a k $5 }
+  | Polarity 'type' OptKindedVar '.' Type %prec SEMI { let (a, k) = $3 in T.AppQuantS (spanFromTo (fst $1) $5) (snd $1) a k $5 }
   | '\\' KindedVars '->' Type   %prec  ARROW { T.Abs (spanFromTo $1 $4) $2 $4 }
   | TypeApp ';' TypeNotArrow { T.AppSemi (spanFromTo $1 $3) $1 $3 }
   | TypeApp %prec SEMI { $1 }
@@ -388,15 +388,15 @@ MultiplicityPrimary :: { K.Multiplicity }
   | MultVar { K.VarM (getSpan $1) ObjLv $1 }
   | '(' Multiplicity ')' { $2 }
 
-MultOrKindedVars :: { [Either [Variable] [(Variable, K.Kind)]] }
+MultOrKindedVars :: { [Either [Variable] [(Variable, Maybe K.Kind)]] }
   : '#' MultVar MultOrKindedVars { case $3 of { (Left  φs  : φaks) -> Left  ($2 : φs ) : φaks
                                               ; φaks -> Left  [$2] : φaks
                                               }}
-  | KindedVar   MultOrKindedVars { case $2 of { (Right aks : φaks) -> Right ($1 : aks) : φaks
+  | OptKindedVar MultOrKindedVars { case $2 of { (Right aks : φaks) -> Right ($1 : aks) : φaks
                                               ; φaks -> Right [$1] : φaks
                                               }}
   | '#' MultVar { [Left  [$2]] }
-  | KindedVar   { [Right [$1]] }
+  | OptKindedVar { [Right [$1]] }
 
 TypeListComma :: { [T.ParsedType] }
   : Type ',' TypeListComma { $1 : $3 }
@@ -434,16 +434,23 @@ LabelListComma :: { [Identifier] }
   : Identifier ',' LabelListComma { $1 : $3 }
   | Identifier                    { [$1] }
 
-KindedVarListWS :: { [(Variable, K.Kind)] }
+KindedVarListWS :: { [(Variable, Maybe K.Kind)] }
   : {- empty -} { [] }
-  | KindedVar KindedVarListWS { $1 : $2 }
+  | OptKindedVar KindedVarListWS { $1 : $2 }
 
-KindedVars :: { [(Variable, K.Kind)] }
-  : TypeVar KindedVars { ($1, dummyKindVar $1) : $2 }
-  | '(' TypeVarNEListWS ':' Kind ')' KindedVars { map (, $4) $2 ++ $6 }
-  | TypeVar { [($1, dummyKindVar $1)] }
-  | '(' TypeVarNEListWS ':' Kind ')' { map (, $4) $2 }
+KindedVars :: { [(Variable, Maybe K.Kind)] }
+  : TypeVar KindedVars { ($1, Nothing) : $2 }
+  | '(' TypeVarNEListWS ':' Kind ')' KindedVars { map (, Just $4) $2 ++ $6 }
+  | TypeVar { [($1, Nothing)] }
+  | '(' TypeVarNEListWS ':' Kind ')' { map (, Just $4) $2 }
 
+OptKindedVar :: { (Variable, Maybe K.Kind) }
+  : TypeVar { ($1, Nothing) }
+  | '(' TypeVar ':' Kind ')' { ($2, Just $4) }
+
+-- | A type-variable binder with a concrete kind (omission defaulted via
+-- 'dummyKindVar'). Used for binders in expressions (@\@a@, @pack@,
+-- type-in-pattern), pending the same optional treatment as type-level binders.
 KindedVar :: { (Variable, K.Kind) }
   : TypeVar { ($1, dummyKindVar $1) }
   | '(' TypeVar ':' Kind ')' { ($2, $4) }

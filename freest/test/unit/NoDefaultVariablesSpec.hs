@@ -27,18 +27,42 @@ class NoDefaultVariables a where
 instance NoDefaultVariables Variable where
   noDefault a = internal a /= defaultInternal
 
+instance NoDefaultVariables a => NoDefaultVariables (Maybe a) where
+  noDefault = all noDefault
+
+instance NoDefaultVariables K.Multiplicity where
+  noDefault = \case
+    K.Sup _ lvφs -> all (noDefault . snd) lvφs
+    _            -> True
+
+instance NoDefaultVariables K.Prekind where
+  noDefault = \case
+    K.VarPK ψ -> noDefault ψ
+    _         -> True
+
+instance NoDefaultVariables K.Kind where
+  noDefault = \case
+    K.Proper _ m pk -> noDefault m && noDefault pk
+    K.Arrow _ k1 k2 -> noDefault k1 && noDefault k2
+    K.Var _ a       -> noDefault a
+
 instance NoDefaultVariables T.ScopedType where
   noDefault = \case
-    T.Abs _ aks t -> all (noDefault . fst) aks && noDefault t
+    T.Abs _ aks t -> all noDefaultBnd aks && noDefault t
     T.Var _ a -> noDefault a
     T.App _ t us -> all noDefault (t:us)
     _ -> True
 
+-- | A type-variable binder has no default variables in either its name or its
+-- (optional) kind annotation.
+noDefaultBnd :: (Variable, Maybe K.Kind) -> Bool
+noDefaultBnd (a, mk) = noDefault a && noDefault mk
+
 instance NoDefaultVariables (Map.Map a T.ScopedType) where
   noDefault = Map.foldr (\t b -> b && noDefault t) True
 
-instance NoDefaultVariables (Map.Map a ([(Variable, K.Kind)], [Identifier])) where
-  noDefault = Map.foldr (\(fst . unzip -> as, _) b -> foldr (\a b' -> noDefault a && b') b as) True
+instance NoDefaultVariables (Map.Map a ([(Variable, Maybe K.Kind)], [Identifier])) where
+  noDefault = Map.foldr (\(aks, _) b -> all noDefaultBnd aks && b) True
 
 instance NoDefaultVariables (Map.Map a (Identifier, [T.ScopedType])) where
   noDefault = Map.foldr (\(_, ts) b -> foldr (\t b' -> noDefault t && b') b ts) True

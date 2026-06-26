@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances #-}
 {- |
 Module      :  Syntax.Expression
 Copyright   :  © The FreeST Team
@@ -35,7 +36,7 @@ where
 import Syntax.Base
 import Syntax.Kind ( Multiplicity, Kind )
 import Syntax.Names
-import Syntax.Type.Internal ( Type )
+import Syntax.Type.Internal ( Type, XBndKind )
 
 import Data.List ( intercalate )
 import qualified Data.Set as Set
@@ -251,7 +252,7 @@ instance Show Pat where
     TypeInPat _ (a, k) p -> "(?@(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
     AsPat _ x p     -> show x++"@"++show p
 
-instance Show (LetDecl x) where
+instance Show (XBndKind x) => Show (LetDecl x) where
   show = \case
     ValDef p rhs   -> show p++show rhs
     FnDef x psrhss ->
@@ -263,19 +264,19 @@ instance Show (LetDecl x) where
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
     Mutual ds -> "mutual ⦃\n"++intercalate "⨾\n" (map show ds)++"\n⦄"
 
-instance Show (RHS x) where
+instance Show (XBndKind x) => Show (RHS x) where
   show = \case
     GuardedRHS ges w ->
       concatMap (\(g,e) -> " | "++show g++" = "++show e) ges++showWhere w
     UnguardedRHS e w ->
       " = "++show e++showWhere w
 
-showWhere :: Maybe [LetDecl x] -> String
+showWhere :: Show (XBndKind x) => Maybe [LetDecl x] -> String
 showWhere = \case
   Nothing -> ""
   Just ds -> " where ⦃ "++intercalate " ⨾ " (map show ds)++" ⦄"
 
-instance Show (Exp x) where
+instance Show (XBndKind x) => Show (Exp x) where
   show = \case
     Int _ i        -> show i
     Float _ d      -> show d
