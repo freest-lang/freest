@@ -552,7 +552,7 @@ toMessage src = \case
     K.Top     -> "type"
     K.Session -> "session type"
     K.Channel -> "channel type"
-    K.VarPK ψ -> "prekind " ++ show ψ ++ " type"
+    K.VarPK _ ψ -> "prekind " ++ show ψ ++ " type"
 
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String

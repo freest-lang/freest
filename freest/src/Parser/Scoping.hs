@@ -599,9 +599,9 @@ scopeKind ctx = \case
     K.Proper s m pk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopePrekind pk
     K.Var s lv τ    -> K.Var s lv <$> scopeKVar τ
   where
-    scopePrekind (K.VarPK ψ) = do
+    scopePrekind (K.VarPK lv ψ) = do
       ψ' <- freshInternal ψ
-      return $ K.VarPK ψ'{external = "ψ" ++ show (internal ψ')}
+      return $ K.VarPK lv ψ'{external = "ψ" ++ show (internal ψ')}
     scopePrekind pk = pure pk
     scopeKVar τ = do
       τ' <- freshInternal τ

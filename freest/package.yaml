@@ -66,6 +66,7 @@ library:
     - Syntax.Declarations
     - Syntax.Expression
     - Syntax.Kind
+    - Syntax.Provenance
     - Syntax.Module
     - Syntax.Names
     - Syntax.Type.Internal
@@ -75,6 +76,7 @@ library:
     - UI.Error
     - Validation.Base
     - Validation.Expose
+    - Validation.LocalInference.Prekinds
     - Validation.HOTRecursion
     - Validation.Kinding
     - Validation.Normalisation

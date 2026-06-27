@@ -107,7 +107,7 @@ instance Show Multiplicity where
 
 -- 2. Prekinds
 
-data Prekind = Top | Session | Channel | VarPK Variable
+data Prekind = Top | Session | Channel | VarPK VarLv Variable
   deriving (Eq, Ord)
 
 instance Subsort Prekind where
@@ -139,7 +139,7 @@ instance Show Prekind where
     Top     -> "T"
     Session -> "S"
     Channel -> "C"
-    VarPK ψ -> external ψ
+    VarPK _ ψ -> external ψ
 
 -- 3. Kinds
 

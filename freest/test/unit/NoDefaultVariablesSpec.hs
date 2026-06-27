@@ -37,7 +37,7 @@ instance NoDefaultVariables K.Multiplicity where
 
 instance NoDefaultVariables K.Prekind where
   noDefault = \case
-    K.VarPK ψ -> noDefault ψ
+    K.VarPK _ ψ -> noDefault ψ
     _         -> True
 
 instance NoDefaultVariables K.Kind where
