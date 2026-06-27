@@ -76,6 +76,7 @@ library:
     - UI.Error
     - Validation.Base
     - Validation.Expose
+    - Validation.LocalInference.Kinds
     - Validation.LocalInference.Prekinds
     - Validation.HOTRecursion
     - Validation.Kinding
