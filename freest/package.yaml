@@ -78,6 +78,7 @@ library:
     - Validation.Expose
     - Validation.LocalInference.Kinds
     - Validation.LocalInference.Prekinds
+    - Validation.LocalInference.Solution
     - Validation.HOTRecursion
     - Validation.Kinding
     - Validation.Normalisation
