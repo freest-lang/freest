@@ -50,13 +50,15 @@ type U = StateT Acc (Either UnifyError)
 -- | Unify two kinds related by @<:@, producing the whole-kind bindings and the
 -- residual multiplicity/prekind leaf constraints, or a 'UnifyError'.
 unifyKindSub :: Origin -> Kind -> Kind -> Either UnifyError KindUnifier
-unifyKindSub o k1 k2 = unifyKindSubs [(o, k1, k2)]
+unifyKindSub o k1 k2 = unifyKindSubs Map.empty [(o, k1, k2)]
 
 -- | Unify a set of subkinding constraints together, threading one substitution
 -- and fresh-variable counter, so bindings from one constraint inform the next.
-unifyKindSubs :: [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
-unifyKindSubs cs =
-  case runStateT (mapM_ (\(o, k1, k2) -> go o k1 k2) cs) (Acc (-2) Map.empty [] []) of
+-- The substitution is seeded with @binds@ (e.g. whole-kind bindings established
+-- elsewhere during kinding).
+unifyKindSubs :: Map.Map Variable Kind -> [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
+unifyKindSubs binds cs =
+  case runStateT (mapM_ (\(o, k1, k2) -> go o k1 k2) cs) (Acc (-2) binds [] []) of
     Left e         -> Left e
     Right (_, acc) -> Right (KindUnifier (kSub acc) (mCs acc) (pCs acc))
 

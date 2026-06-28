@@ -425,11 +425,15 @@ toMessage src = \case
         K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (unparse t)
         k               -> bt (unparse t) ++ " of kind " ++ bt (unparse k))
       ++ " instead")
-  ProperKindMismatch s t k -> makeError src s
-    ("Expected " ++ prettyMoreArgs arity ++ " to " ++ bt (unparse t))
-    ++ "(Expected a proper type, but got " ++ bt (unparse t)
-    ++ " of kind " ++ bt (unparse k) ++ ")"
-    where arity = K.depth k
+  ProperKindMismatch s t k -> case k of
+    -- an unsolved kind variable: inference could not determine a proper kind here
+    K.Var{} -> makeError src s
+      ("Could not infer a proper kind for " ++ bt (unparse t)
+       ++ "; consider annotating it")
+    _ -> makeError src s
+      ("Expected " ++ prettyMoreArgs (K.depth k) ++ " to " ++ bt (unparse t))
+      ++ "(Expected a proper type, but got " ++ bt (unparse t)
+      ++ " of kind " ++ bt (unparse k) ++ ")"
   RestrictedFunInMutual s x t -> makeError src s
     ("Mutually recursive function " ++ bt (external x)
       ++ " must be unrestricted, but has type " ++ bt (unparse t))

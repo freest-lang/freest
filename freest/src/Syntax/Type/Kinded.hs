@@ -56,6 +56,7 @@ module Syntax.Type.Kinded
   , kindOf
   , isProper
   , smartApp
+  , appSemiWithKind
   )
 where
 
@@ -212,10 +213,16 @@ pattern UnChoice s p ls <- T.UnChoice s _ p ls
 pattern AppSemi :: Span -> KindedType -> KindedType -> KindedType
 pattern AppSemi s t u <- T.AppSemi s _ _ t u
   where AppSemi s t u  = T.AppSemi s app semi t u
-          where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2) 
+          where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2)
                 (K.Proper _ m1 pk1) = kindOf t
                 (K.Proper _ m2 pk2) = kindOf u
                 semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
+
+-- | Build a @;@ node with an explicitly-given result kind. 
+-- Used by kind inference to defer the result kind to the solver.
+appSemiWithKind :: Span -> K.Kind -> KindedType -> KindedType -> KindedType
+appSemiWithKind s app = T.AppSemi s app semi
+  where semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
             
 pattern AppDual :: Span -> KindedType -> KindedType
 pattern AppDual s t <- T.AppDual s _ _ t
