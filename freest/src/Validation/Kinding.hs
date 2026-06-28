@@ -108,24 +108,24 @@ synth ctx = \case
   T.Message s m p -> pure $ TK.Message s m p
   T.UnChoice s p ls -> pure $ TK.UnChoice s p ls
   T.AppLinChoice s p lts -> do
-    lts' <- forM lts (\(i, t) -> do
-      (_, _, u) <- checkSession ctx t
-      return (i, u))
-    pure $ TK.AppLinChoice s p lts'
+    ltpks <- forM lts (\(i, t) -> do
+      (_, pk, u) <- checkOperand ctx Session t
+      return ((i, u), pk))
+    let (lts', pks) = unzip ltpks
+    ψ <- joinPrekinds s pks   -- result prekind = join of the branches
+    return $ TK.appLinChoiceWithKind s (Proper s (Lin s) ψ) p lts'
   T.End s p -> pure $ TK.End s p
   T.Skip s -> pure $ TK.Skip s
   T.Void s k -> pure $ TK.Void s k
   T.AppSemi s t u -> do
-    (m1, pk1, t') <- checkSessionDefer ctx t
-    (m2, pk2, u') <- checkSessionDefer ctx u
+    (m1, pk1, t') <- checkOperand ctx Session t
+    (m2, pk2, u') <- checkOperand ctx Session u
     if hasSolvableVar (Proper s m1 pk1) || hasSolvableVar (Proper s m2 pk2)
       then do
-        -- defer: the result prekind is the meet, the multiplicity the join
-        φ  <- freshUnifMult s
-        ψv <- freshUnifPrekindVar s
-        addPrekindConstraint (MeetPrekind (Origin s FromKind) ψv [pk1, pk2])
-        addMultEquation (Origin s FromKind) φ (join m1 m2)
-        return $ TK.appSemiWithKind s (Proper s φ (VarPK UnifLv ψv)) t' u'
+        -- defer: result prekind is the meet, multiplicity the join (the *C
+        -- channel-conditional refinement is left to the ground path)
+        ψ <- meetPrekinds s [pk1, pk2]
+        return $ TK.appSemiWithKind s (Proper s (join m1 m2) ψ) t' u'
       else return $ TK.AppSemi s t' u'
   T.AppDual s t -> do
     t' <- check ctx t (ls s)
@@ -134,14 +134,15 @@ synth ctx = \case
   T.AppQuant s p pk m aks t -> do
     aks' <- mapM resolveBndKind aks
     let ctx' = Map.fromList (first Left <$> aks') `Map.union` ctx
-    (_, _, kt) <- checkPrekindDefer ctx' t pk
+    (_, _, kt) <- checkOperand ctx' pk t
     return $ TK.AppQuant s p pk m aks' kt
   T.ForallM s m φs t -> TK.ForallM s m φs <$> synth ctx t
   -- Equations (including built-ins)
   T.TName s i -> flip (TK.TName s) i <$> lookupKind' ctx i
   T.Tuple s ts -> do
-    (_, ts') <- foldCheckProperJoin ctx (Un s) ts
-    return $ TK.Tuple s ts'
+    mts <- forM ts (\t -> do (m, _, u) <- checkOperand ctx Top t; return (m, u))
+    let (ms, ts') = unzip mts
+    return $ TK.tupleWithKind s (Proper s (foldr join (Un s) ms) Top) ts'
   T.List s t -> do
     (_, _, t') <- checkProper ctx t
     return $ TK.List s t'
@@ -216,18 +217,22 @@ checkSession ctx t = checkPrekind ctx t Session
 -- constraints rather than erroring, so unannotated session continuations are
 -- inferred. Used only by the @;@ former; choices and tuples keep the strict
 -- 'checkSession'.
-checkSessionDefer :: KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
-checkSessionDefer ctx t = do
+-- | A variable-tolerant proper-operand check, the single check used by the
+-- multi-operand formers (@;@, choice, tuple) and a quantifier body. The operand
+-- must be a proper type whose prekind is below @req@; a solvable whole-kind
+-- variable is resolved to a fresh proper kind via a direct binding (reused if
+-- the variable recurs), and a variable prekind is gathered as a constraint
+-- rather than checked eagerly. Replaces the former @check…Defer@ variants.
+checkOperand :: KindCtx -> Prekind -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+checkOperand ctx req t = do
   t' <- synth ctx t
   let o = Origin (getSpan t) FromKind
   case TK.kindOf t' of
     Proper _ m pk
-      | isVarPrekind pk -> addPrekindConstraint (SubPrekind o pk Session) >> return (m, pk, t')
-      | pk <: Session   -> return (m, pk, t')
-      | otherwise       -> throwE (PrekindMismatch (getSpan t) Session t' (Proper (getSpan t) m pk))
+      | isVarPrekind pk -> addPrekindConstraint (SubPrekind o pk req) >> return (m, pk, t')
+      | pk <: req       -> return (m, pk, t')
+      | otherwise       -> throwE (PrekindMismatch (getSpan t) req t' (Proper (getSpan t) m pk))
     Var _ lv a | solvable lv -> do
-      -- resolve the kind variable to a proper session kind (reusing an earlier
-      -- binding if this type variable already occurred in a composition)
       existing <- gets kindBindings
       (m, pk) <- case Map.lookup a existing of
         Just (Proper _ m pk) -> pure (m, pk)
@@ -236,12 +241,33 @@ checkSessionDefer ctx t = do
           ψv <- freshUnifPrekindVar (getSpan t)
           let pk = VarPK UnifLv ψv
           addKindBinding a (Proper (getSpan t) m pk)
-          addPrekindConstraint (SubPrekind o pk Session)
+          addPrekindConstraint (SubPrekind o pk req)
           pure (m, pk)
       return (m, pk, t')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
   where
     isVarPrekind = \case VarPK lv _ -> solvable lv; _ -> False
+
+-- | The greatest lower bound (@meetPrekinds@) or least upper bound
+-- (@joinPrekinds@) of operand prekinds, computed eagerly when all are ground and
+-- deferred to a fresh variable plus a constraint when any is a variable
+-- (meet/join are partial on variables).
+meetPrekinds, joinPrekinds :: Span -> [Prekind] -> Validation Prekind
+meetPrekinds = combinePrekinds meet Top     MeetPrekind
+joinPrekinds = combinePrekinds join Channel JoinPrekind
+
+combinePrekinds
+  :: (Prekind -> Prekind -> Prekind)                        -- ^ eager lattice op
+  -> Prekind                                                -- ^ its identity
+  -> (Origin -> Variable -> [Prekind] -> PrekindConstraint) -- ^ the deferred form
+  -> Span -> [Prekind] -> Validation Prekind
+combinePrekinds op unit mkC s pks
+  | all ground pks = pure (foldr op unit pks)
+  | otherwise = do
+      ψv <- freshUnifPrekindVar s
+      addPrekindConstraint (mkC (Origin s FromKind) ψv pks)
+      return (VarPK UnifLv ψv)
+  where ground = \case VarPK lv _ -> not (solvable lv); _ -> True
 
 checkSessionK :: TK.KindedType -> Validation (Multiplicity, Prekind)
 checkSessionK t = checkPrekindK t Session
@@ -258,19 +284,6 @@ checkPrekind ctx t pk = do
   (m, pk', kt) <- checkProper ctx t
   unless (pk' <: pk) $
     throwE (PrekindMismatch (getSpan t) pk kt (Proper (getSpan t) m pk'))
-  return (m, pk', kt)
-
--- | Like 'checkPrekind', but tolerant of a variable result prekind (gathered as
--- a constraint rather than checked eagerly). Used for a quantifier's body, whose
--- prekind may be a deferred @;@ result; choices and tuples keep 'checkPrekind'.
-checkPrekindDefer :: KindCtx -> T.ScopedType -> Prekind -> Validation (Multiplicity, Prekind, TK.KindedType)
-checkPrekindDefer ctx t pk = do
-  (m, pk', kt) <- checkProper ctx t
-  case pk' of
-    VarPK lv _ | solvable lv ->
-      addPrekindConstraint (SubPrekind (Origin (getSpan t) FromKind) pk' pk)
-    _ -> unless (pk' <: pk) $
-           throwE (PrekindMismatch (getSpan t) pk kt (Proper (getSpan t) m pk'))
   return (m, pk', kt)
 
 checkPrekindK :: TK.KindedType -> Prekind -> Validation (Multiplicity, Prekind)

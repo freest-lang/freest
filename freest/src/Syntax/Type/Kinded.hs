@@ -57,6 +57,8 @@ module Syntax.Type.Kinded
   , isProper
   , smartApp
   , appSemiWithKind
+  , appLinChoiceWithKind
+  , tupleWithKind
   )
 where
 
@@ -223,6 +225,18 @@ pattern AppSemi s t u <- T.AppSemi s _ _ t u
 appSemiWithKind :: Span -> K.Kind -> KindedType -> KindedType -> KindedType
 appSemiWithKind s app = T.AppSemi s app semi
   where semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
+
+-- | Build a linear-choice node with an explicitly-given result kind (see
+-- 'appSemiWithKind'). Used by kind inference to defer the result prekind.
+appLinChoiceWithKind :: Span -> K.Kind -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
+appLinChoiceWithKind s app p lts = T.AppLinChoice s app choice p lts
+  where choice = foldr (const $ K.Arrow s (K.ls s)) app lts
+
+-- | Build a tuple node with an explicitly-given result kind (see
+-- 'appSemiWithKind').
+tupleWithKind :: Span -> K.Kind -> [KindedType] -> KindedType
+tupleWithKind s app ts = T.Tuple s app arrows ts
+  where arrows = foldr (const $ K.Arrow s (K.lt s)) app ts
             
 pattern AppDual :: Span -> KindedType -> KindedType
 pattern AppDual s t <- T.AppDual s _ _ t
