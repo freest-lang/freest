@@ -1,3 +1,5 @@
 module LacksKindSig where
 
-type Foo = Int
+-- Type-declaration kinds are inferred, but datatype declarations still require
+-- an explicit kind signature.
+data Foo = Bar Int

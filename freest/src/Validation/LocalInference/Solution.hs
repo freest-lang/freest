@@ -78,6 +78,8 @@ resolveType sol = \case
   TK.ForallM s m φs t    -> TK.ForallM s (resolveMult sol m) φs (resolveType sol t)
   TK.Void s k            -> TK.Void s (resolveKind sol k)
   TK.Var s k lv a        -> TK.Var s (resolveKind sol k) lv a
+  TK.TName s k i         -> TK.TName s (resolveKind sol k) i
+  TK.DName s k i         -> TK.DName s (resolveKind sol k) i
   TK.Abs s aks t         -> TK.Abs s (kinds aks) (resolveType sol t)
   TK.App s t ts          -> TK.App s (resolveType sol t) (map (resolveType sol) ts)
   t                      -> t

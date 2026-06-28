@@ -303,7 +303,7 @@ scopeTypeDecls :: ScopingCtx -> D.TypeDecls Parsed
 scopeTypeDecls ctx = foldM scopeTypeDecl (ctx, Map.empty)
   where
     scopeTypeDecl (ctx', tdecls') (ti, (n, t)) = do
-      unless (memberKSig ti ctx') (throwE (LacksKindSig (getSpan ti) ti))
+      -- a missing kind signature is inferred
       t'  <- scopeType ctx' t
       return (ctx', Map.insert ti (n, t') tdecls')
 

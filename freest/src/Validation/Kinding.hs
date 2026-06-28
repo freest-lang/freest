@@ -48,7 +48,7 @@ import Syntax.Provenance ( Origin(..), Reason(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
 import Validation.LocalInference.Prekinds ( PrekindConstraint(..), solvePrekindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveType, resolveModule )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveModule )
 import Validation.LocalInference.Substitution ( Substitution(..) )
 
 import Control.Monad.Identity ( Identity(..) )
@@ -61,6 +61,7 @@ import Data.Foldable.Extra ( allM )
 import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.List qualified as List
 import Validation.HOTRecursion (checkNoHOTRec)
 
@@ -335,47 +336,140 @@ isStrictlySession t = case TK.kindOf t of
 
 
 lookupKind' :: KindCtx -> Identifier -> Validation Kind
-lookupKind' ctx i = do 
+lookupKind' ctx i = do
   case ctx Map.!? Right i of
     Just k  -> return k
     Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
 
+-- | The @chan@ predicate (paper Fig. 9): is @t@ a channel type, i.e. do its
+-- finite complete traces terminate in 'Wait'/'Close'? @selfs@ holds the
+-- self-references treated as channels (the recursive type being defined). Used
+-- to decide the prekind of a recursive declaration (CK-Rec): channel if its body
+-- is a channel type, session otherwise.
+--
+-- Two cases are deliberately conservative — both answer @False@, which only
+-- loses precision (inferring a session where a channel was admissible, i.e. a
+-- weaker prekind) and never soundness, and both are recoverable with an explicit
+-- kind signature:
+--
+--   * A reference to /another/ named type (@TName i@, @i@ not in @selfs@). This
+--     is not about higher kinds: the paper formalises recursion with inline μ
+--     and no top-level environment of named type abbreviations, so cross-decl
+--     references never arise there. We bail rather than unfold because @chan@
+--     runs during constraint gathering, before the solve — the other
+--     declaration's prekind is not yet known, and a precise answer would need a
+--     fixpoint over the whole (mutually recursive) declaration group.
+--
+--   * An applied type name (@AppTName i _@, @i@ not in @selfs@). This /is/ the
+--     higher-kinded gap: deciding channel-ness of @F a b@ precisely would mean
+--     substituting the arguments into @F@'s operator body (or propagating a
+--     channel-ness component through arrow kinds), machinery the paper's
+--     syntactic predicate lacks. Self-application stays a channel (Chan-Var) so
+--     guarded recursive channels keep working.
+chan :: Set.Set Identifier -> T.ScopedType -> Bool
+chan selfs = \case
+  T.End{}                -> True                               -- Chan-End
+  T.AppSemi _ t u        -> chan selfs t || chan selfs u       -- Chan-Seq-L/R
+  T.AppLinChoice _ _ lts -> all (chan selfs . snd) lts         -- Chan-Ch
+  T.AppDual _ t          -> chan selfs t
+  T.TName _ i            -> i `Set.member` selfs               -- Chan-Var
+  T.AppTName _ i _       -> i `Set.member` selfs
+  _                      -> False
+
+-- | A fresh binder kind for a sig-less declaration of the given arity: an arrow
+-- over fresh whole-kind parameter variables ending in a fresh proper kind.
+-- Returns the kind and the result's prekind variable (for the CK-Rec channel
+-- constraint).
+freshDeclSig :: Span -> Int -> Validation (Kind, Variable)
+freshDeclSig s n = do
+  m   <- freshUnifMult s
+  pkv <- freshUnifPrekindVar s
+  ps  <- mapM (const (freshUnifKind s)) [1 .. n]
+  pure (foldr (Arrow s) (Proper s m (VarPK UnifLv pkv)) ps, pkv)
+
+-- | Does a declaration body reference the given type name (is the declaration
+-- recursive)?
+mentions :: Identifier -> T.ScopedType -> Bool
+mentions i = go
+  where
+    go = \case
+      T.TName _ j       -> i == j
+      T.DName _ j       -> i == j
+      T.App _ t ts      -> go t || any go ts
+      T.Abs _ _ t       -> go t
+      T.ForallM _ _ _ t -> go t
+      _                 -> False
+
 -- | Check a module for type formation.
 kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
 kindModule ctx mod = do
-  let ctx' = Map.mapKeys Right mod.kindSigs `Map.union` ctx
-  tdecls <- Map.traverseWithKey (kindTypeDecl ctx') (M.typeDecls mod)
+  let declared = mod.kindSigs
+      sigless  = Map.filterWithKey (\i _ -> not (Map.member i declared)) (M.typeDecls mod)
+  -- fresh binder kinds for type declarations lacking a signature (so self- and
+  -- mutual references resolve while their bodies are kinded)
+  freshSigs <- Map.traverseWithKey (\i (hp, t) -> freshDeclSig (getSpan i) (declArity hp t)) sigless
+  let ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
+  tdecls <- Map.traverseWithKey (kindTypeDecl ctx' freshSigs) (M.typeDecls mod)
   (dcdecls, kdtdecls) <- foldM (kindDataDecls ctx') (Map.empty, Map.empty) $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
-  let mod' = mod { M.name        = mod.name
-                 , M.imports     = mod.imports
-                 , M.kindSigs    = mod.kindSigs
-                 , M.typeDecls   = tdecls
-                 , M.dataDecls     = D.DataDecls dcdecls kdtdecls
-                 , M.definitions = []
-                 }
-  (_, lds) <- kindLetDecls (M.typeDecls mod') ctx' (M.definitions mod)
+  (_, lds) <- kindLetDecls tdecls ctx' (M.definitions mod)
   sol <- solveKindConstraints
-  return (ctx', resolveModule sol mod'{M.definitions = lds})
+  let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
+      mod' = mod { M.typeDecls   = tdecls
+                 , M.dataDecls    = D.DataDecls dcdecls kdtdecls
+                 , M.kindSigs     = Map.union declared inferredSigs
+                 , M.definitions  = lds
+                 }
+      ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
+  return (ctxOut, resolveModule sol mod')
   where
-    kindTypeDecl :: KindCtx -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
-    kindTypeDecl ctx i (hasParams, t) = do
-      k <- lookupKind' ctx i
-      (hasParams,) <$> case t of
-        T.Abs s aks u | hasParams -> do
-          (aks', k') <- kindParams aks k
-          u' <- check (Map.fromList (first Left <$> aks') `Map.union` ctx) u k' -- TODO: Map.empty'
-          return $ TK.Abs s aks' u'
-          where
-            kindParams ((a, Nothing) : aks') (Arrow _ k1 k2) =
-              first ((a, k1) :) <$> kindParams aks' k2
-            kindParams ((a, Just k) : aks') (Arrow _ k1 k2) = do
-              checkK (TK.fromVariable ObjLv a k) k1
-              first ((a, k) :) <$> kindParams aks' k2
-            kindParams []  k' = pure ([], k')
-            kindParams aks _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
+    declArity hp t = if hp then (case t of T.Abs _ aks _ -> length aks; _ -> 0) else 0
 
-        t' -> check ctx t' k-- TODO: Map.empty? 
-      -- return (hasParams, t')
+    kindTypeDecl :: KindCtx -> Map.Map Identifier (Kind, Variable)
+                 -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
+    kindTypeDecl ctx freshSigs i (hasParams, t) = (hasParams,) <$>
+      case Map.lookup i freshSigs of
+        -- declared signature: check the body against it (as before)
+        Nothing -> do
+          k <- lookupKind' ctx i
+          case t of
+            T.Abs s aks u | hasParams -> do
+              (aks', k') <- kindParams k aks
+              TK.Abs s aks' <$> check (params aks' ctx) u k'
+            t' -> check ctx t' k
+        -- inferred signature
+        Just (sig, pkv) -> do
+          let recursive = mentions i t
+          case t of
+            T.Abs s aks u | hasParams -> do
+              (aks', resK) <- kindParams sig aks
+              TK.Abs s aks' <$> inferBody recursive (getSpan i) (params aks' ctx) u resK pkv
+            t' -> inferBody recursive (getSpan i) ctx t' sig pkv
+      where
+        params aks' = Map.union (Map.fromList (first Left <$> aks'))
+
+        kindParams k aks = go aks k
+          where
+            go ((a, Nothing) : aks') (Arrow _ k1 k2) = first ((a, k1) :) <$> go aks' k2
+            go ((a, Just kk) : aks') (Arrow _ k1 k2) =
+              checkK (TK.fromVariable ObjLv a kk) k1 >> first ((a, kk) :) <$> go aks' k2
+            go []  k' = pure ([], k')
+            go _ _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
+
+        -- A recursive body follows CK-Rec (body <: binder, channel prekind if its
+        -- body is a channel type); a non-recursive body fixes the declaration's
+        -- kind to be exactly the body's kind.
+        inferBody recursive s ctxB body resK pkv
+          | recursive = do
+              b <- check ctxB body resK
+              when (chan (Set.singleton i) body) $
+                addPrekindConstraint (SubPrekind (Origin s FromKind) (VarPK UnifLv pkv) Channel)
+              return b
+          | otherwise = do
+              b <- synth ctxB body
+              let o = Origin s FromKind
+              addKindConstraint o (TK.kindOf b) resK
+              addKindConstraint o resK (TK.kindOf b)
+              return b
 
     -- Kind a single datatype declaration, returning both its (kinded)
     -- constructor declarations and its parameters resolved against the kind
