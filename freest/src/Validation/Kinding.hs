@@ -63,6 +63,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.List qualified as List
+import Data.Graph qualified as Graph
 import Validation.HOTRecursion (checkNoHOTRec)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
@@ -191,7 +192,9 @@ checkK t = checkSubkindOf t (TK.kindOf t)
 foldCheckProperJoin :: KindCtx -> Multiplicity -> [T.ScopedType] -> Validation (Multiplicity, [TK.KindedType])
 foldCheckProperJoin ctx m = foldM checkProperJoin (m, [])
   where checkProperJoin (m', ts) t = do
-          (m'', _, t') <- checkProper ctx t
+          -- 'checkOperand Top', not 'checkProper': tolerates a variable-kinded
+          -- field (a parameter); coincides with 'checkProper' on ground fields
+          (m'', _, t') <- checkOperand ctx Top t
           pure (join m' m'', ts ++ [t'])
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
@@ -376,15 +379,17 @@ chan selfs = \case
   T.AppTName _ i _       -> i `Set.member` selfs
   _                      -> False
 
--- | A fresh binder kind for a sig-less declaration of the given arity: an arrow
--- over fresh whole-kind parameter variables ending in a fresh proper kind.
--- Returns the kind and the result's prekind variable (for the CK-Rec channel
--- constraint).
-freshDeclSig :: Span -> Int -> Validation (Kind, Variable)
-freshDeclSig s n = do
+-- | A fresh binder kind for a sig-less declaration from its parameters'
+-- (optional) kind annotations: an arrow whose slot for each parameter is the
+-- written annotation when present (so a sub-top annotation like @*S@ survives
+-- into the inferred signature) and a fresh whole-kind variable otherwise, ending
+-- in a fresh proper kind. Also returns the result's prekind variable (for the
+-- CK-Rec channel constraint).
+freshDeclSig :: Span -> [Maybe Kind] -> Validation (Kind, Variable)
+freshDeclSig s anns = do
   m   <- freshUnifMult s
   pkv <- freshUnifPrekindVar s
-  ps  <- mapM (const (freshUnifKind s)) [1 .. n]
+  ps  <- mapM (maybe (freshUnifKind s) pure) anns
   pure (foldr (Arrow s) (Proper s m (VarPK UnifLv pkv)) ps, pkv)
 
 -- | Does a declaration body reference the given type name (is the declaration
@@ -404,13 +409,26 @@ mentions i = go
 kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
 kindModule ctx mod = do
   let declared = mod.kindSigs
-      sigless  = Map.filterWithKey (\i _ -> not (Map.member i declared)) (M.typeDecls mod)
-  -- fresh binder kinds for type declarations lacking a signature (so self- and
-  -- mutual references resolve while their bodies are kinded)
-  freshSigs <- Map.traverseWithKey (\i (hp, t) -> freshDeclSig (getSpan i) (declArity hp t)) sigless
-  let ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
+      undeclared :: Map.Map Identifier a -> Map.Map Identifier a
+      undeclared = Map.filterWithKey (\i _ -> not (Map.member i declared))
+      siglessTypes = undeclared (M.typeDecls mod)
+      siglessDatas = undeclared (M.dataTypeDecls mod)
+      siglessIds   = Set.union (Map.keysSet siglessTypes) (Map.keysSet siglessDatas)
+  -- mutually recursive datatypes are not yet inferrable; require a signature
+  forM_ (mutualDatatypes siglessIds (Map.keysSet siglessDatas)) \i ->
+    throwE (MutualDataNeedsKindSig (getSpan i) i)
+  -- fresh binder kinds for type and datatype declarations lacking a signature
+  -- (so self- and mutual references resolve while their bodies are kinded)
+  freshT <- Map.traverseWithKey
+              (\i (hp, t) -> freshDeclSig (getSpan i) (declParams hp t))
+              siglessTypes
+  freshD <- Map.traverseWithKey
+              (\i (aks, _) -> freshDeclSig (getSpan i) (map snd aks))
+              siglessDatas
+  let freshSigs = Map.union freshT freshD
+      ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
   tdecls <- Map.traverseWithKey (kindTypeDecl ctx' freshSigs) (M.typeDecls mod)
-  (dcdecls, kdtdecls) <- foldM (kindDataDecls ctx') (Map.empty, Map.empty) $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
+  (dcdecls, kdtdecls) <- foldM (kindDataDecls ctx' freshSigs) (Map.empty, Map.empty) $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
   (_, lds) <- kindLetDecls tdecls ctx' (M.definitions mod)
   sol <- solveKindConstraints
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
@@ -422,7 +440,22 @@ kindModule ctx mod = do
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
   return (ctxOut, resolveModule sol mod')
   where
-    declArity hp t = if hp then (case t of T.Abs _ aks _ -> length aks; _ -> 0) else 0
+    declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
+
+    -- Datatypes in a non-trivial SCC of the sig-less reference graph (genuine
+    -- mutual recursion; a lone self-reference is excluded as it is no edge).
+    mutualDatatypes ids dataIds =
+      [ j | Graph.CyclicSCC grp <- sccs, length grp >= 2
+          , j <- grp, j `Set.member` dataIds ]
+      where
+        sccs = Graph.stronglyConnComp [ (i, i, refsOf i) | i <- Set.toList ids ]
+        refsOf i = [ j | j <- Set.toList ids, j /= i, any (mentions j) (bodiesOf i) ]
+        bodiesOf i =
+          maybe [] (pure . snd) (Map.lookup i (M.typeDecls mod))
+            ++ [ t | Just (_, cis) <- [Map.lookup i (M.dataTypeDecls mod)]
+                   , ci <- cis
+                   , Just (_, ts) <- [Map.lookup ci (M.dataConsDecls mod)]
+                   , t <- ts ]
 
     kindTypeDecl :: KindCtx -> Map.Map Identifier (Kind, Variable)
                  -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
@@ -474,39 +507,58 @@ kindModule ctx mod = do
     -- Kind a single datatype declaration, returning both its (kinded)
     -- constructor declarations and its parameters resolved against the kind
     -- signature (an omitted parameter kind is read off the signature's arrow).
-    kindDataDecls :: KindCtx
+    kindDataDecls :: KindCtx -> Map.Map Identifier (Kind, Variable)
                   -> (D.DataConsDecls Kinded, D.DataTypeDecls Kinded)
                   -> (Identifier, ([(Variable, Maybe Kind)], [Identifier]))
                   -> Validation (D.DataConsDecls Kinded, D.DataTypeDecls Kinded)
-    kindDataDecls ctx (dcAcc, dtAcc) (i, (aks, cis)) = do
-      k  <- lookupKind' ctx i
-      (cd, aks') <- checkDataDecl k id ctx aks k
+    kindDataDecls ctx freshSigs (dcAcc, dtAcc) (i, (aks, cis)) = do
+      -- With a declared signature, the synthesised kind is checked against it
+      -- (@k' <: k@); for an inferred (fresh) signature, the synthesised kind is
+      -- fixed to be exactly the declaration's kind via equality constraints.
+      let inferring = Map.member i freshSigs
+      k <- maybe (lookupKind' ctx i) (pure . fst) (Map.lookup i freshSigs)
+      -- bind the self-reference at the bottom multiplicity, so the datatype's
+      -- multiplicity is the least fixpoint of @φ = join(fields)@ (recursion alone
+      -- never forces linearity); a non-recursive linear field still lifts it
+      let ctxF | inferring = Map.insert (Right i) (bottomResult k) ctx
+               | otherwise = ctx
+      (cd, aks') <- checkDataDecl inferring k id ctxF aks k
       return (Map.union cd dcAcc, Map.insert i (aks', cis) dtAcc)
       where
-        checkDataDecl :: Kind
+        bottomResult = \case
+          Arrow s k1 k2 -> Arrow s k1 (bottomResult k2)
+          Proper s _ _  -> Proper s (Un s) Top
+          k             -> k
+        checkDataDecl :: Bool
+                      -> Kind
                       -> (Kind -> Kind)
                       -> KindCtx
                       -> [(Variable, Maybe Kind)]
                       -> Kind
                       -> Validation (D.KindedDataConsDecls, [(Variable, Kind)])
-        checkDataDecl k f ctx [] _ = (, []) <$> checkConsDecls k f ctx
-        checkDataDecl k f ctx ((a, Nothing) : aks') (Arrow s k1 k2) =
-          second ((a, k1) :) <$> checkDataDecl k (f . Arrow s k1) (Map.insert (Left a) k1 ctx) aks' k2
-        checkDataDecl k f ctx ((a, Just k') : aks') (Arrow s k1 k2) = do
+        checkDataDecl inf k f ctx [] _ = (, []) <$> checkConsDecls inf k f ctx
+        checkDataDecl inf k f ctx ((a, Nothing) : aks') (Arrow s k1 k2) =
+          second ((a, k1) :) <$> checkDataDecl inf k (f . Arrow s k1) (Map.insert (Left a) k1 ctx) aks' k2
+        checkDataDecl inf k f ctx ((a, Just k') : aks') (Arrow s k1 k2) = do
           checkK (TK.fromVariable ObjLv a k') k1
-          second ((a, k') :) <$> checkDataDecl k (f . Arrow s k') (Map.insert (Left a) k' ctx) aks' k2
-        checkDataDecl k f ctx aks Proper{} =
+          second ((a, k') :) <$> checkDataDecl inf k (f . Arrow s k') (Map.insert (Left a) k' ctx) aks' k2
+        checkDataDecl _ k _ _ _ Proper{} =
           throwE (ExpectsTooManyArgsK (getSpan i) i k)
 
-        checkConsDecls :: Kind
+        checkConsDecls :: Bool
+                       -> Kind
                        -> (Kind -> Kind)
                        -> KindCtx
                        -> Validation D.KindedDataConsDecls
-        checkConsDecls k f ctx = do
+        checkConsDecls inf k f ctx = do
           (m, dcdecls') <- synthDataMult ctx cis
           let k' = f (Proper (getSpan i) m Top)
-          unless (k' <: k)
-            (throwE (KindMismatch (getSpan i) k (TK.TName (getSpan i) k' i)))
+          if inf
+            -- inferred: the datatype's kind is exactly the synthesised @k'@
+            then let o = Origin (getSpan i) FromKind
+                 in addKindConstraint o k' k >> addKindConstraint o k k'
+            else unless (k' <: k)
+                   (throwE (KindMismatch (getSpan i) k (TK.TName (getSpan i) k' i)))
           return dcdecls'
 
         synthDataMult :: KindCtx

@@ -285,8 +285,7 @@ scopeDataDecls :: ScopingCtx
 scopeDataDecls ctx = foldM scopeDataDecl (ctx, Map.empty)
   where
     scopeDataDecl (ctx', dtdecls') dd@(ti, (unzip -> (as, ks), cis)) = do
-        unless (ti `memberKSig` ctx) do
-          throwE (LacksKindSig (getSpan ti) ti)
+        -- a missing kind signature is inferred
         as'  <- mapM freshInternal as
         ks'  <- mapM (traverse (scopeKind ctx)) ks
         return (ctx', Map.insert ti (zip as' ks', cis) dtdecls')
