@@ -9,6 +9,7 @@ module Validation.LocalInference.Kinds
   ( KindUnifier(..)
   , UnifyError(..)
   , unifyKindSub
+  , unifyKindSubs
   ) where
 
 import Syntax.Base
@@ -49,9 +50,14 @@ type U = StateT Acc (Either UnifyError)
 -- | Unify two kinds related by @<:@, producing the whole-kind bindings and the
 -- residual multiplicity/prekind leaf constraints, or a 'UnifyError'.
 unifyKindSub :: Origin -> Kind -> Kind -> Either UnifyError KindUnifier
-unifyKindSub o k1 k2 =
-  case runStateT (go o k1 k2) (Acc (-2) Map.empty [] []) of
-    Left e        -> Left e
+unifyKindSub o k1 k2 = unifyKindSubs [(o, k1, k2)]
+
+-- | Unify a set of subkinding constraints together, threading one substitution
+-- and fresh-variable counter, so bindings from one constraint inform the next.
+unifyKindSubs :: [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
+unifyKindSubs cs =
+  case runStateT (mapM_ (\(o, k1, k2) -> go o k1 k2) cs) (Acc (-2) Map.empty [] []) of
+    Left e         -> Left e
     Right (_, acc) -> Right (KindUnifier (kSub acc) (mCs acc) (pCs acc))
 
 go :: Origin -> Kind -> Kind -> U ()

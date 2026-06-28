@@ -8,6 +8,7 @@ This module implements FreeST's bidirectional kinding algorithm.
 
 module Validation.Kinding
   ( synth
+  , kindType
   , check
   , checkK
   , checkSubkindOf
@@ -43,6 +44,12 @@ import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
 import Validation.Substitution ( subs, subsMultType )
+import Syntax.Provenance ( Origin(..), Reason(..) )
+import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
+import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
+import Validation.LocalInference.Prekinds ( PrekindConstraint(..), solvePrekindConstraints )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveType, resolveModule )
+import Validation.LocalInference.Substitution ( Substitution(..) )
 
 import Control.Monad.Identity ( Identity(..) )
 import Control.Monad.Extra ( unlessM, (&&^) )
@@ -211,11 +218,24 @@ checkPrekindK t pk = do
     throwE (PrekindMismatch (getSpan t) pk t (Proper (getSpan t) m pk'))
   return (m, pk')
 
--- | Check if the kind of a type is a subkind of another. If not, throw an 
--- error located at the type.
+-- | Check that the kind of a type is a subkind of another. When a solvable
+-- variable is involved, the relation cannot be decided locally, so the
+-- constraint is gathered and solved later; otherwise it is checked eagerly.
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
-checkSubkindOf t k' k = unless (k' <: k) $
-    throwE (KindMismatch (getSpan t) k t)
+checkSubkindOf t k' k
+  | hasSolvableVar k' || hasSolvableVar k =
+      addKindConstraint (Origin (getSpan t) FromKind) k' k
+  | otherwise = unless (k' <: k) $ throwE (KindMismatch (getSpan t) k t)
+
+-- | Does a kind mention a solvable (inference) variable?
+hasSolvableVar :: Kind -> Bool
+hasSolvableVar = \case
+  Proper _ m pk -> multVar m || prekindVar pk
+  Arrow _ k1 k2 -> hasSolvableVar k1 || hasSolvableVar k2
+  Var _ lv _    -> solvable lv
+  where
+    multVar    = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
+    prekindVar = \case VarPK lv _ -> solvable lv; _ -> False
 
 -- | Check if the kind of a type is a subkind of another in a contravariant 
 -- position. If not, throw an error located at the type.
@@ -259,7 +279,8 @@ kindModule ctx mod = do
                  , M.definitions = []
                  }
   (_, lds) <- kindLetDecls (M.typeDecls mod') ctx' (M.definitions mod)
-  return (ctx', mod'{M.definitions = lds})
+  sol <- solveKindConstraints
+  return (ctx', resolveModule sol mod'{M.definitions = lds})
   where
     kindTypeDecl :: KindCtx -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
     kindTypeDecl ctx i (hasParams, t) = do
@@ -539,6 +560,38 @@ kindExp tdecls kctx = \case
   E.SendType s t -> E.SendType s <$> synth kctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
 
+-- | Synthesise a type's kind, then solve the gathered kind constraints and
+-- apply the resulting solution to the kinded type. The entry point for kinding
+-- a standalone type (e.g. the REPL's @:kind@).
+kindType :: KindCtx -> T.ScopedType -> Validation TK.KindedType
+kindType ctx t = do
+  kt <- synth ctx t
+  sol <- solveKindConstraints
+  return (resolveType sol kt)
+
+-- | Solve the subkinding constraints gathered during kinding into a single kind
+-- solution, via the kind unifier and the multiplicity and prekind solvers.
+solveKindConstraints :: Validation KindSolution
+solveKindConstraints = do
+  cs <- takeKindConstraints
+  KindUnifier ksub mcs pcs <- either (throwE . unifyErr) pure (unifyKindSubs cs)
+  msub <- solveMultConstraints mcs >>= either (throwE . multErr) (pure . multsOf)
+  psub <- either (throwE . preErr) pure (solvePrekindConstraints pcs)
+  return (KindSolution ksub psub msub)
+  where
+    multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]
+    kindSpan = \case Proper s _ _ -> s; Arrow s _ _ -> s; Var s _ _ -> s
+    unifyErr = \case
+      Mismatch k1 k2 -> CannotSatisfyKindConstraint (kindSpan k1) k1 k2
+      Occurs _ k     -> CannotSatisfyKindConstraint (kindSpan k) k k
+    multErr (MultEquation m1 o1 m2 o2) = CannotSatisfyMultConstraint (getSpan o1) m1 o1 m2 o2
+    preErr = \case
+      SubPrekind o p1 p2 -> mk o p1 p2
+      MeetPrekind o _ _  -> mk o Top Top
+      JoinPrekind o _ _  -> mk o Top Top
+      where mk o p1 p2 = let s = getSpan o
+                         in CannotSatisfyKindConstraint s (Proper s (Lin s) p1) (Proper s (Lin s) p2)
+
 -- | Run kinding on a module, building the initial validation state from it.
 -- This returns either:
 -- 
@@ -556,7 +609,7 @@ runKindModule modl = runValidation emptyValidationState do
 --     * a list of errors, if any was encountered;
 --     * a kind synthesized from the type, otherwise.
 runSynth :: KindCtx -> T.ScopedType -> Either [Error] TK.KindedType -- TODO: this function will be deprecated
-runSynth ctx t = runValidation emptyValidationState (synth ctx t)
+runSynth ctx t = runValidation emptyValidationState (kindType ctx t)
 
 -- | Run checking on a type against a kind, building the initial validation 
 -- state from a given module. This returns either:

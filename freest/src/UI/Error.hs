@@ -44,6 +44,7 @@ data Error
       K.Multiplicity Origin
       K.Multiplicity Origin
   | CannotInferHigherKindedTypeApp Span K.Kind
+  | CannotSatisfyKindConstraint Span K.Kind K.Kind
   | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesisePat Span E.Pat
@@ -124,6 +125,7 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
+    CannotSatisfyKindConstraint s _ _ -> s
     CannotSatisfyMultConstraint s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesisePat s _ -> s
@@ -277,6 +279,8 @@ toMessage src = \case
     ++ "The type parameter has kind " ++ bt (unparse k) ++ ", declared at"
     ++ locateSpan src (getSpan k)
     ++ "Higher-kinded type arguments are not inferred; please provide them explicitly"
+  CannotSatisfyKindConstraint s k1 k2 -> makeError src s
+    ("Could not match kind " ++ bt (show k1) ++ " with kind " ++ bt (show k2))
   CannotSatisfyMultConstraint s m1 o1 m2 o2 -> makeError src s
     "Could not infer consistent multiplicities for this application"
     ++ "Could not match multiplicity " ++ multSide src m1 o1
