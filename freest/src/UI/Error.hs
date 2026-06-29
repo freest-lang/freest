@@ -64,7 +64,6 @@ data Error
   | KindMismatchK Span K.Kind K.Kind TU.ScopedType
   | KSigLacksBinding Span Identifier
   | LacksTypeSig Span Variable
-  | MutualDataNeedsKindSig Span Identifier
   | LexicalError Span Char
   | LinConsumedInGuard 
       Span 
@@ -145,7 +144,6 @@ instance Located Error where
     KindMismatchK s _ _ _ -> s
     KSigLacksBinding s _ -> s
     LacksTypeSig s _ -> s
-    MutualDataNeedsKindSig s _ -> s
     LexicalError s _ -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
@@ -352,10 +350,6 @@ toMessage src = \case
       ++ " lacks an accompanying binding")
   LacksTypeSig s x -> makeError src s
     ("Function " ++ bt (external x) ++ " is missing a type signature")
-  MutualDataNeedsKindSig s i -> makeError src s
-    ("Mutually recursive datatype " ++ bt (show i)
-      ++ " requires an explicit kind signature (kind inference does not yet "
-      ++ "support mutually recursive datatypes)")
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s

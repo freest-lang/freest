@@ -103,6 +103,17 @@ solve eqs = do
     guard (solvable lv)
     return $ SolverState (Map.insert φ (Lin (getSpan m)) sub) n
 
+  -- Most general unifier(s) of `⊔A = ⊔B` modulo ACUI (associativity,
+  -- commutativity, idempotence, unit), with the `ObjLv` atoms as constants.
+  -- Let AS, BS be the solvable variables of each side (a common variable is in
+  -- both). A fresh region variable z(x,y) stands for the content shared by
+  -- x∈AS and y∈BS; each variable is bound to the join of its row/column of
+  -- regions, so ⊔A = ⊔(all z) = ⊔B by construction. A constant occurring on one
+  -- side only must be absorbed by some solvable variable on the other side —
+  -- each absorption choice is a separate unifier (`assignTo`), and that is the
+  -- only source of non-unitarity; the region construction itself is
+  -- deterministic. The absorbing top `Lin` is not handled here but by the
+  -- `Lin = Sup` case (`collapseSide`).
   unifySup :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
   unifySup m1 m2 (SolverState sub n0) = do
     let s     = getSpan m1
@@ -110,30 +121,25 @@ solve eqs = do
         as2   = atoms m2
         only1 = Set.difference as1 as2
         only2 = Set.difference as2 as1
-        ovsL  = [φ | (ObjLv, φ) <- Set.toList only1]
-        ovsR  = [φ | (ObjLv, φ) <- Set.toList only2]
-        ivsL  = [φ | (lv, φ) <- Set.toList only1, solvable lv]
-        ivsR  = [φ | (lv, φ) <- Set.toList only2, solvable lv]
-        ivs2   = [φ | (lv, φ) <- Set.toList as2, solvable lv]
-        ivs1   = [φ | (lv, φ) <- Set.toList as1, solvable lv]
-    guard (null ovsL || not (null ivs2))   -- left-only ObjLv needs absorber on right
-    guard (null ovsR || not (null ivs1))   -- right-only ObjLv needs absorber on left
-    assignL <- assignTo ovsL ivs2
-    assignR <- assignTo ovsR ivs1
-    let merged          = Map.unionWith Set.union assignL assignR
-        toBind          = Set.toList (Set.fromList (ivsL ++ ivsR ++ Map.keys merged))
-        pairs           = [(x, y) | x <- ivsL, y <- ivsR]
-        (pairFresh, n1) = allocFresh s n0 pairs
-        ivsLSet          = Set.fromList ivsL
-        ivsRSet          = Set.fromList ivsR
-        bind acc u =
-          let absorbed  = Map.findWithDefault Set.empty u merged
-              objAtoms  = [(ObjLv, φ) | φ <- Set.toList absorbed]
-              freshAtms
-                | Set.member u ivsLSet = [(InstLv, pairFresh Map.! (u, y)) | y <- ivsR]
-                | Set.member u ivsRSet = [(InstLv, pairFresh Map.! (x, u)) | x <- ivsL]
-                | otherwise           = []
-          in Map.insert u (Sup s (objAtoms ++ freshAtms)) acc
+        asS   = [φ | (lv, φ) <- Set.toList as1, solvable lv]   -- solvable vars of A
+        bsS   = [φ | (lv, φ) <- Set.toList as2, solvable lv]   -- solvable vars of B
+        oL    = [φ | (ObjLv, φ) <- Set.toList only1]           -- only-A constants
+        oR    = [φ | (ObjLv, φ) <- Set.toList only2]           -- only-B constants
+    guard (null oL || not (null bsS))   -- an only-A constant needs an absorber on the right
+    guard (null oR || not (null asS))   -- an only-B constant needs an absorber on the left
+    assignL <- assignTo oL bsS
+    assignR <- assignTo oR asS
+    let absorbed = Map.unionWith Set.union assignL assignR
+        pairs    = [(x, y) | x <- asS, y <- bsS]
+        (zf, n1) = allocFresh s n0 pairs
+        asSet    = Set.fromList asS
+        bsSet    = Set.fromList bsS
+        bind acc v =
+          let row = [(InstLv, zf Map.! (v, y)) | Set.member v asSet, y <- bsS]
+              col = [(InstLv, zf Map.! (x, v)) | Set.member v bsSet, x <- asS]
+              rig = [(ObjLv, r) | r <- Set.toList (Map.findWithDefault Set.empty v absorbed)]
+          in Map.insert v (Sup s (row ++ col ++ rig)) acc
+        toBind = Set.toList (Set.union asSet bsSet)
     return (SolverState (foldl' bind sub toBind) n1)
 
   apply :: Map.Map Variable Multiplicity -> Multiplicity -> Multiplicity
@@ -142,8 +148,8 @@ solve eqs = do
     (Sup s lvφs) -> foldl' K.join (Un s) (map expand lvφs)
       where
         expand = \case
-          (InstLv, φ) | Just m <- Map.lookup φ sub -> apply sub m
-          a                                        -> Sup s [a]
+          (lv, φ) | solvable lv, Just m <- Map.lookup φ sub -> apply sub m
+          a                                                 -> Sup s [a]
 
   assignTo :: [Variable] -> [Variable] -> [Map.Map Variable (Set Variable)]
   assignTo = \cases
