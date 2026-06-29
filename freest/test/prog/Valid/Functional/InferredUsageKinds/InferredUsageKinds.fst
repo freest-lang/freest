@@ -13,7 +13,10 @@ discard @a x = 42
 pick : forall a -> Bool -> a -> a -> a  -- one arg dropped per branch => a : *T
 pick @a b x y = if b then x else y
 
+dropPair : forall a -> (a, a) -> Int    -- composite param discarded => a : *T
+dropPair @a p = 99
+
 main : ()
 main =
   let (p, q) = dup @Int 7 in
-  print (p + q + discard @Char 'z' + pick @Int True 1 2)
+  print (p + q + discard @Char 'z' + pick @Int True 1 2 + dropPair @Int (3, 4))

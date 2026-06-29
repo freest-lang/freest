@@ -653,6 +653,18 @@ usesLetDecls x = foldr (addU . \case
   E.TypeSig{}       -> Zero
   E.Mutual lds      -> usesLetDecls x lds) Zero
 
+-- | A discarded or duplicated value of this type forces its multiplicity to
+-- unrestricted: descend tuples to the type-variable leaves and constrain each
+-- whose kind is still being inferred. Other shapes (sessions, functions, ground
+-- types) are left to the type checker — and matching on structure, rather than
+-- forcing the type's kind, avoids a 'normalise'-rebuilt session node whose eager
+-- smart constructor assumes proper-kinded operands.
+forceUnrestricted :: TK.KindedType -> Validation ()
+forceUnrestricted = \case
+  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s FromKind) k (Proper s (Un s) Top)
+  TK.Tuple _ ts                     -> mapM_ forceUnrestricted ts
+  _                                 -> pure ()
+
 kindFun :: Located e
         => D.KindedTypeDecls
         -> e
@@ -665,7 +677,7 @@ kindFun :: Located e
 kindFun tdecls e = kindFun' 0 []
   where
     kindFun' :: Int
-            -> [(Variable, Kind)]  -- value parameters whose type's multiplicity is being inferred
+            -> [(Variable, TK.KindedType)]  -- value parameters and their types, for usage inference
             -> KindCtx
             -> TypeCtx
             -> [Level (E.Pat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
@@ -674,13 +686,12 @@ kindFun tdecls e = kindFun' 0 []
             -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
     kindFun' i tracked kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
       ([], _) -> do
-        -- usage-based multiplicity inference: a tracked parameter that is
-        -- discarded or duplicated forces its type's multiplicity to unrestricted
+        -- usage-based multiplicity inference: a parameter that is discarded or
+        -- duplicated forces its type's multiplicity to unrestricted
         rhs' <- kindRHS tdecls kctx rhs
-        forM_ tracked \(x, k) -> case usesRHS x rhs' of
+        forM_ tracked \(x, pt) -> case usesRHS x rhs' of
           One -> pure ()
-          _   -> let s = getSpan x
-                 in addKindConstraint (Origin s FromKind) k (Proper s (Un s) Top)
+          _   -> forceUnrestricted pt
         return ([], rhs')
       (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
         k' <- case mki of
@@ -695,13 +706,11 @@ kindFun tdecls e = kindFun' 0 []
             return tp'
           Nothing -> pure u
         (kctxi', p') <- kindPat tdecls kctx p
-        -- track only parameters whose type is a bare type variable with a
-        -- still-unknown kind: those are the polymorphic binders whose
-        -- multiplicity usage can infer (a concrete session/functional type has a
-        -- determined multiplicity, and forcing it unrestricted would be wrong)
-        let tracked' = case (p, tp') of
-              (E.VarPat _ x, TK.Var _ k _ _) | hasSolvableVar k -> (x, k) : tracked
-              _                                                 -> tracked
+        -- track variable parameters with their type; 'forceUnrestricted' decides
+        -- from the type's structure what (if anything) a discard/duplicate forces
+        let tracked' = case p of
+              E.VarPat _ x -> (x, tp') : tracked
+              _            -> tracked
         first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) tracked' kctxi' tctxds ps' rhs v
       (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
         first (MultLevel φ :) <$> kindFun' (i + 1) tracked kctx tctxds ps' rhs
