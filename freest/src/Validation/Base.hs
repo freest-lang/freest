@@ -8,6 +8,7 @@ module Validation.Base
   , addKindBinding
   , addMultEquation
   , addPrekindConstraint
+  , addCondSeqMult
   , takeKindState
   , unfold
   )
@@ -49,6 +50,10 @@ data ValidationState
     , multEquations :: [(Origin, K.Multiplicity, K.Multiplicity)]
     -- | Prekind constraints (meet/join/sub) emitted by multi-operand formers.
     , prekindConstraints :: [PrekindConstraint]
+    -- | Channel-conditional @;@ multiplicities @(o, υ₁, φ, m₁, m₂)@ meaning
+    -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
+    -- prekind υ₁ is still a variable; discharged once prekinds are solved.
+    , condSeqMults :: [(Origin, K.Prekind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
     }
 
 -- | The empty validation state. No errors or declarations.
@@ -60,6 +65,7 @@ emptyValidationState = ValidationState
   , kindBindings = Map.empty
   , multEquations = []
   , prekindConstraints = []
+  , condSeqMults = []
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
@@ -94,16 +100,22 @@ addPrekindConstraint :: PrekindConstraint -> Validation ()
 addPrekindConstraint c =
   modify \s -> s{prekindConstraints = c : prekindConstraints s}
 
+-- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
+addCondSeqMult :: Origin -> K.Prekind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()
+addCondSeqMult o pk φ m1 m2 =
+  modify \s -> s{condSeqMults = (o, pk, φ, m1, m2) : condSeqMults s}
+
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation
   ( Map.Map Variable K.Kind
   , [(Origin, K.Kind, K.Kind)]
   , [(Origin, K.Multiplicity, K.Multiplicity)]
-  , [PrekindConstraint] )
+  , [PrekindConstraint]
+  , [(Origin, K.Prekind, K.Multiplicity, K.Multiplicity, K.Multiplicity)] )
 takeKindState = do
   s <- gets id
-  modify \st -> st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], prekindConstraints = []}
-  return (kindBindings s, kindConstraints s, multEquations s, prekindConstraints s)
+  modify \st -> st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], prekindConstraints = [], condSeqMults = []}
+  return (kindBindings s, kindConstraints s, multEquations s, prekindConstraints s, condSeqMults s)
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

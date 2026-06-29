@@ -275,6 +275,14 @@ case *&{A, B} == *&{B, A} : *C
 
 case Dual (*&{A, B}) == *+{A, B} : *C
 
+-- CK-Seq conditional multiplicity: the left operand of `;` is a *reference*
+-- (SeqB) whose channel-ness is inferred, not syntactically ground. SeqA stays
+-- *C; the eager fallback over-linearised the variable-left case to 1C.
+case SeqA == SeqB ; Close : *C
+where
+  type SeqB = *!Int ; SeqA
+  type SeqA = SeqB ; Close
+
 case *&{A, B} ; !Int == *&{B, A} : *S
 
 case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S

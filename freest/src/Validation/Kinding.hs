@@ -124,10 +124,17 @@ synth ctx = \case
     (m2, pk2, u') <- checkOperand ctx Session u
     if hasSolvableVar (Proper s m1 pk1) || hasSolvableVar (Proper s m2 pk2)
       then do
-        -- defer: prekind is the meet, multiplicity the channel-conditional join;
-        -- a variable left prekind falls back to the plain join, conservatively
+        -- defer: prekind is the meet, multiplicity the channel-conditional join.
+        -- A *variable* left prekind defers the choice (CondSeqMult) until prekinds
+        -- are solved, rather than conservatively falling back to the plain join.
         ψ <- meetPrekinds s [pk1, pk2]
-        let φ = if pk1 == Channel then m1 else join m1 m2
+        φ <- case pk1 of
+          _ | pk1 == Channel       -> pure m1
+          VarPK lv _ | solvable lv -> do
+            φv <- freshUnifMult s
+            addCondSeqMult (Origin s FromKind) pk1 φv m1 m2
+            pure φv
+          _                         -> pure (join m1 m2)
         return $ TK.appSemiWithKind s (Proper s φ ψ) t' u'
       else return $ TK.AppSemi s t' u'
   T.AppDual s t -> do
@@ -954,12 +961,17 @@ kindType ctx t = do
 -- solution, via the kind unifier and the multiplicity and prekind solvers.
 solveKindConstraints :: Validation KindSolution
 solveKindConstraints = do
-  (binds, cs, meqs, pcs0) <- takeKindState
+  (binds, cs, meqs, pcs0, condmults) <- takeKindState
   KindUnifier ksub mcs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
-  msub <- solveMultConstraints (mcs ++ map toMultEq meqs) >>= either (throwE . multErr) (pure . multsOf)
+  -- prekinds first: the channel-conditional @;@ multiplicities depend on the left
+  -- operand's prekind, and prekinds are independent of multiplicities
   psub <- either (throwE . preErr) pure (solvePrekindConstraints (pcs ++ pcs0))
+  let condEqs = [ MultEquation φ o (if resolvePK psub pk == Channel then m1 else join m1 m2) o
+                | (o, pk, φ, m1, m2) <- condmults ]
+  msub <- solveMultConstraints (mcs ++ map toMultEq meqs ++ condEqs) >>= either (throwE . multErr) (pure . multsOf)
   return (KindSolution ksub psub msub)
   where
+    resolvePK psub = \case VarPK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; pk -> pk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o
     multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]
     kindSpan = \case Proper s _ _ -> s; Arrow s _ _ -> s; Var s _ _ -> s
