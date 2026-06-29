@@ -415,8 +415,17 @@ kindModule ctx mod = do
       siglessTypes = undeclared (M.typeDecls mod)
       siglessDatas = undeclared (M.dataTypeDecls mod)
       siglessIds   = Set.union (Map.keysSet siglessTypes) (Map.keysSet siglessDatas)
+  -- strongly-connected components of the sig-less reference graph, shared by the
+  -- datatype guard and the `chan` predicate (which uses a declaration's whole SCC
+  -- as `selfs`, so a reference within a mutually recursive group counts as a
+  -- channel — Chan-Var — just as a self-reference does)
+  let comps = Graph.stronglyConnComp [ (i, i, refsOf siglessIds i) | i <- Set.toList siglessIds ]
+      sccOf = Map.fromList [ (j, comp) | scc <- comps
+                           , let comp = Set.fromList (Graph.flattenSCC scc)
+                           , j <- Set.toList comp ]
   -- mutually recursive datatypes are not yet inferrable; require a signature
-  forM_ (mutualDatatypes siglessIds (Map.keysSet siglessDatas)) \i ->
+  forM_ [ j | Graph.CyclicSCC grp <- comps, length grp >= 2
+            , j <- grp, j `Set.member` Map.keysSet siglessDatas ] \i ->
     throwE (MutualDataNeedsKindSig (getSpan i) i)
   -- fresh binder kinds for type and datatype declarations lacking a signature
   -- (so self- and mutual references resolve while their bodies are kinded)
@@ -428,7 +437,7 @@ kindModule ctx mod = do
               siglessDatas
   let freshSigs = Map.union freshT freshD
       ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
-  tdecls <- Map.traverseWithKey (kindTypeDecl ctx' freshSigs) (M.typeDecls mod)
+  tdecls <- Map.traverseWithKey (kindTypeDecl sccOf ctx' freshSigs) (M.typeDecls mod)
   (dcdecls, kdtdecls) <- foldM (kindDataDecls ctx' freshSigs) (Map.empty, Map.empty) $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
   let ddecls = D.DataDecls dcdecls kdtdecls
   (_, lds) <- kindLetDecls tdecls ddecls ctx' (M.definitions mod)
@@ -444,24 +453,20 @@ kindModule ctx mod = do
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 
-    -- Datatypes in a non-trivial SCC of the sig-less reference graph (genuine
-    -- mutual recursion; a lone self-reference is excluded as it is no edge).
-    mutualDatatypes ids dataIds =
-      [ j | Graph.CyclicSCC grp <- sccs, length grp >= 2
-          , j <- grp, j `Set.member` dataIds ]
-      where
-        sccs = Graph.stronglyConnComp [ (i, i, refsOf i) | i <- Set.toList ids ]
-        refsOf i = [ j | j <- Set.toList ids, j /= i, any (mentions j) (bodiesOf i) ]
-        bodiesOf i =
-          maybe [] (pure . snd) (Map.lookup i (M.typeDecls mod))
-            ++ [ t | Just (_, cis) <- [Map.lookup i (M.dataTypeDecls mod)]
-                   , ci <- cis
-                   , Just (_, ts) <- [Map.lookup ci (M.dataConsDecls mod)]
-                   , t <- ts ]
+    -- Direct references from a declaration's body/fields to other sig-less
+    -- declarations (edges of the reference graph; a self-reference is no edge).
+    refsOf ids i = [ j | j <- Set.toList ids, j /= i, any (mentions j) (bodiesOf i) ]
+    bodiesOf i =
+      maybe [] (pure . snd) (Map.lookup i (M.typeDecls mod))
+        ++ [ t | Just (_, cis) <- [Map.lookup i (M.dataTypeDecls mod)]
+               , ci <- cis
+               , Just (_, ts) <- [Map.lookup ci (M.dataConsDecls mod)]
+               , t <- ts ]
 
-    kindTypeDecl :: KindCtx -> Map.Map Identifier (Kind, Variable)
+    kindTypeDecl :: Map.Map Identifier (Set.Set Identifier)
+                 -> KindCtx -> Map.Map Identifier (Kind, Variable)
                  -> Identifier -> (Bool, T.ScopedType) -> Validation (Bool, TK.KindedType)
-    kindTypeDecl ctx freshSigs i (hasParams, t) = (hasParams,) <$>
+    kindTypeDecl sccOf ctx freshSigs i (hasParams, t) = (hasParams,) <$>
       case Map.lookup i freshSigs of
         -- declared signature: check the body against it (as before)
         Nothing -> do
@@ -473,7 +478,8 @@ kindModule ctx mod = do
             t' -> check ctx t' k
         -- inferred signature
         Just (sig, pkv) -> do
-          let recursive = mentions i t
+          let selfs     = Map.findWithDefault (Set.singleton i) i sccOf
+              recursive = Set.size selfs > 1 || mentions i t
           case t of
             T.Abs s aks u | hasParams -> do
               (aks', resK) <- kindParams sig aks
@@ -502,7 +508,7 @@ kindModule ctx mod = do
               case (resK, TK.kindOf b) of
                 (Proper _ φ _, Proper _ mb _) -> addMultEquation o φ mb
                 _                             -> pure ()
-              when (chan (Set.singleton i) body) $
+              when (chan (Map.findWithDefault (Set.singleton i) i sccOf) body) $
                 addPrekindConstraint (SubPrekind o (VarPK UnifLv pkv) Channel)
               return b
           | otherwise = do

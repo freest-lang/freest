@@ -807,3 +807,15 @@ where
 case SStream == *!Int ; SStream : *C
 where
   type SStream = *!Int ; SStream
+
+-- mutual recursion: channel-ness across the SCC (cross-declaration `chan`), kind
+-- preserved under unfolding, for linear and shared channels
+case Ping == !Int ; Pong : 1C
+where
+  type Ping = !Int ; Pong
+  type Pong = ?Int ; Ping
+
+case SPing == *!Int ; SPong : *C
+where
+  type SPing = *!Int ; SPong
+  type SPong = *!Int ; SPing
