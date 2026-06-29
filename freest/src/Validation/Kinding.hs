@@ -43,7 +43,7 @@ import Compiler.Bug ( internalError )
 import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
-import Validation.Substitution ( subs, subsMultType )
+import Validation.Substitution ( subs, subsAll, subsMultType )
 import Syntax.Provenance ( Origin(..), Reason(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
@@ -429,7 +429,8 @@ kindModule ctx mod = do
       ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
   tdecls <- Map.traverseWithKey (kindTypeDecl ctx' freshSigs) (M.typeDecls mod)
   (dcdecls, kdtdecls) <- foldM (kindDataDecls ctx' freshSigs) (Map.empty, Map.empty) $ Map.toList $ M.dataTypeDecls mod -- TODO: foldrWithKeyM
-  (_, lds) <- kindLetDecls tdecls ctx' (M.definitions mod)
+  let ddecls = D.DataDecls dcdecls kdtdecls
+  (_, lds) <- kindLetDecls tdecls ddecls ctx' (M.definitions mod)
   sol <- solveKindConstraints
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
       mod' = mod { M.typeDecls   = tdecls
@@ -573,27 +574,29 @@ kindModule ctx mod = do
           (Un (getSpan i), Map.empty)
 
 kindLetDecls :: D.KindedTypeDecls
+             -> D.KindedDataDecls
              -> KindCtx
              -> [E.LetDecl Scoped]
              -> Validation (KindCtx, [E.LetDecl Kinded])
-kindLetDecls tdecls kctx lds = do
-  (kctx, _, lds) <- foldM (kindLetDecl tdecls) (kctx, Map.empty, []) lds
+kindLetDecls tdecls ddecls kctx lds = do
+  (kctx, _, lds) <- foldM (kindLetDecl tdecls ddecls) (kctx, Map.empty, []) lds
   return (kctx, lds)
 
 kindLetDecl :: D.KindedTypeDecls
+            -> D.KindedDataDecls
             -> (KindCtx, TypeCtx, [E.LetDecl Kinded])
             -> E.LetDecl Scoped
             -> Validation (KindCtx, TypeCtx, [E.LetDecl Kinded])
-kindLetDecl tdecls (kctx, tctxds, lds) = \case
+kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
   E.ValDef p rhs -> do
-    rhs' <- kindRHS tdecls kctx rhs
+    rhs' <- kindRHS tdecls ddecls kctx rhs
     (kctx', p') <- kindPat tdecls kctx p
     return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
   E.FnDef x psrhss -> do
     case tctxds Map.!? x of
       Just t -> do
         psrhss' <- forM psrhss \(psi, rhsi) ->
-          unwrap <$> kindFun tdecls x kctx tctxds (wrap psi) rhsi t
+          unwrap <$> kindFun tdecls ddecls x kctx tctxds (wrap psi) rhsi t
         return (kctx, tctxds, lds ++ [E.FnDef x psrhss'])
         where
           wrap   = map (mapLevel (, Nothing) (, Nothing) id)
@@ -605,7 +608,7 @@ kindLetDecl tdecls (kctx, tctxds, lds) = \case
     return (kctx, tctxds', lds ++ [E.TypeSig xs t'])
   E.Mutual lds' -> do
     let (sigs, fndefs) = List.partition (\case E.TypeSig{} -> True; _ -> False) lds'
-    (kctx',lds'') <- kindLetDecls tdecls kctx (sigs ++ fndefs)
+    (kctx',lds'') <- kindLetDecls tdecls ddecls kctx (sigs ++ fndefs)
     return (kctx', tctxds, lds ++ [E.Mutual lds''])
 
 -- | Affine usage of a term variable: used zero, exactly one, or many times
@@ -624,6 +627,12 @@ mergeU Zero Zero = Zero
 mergeU One  One  = One
 mergeU _    _    = Many
 
+-- 'mergeU' has no identity (@mergeU One Zero = Many@), so fold non-empty
+-- alternatives with 'foldr1'; no alternatives at all is unused ('Zero').
+mergeAll :: [Usage] -> Usage
+mergeAll [] = Zero
+mergeAll us = foldr1 mergeU us
+
 usesExp :: Variable -> E.KindedExp -> Usage
 usesExp x = go
   where
@@ -635,14 +644,14 @@ usesExp x = go
       E.Asc _ e _     -> go e
       E.Let _ lds e   -> addU (usesLetDecls x lds) (go e)
       E.Semi _ e1 e2  -> addU (go e1) (go e2)
-      E.Case _ e brs  -> addU (go e) (foldr mergeU Zero [usesRHS x rhs | (_, rhs) <- brs])
+      E.Case _ e brs  -> addU (go e) (mergeAll [usesRHS x rhs | (_, rhs) <- brs])
       E.If _ e1 e2 e3 -> addU (go e1) (mergeU (go e2) (go e3))
       _               -> Zero
 
 usesRHS :: Variable -> E.RHS Kinded -> Usage
 usesRHS x = \case
   E.UnguardedRHS e w -> addU (usesExp x e) (w `usedIn` Zero)
-  E.GuardedRHS ges w -> addU (foldr (mergeU . \(g, b) -> addU (usesExp x g) (usesExp x b)) Zero ges)
+  E.GuardedRHS ges w -> addU (mergeAll [addU (usesExp x g) (usesExp x b) | (g, b) <- ges])
                              (w `usedIn` Zero)
   where w `usedIn` z = maybe z (usesLetDecls x) w
 
@@ -665,14 +674,18 @@ forceUnrestricted = \case
   TK.Tuple _ ts                     -> mapM_ forceUnrestricted ts
   _                                 -> pure ()
 
--- | Extend a tracked (variable, type) set through @let@-destructuring of tracked
--- variables, so a duplicated or discarded /component/ of a tracked parameter is
--- itself tracked. Only variable and tuple patterns over a variable scrutinee are
--- followed; other patterns and scrutinees are left to the type checker.
-trackComponents :: [(Variable, TK.KindedType)] -> E.RHS Kinded -> [(Variable, TK.KindedType)]
-trackComponents tracked rhs = fixpoint tracked
+-- | Extend a tracked (variable, type) set through a @let@ or @case@ that
+-- destructures a tracked variable, so a duplicated or discarded /component/ of a
+-- tracked parameter is itself tracked. Variable, tuple, and constructor patterns
+-- over a variable scrutinee are followed — a constructor's binders take its field
+-- types instantiated at the scrutinee's type arguments (mirroring 'checkPat').
+-- Other patterns and scrutinees are left to the type checker.
+trackComponents :: D.KindedTypeDecls -> D.KindedDataDecls
+                -> [(Variable, TK.KindedType)] -> E.RHS Kinded
+                -> [(Variable, TK.KindedType)]
+trackComponents tdecls ddecls tracked rhs = fixpoint tracked
   where
-    ds = letDestructuresRHS rhs
+    ds = destructuresRHS rhs
     fixpoint acc =
       let new = [ b | (pat, v) <- ds, Just t <- [lookup v acc]
                     , b <- decomposePat pat t, fst b `notElem` map fst acc ]
@@ -681,36 +694,44 @@ trackComponents tracked rhs = fixpoint tracked
     decomposePat (E.VarPat _ x)    t              = [(x, t)]
     decomposePat (E.TuplePat _ ps) (TK.Tuple _ ts)
       | length ps == length ts                    = concat (zipWith decomposePat ps ts)
+    decomposePat (E.DConsPat _ c ps) t
+      | Just (dty, fields)        <- Map.lookup c (D.ddCons ddecls)
+      , Just (aks, _)             <- Map.lookup dty (D.ddTypes ddecls)
+      , TK.AppDName _ _ dty' args <- normalise tdecls t
+      , dty == dty', length args == length aks, length ps == length fields
+      = concat (zipWith decomposePat ps (map (subsAll (map fst aks) args) fields))
     decomposePat _                 _              = []
 
-letDestructuresRHS :: E.RHS Kinded -> [(E.Pat, Variable)]
-letDestructuresRHS = \case
-  E.UnguardedRHS e w -> letDestructuresExp e ++ inWhere w
-  E.GuardedRHS ges w -> concatMap (\(g, b) -> letDestructuresExp g ++ letDestructuresExp b) ges ++ inWhere w
-  where inWhere = maybe [] (concatMap letDestructuresLet)
+destructuresRHS :: E.RHS Kinded -> [(E.Pat, Variable)]
+destructuresRHS = \case
+  E.UnguardedRHS e w -> destructuresExp e ++ inWhere w
+  E.GuardedRHS ges w -> concatMap (\(g, b) -> destructuresExp g ++ destructuresExp b) ges ++ inWhere w
+  where inWhere = maybe [] (concatMap destructuresLet)
 
-letDestructuresExp :: E.KindedExp -> [(E.Pat, Variable)]
-letDestructuresExp = \case
-  E.Let _ lds e   -> concatMap letDestructuresLet lds ++ letDestructuresExp e
-  E.App _ e args  -> letDestructuresExp e ++ concatMap (\case ExpLevel a -> letDestructuresExp a; _ -> []) args
-  E.Abs _ _ _ e   -> letDestructuresExp e
-  E.Pack _ _ e    -> letDestructuresExp e
-  E.Asc _ e _     -> letDestructuresExp e
-  E.Semi _ e1 e2  -> letDestructuresExp e1 ++ letDestructuresExp e2
-  E.Case _ e brs  -> letDestructuresExp e ++ concatMap (letDestructuresRHS . snd) brs
-  E.If _ e1 e2 e3 -> letDestructuresExp e1 ++ letDestructuresExp e2 ++ letDestructuresExp e3
+destructuresExp :: E.KindedExp -> [(E.Pat, Variable)]
+destructuresExp = \case
+  E.Let _ lds e   -> concatMap destructuresLet lds ++ destructuresExp e
+  E.App _ e args  -> destructuresExp e ++ concatMap (\case ExpLevel a -> destructuresExp a; _ -> []) args
+  E.Abs _ _ _ e   -> destructuresExp e
+  E.Pack _ _ e    -> destructuresExp e
+  E.Asc _ e _     -> destructuresExp e
+  E.Semi _ e1 e2  -> destructuresExp e1 ++ destructuresExp e2
+  E.Case _ e brs  -> (case e of E.Var _ v -> [(p, v) | (p, _) <- brs]; _ -> [])
+                       ++ destructuresExp e ++ concatMap (destructuresRHS . snd) brs
+  E.If _ e1 e2 e3 -> destructuresExp e1 ++ destructuresExp e2 ++ destructuresExp e3
   _               -> []
 
-letDestructuresLet :: E.LetDecl Kinded -> [(E.Pat, Variable)]
-letDestructuresLet = \case
+destructuresLet :: E.LetDecl Kinded -> [(E.Pat, Variable)]
+destructuresLet = \case
   E.ValDef pat rhs -> (case rhs of E.UnguardedRHS (E.Var _ v) _ -> [(pat, v)]; _ -> [])
-                        ++ letDestructuresRHS rhs
-  E.FnDef _ cls    -> concatMap (letDestructuresRHS . snd) cls
-  E.Mutual lds     -> concatMap letDestructuresLet lds
+                        ++ destructuresRHS rhs
+  E.FnDef _ cls    -> concatMap (destructuresRHS . snd) cls
+  E.Mutual lds     -> concatMap destructuresLet lds
   E.TypeSig{}      -> []
 
 kindFun :: Located e
         => D.KindedTypeDecls
+        -> D.KindedDataDecls
         -> e
         -> KindCtx
         -> TypeCtx
@@ -718,7 +739,7 @@ kindFun :: Located e
         -> E.ScopedRHS
         -> TK.KindedType
         -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-kindFun tdecls e = kindFun' 0 []
+kindFun tdecls ddecls e = kindFun' 0 []
   where
     kindFun' :: Int
             -> [(Variable, TK.KindedType)]  -- value parameters and their types, for usage inference
@@ -732,8 +753,8 @@ kindFun tdecls e = kindFun' 0 []
       ([], _) -> do
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
-        rhs' <- kindRHS tdecls kctx rhs
-        forM_ (trackComponents tracked rhs') \(x, pt) -> case usesRHS x rhs' of
+        rhs' <- kindRHS tdecls ddecls kctx rhs
+        forM_ (trackComponents tdecls ddecls tracked rhs') \(x, pt) -> case usesRHS x rhs' of
           One -> pure ()
           _   -> forceUnrestricted pt
         return ([], rhs')
@@ -776,19 +797,20 @@ kindFun tdecls e = kindFun' 0 []
           MultLevel φ -> getSpan φ
 
 kindRHS :: D.KindedTypeDecls
+        -> D.KindedDataDecls
         -> KindCtx -> E.RHS Scoped -> Validation (E.RHS Kinded)
-kindRHS tdecls kctx = \case
+kindRHS tdecls ddecls kctx = \case
   E.GuardedRHS es mlds -> do
     (kctx', mlds') <- case mlds of
-      Just lds -> second Just <$> kindLetDecls tdecls kctx lds
+      Just lds -> second Just <$> kindLetDecls tdecls ddecls kctx lds
       Nothing -> pure (kctx, Nothing)
-    es' <- mapM (bitraverse (kindExp tdecls kctx') (kindExp tdecls kctx')) es
+    es' <- mapM (bitraverse (kindExp tdecls ddecls kctx') (kindExp tdecls ddecls kctx')) es
     return $ E.GuardedRHS es' mlds'
   E.UnguardedRHS e mlds -> do
     (kctx', mlds') <- case mlds of
-      Just lds -> second Just <$> kindLetDecls tdecls kctx lds
+      Just lds -> second Just <$> kindLetDecls tdecls ddecls kctx lds
       Nothing -> pure (kctx, Nothing)
-    e' <- kindExp tdecls kctx' e
+    e' <- kindExp tdecls ddecls kctx' e
     return $ E.UnguardedRHS e' mlds'
 
 kindPat :: D.KindedTypeDecls 
@@ -836,9 +858,10 @@ kindPat tdecls kctx = \case
     second (E.AsPat s x) 
     <$> kindPat tdecls kctx p
 
-kindExp :: D.KindedTypeDecls 
+kindExp :: D.KindedTypeDecls
+        -> D.KindedDataDecls
         -> KindCtx -> E.ScopedExp -> Validation E.KindedExp
-kindExp tdecls kctx = \case
+kindExp tdecls ddecls kctx = \case
   E.Int   s i -> pure $ E.Int   s i
   E.Float s d -> pure $ E.Float s d
   E.Char  s c -> pure $ E.Char  s c
@@ -846,9 +869,9 @@ kindExp tdecls kctx = \case
   E.DCons s i -> pure $ E.DCons s i
   E.Var   s a -> pure $ E.Var   s a
   E.App s e args -> do
-    e' <- kindExp tdecls kctx e
+    e' <- kindExp tdecls ddecls kctx e
     args' <- forM args \case
-      ExpLevel  e -> ExpLevel  <$> kindExp tdecls kctx e
+      ExpLevel  e -> ExpLevel  <$> kindExp tdecls ddecls kctx e
       TypeLevel t -> TypeLevel <$> synth kctx t
       MultLevel m -> pure $ MultLevel m
     return $ E.App s e' args'
@@ -864,32 +887,32 @@ kindExp tdecls kctx = \case
         MultLevel φ -> do
           return (kctxi, parsi ++ [MultLevel φ]))
       (kctx, []) pars
-    e' <- kindExp tdecls kctx' e
+    e' <- kindExp tdecls ddecls kctx' e
     pure $ E.Abs s pars' m e'
   E.Pack s' ts e -> 
     E.Pack s' <$> mapM (synth kctx) ts
-              <*> kindExp tdecls kctx e
+              <*> kindExp tdecls ddecls kctx e
   E.Asc s e t -> 
-    E.Asc s <$> kindExp tdecls kctx e 
+    E.Asc s <$> kindExp tdecls ddecls kctx e 
             <*> synth kctx t
   E.Let s lds e -> do
-    (kctx', lds') <- kindLetDecls tdecls kctx lds
-    e' <- kindExp tdecls kctx' e
+    (kctx', lds') <- kindLetDecls tdecls ddecls kctx lds
+    e' <- kindExp tdecls ddecls kctx' e
     return (E.Let s lds' e')
   E.Semi s e1 e2 -> 
-    E.Semi s <$> kindExp tdecls kctx e1
-             <*> kindExp tdecls kctx e2
+    E.Semi s <$> kindExp tdecls ddecls kctx e1
+             <*> kindExp tdecls ddecls kctx e2
   E.Case s e prhss -> do
-    e' <- kindExp tdecls kctx e
+    e' <- kindExp tdecls ddecls kctx e
     prhss' <- forM prhss \(pi, rhsi) -> do
       (kctxi, pi') <- kindPat tdecls kctx pi
-      rhsi' <- kindRHS tdecls kctxi rhsi
+      rhsi' <- kindRHS tdecls ddecls kctxi rhsi
       return (pi', rhsi')
     return $ E.Case s e' prhss'
   E.If s e1 e2 e3 ->
-    E.If s <$> kindExp tdecls kctx e1 
-           <*> kindExp tdecls kctx e2
-           <*> kindExp tdecls kctx e3
+    E.If s <$> kindExp tdecls ddecls kctx e1 
+           <*> kindExp tdecls ddecls kctx e2
+           <*> kindExp tdecls ddecls kctx e3
   E.Channel s t -> E.Channel s <$> synth kctx t
   E.Select s i -> pure $ E.Select s i
   E.SendType s t -> E.SendType s <$> synth kctx t

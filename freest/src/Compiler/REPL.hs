@@ -393,8 +393,8 @@ validateTypes = mapM . validateType
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s =
-  Scoping.scopeExp (scopingCtx s) 
-  >=> Kinding.kindExp (tdecls s) (kindCtx s)
+  Scoping.scopeExp (scopingCtx s)
+  >=> Kinding.kindExp (tdecls s) (ddecls s) (kindCtx s)
   >=> Typing.synth (tdecls s) (ddecls s) (kindCtx s) (typeCtx s)
   >=> pure . \(_, t, _) -> t
 
