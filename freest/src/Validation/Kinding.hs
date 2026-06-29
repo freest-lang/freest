@@ -665,6 +665,50 @@ forceUnrestricted = \case
   TK.Tuple _ ts                     -> mapM_ forceUnrestricted ts
   _                                 -> pure ()
 
+-- | Extend a tracked (variable, type) set through @let@-destructuring of tracked
+-- variables, so a duplicated or discarded /component/ of a tracked parameter is
+-- itself tracked. Only variable and tuple patterns over a variable scrutinee are
+-- followed; other patterns and scrutinees are left to the type checker.
+trackComponents :: [(Variable, TK.KindedType)] -> E.RHS Kinded -> [(Variable, TK.KindedType)]
+trackComponents tracked rhs = fixpoint tracked
+  where
+    ds = letDestructuresRHS rhs
+    fixpoint acc =
+      let new = [ b | (pat, v) <- ds, Just t <- [lookup v acc]
+                    , b <- decomposePat pat t, fst b `notElem` map fst acc ]
+      in if null new then acc else fixpoint (acc ++ new)
+
+    decomposePat (E.VarPat _ x)    t              = [(x, t)]
+    decomposePat (E.TuplePat _ ps) (TK.Tuple _ ts)
+      | length ps == length ts                    = concat (zipWith decomposePat ps ts)
+    decomposePat _                 _              = []
+
+letDestructuresRHS :: E.RHS Kinded -> [(E.Pat, Variable)]
+letDestructuresRHS = \case
+  E.UnguardedRHS e w -> letDestructuresExp e ++ inWhere w
+  E.GuardedRHS ges w -> concatMap (\(g, b) -> letDestructuresExp g ++ letDestructuresExp b) ges ++ inWhere w
+  where inWhere = maybe [] (concatMap letDestructuresLet)
+
+letDestructuresExp :: E.KindedExp -> [(E.Pat, Variable)]
+letDestructuresExp = \case
+  E.Let _ lds e   -> concatMap letDestructuresLet lds ++ letDestructuresExp e
+  E.App _ e args  -> letDestructuresExp e ++ concatMap (\case ExpLevel a -> letDestructuresExp a; _ -> []) args
+  E.Abs _ _ _ e   -> letDestructuresExp e
+  E.Pack _ _ e    -> letDestructuresExp e
+  E.Asc _ e _     -> letDestructuresExp e
+  E.Semi _ e1 e2  -> letDestructuresExp e1 ++ letDestructuresExp e2
+  E.Case _ e brs  -> letDestructuresExp e ++ concatMap (letDestructuresRHS . snd) brs
+  E.If _ e1 e2 e3 -> letDestructuresExp e1 ++ letDestructuresExp e2 ++ letDestructuresExp e3
+  _               -> []
+
+letDestructuresLet :: E.LetDecl Kinded -> [(E.Pat, Variable)]
+letDestructuresLet = \case
+  E.ValDef pat rhs -> (case rhs of E.UnguardedRHS (E.Var _ v) _ -> [(pat, v)]; _ -> [])
+                        ++ letDestructuresRHS rhs
+  E.FnDef _ cls    -> concatMap (letDestructuresRHS . snd) cls
+  E.Mutual lds     -> concatMap letDestructuresLet lds
+  E.TypeSig{}      -> []
+
 kindFun :: Located e
         => D.KindedTypeDecls
         -> e
@@ -689,7 +733,7 @@ kindFun tdecls e = kindFun' 0 []
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
         rhs' <- kindRHS tdecls kctx rhs
-        forM_ tracked \(x, pt) -> case usesRHS x rhs' of
+        forM_ (trackComponents tracked rhs') \(x, pt) -> case usesRHS x rhs' of
           One -> pure ()
           _   -> forceUnrestricted pt
         return ([], rhs')

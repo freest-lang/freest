@@ -16,7 +16,11 @@ pick @a b x y = if b then x else y
 dropPair : forall a -> (a, a) -> Int    -- composite param discarded => a : *T
 dropPair @a p = 99
 
+dupComp : forall a -> (a, a) -> (a, a, a)  -- a destructured component duplicated => a : *T
+dupComp @a p = let (x, y) = p in (x, y, x)
+
 main : ()
 main =
   let (p, q) = dup @Int 7 in
-  print (p + q + discard @Char 'z' + pick @Int True 1 2 + dropPair @Int (3, 4))
+  let (r, s, t) = dupComp @Int (5, 6) in
+  print (p + q + discard @Char 'z' + pick @Int True 1 2 + dropPair @Int (3, 4) + r + s + t)
