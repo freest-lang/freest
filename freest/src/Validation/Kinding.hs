@@ -608,6 +608,51 @@ kindLetDecl tdecls (kctx, tctxds, lds) = \case
     (kctx',lds'') <- kindLetDecls tdecls kctx (sigs ++ fndefs)
     return (kctx', tctxds, lds ++ [E.Mutual lds''])
 
+-- | Affine usage of a term variable: used zero, exactly one, or many times
+-- (the last also covering branch-inconsistent use). Over-approximates towards
+-- 'Many' so a binder's multiplicity is never inferred too linear (which would
+-- make the type checker reject an otherwise valid definition).
+data Usage = Zero | One | Many deriving Eq
+
+addU :: Usage -> Usage -> Usage      -- sequential / both consumed
+addU Zero u = u
+addU u Zero = u
+addU _    _ = Many
+
+mergeU :: Usage -> Usage -> Usage     -- alternatives (only one path runs)
+mergeU Zero Zero = Zero
+mergeU One  One  = One
+mergeU _    _    = Many
+
+usesExp :: Variable -> E.KindedExp -> Usage
+usesExp x = go
+  where
+    go = \case
+      E.Var _ a       -> if a == x then One else Zero
+      E.App _ e args  -> foldr (addU . \case ExpLevel a -> go a; _ -> Zero) (go e) args
+      E.Abs _ _ _ e   -> go e
+      E.Pack _ _ e    -> go e
+      E.Asc _ e _     -> go e
+      E.Let _ lds e   -> addU (usesLetDecls x lds) (go e)
+      E.Semi _ e1 e2  -> addU (go e1) (go e2)
+      E.Case _ e brs  -> addU (go e) (foldr mergeU Zero [usesRHS x rhs | (_, rhs) <- brs])
+      E.If _ e1 e2 e3 -> addU (go e1) (mergeU (go e2) (go e3))
+      _               -> Zero
+
+usesRHS :: Variable -> E.RHS Kinded -> Usage
+usesRHS x = \case
+  E.UnguardedRHS e w -> addU (usesExp x e) (w `usedIn` Zero)
+  E.GuardedRHS ges w -> addU (foldr (mergeU . \(g, b) -> addU (usesExp x g) (usesExp x b)) Zero ges)
+                             (w `usedIn` Zero)
+  where w `usedIn` z = maybe z (usesLetDecls x) w
+
+usesLetDecls :: Variable -> [E.LetDecl Kinded] -> Usage
+usesLetDecls x = foldr (addU . \case
+  E.ValDef _ rhs    -> usesRHS x rhs
+  E.FnDef _ clauses -> foldr (mergeU . usesRHS x . snd) Zero clauses
+  E.TypeSig{}       -> Zero
+  E.Mutual lds      -> usesLetDecls x lds) Zero
+
 kindFun :: Located e
         => D.KindedTypeDecls
         -> e
@@ -617,22 +662,31 @@ kindFun :: Located e
         -> E.ScopedRHS
         -> TK.KindedType
         -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-kindFun tdecls e = kindFun' 0
+kindFun tdecls e = kindFun' 0 []
   where
     kindFun' :: Int
+            -> [(Variable, Kind)]  -- value parameters whose type's multiplicity is being inferred
             -> KindCtx
             -> TypeCtx
             -> [Level (E.Pat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
             -> E.ScopedRHS
             -> TK.KindedType
             -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-    kindFun' i kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
-      ([], _) -> ([],) <$> kindRHS tdecls kctx rhs
+    kindFun' i tracked kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
+      ([], _) -> do
+        -- usage-based multiplicity inference: a tracked parameter that is
+        -- discarded or duplicated forces its type's multiplicity to unrestricted
+        rhs' <- kindRHS tdecls kctx rhs
+        forM_ tracked \(x, k) -> case usesRHS x rhs' of
+          One -> pure ()
+          _   -> let s = getSpan x
+                 in addKindConstraint (Origin s FromKind) k (Proper s (Un s) Top)
+        return ([], rhs')
       (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
         k' <- case mki of
           Just ki -> checkK (TK.fromVariable ObjLv ai ki) k >> return ki
           Nothing -> return k
-        first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) (Map.insert (Left ai) k' kctx) tctxds ps'
+        first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) tracked (Map.insert (Left ai) k' kctx) tctxds ps'
           rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv ai k') u)
       (ExpLevel  (p, mtp) : ps', TK.AppArrow _ _ u v) -> do
         tp' <- case mtp of
@@ -641,10 +695,17 @@ kindFun tdecls e = kindFun' 0
             return tp'
           Nothing -> pure u
         (kctxi', p') <- kindPat tdecls kctx p
-        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) kctxi' tctxds ps' rhs v
+        -- track only parameters whose type is a bare type variable with a
+        -- still-unknown kind: those are the polymorphic binders whose
+        -- multiplicity usage can infer (a concrete session/functional type has a
+        -- determined multiplicity, and forcing it unrestricted would be wrong)
+        let tracked' = case (p, tp') of
+              (E.VarPat _ x, TK.Var _ k _ _) | hasSolvableVar k -> (x, k) : tracked
+              _                                                 -> tracked
+        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) tracked' kctxi' tctxds ps' rhs v
       (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
-        first (MultLevel φ :) <$> kindFun' (i + 1) kctx tctxds ps' rhs 
-          ((if null φs then id else TK.ForallM s' m φs) $ 
+        first (MultLevel φ :) <$> kindFun' (i + 1) tracked kctx tctxds ps' rhs
+          ((if null φs then id else TK.ForallM s' m φs) $
             subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u)
       (pi : ps', TK.AppArrow _ _ u _) ->
         throwE (UnexpectedParam (paramSpan pi) i (ExpLevel  u ) (voidLevel pi))
