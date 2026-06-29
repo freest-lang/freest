@@ -777,3 +777,33 @@ case forall #m -*-> Int -m-> Int  == forall #n -*-> Int -n-> Int : *T
 case forall #m #n -*-> Int -m+n-> Int  == forall #m #n -*-> Int -n+m-> Int : *T
 
 case forall #m #n -*-> Int -m+n-> Int  == forall #n #m -*-> Int -m+n-> Int : *T
+
+-- Kind preservation under the context-free session algebra (channel-conditional
+-- `;` and CK-Rec). The declared kind is the tight one, so an over-linearising
+-- regression on either side fails the `<: k` check.
+
+-- identity: Skip;T ~ T ~ T;Skip   (T = *!Int;Close, a shared channel)
+case Skip ; (*!Int ; Close) == *!Int ; Close : *C
+
+case (*!Int ; Close) ; Skip == *!Int ; Close : *C
+
+-- associativity with a shared channel leftmost
+case (*!Int ; ?Int) ; Close == *!Int ; (?Int ; Close) : *C
+
+-- associativity with Close absorbing
+case (Close ; !Int) ; ?Int == Close ; (!Int ; ?Int) : 1C
+
+-- distributivity over an internal choice
+case (+{A: !Int}) ; ?Int == +{A: !Int ; ?Int} : 1S
+
+-- absorption: Close;T ~ Close
+case Close ; (*!Int ; Close) == Close : 1C
+
+-- recursion: unfolding preserves kind, for linear and shared channels
+case Stream == !Int ; Stream : 1C
+where
+  type Stream = !Int ; Stream
+
+case SStream == *!Int ; SStream : *C
+where
+  type SStream = *!Int ; SStream

@@ -124,10 +124,11 @@ synth ctx = \case
     (m2, pk2, u') <- checkOperand ctx Session u
     if hasSolvableVar (Proper s m1 pk1) || hasSolvableVar (Proper s m2 pk2)
       then do
-        -- defer: result prekind is the meet, multiplicity the join (the *C
-        -- channel-conditional refinement is left to the ground path)
+        -- defer: prekind is the meet, multiplicity the channel-conditional join;
+        -- a variable left prekind falls back to the plain join, conservatively
         ψ <- meetPrekinds s [pk1, pk2]
-        return $ TK.appSemiWithKind s (Proper s (join m1 m2) ψ) t' u'
+        let φ = if pk1 == Channel then m1 else join m1 m2
+        return $ TK.appSemiWithKind s (Proper s φ ψ) t' u'
       else return $ TK.AppSemi s t' u'
   T.AppDual s t -> do
     t' <- check ctx t (ls s)
@@ -495,8 +496,14 @@ kindModule ctx mod = do
         inferBody recursive s ctxB body resK pkv
           | recursive = do
               b <- check ctxB body resK
+              let o = Origin s FromKind
+              -- the multiplicity is a fixpoint, not just a lower bound: equate it
+              -- to the body's, so a shared recursive channel stays unrestricted
+              case (resK, TK.kindOf b) of
+                (Proper _ φ _, Proper _ mb _) -> addMultEquation o φ mb
+                _                             -> pure ()
               when (chan (Set.singleton i) body) $
-                addPrekindConstraint (SubPrekind (Origin s FromKind) (VarPK UnifLv pkv) Channel)
+                addPrekindConstraint (SubPrekind o (VarPK UnifLv pkv) Channel)
               return b
           | otherwise = do
               b <- synth ctxB body
