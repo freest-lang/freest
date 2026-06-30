@@ -163,12 +163,33 @@ synth ctx = \case
     Nothing -> do
       throwE (TypeVarOutOfScope s a)
   T.App s t ts -> do
-    t' <- synth ctx t
-    let k = TK.kindOf t'
-    let (ks, kn) = Expose.kindArrow k
+    t' <- synth ctx t >>= expectArrow s (length ts)
+    let (ks, kn) = Expose.kindArrow (TK.kindOf t')
     (_, ts') <- checkArgs t' (length ts) (length ks) ts ks kn
     return $ TK.App s t' ts'
     where
+      -- At an application the operator must have an arrow kind. If a higher-kinded
+      -- parameter is applied while its kind is still an unsolved whole-kind
+      -- variable, instantiate it to a fresh arrow of the right arity (reusing an
+      -- earlier instantiation) and give the operator that kind — so the
+      -- parameter's arrow kind is inferred from its use, just as `checkOperand`
+      -- instantiates a variable to a `Proper`. The result is a ground arrow kind
+      -- a signature could also write.
+      expectArrow :: Span -> Int -> TK.KindedType -> Validation TK.KindedType
+      expectArrow s n = \case
+        TK.Var vs (Var _ lv v) l a | solvable lv, n > 0 -> do
+          existing <- gets kindBindings
+          arrow <- case Map.lookup v existing of
+            Just k@Arrow{} -> pure k
+            _              -> do
+              ps <- mapM (const (freshUnifKind s)) [1 .. n]
+              r  <- freshUnifKind s
+              let arrow = foldr (Arrow s) r ps
+              addKindBinding v arrow
+              pure arrow
+          pure (TK.Var vs arrow l a)
+        t' -> pure t'
+
       checkArgs :: TK.KindedType -> Int -> Int -- error info
                 -> [T.ScopedType] -> [Kind] -> Kind
                 -> Validation (Kind, [TK.KindedType])
