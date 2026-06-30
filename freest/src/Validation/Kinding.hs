@@ -691,7 +691,7 @@ usesExp x = go
     go = \case
       E.Var _ a       -> if a == x then One else Zero
       E.App _ e args  -> foldr (addU . \case ExpLevel a -> go a; _ -> Zero) (go e) args
-      E.Abs _ _ _ e   -> go e
+      E.Abs _ _ m e   -> scaleBy m (go e)
       E.Pack _ _ e    -> go e
       E.Asc _ e _     -> go e
       E.Let _ lds e   -> addU (usesLetDecls x lds) (go e)
@@ -699,6 +699,9 @@ usesExp x = go
       E.Case _ e brs  -> addU (go e) (mergeAll [usesRHS x rhs | (_, rhs) <- brs])
       E.If _ e1 e2 e3 -> addU (go e1) (mergeU (go e2) (go e3))
       _               -> Zero
+    scaleBy m
+      | isLin m   = id
+      | otherwise = \case One -> Many; u -> u
 
 usesRHS :: Variable -> E.RHS Kinded -> Usage
 usesRHS x = \case
