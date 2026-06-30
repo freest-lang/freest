@@ -175,7 +175,11 @@ pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Varia
 pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
   where AppQuant s p pk m aks t  = T.AppQuant s k quant abs p pk m aks t
           where k'@(K.Proper _ m' pk') = kindOf t
-                k = K.Proper s (case p of T.In -> m; T.Out -> m') pk'
+                -- a functional quantifier (∀/∃, supplied prekind Top) is itself
+                -- functional (Top); a session quantifier (!/?type, supplied Session)
+                -- follows its body's prekind (channel iff the body is)
+                rpk = case pk of K.Top -> K.Top; _ -> pk'
+                k = K.Proper s (case p of T.In -> m; T.Out -> m') rpk
                 quant = K.Arrow s abs k
                 abs = foldr (K.Arrow s . snd) k' aks
 

@@ -835,3 +835,8 @@ case Loop == &{Again: Loop, Done: F Int} : 1C
 where
   type F a = !a ; Close
   type Loop = &{Again: Loop, Done: F Int}
+
+-- recursive session quantifier is a channel (chan AppQuantS case)
+case RS == RS : 1C
+where
+  type RS = !type (a : *T). (!a ; RS)

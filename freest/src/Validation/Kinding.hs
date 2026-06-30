@@ -394,6 +394,7 @@ chan tdecls = go
       T.End{}                -> True                          -- Chan-End
       T.AppSemi _ t u        -> go selfs t || go selfs u      -- Chan-Seq-L/R
       T.AppLinChoice _ _ lts -> all (go selfs . snd) lts      -- Chan-Ch
+      T.AppQuantS _ _ _ _ t  -> go selfs t                    -- !/?type a. T is a channel iff T is
       T.AppDual _ t          -> go selfs t
       T.TName _ i            -> named selfs i                 -- Chan-Var / unfold
       T.AppTName _ i _       -> named selfs i
