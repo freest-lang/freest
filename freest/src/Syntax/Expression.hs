@@ -14,6 +14,7 @@ module Syntax.Expression
        , ConsPat
        , TuplePat
        )
+  , ParsedPat, ScopedPat, KindedPat
   , listPat
   , RHS(..)
   , LetDecl(..)
@@ -51,22 +52,26 @@ type ParsedRHS = RHS Parsed
 type ScopedRHS = RHS Scoped
 type KindedRHS = RHS Kinded
 
-data Pat
+type ParsedPat = Pat Parsed
+type ScopedPat = Pat Scoped
+type KindedPat = Pat Kinded
+
+data Pat x
   = IntPat Span Int
   | FloatPat Span Double
   | CharPat Span Char
   | StringPat Span String
   | WildPat Span Variable
   | VarPat Span Variable
-  | PackPat Span [(Variable, Kind)] Pat
-  | DConsPat Span Identifier [Pat]
+  | PackPat Span [(Variable, XBndKind x)] (Pat x)
+  | DConsPat Span Identifier [Pat x]
   | WaitPat Span
-  | InPat Span Pat Pat
-  | ChoicePat Span Identifier Pat
-  | TypeInPat Span (Variable, Kind) Pat
-  | AsPat Span Variable Pat
+  | InPat Span (Pat x) (Pat x)
+  | ChoicePat Span Identifier (Pat x)
+  | TypeInPat Span (Variable, XBndKind x) (Pat x)
+  | AsPat Span Variable (Pat x)
 
-instance Eq Pat where
+instance Eq (XBndKind x) => Eq (Pat x) where
   IntPat _ i1 == IntPat _ i2 = i1 == i2
   FloatPat _ d1 == FloatPat _ d2 = d1 == d2
   CharPat _ c1 == CharPat _ c2 = c1 == c2
@@ -76,27 +81,28 @@ instance Eq Pat where
   DConsPat _ id1 pat1 == DConsPat _ id2 pat2 = id1 == id2 && pat1 == pat2
   ChoicePat _ id1 pat1 == ChoicePat _ id2 pat2 = id1 == id2 && pat1 == pat2
   AsPat _ var1 pat1 == AsPat _ var2 pat2 = var1 == var2 && pat1 == pat2
+  _ == _ = False
 
-pattern NilPat :: Span -> Pat
+pattern NilPat :: Span -> Pat x
 pattern NilPat s <- DConsPat s ((== mkNilId s) -> True) []
   where NilPat s =  DConsPat s (mkNilId s) []
 
-pattern ConsPat :: Span -> Pat -> Pat -> Pat
+pattern ConsPat :: Span -> Pat x -> Pat x -> Pat x
 pattern ConsPat s p1 p2 <- DConsPat s ((== mkConsId s) -> True) [p1,p2]
   where ConsPat s p1 p2 =  DConsPat s (mkConsId s) [p1,p2]
 
-pattern TuplePat :: Span -> [Pat] -> Pat
+pattern TuplePat :: Span -> [Pat x] -> Pat x
 pattern TuplePat s ps <- DConsPat s (isTupleId -> True) ps
   where TuplePat s ps =  DConsPat s (mkTupleId (length ps) s) ps
 
-listPat :: Span -> [Pat] -> Pat
+listPat :: Span -> [Pat x] -> Pat x
 listPat s = \case
   []       -> NilPat s
   (p : ps) -> ConsPat s p (listPat s ps)
 
 data LetDecl x
-  = ValDef Pat      (RHS x)
-  | FnDef  Variable [([Level Pat Variable Variable], RHS x)]
+  = ValDef (Pat x)  (RHS x)
+  | FnDef  Variable [([Level (Pat x) Variable Variable], RHS x)]
   | TypeSig [Variable] (Type x)
   | Mutual [LetDecl x {- FnDef only -}]
 
@@ -116,12 +122,12 @@ data Exp x
   | DCons  Span Identifier
   | Var    Span Variable
   | App    Span (Exp x) [Level (Exp x) (Type x) Multiplicity]
-  | Abs    Span [Level (Pat, Maybe (Type x)) (Variable,Kind) Variable] Multiplicity (Exp x)
+  | Abs    Span [Level (Pat x, Maybe (Type x)) (Variable,Kind) Variable] Multiplicity (Exp x)
   | Pack   Span [Type x] (Exp x)
   | Asc    Span (Exp x) (Type x)
   | Let    Span [LetDecl x] (Exp x)
   | Semi   Span (Exp x) (Exp x)
-  | Case   Span (Exp x) [(Pat, RHS x)]
+  | Case   Span (Exp x) [(Pat x, RHS x)]
   | If     Span (Exp x) (Exp x) (Exp x)
   | Channel Span (Type x)
   | Select Span Identifier
@@ -148,7 +154,7 @@ pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, 
 listExp :: Span -> Type x -> [Exp x] -> Exp x
 listExp s t = foldr (Cons s) (Nil s t)
 
-instance Located Pat where
+instance Located (Pat x) where
   getSpan = \case
     IntPat s _      -> s
     FloatPat s _    -> s
@@ -236,7 +242,7 @@ instance Located (RHS x) where
       spanFromTo e (maybe (getSpan e) (getSpan . last) w)
   setSpan = error "cannot set span of a RHS"
 
-instance Show Pat where
+instance Show (XBndKind x) => Show (Pat x) where
   show = \case
     IntPat _ i      -> show i
     FloatPat _ f    -> show f
@@ -312,7 +318,7 @@ instance Show (XBndKind x) => Show (Exp x) where
     ReceiveType _  -> "receiveType"
 
 -- | The set of all variables ocurring in a pattern.
-allVarsPat :: Pat -> Set.Set Variable
+allVarsPat :: Pat x -> Set.Set Variable
 allVarsPat = \case
   VarPat _ var              -> Set.singleton var
   PackPat _ vars pat        -> let vars' = map fst vars in Set.unions (map Set.singleton vars') `Set.union` allVarsPat pat

@@ -754,13 +754,13 @@ trackComponents tdecls ddecls tracked rhs = fixpoint tracked
       = concat (zipWith decomposePat ps (map (subsAll (map fst aks) args) fields))
     decomposePat _                 _              = []
 
-destructuresRHS :: E.RHS Kinded -> [(E.Pat, Variable)]
+destructuresRHS :: E.RHS Kinded -> [(E.KindedPat, Variable)]
 destructuresRHS = \case
   E.UnguardedRHS e w -> destructuresExp e ++ inWhere w
   E.GuardedRHS ges w -> concatMap (\(g, b) -> destructuresExp g ++ destructuresExp b) ges ++ inWhere w
   where inWhere = maybe [] (concatMap destructuresLet)
 
-destructuresExp :: E.KindedExp -> [(E.Pat, Variable)]
+destructuresExp :: E.KindedExp -> [(E.KindedPat, Variable)]
 destructuresExp = \case
   E.Let _ lds e   -> concatMap destructuresLet lds ++ destructuresExp e
   E.App _ e args  -> destructuresExp e ++ concatMap (\case ExpLevel a -> destructuresExp a; _ -> []) args
@@ -773,7 +773,7 @@ destructuresExp = \case
   E.If _ e1 e2 e3 -> destructuresExp e1 ++ destructuresExp e2 ++ destructuresExp e3
   _               -> []
 
-destructuresLet :: E.LetDecl Kinded -> [(E.Pat, Variable)]
+destructuresLet :: E.LetDecl Kinded -> [(E.KindedPat, Variable)]
 destructuresLet = \case
   E.ValDef pat rhs -> (case rhs of E.UnguardedRHS (E.Var _ v) _ -> [(pat, v)]; _ -> [])
                         ++ destructuresRHS rhs
@@ -787,20 +787,20 @@ kindFun :: Located e
         -> e
         -> KindCtx
         -> TypeCtx
-        -> [Level (E.Pat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
+        -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
         -> E.ScopedRHS
         -> TK.KindedType
-        -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
+        -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
 kindFun tdecls ddecls e = kindFun' 0 []
   where
     kindFun' :: Int
             -> [(Variable, TK.KindedType)]  -- value parameters and their types, for usage inference
             -> KindCtx
             -> TypeCtx
-            -> [Level (E.Pat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
+            -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
             -> E.ScopedRHS
             -> TK.KindedType
-            -> Validation ([Level (E.Pat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
+            -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
     kindFun' i tracked kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
       ([], _) -> do
         -- usage-based multiplicity inference: a parameter that is discarded or
@@ -866,7 +866,7 @@ kindRHS tdecls ddecls kctx = \case
     return $ E.UnguardedRHS e' mlds'
 
 kindPat :: D.KindedTypeDecls 
-        -> KindCtx -> E.Pat -> Validation (KindCtx, E.Pat)
+        -> KindCtx -> E.ScopedPat -> Validation (KindCtx, E.KindedPat)
 kindPat tdecls kctx = \case
   E.IntPat   s i -> pure (kctx, E.IntPat   s i)
   E.FloatPat s f -> pure (kctx, E.FloatPat s f)
@@ -874,9 +874,10 @@ kindPat tdecls kctx = \case
   E.StringPat s t -> pure (kctx, E.StringPat s t)
   E.WildPat  s x -> pure (kctx, E.WildPat  s x)
   E.VarPat   s x -> pure (kctx, E.VarPat   s x)
-  E.PackPat s aks p -> 
-    second (E.PackPat s aks) 
-    <$> kindPat tdecls (Map.fromList (first Left <$> aks) `Map.union` kctx) p
+  E.PackPat s aks p -> do
+    aks' <- mapM resolveBndKind aks
+    second (E.PackPat s aks')
+      <$> kindPat tdecls (Map.fromList (first Left <$> aks') `Map.union` kctx) p
   E.NilPat   s   -> pure (kctx, E.NilPat   s  )
   E.ConsPat s p1 p2 -> do
     (kctx' , p1') <- kindPat tdecls kctx p1
@@ -903,9 +904,10 @@ kindPat tdecls kctx = \case
   E.ChoicePat s i p -> 
     second (E.ChoicePat s i) 
     <$> kindPat tdecls kctx p
-  E.TypeInPat s (a, k) p -> 
-    second (E.TypeInPat s (a, k)) 
-    <$> kindPat tdecls (Map.insert (Left a) k kctx) p
+  E.TypeInPat s ak p -> do
+    ak'@(a, k) <- resolveBndKind ak
+    second (E.TypeInPat s ak')
+      <$> kindPat tdecls (Map.insert (Left a) k kctx) p
   E.AsPat s x p -> 
     second (E.AsPat s x) 
     <$> kindPat tdecls kctx p

@@ -357,7 +357,7 @@ resolveLetDecls global ((E.FnDef var levelRhss):letDecls) = do
 
 {- -- TODO: DELETE, refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
-doPatternMatching :: [E.Pat] -> [Value] -> [String] -> [Maybe (String, Value)]
+doPatternMatching :: [E.KindedPat] -> [Value] -> [String] -> [Maybe (String, Value)]
 doPatternMatching [] [] _ = []
 doPatternMatching pats [] _ = []
 doPatternMatching [] args _ = []
@@ -375,7 +375,7 @@ doPatternMatching (pat:pats) (arg:args) labels = case pat of
   E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] labels ++ doPatternMatching pats args labels -}
 
 {- -- necessary to find out if there is an internal choice in the pattern matching to pre receive the label
-getInternalChoiceChannels :: [E.Pat] -> [Value] -> [ChannelEnd]
+getInternalChoiceChannels :: [E.KindedPat] -> [Value] -> [ChannelEnd]
 getInternalChoiceChannels [] [] = []
 getInternalChoiceChannels pats [] = []
 getInternalChoiceChannels [] args = []

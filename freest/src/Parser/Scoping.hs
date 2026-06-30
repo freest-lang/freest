@@ -442,7 +442,7 @@ scopeExp ctx = \case
     e' <- scopeExp ctx e
     E.Case s e' <$> mapM scopePatRHS prhss
     where
-      scopePatRHS :: (E.Pat, E.RHS Parsed) -> Validation (E.Pat, E.RHS Scoped)
+      scopePatRHS :: (E.ParsedPat, E.RHS Parsed) -> Validation (E.ScopedPat, E.RHS Scoped)
       scopePatRHS (p, rhs) = do
         checkConflictingDefs [ExpLevel p]
         (_, p') <- scopePat ctx emptyScopingCtx p
@@ -463,16 +463,21 @@ scopeExp ctx = \case
 -- auxilliary context (i.e., the lexical context must be modified separately!)
 scopePat :: ScopingCtx -- main context
          -> ScopingCtx -- auxilliary context
-         -> E.Pat
-         -> Validation (ScopingCtx, E.Pat) -- returns the auxilliary context
+         -> E.ParsedPat
+         -> Validation (ScopingCtx, E.ScopedPat) -- returns the auxilliary context
 scopePat ctx ictx = \case
+  E.IntPat s i    -> pure (ictx, E.IntPat s i)
+  E.FloatPat s f  -> pure (ictx, E.FloatPat s f)
+  E.CharPat s c   -> pure (ictx, E.CharPat s c)
+  E.StringPat s t -> pure (ictx, E.StringPat s t)
+  E.WaitPat s     -> pure (ictx, E.WaitPat s)
   E.WildPat s w -> (ictx,) . E.WildPat s <$> freshInternal w
   E.VarPat s x  -> case lookupEVar x ictx of
     Just x' -> pure (deleteEVar x ictx, E.VarPat s x{internal = internal x'})
     Nothing -> (ictx,) . E.VarPat s <$> freshInternal x
-  E.PackPat s aks p -> do 
+  E.PackPat s aks p -> do
     as' <- mapM (freshInternal . fst) aks
-    ks' <- mapM (scopeKind ctx . snd) aks  
+    ks' <- mapM (traverse (scopeKind ctx) . snd) aks
     (ictx', p') <- scopePat (foldr insertTVar ctx as') ictx p
     return (ictx', E.PackPat s (zip as' ks') p')
   E.DConsPat s c ps -> do
@@ -487,7 +492,7 @@ scopePat ctx ictx = \case
     return (ictx'', E.InPat s p1' p2')
   E.TypeInPat s (a, k) p -> do
     a' <- freshInternal a
-    k' <- scopeKind ctx k
+    k' <- traverse (scopeKind ctx) k
     (ictx', p') <- scopePat (insertTVar a' ctx) ictx p
     return (ictx', E.TypeInPat s (a', k') p')
   E.ChoicePat s c p -> do
@@ -496,12 +501,12 @@ scopePat ctx ictx = \case
     Nothing -> do
       x' <- freshInternal x
       second (E.AsPat s x') <$> scopePat ctx ictx p
-    Just x' -> second (E.AsPat s x{internal = internal x'}) 
+    Just x' -> second (E.AsPat s x{internal = internal x'})
       <$> scopePat ctx (deleteEVar x ictx) p
-  p -> pure (ictx, p)
+
 
 -- | Check conflicting definitions for bindings.
-checkConflictingDefs :: [Level E.Pat Variable Variable] -> Validation ()
+checkConflictingDefs :: [Level E.ParsedPat Variable Variable] -> Validation ()
 checkConflictingDefs (partitionLevels -> (ps, as, φs)) = do
   let evos = Map.unionsWith (++) (map patVarOccurs ps)
       tvos = varOccurs TypeLevel as
@@ -522,13 +527,13 @@ checkConflictingDefs (partitionLevels -> (ps, as, φs)) = do
 
 -- | Inserts the variables in a pattern into the scoping context.
 -- TODO: can we do this in one pass with scopePat?
-insertPatVars :: E.Pat -> ScopingCtx -> ScopingCtx
-insertPatVars p ctx = 
+insertPatVars :: E.ScopedPat -> ScopingCtx -> ScopingCtx
+insertPatVars p ctx =
   foldr (\case ExpLevel  x -> insertEVar x
                TypeLevel a -> insertTVar a
                MultLevel φ -> insertMVar φ) ctx (patVars p)
   where
-    patVars :: E.Pat -> Set.Set (Level Variable Variable Variable)
+    patVars :: E.Pat x -> Set.Set (Level Variable Variable Variable)
     patVars = \case
       E.VarPat _ x      -> Set.singleton (ExpLevel x)
       E.PackPat _ aks p -> Set.fromList (map (TypeLevel . fst) aks) `Set.union` patVars p

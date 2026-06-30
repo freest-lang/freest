@@ -46,7 +46,7 @@ arrow tdecls e t = do
     _ -> throwE (ExposeError (getSpan e) (Right e) "a monomorphic function" t)
 
 exists :: D.KindedTypeDecls
-       -> Either E.Pat E.KindedExp
+       -> Either E.KindedPat E.KindedExp
        -> T.KindedType 
        -> Validation ([(Variable, K.Kind)], T.KindedType)
 exists tdecls pe t = do
@@ -54,7 +54,7 @@ exists tdecls pe t = do
     t'@(T.AppExists s aks u) -> pure (aks, u)
     _ -> throwE (TypeMismatchExists (getSpan pe) t pe) 
 
-externalChoice :: D.KindedTypeDecls -> E.Pat -> T.KindedType -> Identifier -> Validation T.KindedType
+externalChoice :: D.KindedTypeDecls -> E.KindedPat -> T.KindedType -> Identifier -> Validation T.KindedType
 externalChoice tdecls p t i = do
   case normalise tdecls t of
     T.AppLinChoice _ T.In lts -> case lookup i lts of
@@ -83,10 +83,10 @@ internalChoice tdecls e t i = do
 output :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
 output tdecls = message tdecls T.Out . Right
 
-input :: D.KindedTypeDecls -> Either E.Pat E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
+input :: D.KindedTypeDecls -> Either E.KindedPat E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
 input tdecls = message tdecls T.In
 
-message :: D.KindedTypeDecls -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType 
+message :: D.KindedTypeDecls -> T.Polarity -> Either E.KindedPat E.KindedExp -> T.KindedType 
         -> Validation (T.KindedType, T.KindedType)
 message tdecls p pe t = do
   case normalise tdecls t of
@@ -101,11 +101,11 @@ typeOutput :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType
            -> Validation (Variable, K.Kind, T.KindedType)
 typeOutput tdecls = typeMsg tdecls T.Out . Right
 
-typeInput :: D.KindedTypeDecls -> Either E.Pat E.KindedExp -> T.KindedType 
+typeInput :: D.KindedTypeDecls -> Either E.KindedPat E.KindedExp -> T.KindedType 
           -> Validation (Variable, K.Kind, T.KindedType)
 typeInput tdecls = typeMsg tdecls T.In
 
-typeMsg :: D.KindedTypeDecls -> T.Polarity -> Either E.Pat E.KindedExp -> T.KindedType
+typeMsg :: D.KindedTypeDecls -> T.Polarity -> Either E.KindedPat E.KindedExp -> T.KindedType
             -> Validation (Variable, K.Kind, T.KindedType)
 typeMsg tdecls p pe t = do
   case normalise tdecls t of
@@ -113,7 +113,7 @@ typeMsg tdecls p pe t = do
     _ -> throwE (ExposeError (getSpan pe) pe msg t)
   where msg = "a type-" ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
 
-wait :: D.KindedTypeDecls -> E.Pat -> T.KindedType -> Validation ()
+wait :: D.KindedTypeDecls -> E.KindedPat -> T.KindedType -> Validation ()
 wait tdecls p t = do
   case normalise tdecls t of
     T.End _ T.In -> return ()

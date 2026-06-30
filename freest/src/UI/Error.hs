@@ -47,7 +47,7 @@ data Error
   | CannotSatisfyKindConstraint Span K.Kind K.Kind
   | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
-  | CannotSynthesisePat Span E.Pat
+  | CannotSynthesisePat Span E.KindedPat
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
   | CannotSynthesiseSendType Span
@@ -56,7 +56,7 @@ data Error
   | DConsPatArgMismatch Span Identifier Int Int
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
+  | ExposeError Span (Either E.KindedPat E.KindedExp) String TK.KindedType
   | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
@@ -76,7 +76,7 @@ data Error
       Span 
       K.Multiplicity
   | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
-    (Either (Either Variable E.Pat) E.KindedExp)
+    (Either (Either Variable E.KindedPat) E.KindedExp)
   | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
@@ -84,7 +84,7 @@ data Error
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
   | MultVarOutOfScope Span Variable
-  | NonLinPat Span E.Pat TK.KindedType
+  | NonLinPat Span E.KindedPat TK.KindedType
   | ParseError Span (Token, [String])
   | PartiallyAppliedSelect Span Identifier
   | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
@@ -92,14 +92,14 @@ data Error
   | RestrictedFunInMutual Span Variable TK.KindedType
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.Pat)
-  | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.Pat)
-  | TypeMismatchChoice Span TK.KindedType Identifier E.Pat
-  | TypeMismatchExists Span TK.KindedType (Either E.Pat E.KindedExp) -- TODO: should be (Either E.Pat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
+  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.KindedPat)
+  | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.KindedPat)
+  | TypeMismatchChoice Span TK.KindedType Identifier E.KindedPat
+  | TypeMismatchExists Span TK.KindedType (Either E.KindedPat E.KindedExp) -- TODO: should be (Either E.KindedPat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
   | TypeMismatchReceiveType Span TK.KindedType
   | TypeMismatchSelect Span TK.KindedType Identifier E.KindedExp
   | TypeMismatchSendType Span TK.KindedType
-  | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.Pat)
+  | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.KindedPat)
   | TypeVarOutOfScope Span Variable
   | UnexpectedArg 
       Span
@@ -115,7 +115,7 @@ data Error
       [Variable]
       (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
-  | MixedSessionVarPats Span E.Pat E.Pat
+  | MixedSessionVarPats Span E.KindedPat E.KindedPat
 
 -- | Errors can be tracked to the source code.
 instance Located Error where

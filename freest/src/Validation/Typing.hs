@@ -248,7 +248,7 @@ synth tdecls ddecls kctx tctx = \case
 synthRHS :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
-         -> Either (Either Variable E.Pat) E.KindedExp
+         -> Either (Either Variable E.KindedPat) E.KindedExp
          -> E.RHS Kinded
          -> Validation (E.KindedRHS, T.KindedType, TypeCtx)
 synthRHS tdecls ddecls kctx tctx fep = \case
@@ -618,14 +618,14 @@ checkFun :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
          -> Either Variable (E.Exp Kinded)
-         -> [Level (E.Pat, Maybe T.KindedType) (Variable, Maybe K.Kind) Variable]
+         -> [Level (E.KindedPat, Maybe T.KindedType) (Variable, Maybe K.Kind) Variable]
          -> Maybe K.Multiplicity
          -> E.KindedRHS
          -> T.KindedType
          -> Validation (E.KindedRHS, TypeCtx)
 checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
   where
-    checkFun' :: Int -> KindCtx -> TypeCtx -> [Level (E.Pat, Maybe T.KindedType) (Variable, Maybe K.Kind) Variable] -> T.KindedType -> Validation (E.KindedRHS, TypeCtx)
+    checkFun' :: Int -> KindCtx -> TypeCtx -> [Level (E.KindedPat, Maybe T.KindedType) (Variable, Maybe K.Kind) Variable] -> T.KindedType -> Validation (E.KindedRHS, TypeCtx)
     checkFun' i kctxi tctxi ps' t' =
       case (ps', normalise tdecls t') of
         -- no more parameters, check RHS
@@ -700,7 +700,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
 -- type context containing exclusively the variables introduced in the pattern.
 checkPat :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
-         -> E.Pat
+         -> E.KindedPat
          -> T.KindedType
          -> Validation (KindCtx, TypeCtx) -- ????
 checkPat tdecls ddecls kctx p t = case p of
@@ -738,7 +738,7 @@ checkPat tdecls ddecls kctx p t = case p of
             (Left $ E.PackPat (spanFromTo a p) aks p))
         ((a, k) : aks) ((b, k') : bks) -> do
           Kinding.checkK (T.fromVariable ObjLv a k') k
-          checkPackPat (Map.insert (Left a) k kctx) (subs b (T.fromVariable ObjLv a k) u) aks bks
+          checkPackPat (Map.insert (Left a) k' kctx) (subs b (T.fromVariable ObjLv a k') u) aks bks
   E.WildPat  s _    -> do
     when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
     return (kctx, Map.empty)
@@ -798,8 +798,8 @@ checkPat tdecls ddecls kctx p t = case p of
   -- ?type a. p
   E.TypeInPat s (a, k) p' -> do
     (b, k', t') <- Expose.typeInput tdecls (Left p) t
-    Kinding.checkSubkindOf (T.fromVariable ObjLv a k) k k'
-    checkPat tdecls ddecls (Map.insert (Left a) k kctx) p' (subs b (T.fromVariable ObjLv a k) t')
+    Kinding.checkK (T.fromVariable ObjLv a k') k
+    checkPat tdecls ddecls (Map.insert (Left a) k' kctx) p' (subs b (T.fromVariable ObjLv a k') t')
   -- (&C p)
   E.ChoicePat s i p' -> do
     ti <- Expose.externalChoice tdecls p t i
@@ -816,7 +816,7 @@ checkPat tdecls ddecls kctx p t = case p of
 checkRHS :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
-         -> Either (Either Variable E.Pat) E.KindedExp
+         -> Either (Either Variable E.KindedPat) E.KindedExp
          -> E.KindedRHS
          -> T.KindedType
          -> Validation (E.KindedRHS, TypeCtx)
@@ -846,7 +846,7 @@ checkRHS tdecls ddecls kctx tctx ep rhs t = case rhs of
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
 -- if they are not. An expression or pattern is provided to locate the error.
 checkEquivTypes :: D.KindedTypeDecls -> D.KindedDataDecls
-                -> Either E.KindedExp E.Pat
+                -> Either E.KindedExp E.KindedPat
                 -> T.KindedType
                 -> T.KindedType
                 -> Validation ()
@@ -858,7 +858,7 @@ checkEquivTypes tdecls ddecls eop t1 t2 =
 -- variables and constructors, throwing an error if they do not. An expression
 -- is provided to locate the error. To be used at the end of a scope.
 checkEquivTypeCtxsCase 
-  :: Either (Either Variable E.Pat) E.KindedExp
+  :: Either (Either Variable E.KindedPat) E.KindedExp
   -> [TypeCtx]
   -> Validation ()
 checkEquivTypeCtxsCase fpe = \case

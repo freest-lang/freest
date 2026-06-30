@@ -36,7 +36,7 @@ collectInLetDecl = \case
 
 -- | For each parameter position across a function's clauses, gather the
 -- patterns and recursively check for variable/session mixes.
-collectInFnClauses :: [[Level E.Pat v m]] -> [Error]
+collectInFnClauses :: [[Level E.KindedPat v m]] -> [Error]
 collectInFnClauses = concatMap (checkPatColumn Nothing . expPats) . List.transpose
   where
     expPats col = [p | ExpLevel p <- col]
@@ -75,7 +75,7 @@ collectInArg = \case
 -- The optional @topSpan@ overrides the location used for a mix detected at
 -- this level (useful so a top-level case error points at the @case@ keyword
 -- rather than at the first branch's pattern).
-checkPatColumn :: Maybe Span -> [E.Pat] -> [Error]
+checkPatColumn :: Maybe Span -> [E.KindedPat] -> [Error]
 checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subColumns
   where
     groups = groupBySession col
@@ -98,7 +98,7 @@ checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subCol
 
 -- | Immediate sub-patterns of a 'Pat'. Empty for leaves and variables.
 -- 'AsPat' is transparent: @x\@p@ has the sub-patterns of @p@.
-subPats :: E.Pat -> [E.Pat]
+subPats :: E.KindedPat -> [E.KindedPat]
 subPats = \case
   E.InPat _ p1 p2   -> [p1, p2]
   E.ChoicePat _ _ p -> [p]
@@ -120,7 +120,7 @@ data ShapeKey
   | LeafShape
   deriving (Eq, Ord)
 
-shapeKey :: E.Pat -> ShapeKey
+shapeKey :: E.KindedPat -> ShapeKey
 shapeKey = \case
   E.InPat{}         -> InShape
   E.ChoicePat _ i _ -> ChoiceShape i
@@ -130,7 +130,7 @@ shapeKey = \case
   E.AsPat _ _ p     -> shapeKey p
   _                 -> LeafShape
 
-groupBySession :: [E.Pat] -> [[E.Pat]]
+groupBySession :: [E.KindedPat] -> [[E.KindedPat]]
 groupBySession pats = choiceGroups ++ otherSessionGroup
   where
     -- Choice patterns, non-Choice session patterns, variables.
@@ -144,7 +144,7 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     -- Non-Choice session patterns plus all variables.
     otherSessionGroup = nonEmpty (nonChoiceSessions ++ vars)
     -- Split into (Choices, non-Choice sessions, variables); drop the rest.
-    partition3 :: [E.Pat] -> ([E.Pat], [E.Pat], [E.Pat])
+    partition3 :: [E.KindedPat] -> ([E.KindedPat], [E.KindedPat], [E.KindedPat])
     partition3 = foldr step ([], [], [])
       where
         step p (cs, ns, vs)
@@ -156,18 +156,18 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     nonEmpty :: [a] -> [[a]]
     nonEmpty xs = [xs | not (null xs)]
 
-    choiceId :: E.Pat -> Identifier
+    choiceId :: E.KindedPat -> Identifier
     choiceId (E.ChoicePat _ i _) = i
     choiceId (E.AsPat _ _ p)     = choiceId p
     choiceId _                   = internalError "not a ChoicePat"
 
-containsVarPat, containsSessionPat, isMixedPat :: [E.Pat] -> Bool
+containsVarPat, containsSessionPat, isMixedPat :: [E.KindedPat] -> Bool
 containsVarPat = any isVar
 containsSessionPat = any isSessionPat
 isMixedPat g = containsVarPat g && containsSessionPat g
 
 -- | 'AsPat' is transparent in all three predicates: @x\@p@ is classified by @p@.
-isSessionPat, isChoicePat, isVar :: E.Pat -> Bool
+isSessionPat, isChoicePat, isVar :: E.KindedPat -> Bool
 
 isSessionPat (E.AsPat _ _ p) = isSessionPat p
 isSessionPat E.WaitPat{}     = True

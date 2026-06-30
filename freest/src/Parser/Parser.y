@@ -567,11 +567,11 @@ ExpListComma :: { [E.ParsedExp] }
   : Exp ',' ExpListComma { $1 : $3 }
   | Exp                  { [$1] }
 
-TypedPat :: { (E.Pat, Maybe T.ParsedType) }
+TypedPat :: { (E.ParsedPat, Maybe T.ParsedType) }
   : '(' Pat ':' Type ')' { ($2, Just $4) }
   | PatPrimary           { ($1, Nothing) }
 
-ExpParamsArrow :: { ([Level (E.Pat, Maybe T.ParsedType) (Variable, K.Kind) Variable], K.Multiplicity) }
+ExpParamsArrow :: { ([Level (E.ParsedPat, Maybe T.ParsedType) (Variable, K.Kind) Variable], K.Multiplicity) }
   :     TypedPat  ExpParamsArrow { first (ExpLevel  $1 :) $2 }
   | '@' KindedVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
   | '#' MultVar   ExpParamsArrow { first (MultLevel $2 :) $3 }
@@ -579,17 +579,17 @@ ExpParamsArrow :: { ([Level (E.Pat, Maybe T.ParsedType) (Variable, K.Kind) Varia
   | '@' KindedVar MultArrow { ([TypeLevel $2], snd $3) }
   | '#' MultVar   MultArrow { ([MultLevel $2], snd $3) }
 
-CaseBlock :: { [(E.Pat, E.ParsedRHS)] }
+CaseBlock :: { [(E.ParsedPat, E.ParsedRHS)] }
   : OPEN CaseListPIPE Close { $2 }
 
-CaseListPIPE :: { [(E.Pat, E.ParsedRHS)] }
+CaseListPIPE :: { [(E.ParsedPat, E.ParsedRHS)] }
   : Case PIPE CaseListPIPE { $1 : $3 }
   | Case                   { [$1] }
 
-Case :: { (E.Pat, E.ParsedRHS) }
+Case :: { (E.ParsedPat, E.ParsedRHS) }
   : Pat RHS('->') { ($1, $2) }
 
-PatPrimary :: { E.Pat }
+PatPrimary :: { E.ParsedPat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
   | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
@@ -600,16 +600,16 @@ PatPrimary :: { E.Pat }
   | '[' PatListComma ']'           { E.listPat (spanFromTo $1 $3) $2 }
   | '(' ')'                        { E.TuplePat (spanFromTo $1 $2) [] }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
-  | '(' '@' KindedVar ',' AtKindedVarListCommaPat ')'{ uncurry (E.PackPat (spanFromTo $1 $6)) (first ($3:) $5) }
+  | '(' '@' OptKindedVar ',' AtKindedVarListCommaPat ')'{ uncurry (E.PackPat (spanFromTo $1 $6)) (first ($3:) $5) }
   | DataConstructor                { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'                    { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary         { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
 
-Pat :: { E.Pat }
+Pat :: { E.ParsedPat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
   | '?' PatPrimary ';' Pat           { E.InPat (spanFromTo $1 $4) $2 $4 } 
   | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
-  | '?' 'type' KindedVar '.' Pat     { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
+  | '?' 'type' OptKindedVar '.' Pat     { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
   | Pat '::' Pat                     { E.ConsPat (spanFromTo $1 $3) $1 $3 }
   | PatPrimary                       { $1 }
 
@@ -619,11 +619,11 @@ DataConstructor :: { Identifier }
   -- | '(' '::'   ')' { mkConsId  (spanFromTo $1 $3) } -- TODO: multiplicities
   -- | '[' ']' { mkNilId (spanFromTo $1 $2) } -- TODO: multiplicities
 
-PatPrimaryListWS :: { [E.Pat] } 
+PatPrimaryListWS :: { [E.ParsedPat] } 
   : PatPrimary PatPrimaryListWS { $1 : $2 }
   | PatPrimary { [$1] }
 
-FnDefParams :: { [Level E.Pat Variable Variable] } 
+FnDefParams :: { [Level E.ParsedPat Variable Variable] } 
   : PatPrimary  FnDefParams { ExpLevel  $1 : $2 }
   | '@' TypeVar FnDefParams { TypeLevel $2 : $3 }
   | '#' MultVar FnDefParams { MultLevel $2 : $3 }
@@ -631,16 +631,16 @@ FnDefParams :: { [Level E.Pat Variable Variable] }
   | '@' TypeVar  { [TypeLevel $2] }
   | '#' MultVar  { [MultLevel $2] }
 
-PatListComma :: { [E.Pat] }
+PatListComma :: { [E.ParsedPat] }
   : {- empty -} { [] }
   | PatNEListComma { $1 }
 
-PatNEListComma :: { [E.Pat] }
+PatNEListComma :: { [E.ParsedPat] }
   : Pat { [$1] }
   | Pat ',' PatNEListComma { $1 : $3 }
 
-AtKindedVarListCommaPat :: { ([(Variable, K.Kind)], E.Pat) }
-  : '@' KindedVar ',' AtKindedVarListCommaPat { first ($2 :) $4 }
+AtKindedVarListCommaPat :: { ([(Variable, Maybe K.Kind)], E.ParsedPat) }
+  : '@' OptKindedVar ',' AtKindedVarListCommaPat { first ($2 :) $4 }
   | Pat { ([], $1) }
 
 LetDeclBlock :: { [E.ParsedLetDecl] }

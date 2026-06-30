@@ -100,10 +100,23 @@ resolveModule sol m = m
       (Map.map (second (map (resolveType sol))) cons)
       (Map.map (first (map (second (resolveKind sol)))) types)
 
+-- | Apply the solution to the kind annotations on a pattern's type-variable
+-- binders ('PackPat' / 'TypeInPat'), recursively. These carry 'UnifLv' kind
+-- vars when the binder kind was omitted (see 'Kinding.resolveBndKind').
+resolvePat :: KindSolution -> E.Pat Kinded -> E.Pat Kinded
+resolvePat sol = \case
+  E.PackPat s aks p   -> E.PackPat s (map (second (resolveKind sol)) aks) (resolvePat sol p)
+  E.TypeInPat s ak p  -> E.TypeInPat s (second (resolveKind sol) ak) (resolvePat sol p)
+  E.DConsPat s i ps   -> E.DConsPat s i (map (resolvePat sol) ps)
+  E.InPat s p1 p2     -> E.InPat s (resolvePat sol p1) (resolvePat sol p2)
+  E.ChoicePat s i p   -> E.ChoicePat s i (resolvePat sol p)
+  E.AsPat s x p       -> E.AsPat s x (resolvePat sol p)
+  p                   -> p
+
 resolveLetDecl :: KindSolution -> E.LetDecl Kinded -> E.LetDecl Kinded
 resolveLetDecl sol = \case
-  E.ValDef p rhs    -> E.ValDef p (resolveRHS sol rhs)
-  E.FnDef x clauses -> E.FnDef x (map (second (resolveRHS sol)) clauses)
+  E.ValDef p rhs    -> E.ValDef (resolvePat sol p) (resolveRHS sol rhs)
+  E.FnDef x clauses -> E.FnDef x (map (bimap (map (mapLevel (resolvePat sol) id id)) (resolveRHS sol)) clauses)
   E.TypeSig xs t    -> E.TypeSig xs (resolveType sol t)
   E.Mutual lds      -> E.Mutual (map (resolveLetDecl sol) lds)
 
@@ -117,12 +130,12 @@ resolveRHS sol = \case
 resolveExp :: KindSolution -> E.KindedExp -> E.KindedExp
 resolveExp sol = \case
   E.App s e args  -> E.App s (resolveExp sol e) (map (mapLevel (resolveExp sol) (resolveType sol) id) args)
-  E.Abs s ps m e  -> E.Abs s (map (mapLevel (second (fmap (resolveType sol))) (second (resolveKind sol)) id) ps) m (resolveExp sol e)
+  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (resolvePat sol) (fmap (resolveType sol))) (second (resolveKind sol)) id) ps) m (resolveExp sol e)
   E.Pack s ts e   -> E.Pack s (map (resolveType sol) ts) (resolveExp sol e)
   E.Asc s e t     -> E.Asc s (resolveExp sol e) (resolveType sol t)
   E.Let s lds e   -> E.Let s (map (resolveLetDecl sol) lds) (resolveExp sol e)
   E.Semi s e1 e2  -> E.Semi s (resolveExp sol e1) (resolveExp sol e2)
-  E.Case s e brs  -> E.Case s (resolveExp sol e) (map (second (resolveRHS sol)) brs)
+  E.Case s e brs  -> E.Case s (resolveExp sol e) (map (bimap (resolvePat sol) (resolveRHS sol)) brs)
   E.If s e1 e2 e3 -> E.If s (resolveExp sol e1) (resolveExp sol e2) (resolveExp sol e3)
   E.Channel s t   -> E.Channel s (resolveType sol t)
   E.SendType s t  -> E.SendType s (resolveType sol t)
