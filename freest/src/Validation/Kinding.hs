@@ -353,39 +353,35 @@ lookupKind' ctx i = do
     Nothing -> throwE (TypeConsOutOfScope (getSpan i) i)
 
 -- | The @chan@ predicate (paper Fig. 9): is @t@ a channel type, i.e. do its
--- finite complete traces terminate in 'Wait'/'Close'? @selfs@ holds the
--- self-references treated as channels (the recursive type being defined). Used
--- to decide the prekind of a recursive declaration (CK-Rec): channel if its body
--- is a channel type, session otherwise.
+-- finite complete traces terminate in 'Wait'/'Close'? @selfs@ holds the names
+-- treated as channels (the recursive group being defined, via Chan-Var). Used to
+-- decide the prekind of a recursive declaration (CK-Rec): channel if its body is
+-- a channel type, session otherwise.
 --
--- Two cases are deliberately conservative — both answer @False@, which only
--- loses precision (inferring a session where a channel was admissible, i.e. a
--- weaker prekind) and never soundness, and both are recoverable with an explicit
--- kind signature:
---
---   * A reference to /another/ named type (@TName i@, @i@ not in @selfs@). This
---     is not about higher kinds: the paper formalises recursion with inline μ
---     and no top-level environment of named type abbreviations, so cross-decl
---     references never arise there. We bail rather than unfold because @chan@
---     runs during constraint gathering, before the solve — the other
---     declaration's prekind is not yet known, and a precise answer would need a
---     fixpoint over the whole (mutually recursive) declaration group.
---
---   * An applied type name (@AppTName i _@, @i@ not in @selfs@). This /is/ the
---     higher-kinded gap: deciding channel-ness of @F a b@ precisely would mean
---     substituting the arguments into @F@'s operator body (or propagating a
---     channel-ness component through arrow kinds), machinery the paper's
---     syntactic predicate lacks. Self-application stays a channel (Chan-Var) so
---     guarded recursive channels keep working.
-chan :: Set.Set Identifier -> T.ScopedType -> Bool
-chan selfs = \case
-  T.End{}                -> True                               -- Chan-End
-  T.AppSemi _ t u        -> chan selfs t || chan selfs u       -- Chan-Seq-L/R
-  T.AppLinChoice _ _ lts -> all (chan selfs . snd) lts         -- Chan-Ch
-  T.AppDual _ t          -> chan selfs t
-  T.TName _ i            -> i `Set.member` selfs               -- Chan-Var
-  T.AppTName _ i _       -> i `Set.member` selfs
-  _                      -> False
+-- A reference to a /sig-less/ named type (@TName@/@AppTName@, name not in
+-- @selfs@) is unfolded: its body is examined with the name added to @selfs@,
+-- which guards self/mutual recursion and, since SCCs form a DAG, terminates.
+-- Arguments are not substituted into the body, so a parameter there reads as
+-- non-channel — sound (only ever under-detects, e.g. a continuation parameter),
+-- recoverable with a signature. A /declared/ type is its signature's
+-- responsibility, so it is not unfolded and stays conservatively non-channel
+-- (@tdecls@ holds the sig-less type declarations only).
+chan :: Map.Map Identifier (Bool, T.ScopedType) -> Set.Set Identifier -> T.ScopedType -> Bool
+chan tdecls = go
+  where
+    go selfs = \case
+      T.End{}                -> True                          -- Chan-End
+      T.AppSemi _ t u        -> go selfs t || go selfs u      -- Chan-Seq-L/R
+      T.AppLinChoice _ _ lts -> all (go selfs . snd) lts      -- Chan-Ch
+      T.AppDual _ t          -> go selfs t
+      T.TName _ i            -> named selfs i                 -- Chan-Var / unfold
+      T.AppTName _ i _       -> named selfs i
+      _                      -> False
+    named selfs i
+      | i `Set.member` selfs               = True
+      | Just (_, b) <- Map.lookup i tdecls = go (Set.insert i selfs) (unAbs b)
+      | otherwise                          = False
+    unAbs = \case T.Abs _ _ t -> t; t -> t
 
 -- | A fresh binder kind for a sig-less declaration from its parameters'
 -- (optional) kind annotations: an arrow whose slot for each parameter is the
@@ -470,6 +466,10 @@ kindModule ctx mod = do
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 
+    -- Sig-less type declarations, the only ones `chan` may unfold (a declared
+    -- type's channel-ness is its signature's responsibility).
+    siglessTypeDecls = Map.filterWithKey (\j _ -> not (Map.member j (M.kindSigs mod))) (M.typeDecls mod)
+
     -- Direct references from a declaration's body/fields to other sig-less
     -- declarations (edges of the reference graph; a self-reference is no edge).
     refsOf ids i = [ j | j <- Set.toList ids, j /= i, any (mentions j) (bodiesOf i) ]
@@ -525,7 +525,7 @@ kindModule ctx mod = do
               case (resK, TK.kindOf b) of
                 (Proper _ φ _, Proper _ mb _) -> addMultEquation o φ mb
                 _                             -> pure ()
-              when (chan (Map.findWithDefault (Set.singleton i) i sccOf) body) $
+              when (chan siglessTypeDecls (Map.findWithDefault (Set.singleton i) i sccOf) body) $
                 addPrekindConstraint (SubPrekind o (VarPK UnifLv pkv) Channel)
               return b
           | otherwise = do

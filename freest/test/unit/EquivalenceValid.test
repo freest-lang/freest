@@ -827,3 +827,11 @@ case SPing == *!Int ; SPong : *C
 where
   type SPing = *!Int ; SPong
   type SPong = *!Int ; SPing
+
+-- applied sig-less synonym unfolded by `chan`: Loop is a channel only because the
+-- `Done` branch `F Int` unfolds to a channel (!Int ; Close); without unfolding
+-- it reads as a session and Loop would be 1S
+case Loop == &{Again: Loop, Done: F Int} : 1C
+where
+  type F a = !a ; Close
+  type Loop = &{Again: Loop, Done: F Int}
