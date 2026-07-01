@@ -767,6 +767,7 @@ trackComponents tdecls ddecls tracked rhs = fixpoint tracked
       in if null new then acc else fixpoint (acc ++ new)
 
     decomposePat (E.VarPat _ x)    t              = [(x, t)]
+    decomposePat (E.WildPat _ x)   t              = [(x, t)] -- (x should have zero uses)
     decomposePat (E.TuplePat _ ps) (TK.Tuple _ ts)
       | length ps == length ts                    = concat (zipWith decomposePat ps ts)
     decomposePat (E.DConsPat _ c ps) t
