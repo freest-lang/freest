@@ -685,6 +685,16 @@ mergeAll :: [Usage] -> Usage
 mergeAll [] = Zero
 mergeAll us = foldr1 mergeU us
 
+-- | Scale a closure body's usage by the closure's multiplicity: an unrestricted
+-- closure may run any number of times, so a variable used once in its body is
+-- effectively duplicated ('One' becomes 'Many'); a linear closure runs at most
+-- once, so usage passes through. Applies to both lambdas ('usesExp') and local
+-- function definitions ('usesLetDecls').
+scaleBy :: Multiplicity -> Usage -> Usage
+scaleBy m
+  | isLin m   = id
+  | otherwise = \case One -> Many; u -> u
+
 usesExp :: Variable -> E.KindedExp -> Usage
 usesExp x = go
   where
@@ -699,9 +709,6 @@ usesExp x = go
       E.Case _ e brs  -> addU (go e) (mergeAll [usesRHS x rhs | (_, rhs) <- brs])
       E.If _ e1 e2 e3 -> addU (go e1) (mergeU (go e2) (go e3))
       _               -> Zero
-    scaleBy m
-      | isLin m   = id
-      | otherwise = \case One -> Many; u -> u
 
 usesRHS :: Variable -> E.RHS Kinded -> Usage
 usesRHS x = \case
@@ -711,11 +718,17 @@ usesRHS x = \case
   where w `usedIn` z = maybe z (usesLetDecls x) w
 
 usesLetDecls :: Variable -> [E.LetDecl Kinded] -> Usage
-usesLetDecls x = foldr (addU . \case
-  E.ValDef _ rhs    -> usesRHS x rhs
-  E.FnDef _ clauses -> foldr (mergeU . usesRHS x . snd) Zero clauses
-  E.TypeSig{}       -> Zero
-  E.Mutual lds      -> usesLetDecls x lds) Zero
+usesLetDecls x lds = foldr (addU . go) Zero lds
+  where
+    sigMults = Map.fromList [ (v, m) | E.TypeSig vs t <- lds, v <- vs
+                                     , Proper _ m _ <- [TK.kindOf t] ]
+    go = \case
+      E.ValDef _ rhs    -> usesRHS x rhs
+      E.FnDef f clauses ->
+        scaleBy (Map.findWithDefault (Un (getSpan f)) f sigMults)
+                (mergeAll (map (usesRHS x . snd) clauses))
+      E.TypeSig{}       -> Zero
+      E.Mutual lds'     -> usesLetDecls x lds'
 
 -- | A discarded or duplicated value of this type forces its multiplicity to
 -- unrestricted: descend tuples to the type-variable leaves and constrain each
