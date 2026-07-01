@@ -83,6 +83,20 @@ resolveBndKind :: (Variable, Maybe Kind) -> Validation (Variable, Kind)
 resolveBndKind (a, Just k)  = pure (a, k)
 resolveBndKind (a, Nothing) = (a,) <$> freshUnifKind a
 
+-- | Resolve a quantifier's (possibly omitted) binder kind. A functional
+-- existential (∃: polarity 'Out', prekind 'Top') defaults an omitted binder to
+-- *unrestricted* — the multiplicity is fixed to 'Un', its prekind still inferred
+-- from the body. Rationale: ∃ is covariant in the binder kind, so the most-usable
+-- default is the subkind '*T' (the unpacked abstract type is freely usable by the
+-- consumer), dual to a ∀ binder's most-general '1T'; and unlike ∀ there is no
+-- local usage to tighten from (consumers are remote). A linear existential is the
+-- annotated case @exists (a:1T)@. All other quantifiers keep the most-general
+-- default ('resolveBndKind').
+resolveQuantBinder :: T.Polarity -> Prekind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
+resolveQuantBinder T.Out Top (a, Nothing) =
+  (a,) . Proper (getSpan a) (Un (getSpan a)) . VarPK UnifLv <$> freshUnifPrekindVar (getSpan a)
+resolveQuantBinder _ _ ak = resolveBndKind ak
+
 -- | A fresh unification kind variable (see 'resolveBndKind').
 freshUnifKind :: Located e => e -> Validation Kind
 freshUnifKind (getSpan -> s) = do
@@ -142,7 +156,7 @@ synth ctx = \case
     return (TK.AppDual s t')
   -- Polymorphism
   T.AppQuant s p pk m aks t -> do
-    aks' <- mapM resolveBndKind aks
+    aks' <- mapM (resolveQuantBinder p pk) aks
     let ctx' = Map.fromList (first Left <$> aks') `Map.union` ctx
     (_, _, kt) <- checkOperand ctx' pk t
     return $ TK.AppQuant s p pk m aks' kt
