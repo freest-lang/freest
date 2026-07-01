@@ -154,7 +154,7 @@ synth ctx = \case
     let (ms, ts') = unzip mts
     return $ TK.tupleWithKind s (Proper s (foldr join (Un s) ms) Top) ts'
   T.List s t -> do
-    (_, _, t') <- checkProper ctx t
+    (_, _, t') <- checkOperand ctx Top t
     return $ TK.List s t'
   T.DName s i -> flip (TK.DName s) i <$> lookupKind' ctx i
   -- Higher-order
