@@ -757,26 +757,29 @@ forceUnrestricted = \case
 -- Other patterns and scrutinees are left to the type checker.
 trackComponents :: D.KindedTypeDecls -> D.KindedDataDecls
                 -> [(Variable, TK.KindedType)] -> E.RHS Kinded
-                -> [(Variable, TK.KindedType)]
-trackComponents tdecls ddecls tracked rhs = fixpoint tracked
+                -> ([(Variable, TK.KindedType)], [TK.KindedType])
+trackComponents tdecls ddecls tracked rhs = (acc, forced)
   where
-    ds = destructuresRHS rhs
-    fixpoint acc =
-      let new = [ b | (pat, v) <- ds, Just t <- [lookup v acc]
-                    , b <- decomposePat pat t, fst b `notElem` map fst acc ]
-      in if null new then acc else fixpoint (acc ++ new)
+    ds     = destructuresRHS rhs
+    acc    = fixpoint tracked
+    forced = [ ft | (pat, v) <- ds, Just t <- [lookup v acc], ft <- snd (decomposePat pat t) ]
+    fixpoint a =
+      let new = [ b | (pat, v) <- ds, Just t <- [lookup v a]
+                    , b <- fst (decomposePat pat t), fst b `notElem` map fst a ]
+      in if null new then a else fixpoint (a ++ new)
 
-    decomposePat (E.VarPat _ x)    t              = [(x, t)]
-    decomposePat (E.WildPat _ x)   t              = [(x, t)] -- (x should have zero uses)
+    decomposePat (E.VarPat _ x)    t              = ([(x, t)], [])
+    decomposePat (E.WildPat _ x)   t              = ([(x, t)], []) -- (x should have zero uses)
+    decomposePat (E.AsPat _ x p)   t              = ([(x, t)], [t]) <> decomposePat p t
     decomposePat (E.TuplePat _ ps) (TK.Tuple _ ts)
-      | length ps == length ts                    = concat (zipWith decomposePat ps ts)
+      | length ps == length ts                    = mconcat (zipWith decomposePat ps ts)
     decomposePat (E.DConsPat _ c ps) t
       | Just (dty, fields)        <- Map.lookup c (D.ddCons ddecls)
       , Just (aks, _)             <- Map.lookup dty (D.ddTypes ddecls)
       , TK.AppDName _ _ dty' args <- normalise tdecls t
       , dty == dty', length args == length aks, length ps == length fields
-      = concat (zipWith decomposePat ps (map (subsAll (map fst aks) args) fields))
-    decomposePat _                 _              = []
+      = mconcat (zipWith decomposePat ps (map (subsAll (map fst aks) args) fields))
+    decomposePat _                 _              = ([], [])
 
 destructuresRHS :: E.RHS Kinded -> [(E.KindedPat, Variable)]
 destructuresRHS = \case
@@ -830,9 +833,11 @@ kindFun tdecls ddecls e = kindFun' 0 []
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
         rhs' <- kindRHS tdecls ddecls kctx rhs
-        forM_ (trackComponents tdecls ddecls tracked rhs') \(x, pt) -> case usesRHS x rhs' of
+        let (comps, forced) = trackComponents tdecls ddecls tracked rhs'
+        forM_ comps \(x, pt) -> case usesRHS x rhs' of
           One -> pure ()
           _   -> forceUnrestricted pt
+        mapM_ forceUnrestricted forced
         return ([], rhs')
       (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
         k' <- case mki of
