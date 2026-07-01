@@ -83,17 +83,18 @@ resolveBndKind :: (Variable, Maybe Kind) -> Validation (Variable, Kind)
 resolveBndKind (a, Just k)  = pure (a, k)
 resolveBndKind (a, Nothing) = (a,) <$> freshUnifKind a
 
--- | Resolve a quantifier's (possibly omitted) binder kind. A functional
--- existential (∃: polarity 'Out', prekind 'Top') defaults an omitted binder to
--- *unrestricted* — the multiplicity is fixed to 'Un', its prekind still inferred
--- from the body. Rationale: ∃ is covariant in the binder kind, so the most-usable
--- default is the subkind '*T' (the unpacked abstract type is freely usable by the
--- consumer), dual to a ∀ binder's most-general '1T'; and unlike ∀ there is no
--- local usage to tighten from (consumers are remote). A linear existential is the
--- annotated case @exists (a:1T)@. All other quantifiers keep the most-general
--- default ('resolveBndKind').
+-- | Resolve a quantifier's (possibly omitted) binder kind. An output-polarity
+-- quantifier (∃ and its session twin @!type@, both polarity 'Out') defaults an
+-- omitted binder to *unrestricted* — the multiplicity is fixed to 'Un', its
+-- prekind still inferred from the body. Rationale: an 'Out' binder is covariant,
+-- so the most-usable default is the subkind '*T' (the abstract type is freely
+-- usable by the consumer — the party that unpacks it, or the @?type@ receiver at
+-- the dual endpoint), dual to an 'In' binder's most-general '1T'; and there is no
+-- local usage to tighten from, since that consumer is remote. A linear binder is
+-- the annotated case @exists (a:1T)@ / @!type (a:1T)@. Input-polarity quantifiers
+-- (∀ and @?type@) keep the most-general default ('resolveBndKind').
 resolveQuantBinder :: T.Polarity -> Prekind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
-resolveQuantBinder T.Out Top (a, Nothing) =
+resolveQuantBinder T.Out _ (a, Nothing) =
   (a,) . Proper (getSpan a) (Un (getSpan a)) . VarPK UnifLv <$> freshUnifPrekindVar (getSpan a)
 resolveQuantBinder _ _ ak = resolveBndKind ak
 

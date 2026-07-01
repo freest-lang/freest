@@ -1,7 +1,7 @@
 module HTree where
 
 type HTree : 1S
-type HTree = +{Node: HTree; !type (a : *T). !a; HTree, Empty: Skip}
+type HTree = +{Node: HTree; !type a. !a; HTree, Empty: Skip}
 
 client : HTree -> Skip
 client c =              -- (Node Empty True (Node Empty 25 Empty))
