@@ -422,7 +422,7 @@ scopeExp ctx = \case
           return (ctx'', pars' ++ [ExpLevel (p', t')])
         (ctx', pars') (TypeLevel (a, k)) -> do
           a' <- freshInternal a
-          k' <- scopeKind ctx k
+          k' <- traverse (scopeKind ctx) k
           let ctx'' = insertTVar a' ctx'
           return (ctx'', pars' ++ [TypeLevel (a', k')])
         (ctx', pars') (MultLevel φ) -> do

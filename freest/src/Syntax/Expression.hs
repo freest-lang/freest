@@ -122,7 +122,7 @@ data Exp x
   | DCons  Span Identifier
   | Var    Span Variable
   | App    Span (Exp x) [Level (Exp x) (Type x) Multiplicity]
-  | Abs    Span [Level (Pat x, Maybe (Type x)) (Variable,Kind) Variable] Multiplicity (Exp x)
+  | Abs    Span [Level (Pat x, Maybe (Type x)) (Variable, Maybe Kind) Variable] Multiplicity (Exp x)
   | Pack   Span [Type x] (Exp x)
   | Asc    Span (Exp x) (Type x)
   | Let    Span [LetDecl x] (Exp x)
@@ -299,7 +299,8 @@ instance Show (XBndKind x) => Show (Exp x) where
                       where showParam = \case
                               ExpLevel  (p,Just t)  -> "("++show p++":"++show t++")"
                               ExpLevel  (p,Nothing) -> show p
-                              TypeLevel (a,k) -> "@("++show a++":"++show k++")"
+                              TypeLevel (a,Just k)  -> "@("++show a++":"++show k++")"
+                              TypeLevel (a,Nothing) -> "@"++show a
                               MultLevel φ     -> "#("++show φ++")"
     Pack _ ts e    -> "(" ++ intercalate ", " (map (('@' :) . show) ts) ++ ", " ++ show e ++ ")"
     Asc _ e t      -> "(" ++ show e ++ " : " ++ show t ++ ")"

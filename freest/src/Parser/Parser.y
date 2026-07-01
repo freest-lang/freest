@@ -448,13 +448,6 @@ OptKindedVar :: { (Variable, Maybe K.Kind) }
   : TypeVar { ($1, Nothing) }
   | '(' TypeVar ':' Kind ')' { ($2, Just $4) }
 
--- | A type-variable binder with a concrete kind (omission defaulted via
--- 'dummyKindVar'). Used for binders in expressions (@\@a@, @pack@,
--- type-in-pattern), pending the same optional treatment as type-level binders.
-KindedVar :: { (Variable, K.Kind) }
-  : TypeVar { ($1, dummyKindVar $1) }
-  | '(' TypeVar ':' Kind ')' { ($2, $4) }
-
 ExpPrimary :: { E.ParsedExp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
@@ -571,12 +564,12 @@ TypedPat :: { (E.ParsedPat, Maybe T.ParsedType) }
   : '(' Pat ':' Type ')' { ($2, Just $4) }
   | PatPrimary           { ($1, Nothing) }
 
-ExpParamsArrow :: { ([Level (E.ParsedPat, Maybe T.ParsedType) (Variable, K.Kind) Variable], K.Multiplicity) }
+ExpParamsArrow :: { ([Level (E.ParsedPat, Maybe T.ParsedType) (Variable, Maybe K.Kind) Variable], K.Multiplicity) }
   :     TypedPat  ExpParamsArrow { first (ExpLevel  $1 :) $2 }
-  | '@' KindedVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
+  | '@' OptKindedVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
   | '#' MultVar   ExpParamsArrow { first (MultLevel $2 :) $3 }
   |     TypedPat  MultArrow { ([ExpLevel  $1], snd $2) }
-  | '@' KindedVar MultArrow { ([TypeLevel $2], snd $3) }
+  | '@' OptKindedVar MultArrow { ([TypeLevel $2], snd $3) }
   | '#' MultVar   MultArrow { ([MultLevel $2], snd $3) }
 
 CaseBlock :: { [(E.ParsedPat, E.ParsedRHS)] }

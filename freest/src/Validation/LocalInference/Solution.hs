@@ -130,7 +130,7 @@ resolveRHS sol = \case
 resolveExp :: KindSolution -> E.KindedExp -> E.KindedExp
 resolveExp sol = \case
   E.App s e args  -> E.App s (resolveExp sol e) (map (mapLevel (resolveExp sol) (resolveType sol) id) args)
-  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (resolvePat sol) (fmap (resolveType sol))) (second (resolveKind sol)) id) ps) m (resolveExp sol e)
+  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (resolvePat sol) (fmap (resolveType sol))) (second (fmap (resolveKind sol))) id) ps) m (resolveExp sol e)
   E.Pack s ts e   -> E.Pack s (map (resolveType sol) ts) (resolveExp sol e)
   E.Asc s e t     -> E.Asc s (resolveExp sol e) (resolveType sol t)
   E.Let s lds e   -> E.Let s (map (resolveLetDecl sol) lds) (resolveExp sol e)

@@ -964,9 +964,10 @@ kindExp tdecls ddecls kctx = \case
           (kctxi', p') <- kindPat tdecls kctxi p
           t' <- traverse (synth kctxi') t
           return (kctxi', parsi ++ [ExpLevel (p', t')])
-        TypeLevel (a, k) -> do
+        TypeLevel (a, mk) -> do
+          k <- maybe (freshUnifKind a) pure mk
           let kctxi' = Map.insert (Left a) k kctxi
-          return (kctxi', parsi ++ [TypeLevel (a, k)])
+          return (kctxi', parsi ++ [TypeLevel (a, mk)])
         MultLevel φ -> do
           return (kctxi, parsi ++ [MultLevel φ]))
       (kctx, []) pars

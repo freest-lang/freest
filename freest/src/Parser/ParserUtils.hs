@@ -6,7 +6,6 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module contains utilities for parsing, namely for generating fresh variables
 and constructing types and expressions more succinctly.
 -}
-{-# LANGUAGE ViewPatterns #-}
 module Parser.ParserUtils where
 
 import Parser.Token
@@ -18,10 +17,6 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Unkinded qualified as T
 
 import Data.List.NonEmpty qualified as NE
-
-dummyKindVar :: Located a => a -> K.Kind
-dummyKindVar (getSpan -> s) =
-  K.Var s ObjLv (Variable s "τ" defaultInternal)
 
 split :: Eq a => a -> [a] -> [[a]]
 split d str =

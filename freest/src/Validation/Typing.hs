@@ -180,7 +180,8 @@ synth tdecls ddecls kctx tctx = \case
           tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
           return (e'', T.AppArrow (spanFromTo pi e') m ti ti', tctxi'')
-        TypeLevel (ai, ki) : ps' -> do
+        TypeLevel (ai, mki) : ps' -> do
+          let ki = maybe (K.lt (getSpan ai)) id mki
           (e'', ti', tctxi') <- synthAbs (Map.insert (Left ai) ki kctxi) tctxi ps'
           checkEquivTypeCtxsFun m tctxi' tctxi (getSpan e)
           let ti'' = case ti' of
@@ -372,11 +373,9 @@ check tdecls ddecls kctx tctx e t = case e of
     (h', t', tctx') <- synth tdecls ddecls kctx tctx h
     checkApp tdecls ddecls kctx e s h' t' tctx' args t
   E.Abs s pars m e' -> do
-    checkFun tdecls ddecls kctx tctx (Right e) pars' (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
+    checkFun tdecls ddecls kctx tctx (Right e) pars (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
       (E.UnguardedRHS e'' Nothing, tctx') -> return (E.Abs s pars m e'', tctx')
       _ -> internalError "elaborated abstraction cannot be guarded"
-    where
-      pars' = map (mapLevel id (second Just) id) pars
   E.Pack s ts e' ->
     case normalise tdecls t of
       T.AppExists _ aks t' -> first (E.Pack s ts) <$> checkPack ts aks t'
