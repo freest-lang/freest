@@ -276,7 +276,14 @@ checkOperand ctx req t = do
           addKindBinding a (Proper (getSpan t) m pk)
           addPrekindConstraint (SubPrekind o pk req)
           pure (m, pk)
-      return (m, pk, t')
+      -- carry the instantiated 'Proper' kind on the returned type rather than the
+      -- bare solvable kind variable. A quantifier body that is exactly this
+      -- variable (e.g. @exists a, a@, @?type a. a@) would otherwise reach a smart
+      -- constructor whose eager @Proper _ _ _@ match on the body's kind crashes.
+      let t'' = case t' of
+                  TK.Var s _ vl v -> TK.Var s (Proper (getSpan t) m pk) vl v
+                  _               -> t'
+      return (m, pk, t'')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
   where
     isVarPrekind = \case VarPK lv _ -> solvable lv; _ -> False
