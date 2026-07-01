@@ -143,13 +143,14 @@ solve eqs = do
     return (SolverState (foldl' bind sub toBind) n1)
 
   apply :: Map.Map Variable Multiplicity -> Multiplicity -> Multiplicity
-  apply sub = \case
-    m@Lin{}      -> m
-    (Sup s lvφs) -> foldl' K.join (Un s) (map expand lvφs)
-      where
-        expand = \case
-          (lv, φ) | solvable lv, Just m <- Map.lookup φ sub -> apply sub m
-          a                                                 -> Sup s [a]
+  apply sub = go Set.empty
+    where
+      go _    m@Lin{}      = m
+      go seen (Sup s lvφs) = foldl' K.join (Un s) (map (expand seen s) lvφs)
+      expand seen s a@(lv, φ)
+        | solvable lv, Just m <- Map.lookup φ sub =
+            if Set.member φ seen then Un s else go (Set.insert φ seen) m
+        | otherwise = Sup s [a]
 
   assignTo :: [Variable] -> [Variable] -> [Map.Map Variable (Set Variable)]
   assignTo = \cases
