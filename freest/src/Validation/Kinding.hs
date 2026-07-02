@@ -777,24 +777,33 @@ trackComponents tdecls ddecls tracked rhs = (acc, forced)
   where
     ds     = destructuresRHS rhs
     acc    = fixpoint tracked
-    forced = [ ft | (pat, v) <- ds, Just t <- [lookup v acc], ft <- snd (decomposePat pat t) ]
+    forced = [ ft | (pat, v) <- ds, Just t <- [lookup v acc], ft <- snd (decomposePat tdecls ddecls pat t) ]
     fixpoint a =
       let new = [ b | (pat, v) <- ds, Just t <- [lookup v a]
-                    , b <- fst (decomposePat pat t), fst b `notElem` map fst a ]
+                    , b <- fst (decomposePat tdecls ddecls pat t), fst b `notElem` map fst a ]
       in if null new then a else fixpoint (a ++ new)
 
-    decomposePat (E.VarPat _ x)    t              = ([(x, t)], [])
-    decomposePat (E.WildPat _ x)   t              = ([(x, t)], []) -- (x should have zero uses)
-    decomposePat (E.AsPat _ x p)   t              = ([(x, t)], [t]) <> decomposePat p t
-    decomposePat (E.TuplePat _ ps) (TK.Tuple _ ts)
-      | length ps == length ts                    = mconcat (zipWith decomposePat ps ts)
-    decomposePat (E.DConsPat _ c ps) t
+-- | Decompose a pattern against its type into the (variable, type) leaves it
+-- binds, plus the types an as-pattern forces unrestricted. Variable, wildcard,
+-- as, tuple and constructor patterns are followed — a constructor's binders take
+-- its field types at the scrutinee's type arguments, mirroring 'checkPat'. Other
+-- shapes (notably session patterns) are left to the type checker.
+decomposePat :: D.KindedTypeDecls -> D.KindedDataDecls -> E.KindedPat -> TK.KindedType
+             -> ([(Variable, TK.KindedType)], [TK.KindedType])
+decomposePat tdecls ddecls = go
+  where
+    go (E.VarPat _ x)    t              = ([(x, t)], [])
+    go (E.WildPat _ x)   t              = ([(x, t)], []) -- (x should have zero uses)
+    go (E.AsPat _ x p)   t              = ([(x, t)], [t]) <> go p t
+    go (E.TuplePat _ ps) (TK.Tuple _ ts)
+      | length ps == length ts          = mconcat (zipWith go ps ts)
+    go (E.DConsPat _ c ps) t
       | Just (dty, fields)        <- Map.lookup c (D.ddCons ddecls)
       , Just (aks, _)             <- Map.lookup dty (D.ddTypes ddecls)
       , TK.AppDName _ _ dty' args <- normalise tdecls t
       , dty == dty', length args == length aks, length ps == length fields
-      = mconcat (zipWith decomposePat ps (map (subsAll (map fst aks) args) fields))
-    decomposePat _                 _              = ([], [])
+      = mconcat (zipWith go ps (map (subsAll (map fst aks) args) fields))
+    go _                 _              = ([], [])
 
 destructuresRHS :: E.RHS Kinded -> [(E.KindedPat, Variable)]
 destructuresRHS = \case
@@ -874,12 +883,11 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
             return tp'
           Nothing -> pure u
         (kctxi', p') <- kindPat tdecls kctx p
-        -- track variable parameters with their type; 'forceUnrestricted' decides
-        -- from the type's structure what (if anything) a discard/duplicate forces
-        let tracked' = case p of
-              E.VarPat _ x -> (x, tp') : tracked
-              _            -> tracked
-        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) tracked' (capUnder am tracked capUn) kctxi' tctxds ps' rhs v
+        -- decompose the parameter pattern into its bound leaves, so a discarded or
+        -- duplicated *component* (not just a bare variable) forces its type
+        let (pvars, pforced) = decomposePat tdecls ddecls p' tp'
+        mapM_ forceUnrestricted pforced
+        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) (pvars ++ tracked) (capUnder am tracked capUn) kctxi' tctxds ps' rhs v
       (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
         first (MultLevel φ :) <$> kindFun' (i + 1) tracked (capUnder m tracked capUn) kctx tctxds ps' rhs
           ((if null φs then id else TK.ForallM s' m φs) $
