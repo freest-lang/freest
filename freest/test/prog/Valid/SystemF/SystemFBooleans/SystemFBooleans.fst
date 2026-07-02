@@ -9,7 +9,7 @@ Church Encoding _ Boolean Values
 module SystemFBooleans where
 
 type Bool' : *T
-type Bool' = forall (b : *T) -> b -> b -> b
+type Bool' = forall b -> b -> b -> b
 
 true, false : Bool'
 
@@ -25,13 +25,13 @@ not' = \b -> \@(a : *T) -> \t -> \f -> b @a f t
 type Bool'' : *T -> *T
 type Bool'' b = b -> b -> b
 
-true', false': forall (b : *T) -> Bool'' b
+true', false': forall b -> Bool'' b
 
 true'  @b t _ = t
 
 false' @b _ f = f
 
-not'' : forall (b : *T) -> Bool'' b -> Bool'' b
+not'' : forall b -> Bool'' b -> Bool'' b
 not'' @b b = \t f -> b f t
 
 -- Destructor

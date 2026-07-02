@@ -13,6 +13,6 @@ European Mathematical Society, 2011
 module SystemFTrees where
 
 type Tree : *T -> *T
-type Tree a = forall (t : *T) -> a -> (t -> t -> t) -> t
+type Tree a = forall t -> a -> (t -> t -> t) -> t
 
 -- TO BE CONTINUED

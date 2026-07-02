@@ -1,6 +1,6 @@
 module PolySUSL where
 
-id' : forall (a : 1T) -> a -> a
+id' : forall a -> a -> a
 id' @a x = x
 
 main : ()

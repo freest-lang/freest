@@ -37,7 +37,7 @@ type XploreNodeChan = &{
 
 -- The client. Send the tree as requested by the server.
 mutual
-  exploreTree : forall (a : 1S) -> XploreTreeChan;a -> Tree -1-> a
+  exploreTree : forall a -> XploreTreeChan;a -> Tree -1-> a
   exploreTree @a c tree =
     case tree of
       Leaf ->
@@ -45,7 +45,7 @@ mutual
       Node x l r ->
         exploreNode (select NodeC c) x l r
 
-  exploreNode : forall (a : 1S) -> XploreNodeChan; a -> Int -1-> Tree -1-> Tree -1-> a
+  exploreNode : forall a -> XploreNodeChan; a -> Int -1-> Tree -1-> Tree -1-> a
   exploreNode @a c x l r =
     case c of
       &Value c ->
@@ -62,13 +62,13 @@ mutual
 -- The server. Compute the product of the values in a tree;
 -- explicitely request the values; stop as soon a zero is received
 mutual 
-  server : forall (a : 1S) -> Dual XploreTreeChan; a -> Int -1-> (a, Int)
+  server : forall a -> Dual XploreTreeChan; a -> Int -1-> (a, Int)
   server @a c1 n =
     case c1 of
       &LeafC c1 -> (c1, n)
       &NodeC c1 -> serverNode c1 n
 
-  serverNode : forall (a : 1S) -> Dual XploreNodeChan; a -> Int -1-> (a, Int)
+  serverNode : forall a -> Dual XploreNodeChan; a -> Int -1-> (a, Int)
   serverNode @a c n =
     let (m, c) = c |> select Value |> receive in
     if m == 0

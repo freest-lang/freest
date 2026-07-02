@@ -1,0 +1,7 @@
+<pending>
+
+Input-side usage-driven tightening (?type, the `∀` twin).
+
+Awaiting: usage inference on the local continuation forcing an `In`-side binder
+(`?type` / `∀`) from the most-general `1T` down to `*T` when the bound value is
+used unrestrictedly (here discarded). Once solved expect empty output.

@@ -40,7 +40,7 @@ toInt : Bin -> Int
 toInt n = n @Int 0 (\x -> 2 * x) (\x -> 2 * x + 1)
 
 -- succ' : Bin -> Bin
--- succ' n = \@(a : *T) -> (one @a) (\(s0 : a -> a) -> s0 n @a) (\(s1 : a->a) -> s1 n@a)
+-- succ' n = \@a -> (one @a) (\(s0 : a -> a) -> s0 n @a) (\(s1 : a->a) -> s1 n@a)
 
 -- succ' : Bin -> Bin
 -- succ' n = n @Bin

@@ -1,0 +1,37 @@
+{-
+Benjamin C. Pierce:
+Types and programming languages. MIT Press 2002
+-}
+module FlipFlop where
+
+type Counter : *T
+type Counter = (exists a, (a, a -> Int, a -> a))
+
+counterADT : Counter
+counterADT = 
+  ( @Int
+  , ( 1                    -- new
+    , \i -> i      -- get
+    , \i -> succ i -- inc
+    )
+  ) 
+  : Counter
+
+type FlipFlop : *T
+type FlipFlop = (exists a, (a, a -> Bool, a -> a, a -> a))
+
+flipFlopADT : FlipFlop
+flipFlopADT = 
+  ( @c 
+  , ( new                      -- new
+    , \c -> even (get c) -- read
+    , \c -> inc c        -- toggle
+    , \c -> new          -- reset
+    )
+  ) 
+  : FlipFlop
+  where (@c, (new, get, inc)) = counterADT
+
+main : ()
+main = print (read (toggle (reset (toggle new))))
+  where (@f, (new, read, toggle, reset)) = flipFlopADT

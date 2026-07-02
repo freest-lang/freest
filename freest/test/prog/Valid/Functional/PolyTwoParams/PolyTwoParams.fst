@@ -1,7 +1,7 @@
 module PolyTwoParams where
 
--- mkPair : forall (a : 1T) -> forall (b : 1T) -> a -> b -1-> (a, b)
-mkPair : forall (a : 1T) (b : 1T) -> a -> b -1-> (a, b)
+-- mkPair : forall a -> forall b -> a -> b -1-> (a, b)
+mkPair : forall a b -> a -> b -1-> (a, b)
 mkPair @a @b x y = (x, y)
 
 main : ()

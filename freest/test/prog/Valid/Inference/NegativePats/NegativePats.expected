@@ -1,0 +1,8 @@
+<pending>
+
+Input-side `?type` usage tightening (the `∀` twin).
+
+Awaiting: usage inference on the local continuation forcing a `?type` binder from
+the most-general `1T` to `*T` when the received value is used unrestrictedly.
+
+Literal fully-stripped duplicate of Valid/SessionTypes/NegativePats/NegativePats.fst; the annotated original passes.

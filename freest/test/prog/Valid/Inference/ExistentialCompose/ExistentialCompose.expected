@@ -1,0 +1,8 @@
+<pending>
+
+Existential composition (item 2, type-level face).
+
+Awaiting: kinding that consults the scrutinee's existential type so an unpacked
+abstract type is bound at the existential's own binder kind, rather than a
+phase-B placeholder that leaks (defaulted to 1T) when the type is re-packed.
+Once solved expect empty output.

@@ -1,0 +1,7 @@
+<pending>
+
+Capture-aware usage tightening (forall, the `?type` twin).
+
+Awaiting: usage inference that forces a `∀`-bound binder to `*T` when the value
+is captured across an unrestricted arrow/closure boundary (not just a plain
+duplicate, which is already handled). Once solved expect empty output.

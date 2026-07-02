@@ -5,7 +5,7 @@ Types and programming languages. MIT Press 2002
 module Counter where
 
 type Counter : *T
-type Counter = (exists (a : *T), (a, a -> Int, a -> a))
+type Counter = (exists a, (a, a -> Int, a -> a))
 
 counterADT : Counter
 counterADT = (@Int, ( 1 
@@ -17,5 +17,5 @@ counterADT = (@Int, ( 1
 
 main : ()
 main =
-  let (@(c : *T), (new, get, inc)) = counterADT
+  let (@c, (new, get, inc)) = counterADT
   in print (get (inc new))

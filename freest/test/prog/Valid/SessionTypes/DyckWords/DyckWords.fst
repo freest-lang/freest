@@ -24,7 +24,7 @@ type D = +{ Lt : T;D, Dollar : Skip }
 type T = +{ Lt : T;T, Gt : Skip }
 
 -- Read from a channel; print what is read
-readT : forall (a : 1S) -> (Dual T; a) -> a
+readT : forall a -> (Dual T; a) -> a
 readT @a c =
   case c of
     &Lt c ->
@@ -34,7 +34,7 @@ readT @a c =
       putStr ">";
       c
 
-readD : forall (a : 1S) -> (Dual D; a) -> a
+readD : forall a -> (Dual D; a) -> a
 readD @a c =
   case c of
     &Lt c ->
@@ -44,7 +44,7 @@ readD @a c =
       putStr "$";
       c
 
-forwardT : forall (a : 1S) (b : 1S) -> (Dual T; a) -> (T; b) -1-> (a, b)
+forwardT : forall a b -> (Dual T; a) -> (T; b) -1-> (a, b)
 forwardT @a @b i o =
   case i of
     &Lt i ->
@@ -54,7 +54,7 @@ forwardT @a @b i o =
       (i, select Gt o)
 
 -- Read from a channel and immediately write on another channel
-forwardD : forall (a : 1S) (b : 1S) -> (Dual D; a) -> (D; b) -1-> (a, b)
+forwardD : forall a b -> (Dual D; a) -> (D; b) -1-> (a, b)
 forwardD @a @b i o =
   case i of
     &Lt i ->
@@ -63,7 +63,7 @@ forwardD @a @b i o =
     &Dollar i -> 
       (i, select Dollar o)
 
-concatT : forall (a : 1S) (b : 1S) (c : 1S) -> (Dual T; a) -> b -1-> (T; c) -1-> (a, b, c)
+concatT : forall a b c -> (Dual T; a) -> b -1-> (T; c) -1-> (a, b, c)
 concatT @a @b @c i1 i2 o =
   case i1 of
     &Lt i1 ->
@@ -75,7 +75,7 @@ concatT @a @b @c i1 i2 o =
 
 -- Read from a channel; read from a second channel; while writing on a
 -- third channel
-concatD : forall (a : 1S) (b : 1S) (c : 1S) -> (Dual D; a) -> (Dual D; b) -1-> (D; c) -1-> (a, b, c)
+concatD : forall a b c -> (Dual D; a) -> (Dual D; b) -1-> (D; c) -1-> (a, b, c)
 concatD @a @b @c in1 in2 out =
   case in1 of 
     &Lt in1 ->

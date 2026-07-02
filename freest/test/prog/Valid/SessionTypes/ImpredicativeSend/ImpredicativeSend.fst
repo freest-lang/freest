@@ -1,6 +1,6 @@
 module ImpredicativeSend where
 
-send' : forall (a : 1T) -> a -> forall (b : 1S) -1-> !a; b -1-> b
+send' : forall a -> a -> forall b -1-> !a; b -1-> b
 send' @a x @b o = send x o
 
 f : Bool -> !Int -> !Int; ?Bool -1-> Skip

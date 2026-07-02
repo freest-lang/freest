@@ -3,7 +3,7 @@ module FiniteStreamEnd where
 type FiniteStream : 1S
 type FiniteStream = &{Done: Skip, More: ?Int;FiniteStream}
 
-ints : forall (c : 1S) -> Int -> Dual FiniteStream;c -> c
+ints : forall c -> Int -> Dual FiniteStream;c -> c
 ints @c n c = 
     if n < 0
     then select Done c

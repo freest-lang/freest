@@ -6,11 +6,11 @@ Copyright   : (c) Vasco T. Vasconcelos, 31 dec 2020
 
 module SystemFWarmUps where
 
-double, quadruple : forall (a : *T) -> (a -> a) -> a -> a
+double, quadruple : forall a -> (a -> a) -> a -> a
 
-double = \@(a : *T) f x -> f (f x)
+double = \@a f x -> f (f x)
 
-quadruple = \@(a : *T) f -> double @(a -> a) (double  @a) f
+quadruple = \@a f -> double @(a -> a) (double  @a) f
 
 doubleInt : (Int -> Int) -> Int -> Int
 doubleInt = double  @Int
