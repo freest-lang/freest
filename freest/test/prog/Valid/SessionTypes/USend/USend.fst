@@ -13,7 +13,7 @@ unrestricted values. The partially evaluated function can then be reused, contra
 
 module USend where
 
-unsend : forall (a : *T) -> a -> forall b -> () -> !a;b -1-> b
+unsend : forall a -> a -> forall b -> () -> !a;b -1-> b
 unsend @a x @b () = send x
 
 main : ()

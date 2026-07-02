@@ -16,7 +16,7 @@ rcvInt @a acc c =
       let (iii, c) = rcvInt (acc*i) c in
       (iii, c)
 
-rt : forall (a : *T) b -> a -> (a -> b) -> b
+rt : forall a b -> a -> (a -> b) -> b
 rt @a @b x f = f x
 
 main : ()

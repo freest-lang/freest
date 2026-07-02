@@ -36,7 +36,7 @@ not'' @b b = \t f -> b f t
 
 -- Destructor
 
-cond : forall (a : *T) -> Bool' -> a -> a -> a
+cond : forall a -> Bool' -> a -> a -> a
 cond @a b e1 e2 = b @a e1 e2
 
 -- Boolean ops based on the conditional

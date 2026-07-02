@@ -833,34 +833,41 @@ kindFun :: Located e
         -> E.ScopedRHS
         -> TK.KindedType
         -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-kindFun tdecls ddecls e = kindFun' 0 []
+kindFun tdecls ddecls e = kindFun' 0 [] []
   where
+    -- A value parameter captured under an 'Un' binder bound *after* it is used
+    -- unrestrictedly: that closure may run many times, duplicating the capture.
+    -- Mirrors 'usesExp's 'scaleBy' for lambdas, which the parameter arrows escape.
+    capUnder :: Multiplicity -> [(Variable, TK.KindedType)] -> [Variable] -> [Variable]
+    capUnder m tracked cap = if isUn m then map fst tracked ++ cap else cap
     kindFun' :: Int
             -> [(Variable, TK.KindedType)]  -- value parameters and their types, for usage inference
+            -> [Variable]                   -- those captured under an unrestricted later binder
             -> KindCtx
             -> TypeCtx
             -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
             -> E.ScopedRHS
             -> TK.KindedType
             -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-    kindFun' i tracked kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
+    kindFun' i tracked capUn kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
       ([], _) -> do
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
         rhs' <- kindRHS tdecls ddecls kctx rhs
         let (comps, forced) = trackComponents tdecls ddecls tracked rhs'
-        forM_ comps \(x, pt) -> case usesRHS x rhs' of
-          One -> pure ()
-          _   -> forceUnrestricted pt
+        forM_ comps \(x, pt) ->
+          case (if x `elem` capUn then scaleBy (Un (getSpan x)) else id) (usesRHS x rhs') of
+            One -> pure ()
+            _   -> forceUnrestricted pt
         mapM_ forceUnrestricted forced
         return ([], rhs')
       (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
         k' <- case mki of
           Just ki -> checkK (TK.fromVariable ObjLv ai ki) k >> return ki
           Nothing -> return k
-        first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) tracked (Map.insert (Left ai) k' kctx) tctxds ps'
+        first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) tracked (capUnder m tracked capUn) (Map.insert (Left ai) k' kctx) tctxds ps'
           rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv ai k') u)
-      (ExpLevel  (p, mtp) : ps', TK.AppArrow _ _ u v) -> do
+      (ExpLevel  (p, mtp) : ps', TK.AppArrow _ am u v) -> do
         tp' <- case mtp of
           Just tp -> do
             (_, _, tp') <- checkProper kctx tp
@@ -872,9 +879,9 @@ kindFun tdecls ddecls e = kindFun' 0 []
         let tracked' = case p of
               E.VarPat _ x -> (x, tp') : tracked
               _            -> tracked
-        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) tracked' kctxi' tctxds ps' rhs v
+        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) tracked' (capUnder am tracked capUn) kctxi' tctxds ps' rhs v
       (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
-        first (MultLevel φ :) <$> kindFun' (i + 1) tracked kctx tctxds ps' rhs
+        first (MultLevel φ :) <$> kindFun' (i + 1) tracked (capUnder m tracked capUn) kctx tctxds ps' rhs
           ((if null φs then id else TK.ForallM s' m φs) $
             subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u)
       (pi : ps', TK.AppArrow _ _ u _) ->

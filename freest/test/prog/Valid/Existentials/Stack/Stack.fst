@@ -28,7 +28,7 @@ main' = fst $ pop (push 5 (push 7 new))
 rev : [Int] -> [Int]
 rev = rev' new
   where 
-    (@(s : *T), (new, push, pop, toList)) = stackADT
+    (@s, (new, push, pop, toList)) = stackADT
 
     rev' : s -> [Int] -> [Int]
     rev' s []        = toList s

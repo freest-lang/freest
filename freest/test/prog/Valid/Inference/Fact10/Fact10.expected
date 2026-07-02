@@ -1,9 +1,0 @@
-<pending>
-
-Capture-aware forall usage tightening.
-
-Awaiting: usage inference that forces a `forall`-bound (or type-abstraction) binder
-to `*T` when its value is captured across an unrestricted arrow / closure boundary;
-the default is the most-general `1T`.
-
-Literal fully-stripped duplicate of Valid/Functional/Fact10/Fact10.fst; the annotated original passes.

@@ -1,9 +1,9 @@
 <pending>
 
-Capture-aware forall usage tightening.
+Capture through a multiplicity-polymorphic arrow (`#m`).
 
-Awaiting: usage inference that forces a `forall`-bound (or type-abstraction) binder
-to `*T` when its value is captured across an unrestricted arrow / closure boundary;
-the default is the most-general `1T`.
+Awaiting: tightening that fires when a value is captured under an arrow whose
+multiplicity is polymorphic (`-#m->`) — the binder must be `*T` because `#m` may
+be `Un`. The capture rule fires only on a concretely-unrestricted binder (item 4).
 
 Literal fully-stripped duplicate of Valid/SessionTypes/PartialFork/PartialFork.fst; the annotated original passes.

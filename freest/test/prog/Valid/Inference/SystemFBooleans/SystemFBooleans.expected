@@ -1,9 +1,10 @@
 <pending>
 
-Capture-aware forall usage tightening.
+Usage tightening for type-abstraction binders in expression position.
 
-Awaiting: usage inference that forces a `forall`-bound (or type-abstraction) binder
-to `*T` when its value is captured across an unrestricted arrow / closure boundary;
-the default is the most-general `1T`.
+Awaiting: `*T` tightening for `\@a -> ...` binders in the body of a value
+definition when a value of the abstract type is discarded/duplicated. The forcing
+runs on function-clause parameters (`kindFun'`), not expression lambdas
+(`kindExp`).
 
 Literal fully-stripped duplicate of Valid/SystemF/SystemFBooleans/SystemFBooleans.fst; the annotated original passes.
