@@ -1061,7 +1061,7 @@ solveKindConstraints = do
     kindSpan = \case Proper s _ _ -> s; Arrow s _ _ -> s; Var s _ _ -> s
     unifyErr = \case
       Mismatch k1 k2 -> CannotSatisfyKindConstraint (kindSpan k1) k1 k2
-      Occurs _ k     -> CannotSatisfyKindConstraint (kindSpan k) k k
+      Occurs _ k     -> InfiniteKind (kindSpan k) k
     multErr (MultEquation m1 o1 m2 o2) = CannotSatisfyMultConstraint (getSpan o1) m1 o1 m2 o2
     preErr = \case
       SubPrekind o p1 p2 -> mk o p1 p2

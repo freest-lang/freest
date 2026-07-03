@@ -19,7 +19,7 @@ import Syntax.Provenance (Origin)
 import Validation.LocalInference.Multiplicities (MultConstraints, MultEquation, kindEq)
 import Validation.LocalInference.Prekinds (PrekindConstraints, PrekindConstraint(..))
 
-import Control.Monad.State (StateT, runStateT, gets, modify)
+import Control.Monad.State (StateT, runStateT, gets, modify, when)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict qualified as Map
 
@@ -72,8 +72,8 @@ go o k1 k2 = do
       | solvable l1 -> bind a k2'
       | solvable l2 -> bind b k1'
       | otherwise   -> lift (Left (Mismatch k1' k2'))
-    (Var s l a, _) | solvable l -> do k <- instLike s k2'; bind a k; go o k k2'
-    (_, Var s l a) | solvable l -> do k <- instLike s k1'; bind a k; go o k1' k
+    (Var s l a, _) | solvable l -> do occursCheck a k2'; k <- instLike s k2'; bind a k; go o k k2'
+    (_, Var s l a) | solvable l -> do occursCheck a k1'; k <- instLike s k1'; bind a k; go o k1' k
     (Arrow _ d1 c1, Arrow _ d2 c2) -> go o d2 d1 >> go o c1 c2  -- contravariant / covariant
     (Proper _ m1 p1, Proper _ m2 p2) -> do
       emitMult (kindEq (K.join m1 m2) m2)  -- m1 <: m2, as the ACUI encoding
@@ -120,6 +120,15 @@ occurs a = \case
               else gets kSub >>= maybe (pure False) (occurs a) . Map.lookup b
   Arrow _ d c -> (||) <$> occurs a d <*> occurs a c
   _           -> pure False
+
+-- | Fail if @a@ occurs in @k@. The @Var <: Arrow@ cases give @a@ an arrow *shape*
+-- (a fresh 'instLike' kind) rather than @k@ itself, so 'bind's occurs check never
+-- sees @a@ in @k@; unguarded, a self-application like @f f@ (goal @κ->κ' <: κ@)
+-- regresses forever instead of failing with 'Occurs'.
+occursCheck :: Variable -> Kind -> U ()
+occursCheck a k = do 
+  occ <- occurs a k 
+  when occ do lift (Left (Occurs a k))
 
 emitMult :: MultEquation -> U ()
 emitMult c = modify \acc -> acc { mCs = c : mCs acc }
