@@ -31,10 +31,11 @@ data KindUnifier = KindUnifier
   , prekindConstraints :: PrekindConstraints
   }
 
--- | Why unification failed.
+-- | Why unification failed. Each carries the 'Origin' of the constraint being
+-- solved, so the error can be reported at the right source location.
 data UnifyError
-  = Mismatch Kind Kind        -- ^ incompatible kind structure (e.g. proper vs. arrow)
-  | Occurs Variable Kind      -- ^ a variable would be bound to a kind that mentions it
+  = Mismatch Origin Kind Kind    -- ^ incompatible kind structure (e.g. proper vs. arrow)
+  | Occurs Origin Variable Kind  -- ^ a variable would be bound to a kind that mentions it
 
 -- The solver threads a fresh-variable counter (decreasing negative internal IDs,
 -- assumed disjoint from the input) and the accumulating result.
@@ -69,16 +70,16 @@ go o k1 k2 = do
   case (k1', k2') of
     (Var _ l1 a, Var _ l2 b)
       | a == b      -> pure ()
-      | solvable l1 -> bind a k2'
-      | solvable l2 -> bind b k1'
-      | otherwise   -> lift (Left (Mismatch k1' k2'))
-    (Var s l a, _) | solvable l -> do occursCheck a k2'; k <- instLike s k2'; bind a k; go o k k2'
-    (_, Var s l a) | solvable l -> do occursCheck a k1'; k <- instLike s k1'; bind a k; go o k1' k
+      | solvable l1 -> bind o a k2'
+      | solvable l2 -> bind o b k1'
+      | otherwise   -> lift (Left (Mismatch o k1' k2'))
+    (Var s l a, _) | solvable l -> do occursCheck o a k2'; k <- instLike s k2'; bind o a k; go o k k2'
+    (_, Var s l a) | solvable l -> do occursCheck o a k1'; k <- instLike s k1'; bind o a k; go o k1' k
     (Arrow _ d1 c1, Arrow _ d2 c2) -> go o d2 d1 >> go o c1 c2  -- contravariant / covariant
     (Proper _ m1 p1, Proper _ m2 p2) -> do
       emitMult (kindEq (K.join m1 m2) m2)  -- m1 <: m2, as the ACUI encoding
       emitPre  (SubPrekind o p1 p2)
-    _ -> lift (Left (Mismatch k1' k2'))
+    _ -> lift (Left (Mismatch o k1' k2'))
 
 -- | A fresh kind of the same structure as the argument, with fresh leaf/whole-
 -- kind variables — so a whole-kind variable resolves to a /shape/, keeping its
@@ -107,10 +108,10 @@ chase k = gets kSub >>= \s -> case k of
   Var _ l a | solvable l, Just k' <- Map.lookup a s -> chase k'
   _                                                  -> pure k
 
-bind :: Variable -> Kind -> U ()
-bind a k = do
+bind :: Origin -> Variable -> Kind -> U ()
+bind o a k = do
   occ <- occurs a k
-  if occ then lift (Left (Occurs a k))
+  if occ then lift (Left (Occurs o a k))
          else modify \acc -> acc { kSub = Map.insert a k (kSub acc) }
 
 occurs :: Variable -> Kind -> U Bool
@@ -125,10 +126,10 @@ occurs a = \case
 -- (a fresh 'instLike' kind) rather than @k@ itself, so 'bind's occurs check never
 -- sees @a@ in @k@; unguarded, a self-application like @f f@ (goal @κ->κ' <: κ@)
 -- regresses forever instead of failing with 'Occurs'.
-occursCheck :: Variable -> Kind -> U ()
-occursCheck a k = do 
-  occ <- occurs a k 
-  when occ do lift (Left (Occurs a k))
+occursCheck :: Origin -> Variable -> Kind -> U ()
+occursCheck o a k = do
+  occ <- occurs a k
+  when occ do lift (Left (Occurs o a k))
 
 emitMult :: MultEquation -> U ()
 emitMult c = modify \acc -> acc { mCs = c : mCs acc }

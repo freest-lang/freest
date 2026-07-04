@@ -44,8 +44,9 @@ data Error
       K.Multiplicity Origin
       K.Multiplicity Origin
   | CannotInferHigherKindedTypeApp Span K.Kind
-  | CannotSatisfyKindConstraint Span K.Kind K.Kind
-  | InfiniteKind Span K.Kind
+  | CannotSatisfyKindConstraint Origin K.Kind K.Kind
+  | CannotSatisfyPrekindConstraint Origin K.Prekind K.Prekind
+  | InfiniteKind Origin Variable K.Kind
   | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesisePat Span E.KindedPat
@@ -125,8 +126,9 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
-    CannotSatisfyKindConstraint s _ _ -> s
-    InfiniteKind s _ -> s
+    CannotSatisfyKindConstraint o _ _ -> getSpan o
+    CannotSatisfyPrekindConstraint o _ _ -> getSpan o
+    InfiniteKind o _ _ -> getSpan o
     CannotSatisfyMultConstraint s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
     CannotSynthesisePat s _ -> s
@@ -276,14 +278,19 @@ toMessage src = \case
         | otherwise = ""
   CannotInferHigherKindedTypeApp s k -> makeError src s
     "Cannot infer a higher-kinded type argument"
-    ++ "The type parameter has kind " ++ bt (unparse k) ++ ", declared at"
+    ++ "The type parameter has kind " ++ bt (tidyK k) ++ ", declared at"
     ++ locateSpan src (getSpan k)
     ++ "Higher-kinded type arguments are not inferred; please provide them explicitly"
-  CannotSatisfyKindConstraint s k1 k2 -> makeError src s
-    ("Could not match kind " ++ bt (show k1) ++ " with kind " ++ bt (show k2))
-  InfiniteKind s k -> makeError src s
-    ("Cannot construct the infinite kind " ++ bt (show k) ++ "\n"
-     ++ "(a type variable's kind would have to contain itself, e.g. from a self-application)")
+  CannotSatisfyKindConstraint o k1 k2 -> makeError src (getSpan o)
+    ("Couldn't match kind " ++ bt a ++ " with kind " ++ bt b)
+    where (a, b) = tidyKK k1 k2
+  CannotSatisfyPrekindConstraint o p1 p2 -> makeError src (getSpan o)
+    ("Expected a " ++ prettyPk p2 ++ ", but got a " ++ prettyPk p1)
+  InfiniteKind o v k -> makeError src (getSpan o)
+    ("Cannot construct the infinite kind " ++ bt (va ++ " ~ " ++ vk))
+    where e  = mkTidy (('k', v) : kMetas k)
+          va = tidyName e v
+          vk = tidyKind e k
   CannotSatisfyMultConstraint s m1 o1 m2 o2 -> makeError src s
     "Could not infer consistent multiplicities for this application"
     ++ "Could not match multiplicity " ++ multSide src m1 o1
@@ -318,7 +325,7 @@ toMessage src = \case
         n -> " only " ++ show n)
   ExpectsTooManyArgsK s i k -> makeError src s
     ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
-      ++ bt (unparse k) ++ " takes only " ++ show (K.depth k))
+      ++ bt (tidyK k) ++ " takes only " ++ show (K.depth k))
   ExposeError s pe msg t -> makeError src s
     case pe of
       Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
@@ -330,7 +337,7 @@ toMessage src = \case
     ++ thirdPerson (m - n) ++ ")"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
-    ++ "(A type of kind " ++ bt (unparse k) ++ " cannot be applied to further arguments)"
+    ++ "(A type of kind " ++ bt (tidyK k) ++ " cannot be applied to further arguments)"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
   KindMismatch s k1 t -> makeError src s
@@ -341,13 +348,13 @@ toMessage src = \case
     --    | K.depth k1 > K.depth k2 ->
     --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
     --    | otherwise ->
-      ("Couldn't match expected kind " ++ bt (unparse k1)
-        ++ " with actual kind " ++ bt (unparse $ TK.kindOf t))
+      (let (a, b) = tidyKK k1 (TK.kindOf t)
+       in "Couldn't match expected kind " ++ bt a ++ " with actual kind " ++ bt b)
     -- where
     --   diff = (K.depth k2 - K.depth k1)
   KindMismatchK s k1 k2 t -> makeError src s
-      ("Couldn't match expected kind " ++ bt (unparse k1)
-        ++ " with actual kind " ++ bt (unparse k2))
+      (let (a, b) = tidyKK k1 k2
+       in "Couldn't match expected kind " ++ bt a ++ " with actual kind " ++ bt b)
     -- where
     --   diff = (K.depth k2 - K.depth k1)
   KSigLacksBinding s i -> makeError src s
@@ -362,7 +369,7 @@ toMessage src = \case
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
       ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
-        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (tidyM m') ++ " and ")
       ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
       ++ " cannot be consumed inside a guard")
@@ -373,13 +380,13 @@ toMessage src = \case
   LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
       ++ ((case m' of 
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
-        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (unparse m') ++ " and ")
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (tidyM m') ++ " and ")
       ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
       ++ " was consumed in body of "
       ++ (case m of 
         K.Un{} -> "an unrestricted function"
-        _      -> "a function with multiplicity " ++ bt (unparse m))
+        _      -> "a function with multiplicity " ++ bt (tidyM m))
       ++ "\n" ++ snippet src fe True)
     ++ "(This would allow duplicating or discarding it. "
     ++ "Consider using a restricted function instead.)"
@@ -412,7 +419,7 @@ toMessage src = \case
   NonLinPat s p t -> makeError src s
     ("Non-linear pattern for" ++ case TK.kindOf t of
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
-      K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (unparse m)
+      K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (tidyM m)
       _ -> internalError "pattern with non-proper type")
   ParseError s (_, ss) -> makeError src s
     "Parse error"
@@ -424,7 +431,7 @@ toMessage src = \case
     ("Expected a " ++ prettyPk pk ++ ", but got " ++
       (case k of
         K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (unparse t)
-        k               -> bt (unparse t) ++ " of kind " ++ bt (unparse k))
+        k               -> bt (unparse t) ++ " of kind " ++ bt (tidyK k))
       ++ " instead")
   ProperKindMismatch s t k -> case k of
     -- an unsolved kind variable: inference could not determine a proper kind here
@@ -434,7 +441,7 @@ toMessage src = \case
     _ -> makeError src s
       ("Expected " ++ prettyMoreArgs (K.depth k) ++ " to " ++ bt (unparse t))
       ++ "(Expected a proper type, but got " ++ bt (unparse t)
-      ++ " of kind " ++ bt (unparse k) ++ ")"
+      ++ " of kind " ++ bt (tidyK k) ++ ")"
   RestrictedFunInMutual s x t -> makeError src s
     ("Mutually recursive function " ++ bt (external x)
       ++ " must be unrestricted, but has type " ++ bt (unparse t))
@@ -539,6 +546,73 @@ toMessage src = \case
   where
   thirdPerson = \case 1 -> "it"; _ -> "them"
 
+  -- Tidying (GHC-style cosmetics). Kind inference leaves solvable metavariables
+  -- in a type's kind precisely when it cannot pin one down; those must never
+  -- reach the user as raw internal names. Following GHC's tidying, we rewrite
+  -- each solvable metavariable to a short, generated name — @k0@/@m0@/@p0@ by
+  -- sort (the leading letter), numbered in first-seen order and shared within a
+  -- message — and leave every ground kind and rigid (object-level: @#m@,
+  -- ∀-bound) variable exactly as the unparser prints it.
+
+  -- The solvable metavariables of a kind/multiplicity/prekind, tagged with the
+  -- letter of their sort, in first-seen (left-to-right) order.
+  kMetas = \case
+    K.Proper _ m pk -> mMetas m ++ pMetas pk
+    K.Arrow _ a b   -> kMetas a ++ kMetas b
+    K.Var _ lv v    -> [('k', v) | solvable lv]
+  mMetas = \case K.Sup _ as -> [('m', v) | (lv, v) <- as, solvable lv]; _ -> []
+  pMetas = \case K.VarPK lv v | solvable lv -> [('p', v)]; _ -> []
+
+  -- Assign each distinct metavariable a name, in first-seen order, per sort.
+  mkTidy = go Map.empty Map.empty
+    where
+      go env _   []             = env
+      go env cnt ((c, v) : rest)
+        | Map.member (internal v) env = go env cnt rest
+        | otherwise = go (Map.insert (internal v) (c : show n) env)
+                         (Map.insert c (n + 1) cnt) rest
+        where n = Map.findWithDefault (0 :: Int) c cnt
+
+  tidyName env v = Map.findWithDefault "_" (internal v) env
+
+  -- The renderers mirror the 'Parser.Unparser' kind instances exactly on ground
+  -- and rigid input, diverging only to print a metavariable's tidy name.
+  tidyKind env = \case
+    K.Proper _ m pk -> tidyMultB env m ++ tidyPrekind env pk
+    K.Arrow _ a b   -> dom ++ " -> " ++ tidyKind env b
+      where dom = case a of K.Arrow{} -> "(" ++ tidyKind env a ++ ")"
+                            _         -> tidyKind env a
+    K.Var _ lv v | solvable lv -> tidyName env v
+                 | otherwise   -> show v
+
+  tidyMult env = \case
+    K.Lin _    -> "1"
+    K.Un _     -> "*"
+    K.Sup _ as -> intercalate " + " (map atom as)
+      where atom (lv, v) | solvable lv = tidyName env v
+                         | otherwise   = show v
+
+  -- As 'tidyMult', but bracketing a multi-atom join before a prekind, as the
+  -- unparser does inside a proper kind.
+  tidyMultB env = \case
+    m@(K.Sup _ as) | length as > 1 -> "(" ++ tidyMult env m ++ ")"
+    m                              -> tidyMult env m
+
+  tidyPrekind env = \case
+    K.Top -> "T"; K.Session -> "S"; K.Channel -> "C"
+    K.VarPK lv v | solvable lv -> tidyName env v
+                 | otherwise   -> external v
+
+  -- Tidy a single kind/multiplicity/prekind, or a pair sharing one environment
+  -- (so a metavariable common to both sides of a mismatch prints one name).
+  tidyK  k      = tidyKind (mkTidy (kMetas k)) k
+  tidyKK k1 k2  = let e = mkTidy (kMetas k1 ++ kMetas k2)
+                  in (tidyKind e k1, tidyKind e k2)
+  tidyM  m      = tidyMult (mkTidy (mMetas m)) m
+  tidyMM m1 m2  = let e = mkTidy (mMetas m1 ++ mMetas m2)
+                  in (tidyMult e m1, tidyMult e m2)
+  tidyP  p      = tidyPrekind (mkTidy (pMetas p)) p
+
   prettyModifiedPlural w q  = \case
     0 -> "no "   ++ q ++ " " ++ w ++ "s"
     1 -> "1 "    ++ q ++ " " ++ w
@@ -561,12 +635,12 @@ toMessage src = \case
     K.Top     -> "type"
     K.Session -> "session type"
     K.Channel -> "channel type"
-    K.VarPK _ ψ -> "prekind " ++ show ψ ++ " type"
+    ψ@K.VarPK{} -> "type of prekind " ++ bt (tidyP ψ)
 
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String
   multSide src m (Origin sp _) =
-    bt (unparse m) ++ multAdj ++ locateSpan src sp
+    bt (tidyM m) ++ multAdj ++ locateSpan src sp
     where
     multAdj = case m of
       K.Lin{} -> " (linear)"

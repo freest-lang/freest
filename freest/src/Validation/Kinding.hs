@@ -1058,17 +1058,16 @@ solveKindConstraints = do
     resolvePK psub = \case VarPK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; pk -> pk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o
     multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]
-    kindSpan = \case Proper s _ _ -> s; Arrow s _ _ -> s; Var s _ _ -> s
     unifyErr = \case
-      Mismatch k1 k2 -> CannotSatisfyKindConstraint (kindSpan k1) k1 k2
-      Occurs _ k     -> InfiniteKind (kindSpan k) k
+      Mismatch o k1 k2 -> CannotSatisfyKindConstraint o k1 k2
+      Occurs o v k     -> InfiniteKind o v k
     multErr (MultEquation m1 o1 m2 o2) = CannotSatisfyMultConstraint (getSpan o1) m1 o1 m2 o2
     preErr = \case
-      SubPrekind o p1 p2 -> mk o p1 p2
-      MeetPrekind o _ _  -> mk o Top Top
-      JoinPrekind o _ _  -> mk o Top Top
-      where mk o p1 p2 = let s = getSpan o
-                         in CannotSatisfyKindConstraint s (Proper s (Lin s) p1) (Proper s (Lin s) p2)
+      SubPrekind o p1 p2 -> CannotSatisfyPrekindConstraint o p1 p2
+      -- The prekind solver only ever fails a subkinding constraint; a meet/join
+      -- constraint is always satisfiable (it defines its own variable).
+      MeetPrekind{} -> internalError "prekind meet reported as unsatisfiable"
+      JoinPrekind{} -> internalError "prekind join reported as unsatisfiable"
 
 -- | Run kinding on a module, building the initial validation state from it.
 -- This returns either:
