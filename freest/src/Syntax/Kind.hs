@@ -19,6 +19,7 @@ module Syntax.Kind
   , isSession
   , isChannel
   , isProper
+  , hasMetavar
   , depth
   )
 where 
@@ -214,6 +215,16 @@ isSession _ = False
 isProper = \case
   Proper{} -> True
   _        -> False
+
+-- | Whether a kind still contains a solvable (unsolved inference) metavariable.
+hasMetavar :: Kind -> Bool
+hasMetavar = \case
+  Proper _ m pk -> multMeta m || preMeta pk
+  Arrow _ k1 k2 -> hasMetavar k1 || hasMetavar k2
+  Var _ lv _    -> solvable lv
+  where
+    multMeta = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
+    preMeta  = \case VarPK lv _ -> solvable lv; _ -> False
 
 depth :: Kind -> Int
 depth = \case

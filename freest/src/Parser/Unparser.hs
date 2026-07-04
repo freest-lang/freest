@@ -94,7 +94,9 @@ instance Unparse Variable where
   fragment a = (maxRator, show a)
 
 instance Unparse (Variable, K.Kind) where
-  fragment (a, k) = (maxRator, "(" ++ show a ++ " : " ++ unparse k ++ ")")
+  fragment (a, k)
+    | K.hasMetavar k = fragment a
+    | otherwise      = (maxRator, "(" ++ show a ++ " : " ++ unparse k ++ ")")
 
 instance Unparse (Variable, Maybe K.Kind) where
   fragment (a, Nothing) = fragment a

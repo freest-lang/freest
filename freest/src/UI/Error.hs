@@ -31,7 +31,6 @@ import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
 import Data.Char qualified as Char
-import Data.Maybe ( fromMaybe )
 import Debug.Trace ( traceM )
 import System.IO ( stderr, hPutStrLn )
 
@@ -200,10 +199,10 @@ getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
   lookupSrc src fp !! (sl - 1)
 
+-- | The source lines of a file, or @[]@ if it is not in the map (e.g. a
+-- synthetic or inferred span), so error rendering degrades instead of crashing.
 lookupSrc :: Source -> FilePath -> [String]
-lookupSrc src fp = fromMaybe
-  (internalError $ "file not in source map: " ++ fp)
-  (src Map.!? fp)
+lookupSrc src fp = Map.findWithDefault [] fp src
 
 -- | Collapse the standard-library install path to a stable, readable suffix,
 -- e.g. ".../share/.../StandardLib/Prelude.fst" becomes "StandardLib/Prelude.fst".
