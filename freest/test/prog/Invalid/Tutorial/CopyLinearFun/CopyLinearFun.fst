@@ -1,8 +1,8 @@
 module CopyLinearFun where
 
-double : Int -1-> Int
-double x = x + x
+linDouble : Int -1-> Int
+linDouble x = x + x
 
 copy : ()
 copy = 
-    print (double 5 + double 5)
+    print (linDouble 5 + linDouble 5)

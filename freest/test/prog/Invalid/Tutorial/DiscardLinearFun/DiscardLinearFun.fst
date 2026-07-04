@@ -1,7 +1,7 @@
-module DiscardFun where
+module DiscardLinearFun where
 
-double : Int -1-> Int
-double x = x + x
+linDouble : Int -1-> Int
+linDouble x = x + x
 
 copy : ()
 copy = 
