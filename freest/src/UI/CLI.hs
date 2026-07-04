@@ -46,7 +46,7 @@ preludePath :: FilePath
 preludePath = "StandardLib/Prelude.fst"
 
 notASourceFile :: FilePath -> String
-notASourceFile file = "target ‘" ++ file ++ "’ is not a source file"
+notASourceFile file = "‘" ++ file ++ "‘: No such file"
 
 optPrefix :: Char
 optPrefix = ':'

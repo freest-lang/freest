@@ -339,7 +339,7 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
-    ("Linear " ++ prettyVarCons xi ++ " was not consumed")
+    ("Linear " ++ prettyVarCons xi ++ " is not consumed")
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
       ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
@@ -424,7 +424,7 @@ toMessage src = \case
                               Right i -> "constructor " ++ bt (show i))
       ++ " of type " ++ bt (unparse t) ++", bound at\n"
       ++ snippet src xi True
-      ++ "was not consumed evenly among the branches of a"
+      ++ "is not consumed evenly among the branches of a"
       ++ (case fpe of
         Left (Left  x) -> " function definition"
         Left (Right p) -> " value definition"
