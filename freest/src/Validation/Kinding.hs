@@ -44,7 +44,7 @@ import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
 import Validation.Substitution ( subs, subsAll, subsMultType )
-import Syntax.Provenance ( Origin(..), Reason(..) )
+import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
 import Validation.LocalInference.Prekinds ( PrekindConstraint(..), solvePrekindConstraints )
@@ -147,7 +147,7 @@ synth ctx = \case
           _ | pk1 == Channel       -> pure m1
           VarPK lv _ | solvable lv -> do
             φv <- freshUnifMult s
-            addCondSeqMult (Origin s FromKind) pk1 φv m1 m2
+            addCondSeqMult (Origin s) pk1 φv m1 m2
             pure φv
           _                         -> pure (join m1 m2)
         return $ TK.appSemiWithKind s (Proper s φ ψ) t' u'
@@ -274,7 +274,7 @@ checkSession ctx t = checkPrekind ctx t Session
 checkOperand :: KindCtx -> Prekind -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
 checkOperand ctx req t = do
   t' <- synth ctx t
-  let o = Origin (getSpan t) FromKind
+  let o = Origin (getSpan t)
   case TK.kindOf t' of
     Proper _ m pk
       | isVarPrekind pk -> addPrekindConstraint (SubPrekind o pk req) >> return (m, pk, t')
@@ -320,7 +320,7 @@ combinePrekinds op unit mkC s pks
   | all ground pks = pure (foldr op unit pks)
   | otherwise = do
       ψv <- freshUnifPrekindVar s
-      addPrekindConstraint (mkC (Origin s FromKind) ψv pks)
+      addPrekindConstraint (mkC (Origin s) ψv pks)
       return (VarPK UnifLv ψv)
   where ground = \case VarPK lv _ -> not (solvable lv); _ -> True
 
@@ -354,7 +354,7 @@ checkPrekindK t pk = do
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k
   | hasSolvableVar k' || hasSolvableVar k =
-      addKindConstraint (Origin (getSpan t) FromKind) k' k
+      addKindConstraint (Origin (getSpan t)) k' k
   | otherwise = unless (k' <: k) $ throwE (KindMismatch (getSpan t) k t)
 
 -- | Does a kind mention a solvable (inference) variable?
@@ -488,13 +488,13 @@ kindModule ctx mod = do
   forM_ (Map.keys extMap) $ \i -> do
     let members = Set.intersection (Map.findWithDefault (Set.singleton i) i sccOf) (Map.keysSet siglessDatas)
         m       = foldr join (Un (getSpan i)) [ e | j <- Set.toList members, Just e <- [Map.lookup j extMap] ]
-    addMultEquation (Origin (getSpan i) FromKind) (resultMult (fst (freshSigs Map.! i))) m
+    addMultEquation (Origin (getSpan i)) (resultMult (fst (freshSigs Map.! i))) m
   -- an unannotated datatype parameter used as a proper field defaults to
   -- unrestricted (a datatype is shared unless a field forces linearity)
   binds <- gets kindBindings
   forM_ (concatMap (paramKindVars . fst) (Map.elems freshD)) $ \v ->
     case Map.lookup v binds of
-      Just (Proper _ φ _) -> addMultEquation (Origin (getSpan v) FromKind) φ (Un (getSpan v))
+      Just (Proper _ φ _) -> addMultEquation (Origin (getSpan v)) φ (Un (getSpan v))
       _                   -> pure ()
   let ddecls = D.DataDecls dcdecls kdtdecls
   (_, lds) <- kindLetDecls tdecls ddecls ctx' (M.definitions mod)
@@ -563,7 +563,7 @@ kindModule ctx mod = do
         inferBody recursive s ctxB body resK pkv
           | recursive = do
               b <- check ctxB body resK
-              let o = Origin s FromKind
+              let o = Origin s
               -- the multiplicity is a fixpoint, not just a lower bound: equate it
               -- to the body's, so a shared recursive channel stays unrestricted
               case (resK, TK.kindOf b) of
@@ -574,7 +574,7 @@ kindModule ctx mod = do
               return b
           | otherwise = do
               b <- synth ctxB body
-              let o = Origin s FromKind
+              let o = Origin s
               addKindConstraint o (TK.kindOf b) resK
               addKindConstraint o resK (TK.kindOf b)
               return b
@@ -760,7 +760,7 @@ usesLetDecls x lds = foldr (addU . go) Zero lds
 -- smart constructor assumes proper-kinded operands.
 forceUnrestricted :: TK.KindedType -> Validation ()
 forceUnrestricted = \case
-  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s FromKind) k (Proper s (Un s) Top)
+  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s (Un s) Top)
   TK.Tuple _ ts                     -> mapM_ forceUnrestricted ts
   _                                 -> pure ()
 

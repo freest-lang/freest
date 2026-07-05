@@ -2,7 +2,7 @@ module KindUnifierSpec (spec) where
 
 import Syntax.Base
 import Syntax.Kind (Kind(..), Multiplicity(..), Prekind(..))
-import Syntax.Provenance (Origin(..), Reason(..))
+import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Kinds
 import Validation.LocalInference.Prekinds (solvePrekindConstraints, applyPrekindSubst)
 
@@ -41,7 +41,7 @@ spec = describe "Kind unifier (K1 <: K2)" $ do
         _ -> expectationFailure "expected a proper leaf and a prekind solution"
       Left _ -> expectationFailure "expected success"
   where
-    o        = Origin nullSpan FromKind
+    o        = Origin nullSpan
     var n    = Variable nullSpan ("κ" ++ show n) n
     kv n     = Var nullSpan UnifLv (var n)
     lin      = Lin nullSpan

@@ -638,7 +638,7 @@ toMessage src = \case
 
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String
-  multSide src m (Origin sp _) =
+  multSide src m (Origin sp) =
     bt (tidyM m) ++ multAdj ++ locateSpan src sp
     where
     multAdj = case m of

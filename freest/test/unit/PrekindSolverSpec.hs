@@ -2,7 +2,7 @@ module PrekindSolverSpec (spec) where
 
 import Syntax.Base
 import Syntax.Kind (Prekind(..))
-import Syntax.Provenance (Origin(..), Reason(..))
+import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Prekinds
 
 import Test.Hspec
@@ -26,7 +26,7 @@ spec = describe "Prekind chain solver (C <: S <: T)" $ do
   it "does not solve object-level (rigid) variables" $
     solveFor [sub (v 1) Session] (rv 9) `shouldBe` Just (rv 9)
   where
-    o = Origin nullSpan FromKind
+    o = Origin nullSpan
     var n = Variable nullSpan ("ψ" ++ show n) n
     v  n  = VarPK UnifLv (var n)  -- a solvable prekind variable
     rv n  = VarPK ObjLv (var n)   -- a rigid prekind variable

@@ -4,8 +4,6 @@ module Validation.LocalInference.Multiplicities
   ( MultConstraints
   , MultEquation(..)
   , multEq
-  , kindEq
-  , arrowEq
   , kindEqConstraints
   , kindSubConstraints
   , solveMultConstraints
@@ -16,7 +14,7 @@ module Validation.LocalInference.Multiplicities
 import Syntax.Base
 import Syntax.Kind (Multiplicity(..), pattern Un)
 import Syntax.Kind qualified as K
-import Syntax.Provenance (Origin(..), Reason(..))
+import Syntax.Provenance (Origin(..))
 import Validation.Base (Validation, incCounter)
 import Validation.LocalInference.Substitution (Substitution(..), emptySubs, subsMult)
 
@@ -34,24 +32,19 @@ type MultConstraints = [MultEquation]
 data MultEquation = MultEquation Multiplicity Origin Multiplicity Origin
 
 -- | Build an equation between two multiplicities.
-multEq :: Reason -> Multiplicity -> Multiplicity -> MultEquation
-multEq r m1 m2 = MultEquation m1 (Origin (getSpan m1) r) m2 (Origin (getSpan m2) r)
-
--- | Specialized builders for multiplicity equations-
-kindEq, arrowEq :: Multiplicity -> Multiplicity -> MultEquation
-kindEq  = multEq FromKind
-arrowEq = multEq FromArrow
+multEq :: Multiplicity -> Multiplicity -> MultEquation
+multEq m1 m2 = MultEquation m1 (Origin (getSpan m1)) m2 (Origin (getSpan m2))
 
 kindEqConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindEqConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [kindEq m1 m2]
+  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [multEq m1 m2]
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindEqConstraints k11 k21
                                           ++ kindEqConstraints k12 k22
   _ _ -> []
 
 kindSubConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindSubConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [kindEq (K.join m1 m2) m2]
+  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [multEq (K.join m1 m2) m2]
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
                                           ++ kindSubConstraints k12 k22
   _ _ -> []

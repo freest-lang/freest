@@ -25,7 +25,7 @@ import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Syntax.Names
 import Syntax.Type.Kinded qualified as T
-import Syntax.Provenance ( Origin(..), Reason(..) )
+import Syntax.Provenance ( Origin(..) )
 import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
@@ -639,8 +639,8 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           case mm of
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo ai fe) fe i
-                       m (Origin (getSpan m) FromForall)
-                       m' (Origin (getSpan m') FromLambda))
+                       m (Origin (getSpan m))
+                       m' (Origin (getSpan m')))
             Nothing -> return ()
           (rhs', tctxi') <- checkFun' (i + 1) (Map.insert (Left ai) ki kctxi) tctxi ps''
             (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv ai ki) u)
@@ -655,8 +655,8 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           case mm of
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo pi fe) fe i
-                       m (Origin (getSpan m) FromArrow)
-                       m' (Origin (getSpan m') FromLambda))
+                       m (Origin (getSpan m))
+                       m' (Origin (getSpan m')))
             Nothing -> return ()
           (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
           let kctxi' = Map.union kctxp kctxi
@@ -668,8 +668,8 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           case mm of
             Just m' -> unless (m' == m) do
               throwE (ArrowMultMismatch (spanFromTo φi fe) fe i
-                       m (Origin (getSpan m) FromForall)
-                       m' (Origin (getSpan m') FromLambda))
+                       m (Origin (getSpan m))
+                       m' (Origin (getSpan m')))
             Nothing -> return ()
           (rhs', tctxi') <- checkFun' (i + 1) kctxi tctxi ps''
             ((if null φs then id else T.ForallM s' m φs) $ 
@@ -1053,18 +1053,18 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 arrowConstraints = \cases
                   [] _ -> []
                   (ExpLevel{}  : ps') (T.AppArrow _ m' _ v) ->
-                    eqOf FromArrow m' : arrowConstraints ps' (normalise tdecls v)
+                    eqOf m' : arrowConstraints ps' (normalise tdecls v)
                   (TypeLevel{} : ps') (T.AppForall s m' (_:aks) v) ->
-                    eqOf FromForall m' : arrowConstraints ps'
+                    eqOf m' : arrowConstraints ps'
                       (if null aks then v else T.AppForall s m' aks v)
                   (MultLevel{} : ps') (T.ForallM s m' (_:φs) v) ->
-                    eqOf FromForall m' : arrowConstraints ps'
+                    eqOf m' : arrowConstraints ps'
                       (if null φs then v else T.ForallM s m' φs v)
                   _ _ -> [] -- error deferred to checking
                 -- the arrow/quantifier multiplicity m' must match the lambda's
                 -- declared multiplicity m; tag each side with its provenance
-                eqOf reason m' = LMI.MultEquation m' (Origin (getSpan m') reason)
-                                                  m  (Origin (getSpan m) FromLambda)
+                eqOf m' = LMI.MultEquation m' (Origin (getSpan m'))
+                                           m  (Origin (getSpan m))
             e t1 ->
               do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
