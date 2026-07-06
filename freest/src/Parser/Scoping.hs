@@ -436,8 +436,6 @@ scopeExp ctx = \case
   E.Let s ds e -> do
     (ctx', ds') <- scopeDefs ctx ds
     E.Let s ds' <$> scopeExp ctx' e
-  E.Semi s e1 e2 -> 
-    E.Semi s <$> scopeExp ctx e1 <*> scopeExp ctx e2
   E.Case s e prhss -> do
     e' <- scopeExp ctx e
     E.Case s e' <$> mapM scopePatRHS prhss

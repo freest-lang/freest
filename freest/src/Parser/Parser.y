@@ -491,7 +491,7 @@ Exp :: { E.ParsedExp }
   --   * à la Haskell (declared by programmer) 
   --   * à la F# (depends on leading chars)
   | Exp '.'  Exp { binOp $1 (E.Var (getSpan $2) $ mkDotVar $2) $3 }
-  | Exp ';'  Exp { E.Semi (spanFromTo $1 $3) $1 $3 }
+  | Exp ';'  Exp { binOp $1 (E.Var (getSpan $2) $ mkSemiVar $2) $3 }
   | Exp '$'  Exp { addArgExp (ExpLevel $3) $1 } -- { binOp $1 (E.Var (getSpan $2) $ mkDollarVar $2) $3 }
   | Exp '|>' Exp { addArgExp (ExpLevel $1) $3 } -- { binOp $1 (E.Var (getSpan $2) $ mkRTriangleVar $2) $3 }
   | Exp '||' Exp { binOp $1 (E.Var (getSpan $2) $ mkOrVar $2) $3 }

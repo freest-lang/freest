@@ -267,8 +267,6 @@ eval ctx (E.Asc span exp typ) = do
 eval ctx (E.Let _ decls exp) = do
   letBindings <- collectLetDecls ctx decls
   eval (ctx `union` letBindings) exp
-eval ctx (E.Semi span exp1 exp2) =
-  eval ctx exp1 >> eval ctx exp2
 eval ctx (E.Case _ exp alternatives) = do
   val <- eval ctx exp
   -- a `case` is the one-column instance of the clause matcher (session effects,

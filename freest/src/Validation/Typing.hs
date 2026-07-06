@@ -207,13 +207,6 @@ synth tdecls ddecls kctx tctx = \case
     (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
     (e', t, tctxe) <- synth tdecls ddecls kctx' tctx' e
     (E.Let s ds' e', t,) <$> typeCtxDifference kctx' tctxe tctxds
-  E.Semi s e1 e2 -> do
-    (e1', t, tctx') <- synth tdecls ddecls kctx tctx e1
-    when (Kinding.isRestricted t) do
-      throwE (KindMismatch s (K.ut se1) t)
-    (e2', u, tctx'') <- synth tdecls ddecls kctx tctx' e2
-    return (E.Semi s e1' e2', u, tctx'')
-    where se1 = getSpan e1
   e@(E.Case s e' cs@((p1, rhs1) : cs'))   -> do
     -- TODO: detect redundant and incomplete patterns
     (e'', t, tctx') <- synth tdecls ddecls kctx tctx e'
@@ -401,10 +394,6 @@ check tdecls ddecls kctx tctx e t = case e of
     (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
     (e'', tctx'') <- check tdecls ddecls kctx' tctx' e' t
     (E.Let s ds' e'',) <$> typeCtxDifference kctx' tctx'' tctxds
-  E.Semi s e1 e2 -> do
-    (e1', t1, tctx') <- synth tdecls ddecls kctx tctx e1
-    Kinding.checkK t1 (K.Proper (getSpan e1) (K.Un $ getSpan e1) K.Top)
-    first (E.Semi s e1') <$> check tdecls ddecls kctx tctx' e2 t
   E.Case s e' psrhss -> do
     (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
     (unzip -> (psrhss', tctxs)) <- forM psrhss \(pi, rhsi) -> do

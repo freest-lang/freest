@@ -727,7 +727,6 @@ usesExp x = go
       E.Pack _ _ e    -> go e
       E.Asc _ e _     -> go e
       E.Let _ lds e   -> addU (usesLetDecls x lds) (go e)
-      E.Semi _ e1 e2  -> addU (go e1) (go e2)
       E.Case _ e brs  -> addU (go e) (mergeAll [usesRHS x rhs | (_, rhs) <- brs])
       E.If _ e1 e2 e3 -> addU (go e1) (mergeU (go e2) (go e3))
       _               -> Zero
@@ -818,7 +817,6 @@ destructuresExp = \case
   E.Abs _ _ _ e   -> destructuresExp e
   E.Pack _ _ e    -> destructuresExp e
   E.Asc _ e _     -> destructuresExp e
-  E.Semi _ e1 e2  -> destructuresExp e1 ++ destructuresExp e2
   E.Case _ e brs  -> (case e of E.Var _ v -> [(p, v) | (p, _) <- brs]; _ -> [])
                        ++ destructuresExp e ++ concatMap (destructuresRHS . snd) brs
   E.If _ e1 e2 e3 -> destructuresExp e1 ++ destructuresExp e2 ++ destructuresExp e3
@@ -1013,9 +1011,6 @@ kindExp tdecls ddecls kctx = \case
     (kctx', lds') <- kindLetDecls tdecls ddecls kctx lds
     e' <- kindExp tdecls ddecls kctx' e
     return (E.Let s lds' e')
-  E.Semi s e1 e2 -> 
-    E.Semi s <$> kindExp tdecls ddecls kctx e1
-             <*> kindExp tdecls ddecls kctx e2
   E.Case s e prhss -> do
     e' <- kindExp tdecls ddecls kctx e
     prhss' <- forM prhss \(pi, rhsi) -> do

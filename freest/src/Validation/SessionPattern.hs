@@ -56,7 +56,6 @@ collectInExp = \case
   E.Pack _ _ e     -> collectInExp e
   E.Asc _ e _      -> collectInExp e
   E.Let _ ds e     -> concatMap collectInLetDecl ds ++ collectInExp e
-  E.Semi _ a b     -> collectInExp a ++ collectInExp b
   E.Case s _ cs    ->
     checkPatColumn (Just s) (map fst cs) ++ concatMap (collectInRHS . snd) cs
   E.If _ a b c     -> collectInExp a ++ collectInExp b ++ collectInExp c

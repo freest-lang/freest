@@ -126,7 +126,6 @@ data Exp x
   | Pack   Span [Type x] (Exp x)
   | Asc    Span (Exp x) (Type x)
   | Let    Span [LetDecl x] (Exp x)
-  | Semi   Span (Exp x) (Exp x)
   | Case   Span (Exp x) [(Pat x, RHS x)]
   | If     Span (Exp x) (Exp x) (Exp x)
   | Channel Span (Type x)
@@ -205,7 +204,6 @@ instance Located (Exp x) where
     Pack s _ _   -> s
     Asc s _ _    -> s
     Let s _ _    -> s
-    Semi s _ _   -> s
     Case s _ _   -> s
     If s _ _ _   -> s
     Channel s _  -> s
@@ -225,7 +223,6 @@ instance Located (Exp x) where
     Pack _ ts e   -> Pack s ts e
     Asc _ e t     -> Asc s e t
     Let _ ds w    -> Let s ds w
-    Semi _ e1 e2  -> Semi s e1 e2
     Case _ e cs   -> Case s e cs
     If _ e1 e2 e3 -> If s e1 e2 e3
     Channel _ t   -> Channel s t
@@ -307,7 +304,6 @@ instance Show (XBndKind x) => Show (Exp x) where
     Let _ ds e     -> "(let ⦃ "
                       ++intercalate " ⨾ " (map show ds)
                       ++" ⦄ in "++show e++")"
-    Semi _ e1 e2   -> "(" ++ show e1 ++ "; " ++ show e2 ++ ")"
     Case _ e pes   -> "(case "++show e++" of ⦃ "
                       ++intercalate " ⨾ " (map showCase pes)
                       ++" ⦄)"
@@ -382,7 +378,6 @@ freeVars = \case
   Pack _ _ exp                -> freeVars exp
   Asc _ exp _                 -> freeVars exp
   Let _ decls exp             -> let (free, bound) = collectVarsLet decls in free `Set.union` (freeVars exp Set.\\ bound)
-  Semi _ exp1 exp2            -> Set.union (freeVars exp1) (freeVars exp2)
   Case _ target alternatives  -> let freeVarsAlts = Set.unions $ map (\(pat, rhs) -> freeVarsRHS rhs Set.\\ allVarsPat pat) alternatives
                                 in freeVars target `Set.union` freeVarsAlts
   If _ ifExp thenExp elseExp  -> freeVars ifExp `Set.union` freeVars thenExp `Set.union` freeVars elseExp

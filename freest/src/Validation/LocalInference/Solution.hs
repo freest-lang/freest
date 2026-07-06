@@ -134,7 +134,6 @@ resolveExp sol = \case
   E.Pack s ts e   -> E.Pack s (map (resolveType sol) ts) (resolveExp sol e)
   E.Asc s e t     -> E.Asc s (resolveExp sol e) (resolveType sol t)
   E.Let s lds e   -> E.Let s (map (resolveLetDecl sol) lds) (resolveExp sol e)
-  E.Semi s e1 e2  -> E.Semi s (resolveExp sol e1) (resolveExp sol e2)
   E.Case s e brs  -> E.Case s (resolveExp sol e) (map (bimap (resolvePat sol) (resolveRHS sol)) brs)
   E.If s e1 e2 e3 -> E.If s (resolveExp sol e1) (resolveExp sol e2) (resolveExp sol e3)
   E.Channel s t   -> E.Channel s (resolveType sol t)
