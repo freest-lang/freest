@@ -315,7 +315,7 @@ toMessage src = \case
     ("Constructor out of scope: " ++ bt (show i))
   DConsPatArgMismatch s i n m -> makeError src s
     ("Constructor " ++ bt (show i) ++ " takes " ++ show n
-      ++ " arguments, but it was given " ++ show m)
+      ++ " arguments, but it is given " ++ show m)
   ExpectsTooManyArgs s t n m -> makeError src s
      ("This function expects " ++ prettyArgs n
        ++ ", but its type " ++ bt (unparse t) ++ " takes"
@@ -364,7 +364,7 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   LinVarAtEndOfScope s xi _ -> makeError src s
-    ("Linear " ++ prettyVarCons xi ++ " was not consumed")
+    ("Linear " ++ prettyVarCons xi ++ " is not consumed")
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
       ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
@@ -382,7 +382,7 @@ toMessage src = \case
         _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (tidyM m') ++ " and ")
       ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
-      ++ " was consumed in body of "
+      ++ " is consumed in body of "
       ++ (case m of 
         K.Un{} -> "an unrestricted function"
         _      -> "a function with multiplicity " ++ bt (tidyM m))
@@ -453,7 +453,7 @@ toMessage src = \case
                               Right i -> "constructor " ++ bt (show i))
       ++ " of type " ++ bt (unparse t) ++", bound at\n"
       ++ snippet src xi True
-      ++ "was not consumed evenly among the branches of a"
+      ++ "is not consumed evenly among the branches of a"
       ++ (case fpe of
         Left (Left  x) -> " function definition"
         Left (Right p) -> " value definition"
