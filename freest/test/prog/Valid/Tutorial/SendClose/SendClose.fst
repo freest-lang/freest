@@ -1,8 +1,8 @@
 module SendClose where
 
-writeFive : !Int ; Close -> ()
-writeFive c =
-  c ; ()
+-- writeFive : !Int ; Close -> ()
+-- writeFive c =
+--   c ; ()
 
 writeFive : !Int ; Close -> ()
 writeFive c =
