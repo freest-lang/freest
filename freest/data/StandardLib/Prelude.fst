@@ -240,6 +240,50 @@ length : forall (a : *T) -> [a] -> Int
 length @a []        = 0
 length @a (_ :: xs) = succ (length xs)
 
+foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
+foldl #m #n @a @b f = go
+  where
+    go : a -> [b] -m-> a
+    go accum (x :: xs) = go (f accum x) xs
+    go accum _         = accum
+
+foldl' : forall #m #n (a : m T) (b : 1T) -> (a -> b -n-> a) -> a -> [b]' -m-> a
+foldl' #m #n @a @b f = go
+  where
+    go : a -> [b]' -m-> a
+    go accum (x ::' xs) = go (f accum x) xs
+    go accum []'        = accum
+
+foldr : forall #m #n (a : *T) (b : m T) -> (a -> b -n-> b) -> b -> [a] -m-> b
+foldr #m #n @a @b f = go
+  where
+    go : b -> [a] -m-> b
+    go accum (x :: xs) = f x $ go accum xs
+    go accum _         = accum
+
+foldr' : forall #m #n (a : 1T) (b : m T) -> (a -> b -n-> b) -> b -> [a]' -m-> b
+foldr' #m #n @a @b f = go
+  where
+    go : b -> [a]' -m-> b
+    go accum (x ::' xs) = f x $ go accum xs
+    go accum []'        = accum
+
+map : forall (a : *T) (b : *T) -> (a -> b) -> [a] -> [b]
+map @a @b _ []        = []
+map @a @b f (x :: xs) = f x :: map f xs
+
+map' : forall (a : 1T) (b : 1T) -> (a -> b) -> [a]' -> [b]'
+map' @a @b _ []'        = []'
+map' @a @b f (x ::' xs) = f x ::' map' f xs
+
+mapUL : forall (a : *T) (b : 1T) -> (a -> b) -> [a] -> [b]'
+mapUL @a @b _ []        = []'
+mapUL @a @b f (x :: xs) = f x ::' mapUL f xs
+
+mapLU : forall (a : 1T) (b : *T) -> (a -> b) -> [a]' -> [b]
+mapLU @a @b _ []'        = []
+mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
+
 -- * Concurrency
 
 fork : forall #m (a : *T) -> (() -m-> a) -> ()
