@@ -27,4 +27,4 @@ main =
   list
 
 aList : [Int]
-aList = [2,3,4,5] @Int
+aList = [2,3,4,5]

@@ -35,4 +35,4 @@ rev = rev' new
     rev' s (x :: xs) = rev' (push x s) xs
 
 main : ()
-main = print (rev ([1, 2, 3] @Int))
+main = print (rev ([1, 2, 3]))

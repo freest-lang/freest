@@ -114,16 +114,7 @@ synth tdecls ddecls kctx tctx = \case
         return (List.snoc esi ei', List.snoc tsi ti, tctxi'))
       ([], [], tctx) es
     return (E.Tuple s es', T.Tuple s ts, tctx')
-  -- Nil, [] @a
-  e@(E.Nil s t) -> do
-    Kinding.checkProperK t
-    pure (e, T.List s t, tctx)
-  -- Cons, (::) @a e1 e2
-  E.Cons s e1 e2 -> do
-    (e1', t1, tctx') <- synth tdecls ddecls kctx tctx e1
-    let t = T.List s t1
-    (e2', tctx') <- check tdecls ddecls kctx tctx' e2 t
-    return (E.Cons s e1' e2', t, tctx') 
+  E.List s es -> synth tdecls ddecls kctx tctx (foldr (E.Cons s) (E.DCons s (mkNilId s)) es)
   e@(E.DCons s i) -> do
     (t, tctx') <- lookupType kctx tctx (Right i)
     return (e, t, tctx')
@@ -302,24 +293,7 @@ check tdecls ddecls kctx tctx e t = case e of
       _ -> do
         (_, u, _) <- synth tdecls ddecls kctx tctx e
         throwE (TypeMismatch s t u (Left e))
-  -- Nil, [] @a
-  E.Nil s u -> do
-    Kinding.checkProperK u
-    case (normalise tdecls t, normalise tdecls u) of
-      (T.List _ t', u') -> do
-        checkEquivTypes tdecls ddecls (Left e) t' u'
-        return (e, tctx)
-      _ -> throwE (TypeMismatch s t (T.List (getSpan u) u) (Left e))
-    -- Cons, (::) @a e1 e2
-  E.Cons s e1 e2 ->
-    case normalise tdecls t of
-      T.List _ t' -> do
-        (e1', tctx') <- check tdecls ddecls kctx tctx e1 t'
-        (e2', tctx'') <- check tdecls ddecls kctx tctx' e2 t
-        return (E.Cons s e1' e2', tctx'')
-      _ -> do
-        (_, u, _) <- synth tdecls ddecls kctx tctx e
-        throwE (TypeMismatch s t u (Left e))
+  E.List s es -> check tdecls ddecls kctx tctx (foldr (E.Cons s) (E.DCons s (mkNilId s)) es) t
   E.DCons s i      -> do
     (u,tctx') <- lookupType kctx tctx (Right i)
     --   checkEquivTypes tdecls ddecls (Left e) t u >> return (e, tctx') -- no bare-head app inference
@@ -977,11 +951,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
               (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
-            e@E.Nil{}   _ -> do
-              (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
-              (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-              LTI.match e tdecls t1 t3
-            e@E.Cons{}  _ -> do
+            e@E.List{} _ -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
               (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
@@ -1090,8 +1060,7 @@ typeModule kctx tctx modl = do
               let (map fst -> as, _) = D.ddTypes ddecls Map.! it
                   aks = zip as ks
               t <- buildArrow (Map.fromList aks) aks k ts
-              let (K.Proper _ m _) = T.kindOf t
-              return (Right ic, T.AppForall (getSpan ic) m aks t)
+              return (Right ic, T.AppForall (getSpan ic) (K.Un (getSpan ic)) aks t)
             _ -> internalError $ "identifier `" ++ show it ++ "` has no kind signature"
           where
             buildArrow kctx aks k = \case

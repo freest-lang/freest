@@ -98,12 +98,14 @@ import Data.List ( sortBy )
   ')'     { TkRParen _ }
   '['     { TkLSquare _ }
   ']'     { TkRSquare _ }
+  "]'"    { TkRSquarePrime _ }
   '\\'    { TkBackslash _ }
   '->'    { TkArrow _ }
   -- Operators
   '|'     { TkPipe _ }
   ':'     { TkColon _ }
   '::'    { TkColonColon _ }
+  "::'"   { TkColonColonPrime _ }
   ';'     { TkSemi _ }
   '@'     { TkAt _ }
   '#'     { TkHash _}
@@ -114,6 +116,7 @@ import Data.List ( sortBy )
   '&&'    { TkAmpAmp _ }
   '+'     { TkPlus _ }
   '++'    { TkPlusPlus _ }
+  "++'"    { TkPlusPlusPrime _ }
   '+.'    { TkPlusDot _ }
   '-'     { TkMinus _ }
   '-.'    { TkMinusDot _ }
@@ -163,7 +166,7 @@ import Data.List ( sortBy )
 %left     '||'
 %left     '&&'
 %nonassoc CMP
-%right    '::' '++' '^^'
+%right    '::' "::'" '++' "++'" '^^'
 %left     '+' '-' '+.' '-.'
 %left     '*' '/' '*.' '/.'
 %right    '^' '**'
@@ -341,9 +344,10 @@ TypePrimary :: { T.ParsedType }
   | Identifier { T.TName (getSpan $1) $1 }
   | TypeVar { T.Var (getSpan $1) $1 }
   -- Lists
-  | '[' ']' {% prefixListTypeConsError $1 $2 }
-         -- { T.DName (spanFromTo $1 $2) (mkListId (spanFromTo $1 $2)) } -- TODO: multiplicities
-  | '[' Type ']' { T.AppDName (spanFromTo $1 $3) (mkNilId (spanFromTo $1 $3)) [$2] }
+  | '[' ']'  { T.TName (spanFromTo $1 $2) (mkListId  (spanFromTo $1 $2)) }
+  | '[' "]'" { T.TName (spanFromTo $1 $2) (mkListId' (spanFromTo $1 $2)) }
+  | '[' Type ']'  { T.AppDName (spanFromTo $1 $3) (mkListId  (spanFromTo $1 $3)) [$2] }
+  | '[' Type "]'" { T.AppDName (spanFromTo $1 $3) (mkListId' (spanFromTo $1 $3)) [$2] }
   -- Parenthesized type
   | '(' Type ')' { setSpan (spanFromTo $1 $3) $2 }
 
@@ -464,7 +468,8 @@ ExpPrimary :: { E.ParsedExp }
   -- | TupleSection { ... } -- TODO: tuple sections
   | '(' Exp ')' { setSpan  (spanFromTo $1 $3) $2 }
   | '(' Op ')'  { E.Var (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
-  | '(' '::' ')' {% prefixListConsError $1 $3 }
+  | '(' '::' ')'  { let s = spanFromTo $1 $3 in E.DCons s (mkConsId  s) }
+  | '(' "::'" ')' { let s = spanFromTo $1 $3 in E.DCons s (mkConsId' s) }
   | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkMinusVar (spanFromTo $1 $3))}
   | '(' '-.' ')' { E.Var (spanFromTo $1 $3) (mkMinusDotVar (spanFromTo $1 $3))}
@@ -473,8 +478,10 @@ ExpPrimary :: { E.ParsedExp }
   | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
   | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
   | '(' Exp '-.' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusDotVar $3)) $2) }
-  | '[' ']' {% listMissingTypeAppError $1 $2 }
-  | '[' ExpListComma ']' {% listMissingTypeAppError $1 $3 }
+  | '[' ']'  { let s = spanFromTo $1 $2 in E.DCons s (mkNilId  s) }
+  | '[' "]'" { let s = spanFromTo $1 $2 in E.DCons s (mkNilId' s) }
+  | '[' ExpListComma ']'  { E.List (spanFromTo $1 $3) $2 }
+  | '[' ExpListComma "]'" { consListExp' (spanFromTo $1 $3) $2 }
 
 Exp :: { E.ParsedExp }
   -- Keyword expressions
@@ -508,8 +515,10 @@ Exp :: { E.ParsedExp }
   | Exp '^'  Exp { binOp $1 (E.Var (getSpan $2) $ mkPowerVar $2) $3 }
   | Exp '**' Exp { binOp $1 (E.Var (getSpan $2) $ mkTimesTimesVar $2) $3 }
   | Exp '++' Exp { binOp $1 (E.Var (getSpan $2) $ mkPlusPlusVar $2) $3 }
+  | Exp "++'" Exp { binOp $1 (E.Var (getSpan $2) $ mkPlusPlusPrimeVar $2) $3 }
   | Exp '^^' Exp { binOp $1 (E.Var (getSpan $2) $ mkCaretCaretVar $2) $3 }
-  | Exp '::' Exp { binOp $1 (E.DCons(getSpan $2) $ mkConsId $2) $3 }
+  | Exp '::' Exp  { binOp $1 (E.DCons (getSpan $2) (mkConsId  $2)) $3 }
+  | Exp "::'" Exp { binOp $1 (E.DCons (getSpan $2) (mkConsId' $2)) $3 }
   -- Unary minus
   -- Should we do something like GHC's NegativeLiterals or LexicalNegation instead?
   -- https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/negative_literals.html
@@ -524,7 +533,6 @@ ExpApp :: { E.ParsedExp }
   | 'sendType' '@' TypePrimary { E.SendType (spanFromTo $1 $3) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
-  | '[' ExpListComma ']' '@' TypePrimary { E.listExp (spanFromTo $1 $3) $5 $2 } -- TODO: multiplicities
   | ExpApp '@' TypePrimary { addArgExp (TypeLevel $3) $1 }
   | ExpApp '#' MultiplicityPrimary { addArgExp (MultLevel $3) $1 }
   | ExpPrimary        { $1 }
@@ -542,6 +550,7 @@ Op :: { Variable }
   | '/.' { mkDivDotVar $1 }
   | '**' { mkTimesTimesVar $1 }
   | '++' { mkPlusPlusVar $1 }
+  | "++'" { mkPlusPlusPrimeVar $1 }
   | '^^' { mkCaretCaretVar $1 }
   | '|>' { mkRTriangleVar $1 }
   | '$'  { mkDollarVar $1 }
@@ -590,7 +599,8 @@ PatPrimary :: { E.ParsedPat }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
   | 'Wait'           { E.WaitPat   (getSpan $1) }
-  | '[' PatListComma ']'           { E.listPat (spanFromTo $1 $3) $2 }
+  | '[' PatListComma ']'           { E.listPat  (spanFromTo $1 $3) $2 }
+  | '[' PatListComma "]'"          { E.listPat' (spanFromTo $1 $3) $2 }
   | '(' ')'                        { E.TuplePat (spanFromTo $1 $2) [] }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
   | '(' '@' OptKindedVar ',' AtKindedVarListCommaPat ')'{ uncurry (E.PackPat (spanFromTo $1 $6)) (first ($3:) $5) }
@@ -604,6 +614,7 @@ Pat :: { E.ParsedPat }
   | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
   | '?' 'type' OptKindedVar '.' Pat     { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
   | Pat '::' Pat                     { E.ConsPat (spanFromTo $1 $3) $1 $3 }
+  | Pat "::'" Pat                    { E.DConsPat (spanFromTo $1 $3) (mkConsId' $2) [$1, $3] }
   | PatPrimary                       { $1 }
 
 DataConstructor :: { Identifier }
@@ -716,18 +727,6 @@ invalidMultiplicityError i tk =
 invalidPrekindError :: String -> Token -> Lexer a
 invalidPrekindError s tk = 
   throwError [UnsupportedError (getSpan tk) ("Invalid prekind: `" ++ s ++ "`") ("(Valid prekinds include `" ++ show K.Top ++ "`, `" ++ show K.Session ++ "` and `" ++ show K.Channel ++"`)")]
-
-listMissingTypeAppError :: Token -> Token -> Lexer a
-listMissingTypeAppError tk1 tk2 =
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "List expressions require a type application" "Please provide a type application after this expression"]
-
-prefixListConsError :: Token -> Token -> Lexer a
-prefixListConsError tk1 tk2 =
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "The prefix list constructor is not yet supported" "(Consider using it infixed)"]
-
-prefixListTypeConsError :: Token -> Token -> Lexer a
-prefixListTypeConsError tk1 tk2 =
-  throwError [UnsupportedError (spanFromTo tk1 tk2) "The prefix list type constructor is not yet supported" "Please provide a type between the brackets"]
 
 prefixTupleTypeConsError :: Token -> Token -> Lexer a
 prefixTupleTypeConsError tk1 tk2 = 

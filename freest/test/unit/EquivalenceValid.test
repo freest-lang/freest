@@ -528,7 +528,7 @@ where
 case Nested Skip == Nested (Skip ; Skip) : 1T
 where
   type Nested : 1T -> 1T
-  data Nested a = NestedCons a (Nested [a]) | Epsilon
+  data Nested a = NestedCons a (Nested [a]') | Epsilon
 
 case Tree Close == Tree (Close; Wait) : 1T
 where

@@ -448,6 +448,7 @@ scopeExp ctx = \case
         (p',) <$> scopeRHS ctx' rhs
   E.If s e1 e2 e3 ->
     E.If s <$> scopeExp ctx e1 <*> scopeExp ctx e2 <*> scopeExp ctx e3
+  E.List s es -> E.List s <$> mapM (scopeExp ctx) es
   E.Channel s t ->
     E.Channel s <$> scopeType ctx t
   E.Select s i -> pure $ E.Select s i

@@ -14,6 +14,7 @@ module Syntax.Module
   , insertImport
   , insertKindSig
   , insertDataDecl
+  , insertBuiltinLists
   , insertTypeDecl
   , insertDef
   , emptyParsedModule
@@ -23,6 +24,7 @@ module Syntax.Module
 where
 
 import Syntax.Base
+import Syntax.Names
 import Syntax.Declarations
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
@@ -73,6 +75,21 @@ insertDataDecl i aks dcdecls m =
        { ddCons = dataConsDecls m ++ map (second (i,)) dcdecls
        , ddTypes = dataTypeDecls m ++ [(i, (aks, map fst dcdecls))]
        } }
+
+-- | Seed the built-in list datatypes (@[]@\/@(::)@ at @*T -> *T@, linear @[]'@\/@(::')@ at @1T -> 1T@) as ordinary datatypes.
+insertBuiltinLists :: ParsedModule -> ParsedModule
+insertBuiltinLists =
+    insertKindSig [mkListId s]  (K.Arrow s (K.ut s) (K.ut s))
+  . insertKindSig [mkListId' s] (K.Arrow s (K.lt s) (K.lt s))
+  . insertDataDecl (mkListId s)  [(a, Just (K.ut s))]
+      [ (mkNilId s, [])
+      , (mkConsId s, [TU.Var s a, TU.List s (TU.Var s a)]) ]
+  . insertDataDecl (mkListId' s) [(a, Just (K.lt s))]
+      [ (mkNilId' s, [])
+      , (mkConsId' s, [TU.Var s a, TU.AppDName s (mkListId' s) [TU.Var s a]]) ]
+  where
+    s = nullSpan
+    a = mkDefaultVar "a" s
 
 insertTypeDecl :: Identifier
                -> [(Variable, Maybe K.Kind)]

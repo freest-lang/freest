@@ -34,15 +34,15 @@ data Token
   | TkForall Span | TkExists Span | TkRec Span
   -- Punctuation
   | TkOpen Span | TkPipe Span | TkClose Span
-  | TkLParen Span | TkRParen Span | TkLSquare Span | TkRSquare Span
+  | TkLParen Span | TkRParen Span | TkLSquare Span | TkRSquare Span | TkRSquarePrime Span
   | TkEqual Span | TkColon Span
   | TkBackslash Span
   | TkArrow Span | TkArrowButt Span | TkArrowHead Span
   | TkDot Span | TkAt Span | TkHash Span | TkComma Span
   -- Operators
-  | TkSemi Span | TkColonColon Span
+  | TkSemi Span | TkColonColon Span | TkColonColonPrime Span
   | TkDollar Span | TkPipeGT Span
-  | TkPlus Span | TkPlusPlus Span | TkPlusDot Span
+  | TkPlus Span | TkPlusDot Span | TkPlusPlus Span | TkPlusPlusPrime Span
   | TkMinus Span | TkMinusDot Span
   | TkStar Span | TkStarStar Span | TkStarDot Span
   | TkSlash Span | TkSlashDot Span
@@ -122,6 +122,7 @@ instance Located Token where
     TkRParen s -> s
     TkLSquare s -> s
     TkRSquare s -> s
+    TkRSquarePrime s -> s
     TkEqual s -> s
     TkColon s -> s
     TkBackslash s -> s
@@ -135,10 +136,12 @@ instance Located Token where
     -- Operators
     TkSemi s -> s
     TkColonColon s -> s
+    TkColonColonPrime s -> s
     TkDollar s -> s
     TkPipeGT s -> s
     TkPlus s -> s
     TkPlusPlus s -> s
+    TkPlusPlusPrime s -> s
     TkPlusDot s -> s
     TkMinus s -> s
     TkMinusDot s -> s
@@ -215,6 +218,7 @@ instance Located Token where
     TkRParen _ -> TkRParen s
     TkLSquare _ -> TkLSquare s
     TkRSquare _ -> TkRSquare s
+    TkRSquarePrime _ -> TkRSquarePrime s
     TkEqual _ -> TkEqual s
     TkColon _ -> TkColon s
     TkBackslash _ -> TkBackslash s
@@ -228,10 +232,12 @@ instance Located Token where
     -- Operators
     TkSemi _ -> TkSemi s
     TkColonColon _ -> TkColonColon s
+    TkColonColonPrime _ -> TkColonColonPrime s
     TkDollar _ -> TkDollar s
     TkPipeGT _ -> TkPipeGT s
     TkPlus _ -> TkPlus s
     TkPlusPlus _ -> TkPlusPlus s
+    TkPlusPlusPrime _ -> TkPlusPlusPrime s
     TkPlusDot _ -> TkPlusDot s
     TkMinus _ -> TkMinus s
     TkMinusDot _ -> TkMinusDot s

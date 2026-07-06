@@ -86,9 +86,11 @@ $upper = [ A-Z ]
 <0> "}"    { token TkClose }
 <0> "|"    { token TkPipe }
 <0> "["    { token TkLSquare }
+<0> "]'"   { token TkRSquarePrime }
 <0> "]"    { token TkRSquare }
 
 -- Operators
+<0> "::'" { token TkColonColonPrime }
 <0> "::"  { token TkColonColon }
 <0> ";"   { token TkSemi }
 <0> "$"   { token TkDollar }
@@ -97,6 +99,7 @@ $upper = [ A-Z ]
 <0> "|>"  { token TkPipeGT }
 <0> "+"   { token TkPlus }
 <0> "+."  { token TkPlusDot }
+<0> "++'" { token TkPlusPlusPrime }
 <0> "++"  { token TkPlusPlus }
 <0> "-"   { token TkMinus }
 <0> "-."  { token TkMinusDot }

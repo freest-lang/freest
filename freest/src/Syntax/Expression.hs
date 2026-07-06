@@ -16,6 +16,7 @@ module Syntax.Expression
        )
   , ParsedPat, ScopedPat, KindedPat
   , listPat
+  , listPat'
   , RHS(..)
   , LetDecl(..)
   , ParsedExp, ScopedExp, KindedExp
@@ -26,7 +27,6 @@ module Syntax.Expression
        , Nil
        , Cons
        )
-  , listExp
   , allVarsPat
   , freeVarsDecls
   , freeVarsRHS
@@ -100,6 +100,11 @@ listPat s = \case
   []       -> NilPat s
   (p : ps) -> ConsPat s p (listPat s ps)
 
+listPat' :: Span -> [Pat x] -> Pat x
+listPat' s = \case
+  []       -> DConsPat s (mkNilId' s) []
+  (p : ps) -> DConsPat s (mkConsId' s) [p, listPat' s ps]
+
 data LetDecl x
   = ValDef (Pat x)  (RHS x)
   | FnDef  Variable [([Level (Pat x) Variable Variable], RHS x)]
@@ -128,6 +133,7 @@ data Exp x
   | Let    Span [LetDecl x] (Exp x)
   | Case   Span (Exp x) [(Pat x, RHS x)]
   | If     Span (Exp x) (Exp x) (Exp x)
+  | List   Span [Exp x]
   | Channel Span (Type x)
   | Select Span Identifier
   | SendType Span (Type x)
@@ -149,9 +155,6 @@ pattern Nil s t <- App s (DCons _ ((== mkNilId s) -> True)) [TypeLevel t]
 pattern Cons :: Span -> Exp x -> Exp x -> Exp x
 pattern Cons s e1 e2 <- App s (DCons _ ((== mkConsId s) -> True)) [ExpLevel e1, ExpLevel e2]
   where Cons s e1 e2 =  App s (DCons s (mkConsId s)) (map ExpLevel [e1,e2])
-
-listExp :: Span -> Type x -> [Exp x] -> Exp x
-listExp s t = foldr (Cons s) (Nil s t)
 
 instance Located (Pat x) where
   getSpan = \case
@@ -206,6 +209,7 @@ instance Located (Exp x) where
     Let s _ _    -> s
     Case s _ _   -> s
     If s _ _ _   -> s
+    List s _     -> s
     Channel s _  -> s
     Select s _   -> s
     SendType s _ -> s
@@ -225,6 +229,7 @@ instance Located (Exp x) where
     Let _ ds w    -> Let s ds w
     Case _ e cs   -> Case s e cs
     If _ e1 e2 e3 -> If s e1 e2 e3
+    List _ es     -> List s es
     Channel _ t   -> Channel s t
     Select _ i -> Select s i
     SendType _ t -> SendType s t
@@ -309,6 +314,7 @@ instance Show (XBndKind x) => Show (Exp x) where
                       ++" ⦄)"
                       where showCase (p, e) = show p ++ " -> " ++ show e
     If _ e1 e2 e3  -> "(if "++show e1++" then "++show e2++" else "++show e3++")"
+    List _ es      -> "["++intercalate ", " (map show es)++"]"
     Channel _ t    -> "(channel @"++show t++")"
     Select _ i     -> "(select "++show i++")"
     SendType _ t   -> "(sendType @" ++ show t ++ ")"
@@ -381,4 +387,5 @@ freeVars = \case
   Case _ target alternatives  -> let freeVarsAlts = Set.unions $ map (\(pat, rhs) -> freeVarsRHS rhs Set.\\ allVarsPat pat) alternatives
                                 in freeVars target `Set.union` freeVarsAlts
   If _ ifExp thenExp elseExp  -> freeVars ifExp `Set.union` freeVars thenExp `Set.union` freeVars elseExp
+  List _ es                   -> Set.unions (map freeVars es)
   _                           -> Set.empty

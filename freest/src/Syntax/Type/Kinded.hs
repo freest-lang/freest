@@ -268,8 +268,7 @@ pattern Tuple s ts <- T.Tuple s _ _ ts
   
 pattern List :: Span -> KindedType -> KindedType
 pattern List s t <- T.List s _ _ t
-  where List s t  = AppDName s (K.Arrow s (K.lt s) (K.Proper s m K.Top)) (mkListId s) [t]
-          where (K.Proper _ m _) = kindOf t 
+  where List s t  = AppDName s (K.Arrow s (K.ut s) (K.ut s)) (mkListId s) [t]
 
 pattern Bool :: Span -> KindedType
 pattern Bool s <- T.Bool s _

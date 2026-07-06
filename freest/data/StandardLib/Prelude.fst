@@ -209,9 +209,13 @@ until @a p f = go
 (;) @a @b _ x = x
 
 -- * Lists
-(++) : forall #m (a : m T) -> [a] -> [a] -m-> [a]
-(++) #m @a []      ys = ys
-(++) #m @a (x::xs) ys = x :: ((++) #m xs ys) 
+(++) : forall (a : *T) -> [a] -> [a] -> [a]
+(++) @a []      ys = ys
+(++) @a (x::xs) ys = x :: ((++) @a xs ys)
+
+(++') : forall (a : 1T) -> [a]' -> [a]' -1-> [a]'
+(++') @a []'        ys = ys
+(++') @a (x ::' xs) ys = x ::' ((++') @a xs ys)
 
 head : forall (a : *T) -> [a] -> a
 head @a []       = error "head: empty list"

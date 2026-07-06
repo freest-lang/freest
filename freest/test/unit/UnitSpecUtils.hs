@@ -36,7 +36,7 @@ mkTypeSpec testPaths testDesc failHandler testHandler = do
           Right (t, k, m)  -> testHandler src' (t, k, m) 
   where
     scopeKindingTest ctx (t, k, m) = do
-      (ctx,m') <- scopeModule' ctx m
+      (ctx,m') <- scopeModule' ctx (M.insertBuiltinLists m)
       t' <- scopeType ctx t
       k' <- mapM (scopeKind ctx) k
       return (t', k', m')
@@ -65,7 +65,7 @@ mkEquivalenceSpec testPaths testDesc testFun = do
           Right (t', u', k', m'') -> testFun src' (t', u', k', m'')
   where
     scopeEquivalenceTest ctx (t, u, k, m) = do
-      (ctx',m') <- scopeModule' ctx m
+      (ctx',m') <- scopeModule' ctx (M.insertBuiltinLists m)
       t' <- scopeType ctx' t
       u' <- scopeType ctx' u
       k' <- scopeKind ctx' k

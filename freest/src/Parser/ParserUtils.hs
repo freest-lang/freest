@@ -39,6 +39,10 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 unOp :: E.ParsedExp -> E.ParsedExp -> E.ParsedExp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 
+-- | Desugar a linear list literal @[e1, ..., en]'@ into a @(::')@\/@[]'@ chain.
+consListExp' :: Span -> [E.ParsedExp] -> E.ParsedExp
+consListExp' s = foldr (\e acc -> E.App s (E.DCons s (mkConsId' s)) [ExpLevel e, ExpLevel acc]) (E.DCons s (mkNilId' s))
+
 addArgExp :: Level E.ParsedExp T.ParsedType K.Multiplicity -> E.ParsedExp -> E.ParsedExp
 addArgExp a (E.App s e as) = E.App (spanFromTo s a) e (as ++ [a])
 addArgExp a e              = E.App (spanFromTo e a) e [a]

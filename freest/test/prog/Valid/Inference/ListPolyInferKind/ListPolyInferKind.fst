@@ -8,4 +8,4 @@ g : forall a -> [a] -> [a]
 g @a x = x
 
 main : ()
-main = print (g @Int ([1, 2, 3] @Int))
+main = print (g @Int ([1, 2, 3]))

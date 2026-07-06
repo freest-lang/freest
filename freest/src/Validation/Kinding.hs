@@ -168,9 +168,6 @@ synth ctx = \case
     mts <- forM ts (\t -> do (m, _, u) <- checkOperand ctx Top t; return (m, u))
     let (ms, ts') = unzip mts
     return $ TK.tupleWithKind s (Proper s (foldr join (Un s) ms) Top) ts'
-  T.List s t -> do
-    (_, _, t') <- checkOperand ctx Top t
-    return $ TK.List s t'
   T.DName s i -> flip (TK.DName s) i <$> lookupKind' ctx i
   -- Higher-order
   T.Var s a -> case ctx Map.!? Left a of
@@ -729,6 +726,7 @@ usesExp x = go
       E.Let _ lds e   -> addU (usesLetDecls x lds) (go e)
       E.Case _ e brs  -> addU (go e) (mergeAll [usesRHS x rhs | (_, rhs) <- brs])
       E.If _ e1 e2 e3 -> addU (go e1) (mergeU (go e2) (go e3))
+      E.List _ es     -> foldr (addU . go) Zero es
       _               -> Zero
 
 usesRHS :: Variable -> E.RHS Kinded -> Usage
@@ -820,6 +818,7 @@ destructuresExp = \case
   E.Case _ e brs  -> (case e of E.Var _ v -> [(p, v) | (p, _) <- brs]; _ -> [])
                        ++ destructuresExp e ++ concatMap (destructuresRHS . snd) brs
   E.If _ e1 e2 e3 -> destructuresExp e1 ++ destructuresExp e2 ++ destructuresExp e3
+  E.List _ es     -> concatMap destructuresExp es
   _               -> []
 
 destructuresLet :: E.LetDecl Kinded -> [(E.KindedPat, Variable)]
@@ -1019,9 +1018,10 @@ kindExp tdecls ddecls kctx = \case
       return (pi', rhsi')
     return $ E.Case s e' prhss'
   E.If s e1 e2 e3 ->
-    E.If s <$> kindExp tdecls ddecls kctx e1 
+    E.If s <$> kindExp tdecls ddecls kctx e1
            <*> kindExp tdecls ddecls kctx e2
            <*> kindExp tdecls ddecls kctx e3
+  E.List s es -> E.List s <$> mapM (kindExp tdecls ddecls kctx) es
   E.Channel s t -> E.Channel s <$> synth kctx t
   E.Select s i -> pure $ E.Select s i
   E.SendType s t -> E.SendType s <$> synth kctx t

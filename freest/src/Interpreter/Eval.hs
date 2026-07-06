@@ -236,6 +236,9 @@ eval _ (E.String _ s) =
   return $ hsToFstString s
 eval _ (E.DCons _ (B.Identifier _ str)) =
   return $ VCons str []
+eval ctx (E.List _ es) = do
+  vs <- mapM (eval ctx) es
+  return $ foldr (\v acc -> VCons "(::)" [v, acc]) (VCons "[]" []) vs
 eval ctx (E.Var _ var) =
   case ctxLookup ctx var of
     VIO io -> io

@@ -111,7 +111,7 @@ loadM post paths =
       let srcs = Map.fromList [(p, lines s) | (p, s) <- inputs] in
       case do modules <- mapM (uncurry runParseModule) inputs
               runValidation emptyValidationState do
-                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx Map.empty D.emptyDataDecls (mconcat modules)
+                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx Map.empty D.emptyDataDecls (M.insertBuiltinLists (mconcat modules))
                 vs                        <- get
                 pure (srcs, vs, sctx, kctx, tctx, kmodl)
       of Left es -> do
