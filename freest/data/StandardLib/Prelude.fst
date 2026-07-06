@@ -255,13 +255,13 @@ close = undefined
 
 -- | Sends a value on a given channel and then waits for the channel to be
 -- | closed. Returns ().
-sendAndWait : forall (a : 1T) -> a -> !a ; Wait -1-> ()
-sendAndWait @a x c = c |> send x |> wait
+sendAndWait : forall #m (a : m T) -> a -> !a ; Wait -m-> ()
+sendAndWait #m @a x c = c |> send x |> wait
 
 -- | Sends a value on a given channel and then closes the channel.
 -- | Returns ().
-sendAndClose : forall (a : 1T) -> a -> !a ; Close -1-> ()
-sendAndClose @a x c = c |> send x |> close
+sendAndClose : forall #m (a : m T) -> a -> !a ; Close -m-> ()
+sendAndClose #m @a x c = c |> send x |> close
 
 -- | Receives a value from a channel that continues to `Wait`, closes the 
 -- | continuation and returns the value.
@@ -310,8 +310,8 @@ readApply @a @b f c =
   c
 
 -- | Sends a value on a star channel. Unrestricted version of `send`.
-send_ : forall (a : 1T) -> a -> *!a -1-> ()
-send_ @a = undefined -- @a x c = c |> send x |> sink @*!a
+send_ : forall #m (a : m T) -> a -> *!a -m-> ()
+send_ #m @a = undefined -- @a x c = c |> send x |> sink @*!a
 
 -- | Receives a value from a star channel. Unrestricted version of `receive`.
 receive_ : forall (a : 1T) -> *?a -> a
