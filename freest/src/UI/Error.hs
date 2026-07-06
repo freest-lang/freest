@@ -332,8 +332,8 @@ toMessage src = \case
     ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
   GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
-    ++ "(Cannot apply an expression of type " ++ bt (unparse t) ++ " to "
-    ++ thirdPerson (m - n) ++ ")"
+    ++ "(Cannot apply this expression: it has type " ++ bt (unparse t)
+    ++ ", which is not a function type)"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(A type of kind " ++ bt (tidyK k) ++ " cannot be applied to further arguments)"
@@ -543,8 +543,6 @@ toMessage src = \case
     ++ snippet src vp True
     ++ "(Session and variable patterns cannot appear together in the same match)"
   where
-  thirdPerson = \case 1 -> "it"; _ -> "them"
-
   -- Tidying (GHC-style cosmetics). Kind inference leaves solvable metavariables
   -- in a type's kind precisely when it cannot pin one down; those must never
   -- reach the user as raw internal names. Following GHC's tidying, we rewrite
