@@ -363,8 +363,12 @@ toMessage src = \case
     ("Function " ++ bt (external x) ++ " is missing a type signature")
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
-  LinVarAtEndOfScope s xi _ -> makeError src s
-    ("Linear " ++ prettyVarCons xi ++ " is not consumed")
+  LinVarAtEndOfScope s xi t ->
+    makeError src s
+      ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse t) ++ " is not consumed")
+    ++ case sessionHint t of
+         Just op -> "  hint: consume it with " ++ bt op ++ "\n"
+         Nothing -> ""
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
       ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
@@ -650,6 +654,32 @@ toMessage src = \case
   locateSpan src sp@(Span fp _ _)
     | Map.member fp src = ":\n" ++ snippet src sp True
     | otherwise         = "\n"
+
+-- | For each of the eight session-type constructors, name the operator that
+-- consumes the endpoint. Returns 'Nothing' when the type does not currently
+-- expose a session action at its head (e.g. it is a function type, a name
+-- yet to be unfolded, or an unsolved metavariable). Walks through @;@
+-- ('AppSemi') so the /next/ action of a sequenced session is reported.
+sessionHint :: TK.KindedType -> Maybe String
+sessionHint = go
+  where
+    go = \case
+      TK.End _ TK.Out              -> Just "close"        -- Close
+      TK.End _ TK.In               -> Just "wait"         -- Wait
+      TK.Message _ _ TK.Out        -> Just "send"         -- Message Out
+      TK.Message _ _ TK.In         -> Just "receive"      -- Message In
+      TK.AppMessage _ _ TK.Out _   -> Just "send"
+      TK.AppMessage _ _ TK.In  _   -> Just "receive"
+      TK.Choice _ _ TK.Out _       -> Just "select"       -- Choice Out (select)
+      TK.Choice _ _ TK.In  _       -> Just "match"        -- Choice In  (branch)
+      TK.AppLinChoice _ TK.Out _   -> Just "select"
+      TK.AppLinChoice _ TK.In  _   -> Just "match"
+      TK.QuantS _ _ TK.Out         -> Just "sendType"     -- Type Out
+      TK.QuantS _ _ TK.In          -> Just "receiveType"  -- Type In
+      TK.AppQuantS _ TK.Out _ _ _  -> Just "sendType"
+      TK.AppQuantS _ TK.In  _ _ _  -> Just "receiveType"
+      TK.AppSemi _ t _             -> go t
+      _                            -> Nothing
 
 showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)

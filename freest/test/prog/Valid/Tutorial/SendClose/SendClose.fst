@@ -2,7 +2,7 @@ module SendClose where
 
 -- writeFive : !Int ; Close -> ()
 -- writeFive c =
---   c ; ()
+--   let c' = send 5 c in () -- KO
 
 writeFive : !Int ; Close -> ()
 writeFive c =
