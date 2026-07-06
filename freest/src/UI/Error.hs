@@ -387,8 +387,8 @@ toMessage src = \case
         K.Un{} -> "an unrestricted function"
         _      -> "a function with multiplicity " ++ bt (tidyM m))
       ++ "\n" ++ snippet src fe True)
-    ++ "(This would allow duplicating or discarding it. "
-    ++ "Consider using a restricted function instead.)"
+    ++ "(This would allow duplicating or discarding the value. "
+    ++ "Consider using a linear function instead.)"
     where 
       m' = case TK.kindOf t of
         K.Proper _ m _ -> m
