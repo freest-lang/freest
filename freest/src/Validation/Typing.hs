@@ -210,10 +210,9 @@ synth tdecls ddecls kctx tctx = \case
   E.Semi s e1 e2 -> do
     (e1', t, tctx') <- synth tdecls ddecls kctx tctx e1
     when (Kinding.isRestricted t) do
-      throwE (KindMismatch s (K.ut se1) t)
+      throwE (SemiLHSLinear (getSpan e1) t)
     (e2', u, tctx'') <- synth tdecls ddecls kctx tctx' e2
     return (E.Semi s e1' e2', u, tctx'')
-    where se1 = getSpan e1
   e@(E.Case s e' cs@((p1, rhs1) : cs'))   -> do
     -- TODO: detect redundant and incomplete patterns
     (e'', t, tctx') <- synth tdecls ddecls kctx tctx e'

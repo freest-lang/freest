@@ -91,6 +91,7 @@ data Error
   | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
   | ProperKindMismatch Span TK.KindedType K.Kind
   | RestrictedFunInMutual Span Variable TK.KindedType
+  | SemiLHSLinear Span TK.KindedType
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
   | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.KindedPat)
@@ -163,6 +164,7 @@ instance Located Error where
     PrekindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     RestrictedFunInMutual s _ _ -> s
+    SemiLHSLinear s _ -> s
     SigLacksDef s _ -> s
     TypeConsOutOfScope s _ -> s
     TypeMismatch s _ _ _ -> s
@@ -444,6 +446,11 @@ toMessage src = \case
   RestrictedFunInMutual s x t -> makeError src s
     ("Mutually recursive function " ++ bt (external x)
       ++ " must be unrestricted, but has type " ++ bt (unparse t))
+  SemiLHSLinear s t -> makeError src s
+    ("The left-hand side of the " ++ bt ";"
+      ++ " operator must be unrestricted, but has type "
+      ++ bt (unparse t) ++ " of kind " ++ bt (unparse (TK.kindOf t)))
+    ++ "(the `;` operator has type `forall (a : *T) (b : 1T). a -*-> b -*-> b`)"
   SigLacksDef s x -> makeError src s
     ("Variable " ++  external x ++ " has a type signature but no definition")
   TypeConsOutOfScope s i -> makeError src s
