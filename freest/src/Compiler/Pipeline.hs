@@ -19,6 +19,7 @@ module Compiler.Pipeline
 import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Parser.Parser ( runParseModule )
+import Compiler.Include ( resolveIncludes, IncludeError(..) )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
 import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
 import Validation.HOTRecursion ( checkNoHOTRec )
@@ -29,7 +30,6 @@ import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, fai
 import UI.Error ( printErrors, Source )
 import Paths_freest ( getDataFileName )
 
-import Control.Exception ( IOException, try )
 import Control.Monad.State ( get )
 import Data.Map qualified as Map
 import System.IO ( stderr, hPutStrLn )
@@ -98,15 +98,19 @@ loadSilent withPrelude programPath = do
              else pure [programPath]
   loadM (pure ()) files
 
--- | Read the given files, parse them, merge into a single 'ParsedModule',
--- then scope, kind and type-check it. The 'post' action runs on successful
--- load (pass 'pure ()' to remain silent). On failure (any unreadable file,
--- parse error, or validation error), prints errors against all sources and
--- returns 'Nothing'.
+-- | Expand the given roots along their 'INCLUDE' pragmas, parse each resulting
+-- file, merge into a single 'ParsedModule', then scope, kind and type-check it.
+-- The 'post' action runs on successful load (pass 'pure ()' to remain silent).
+-- On failure (any unreadable file, include cycle, parse error, or validation
+-- error), prints errors against all sources and returns 'Nothing'.
 loadM :: IO () -> [FilePath] -> IO (Maybe LoadState)
-loadM post paths =
-  traverse tryRead paths >>= maybe (pure Nothing) (validate . zip paths) . sequence
+loadM post roots =
+  resolveIncludes roots >>= \case
+    Left (InvalidRoot p)      -> abort (hPutStrLn stderr (notASourceFile p))
+    Left (GraphErrors src es) -> abort (printErrors src es)
+    Right inputs              -> validate inputs
   where
+    abort report = report *> hPutStrLn stderr failedToLoadModule *> pure Nothing
     validate inputs =
       let srcs = Map.fromList [(p, lines s) | (p, s) <- inputs] in
       case do modules <- mapM (uncurry runParseModule) inputs
@@ -121,12 +125,3 @@ loadM post paths =
          Right result -> do
           post
           pure (Just result)
-
--- | Try to read a file; on IO failure print 'notASourceFile' and return
--- 'Nothing', otherwise return the file contents wrapped in 'Just'.
-tryRead :: FilePath -> IO (Maybe String)
-tryRead path = do
-  result <- try (readFile path) :: IO (Either IOException String)
-  case result of
-    Left _  -> Nothing <$ hPutStrLn stderr (notASourceFile path)
-    Right s -> pure (Just s)

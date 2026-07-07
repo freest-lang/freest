@@ -54,6 +54,7 @@ library:
   exposed-modules:
     - Compiler.Bug
     - Compiler.FreeST
+    - Compiler.Include
     - Compiler.Pipeline
     - Compiler.REPL
     - Parser.LexerUtils

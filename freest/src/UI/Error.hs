@@ -66,6 +66,9 @@ data Error
   | KSigLacksBinding Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
+  | IncludeCycle Span [FilePath]
+  | IncludeNotFound Span FilePath
+  | MalformedInclude Span
   | LinConsumedInGuard 
       Span 
       (Either Variable Identifier) 
@@ -148,6 +151,9 @@ instance Located Error where
     KSigLacksBinding s _ -> s
     LacksTypeSig s _ -> s
     LexicalError s _ -> s
+    IncludeCycle s _ -> s
+    IncludeNotFound s _ -> s
+    MalformedInclude s -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ -> s
     LinConsumedInGuard s _ _ -> s
@@ -363,6 +369,12 @@ toMessage src = \case
     ("Function " ++ bt (external x) ++ " is missing a type signature")
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
+  IncludeCycle s files -> makeError src s
+    ("Include cycle: " ++ intercalate " -> " files)
+  IncludeNotFound s path -> makeError src s
+    ("Cannot find included file \"" ++ path ++ "\"")
+  MalformedInclude s -> makeError src s
+    "Malformed INCLUDE pragma, expected {-# INCLUDE \"path\" #-}"
   LinVarAtEndOfScope s xi t ->
     makeError src s
       ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse t) ++ " is not consumed")
