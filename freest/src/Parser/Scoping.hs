@@ -20,7 +20,6 @@ module Parser.Scoping
   , scopeExp
   , scopeType
   , scopeKind
-  , freshInternal
   , scopeDefs -- for freesti
   )
 where
@@ -186,10 +185,6 @@ runScoping f x =
 -- | Insert an error in the scoping state.
 insertError :: Error -> Validation ()
 insertError e = modify (\s -> s{errors = e : errors s})
-
--- | Update the internal name of a variable with a fresh name.
-freshInternal :: Variable -> Validation Variable
-freshInternal x = incCounter >>= \i -> return x{internal = i}
 
 -- = Scoping procedures
 

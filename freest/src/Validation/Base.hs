@@ -4,6 +4,7 @@ module Validation.Base
   , emptyValidationState
   , runValidation
   , incCounter
+  , freshInternal
   , addKindConstraint
   , addKindBinding
   , addMultEquation
@@ -79,6 +80,10 @@ incCounter = do
   c <- gets counter
   modify (\s -> s{counter=succ (counter s)})
   return c
+
+-- | Give a variable a fresh internal name, keeping its external name and span.
+freshInternal :: Variable -> Validation Variable
+freshInternal x = incCounter >>= \i -> return x{internal = i}
 
 -- | Record a subkinding constraint @k1 <: k2@ to be solved later.
 addKindConstraint :: Origin -> K.Kind -> K.Kind -> Validation ()
