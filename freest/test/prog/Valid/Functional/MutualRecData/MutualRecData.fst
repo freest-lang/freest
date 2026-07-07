@@ -1,5 +1,3 @@
-module MutualRecData where
-
 type RedBlackTree : *T
 data RedBlackTree = Node Colored | Empty
 

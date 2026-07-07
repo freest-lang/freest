@@ -1,5 +1,3 @@
-module CopyLinearFun where
-
 linDouble : Int -1-> Int
 linDouble x = x + x
 

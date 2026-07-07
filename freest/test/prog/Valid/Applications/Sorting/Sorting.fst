@@ -1,5 +1,3 @@
-module Sorting where
-
 {- |
 Module      :  Sorting
 Description :  Server that receives a series of integer values and returns them in ascending or descending order.

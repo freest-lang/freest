@@ -1,3 +1,1 @@
-module ParseError where
-
 x : (

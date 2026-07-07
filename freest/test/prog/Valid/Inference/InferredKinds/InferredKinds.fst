@@ -1,5 +1,3 @@
-module InferredKinds where
-
 id' : forall a -> a -> a
 id' @a x = x
 

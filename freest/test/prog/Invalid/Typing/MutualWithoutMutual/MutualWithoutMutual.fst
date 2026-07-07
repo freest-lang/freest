@@ -1,5 +1,3 @@
-module MutualWithoutMutual where
-
 even' : Int -> Bool
 even' 0 = True 
 even' n 

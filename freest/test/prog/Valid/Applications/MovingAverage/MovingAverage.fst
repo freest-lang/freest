@@ -1,5 +1,3 @@
-module MovingAverage where
-
 {- |
 Module      :  MovingAverage
 Description :  Calculates the moving average of a series of numbers

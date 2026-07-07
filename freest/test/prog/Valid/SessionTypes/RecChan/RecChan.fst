@@ -1,5 +1,3 @@
-module RecChan where
-
 type Chan : 1C
 type Chan = +{Done: Close, More: !Int;Chan}
 

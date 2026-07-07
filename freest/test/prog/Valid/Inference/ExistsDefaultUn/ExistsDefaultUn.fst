@@ -3,8 +3,6 @@
    binder kind, so *T is the most-usable default and lets the unpacked abstract
    value be used more than once without an annotation. (A *linear* existential
    is the annotated case `exists (a:1T)`.) -}
-module ExistsDefaultUn where
-
 type Counter = (exists a, (a, a -> Int, a -> a))
 
 counterADT : Counter

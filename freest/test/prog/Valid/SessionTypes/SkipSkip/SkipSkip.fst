@@ -1,5 +1,3 @@
-module SkipSkip where
-
 f : Skip; Skip; Close -> Int
 f x = close x; 1
 

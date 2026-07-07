@@ -1,6 +1,3 @@
-module TechStore where
-
-
 initQueue : forall a -> () -> (*?a, *!a)
 initQueue @a _ = channel @(*?a)
 

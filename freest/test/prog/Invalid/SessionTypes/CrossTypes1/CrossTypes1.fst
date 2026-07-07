@@ -1,5 +1,3 @@
-module CrossTypes1 where
-
 type ListOut, ListIn : 1S
 type ListOut = +{Nil : Skip, Cons: !Int;ListOut}
 type ListIn = Dual ListOut

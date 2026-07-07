@@ -17,8 +17,6 @@ Example suggested by Frank Pfenning, Ankush Das, Henry DeYoung, and Andreia Mord
 
 -}
 
-module DyckWords where
-
 type D, T : 1S
 type D = +{ Lt : T;D, Dollar : Skip }
 type T = +{ Lt : T;T, Gt : Skip }

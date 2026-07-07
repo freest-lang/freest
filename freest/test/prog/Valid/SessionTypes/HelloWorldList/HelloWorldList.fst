@@ -1,5 +1,3 @@
-module HelloWorldList where
-
 type List : *T
 data List = Nil | Cons Char List
 

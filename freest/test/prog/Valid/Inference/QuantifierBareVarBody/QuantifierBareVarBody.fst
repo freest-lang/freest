@@ -5,8 +5,6 @@
    throw a non-exhaustive-patterns error for `exists a, a`, `!type a. a` and
    `?type a. a` (`forall a -> a` escaped only by laziness). Fixed in
    `checkOperand` by carrying the instantiated proper kind on the body. -}
-module QuantifierBareVarBody where
-
 type ExistsVar = (exists a, a)
 type ForallVar = (forall a -> a)
 type SendTypeVar = (!type a . a)

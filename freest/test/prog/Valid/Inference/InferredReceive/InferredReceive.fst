@@ -1,5 +1,3 @@
-module InferredReceive where
-
 -- `a` appears in a `;` (session) and in a tuple result; both inferred.
 recvInt : forall a -> (?Int ; a) -> (Int, a)
 recvInt @a c = receive c

@@ -1,5 +1,3 @@
-module ListRW where
-
 type IList : *T
 data IList = Nil | Cons Int IList
 

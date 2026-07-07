@@ -10,8 +10,6 @@ The Blind Spot
 European Mathematical Society, 2011
 -}
 
-module SystemFTrees where
-
 type Tree : *T -> *T
 type Tree a = forall t -> a -> (t -> t -> t) -> t
 

@@ -1,5 +1,3 @@
-module DataDiffNumBoundVars where
-
 type T : *T
 data T = C Int | D
 

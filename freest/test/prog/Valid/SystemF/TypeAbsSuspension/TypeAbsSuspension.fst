@@ -1,5 +1,3 @@
-module TypeAbsSuspension where
-
 g : Int -> forall a -> Int
 g x @a = g x @a
 

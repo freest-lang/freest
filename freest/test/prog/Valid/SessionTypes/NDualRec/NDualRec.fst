@@ -1,5 +1,3 @@
-module NDualRec where
-
 type Choice : 1C
 type Choice = +{More: !Int;DD, Enough: Close}
 

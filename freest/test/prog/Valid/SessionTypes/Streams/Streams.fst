@@ -5,8 +5,6 @@ TAPL, page 270
 "A more useful variant of the Hungry type above is the type Stream of functions that can consume an arbitrary number of unit values, each time returning a pair of a number and a new stream."
 -}
 
-module Streams where
-
 -- A more useful variant of the Hungry type above is the type Stream
 -- of functions that can consume an arbitrary number of unit values,
 -- each time returning a pair of a number and a new stream.

@@ -11,8 +11,6 @@ an arithmetic expression. The server reads the expression,
 computes its value and returns the value on the same channel.
 
 -}
-module ArithExprServer where
-
 type TermChannel : 1S
 type TermChannel  = +{
    Const: !Int,

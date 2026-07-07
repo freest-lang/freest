@@ -7,8 +7,6 @@ Copyright   :  (c) LASIGE and University of Lisbon, Portugal
 Maintainer  :  balmeida@lasige.di.fc.ul.pt
 -}
 
-module SendTreeHO where
-
 -- The channel type, as seen from the producer side
 
 type TreeChannel : 1C

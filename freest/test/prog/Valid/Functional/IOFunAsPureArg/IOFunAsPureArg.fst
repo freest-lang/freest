@@ -1,5 +1,3 @@
-module IOFunAsPureArg where
-
 f : ?Int;Wait -> Int
 f c = let (x, c) = receive c in wait c; x
 

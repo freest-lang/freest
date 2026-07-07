@@ -1,4 +1,3 @@
-module Json where
 {- |
 Module      :  Exchange a JSON values on a channel
 Description :  As in "Context-Free Session Types", ICFP'16

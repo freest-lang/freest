@@ -1,5 +1,3 @@
-module Semaphores where
-
 showSemaphore : &{Green: Wait, Yellow: Wait, Red: Wait} -> String
 showSemaphore (&Green s) = wait s ; "Green"
 showSemaphore (&Yellow s) = wait s ; "Yellow"

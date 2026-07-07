@@ -23,7 +23,7 @@ module Parser.Parser
   , parseKindingTests
   ) where
 
-import Parser.Lexer ( scan )
+import Parser.Lexer ( scan, layoutSC )
 import Parser.Token
 import Parser.LexerUtils
 import Parser.ParserUtils
@@ -175,28 +175,11 @@ import Data.List ( sortBy )
 
 %%
 
+-- A module is a layout block of declarations. There is no module header or
+-- imports: the top-level layout is opened by 'runParseModule' seeding the
+-- lexer, not by a 'where'. The 'module' and 'import' keywords stay reserved.
 Module :: { M.ParsedModule }
-  : 'module' ModuleName 'where' ImportModuleDeclBlock { M.setName (split '.' $ getText $2) $4 }
-  -- TODO: no module declaration. See notes in Lexer.
-  -- | ImportModuleDeclBlock { $1 }
-
-ModuleName :: { Token }
-  : UPPER_ID { $1 }
-  | QUALIFIED_UPPER_ID { $1 }
-
-ImportModuleDeclBlock :: { M.ParsedModule }
-  : OPEN ImportModuleDeclListPIPE Close { $2 }
-
-ImportModuleDeclListPIPE :: { M.ParsedModule }
-  : ImportDecl PIPE ImportModuleDeclListPIPE { $1 $3 }
-  | ModuleDecl PIPE ModuleDeclListPIPE       { $1 $3 }
-  | ImportDecl { $1 M.emptyParsedModule }
-  | ModuleDecl { $1 M.emptyParsedModule }
-  | {- empty -} { M.emptyParsedModule }
-
-ImportDecl :: { M.ParsedModule -> M.ParsedModule }
-  : 'import' QUALIFIED_UPPER_ID { M.insertImport (split '.' $ getText $2) }
-  | 'import' UPPER_ID           { M.insertImport [getText $2] }
+  : OPEN ModuleDeclListPIPE Close { $2 }
 
 ModuleDeclListPIPE :: { M.ParsedModule }
   : ModuleDecl PIPE ModuleDeclListPIPE { $1 $3 }
@@ -736,7 +719,10 @@ prefixTupleExpConsError :: Token -> Token -> Lexer a
 prefixTupleExpConsError tk1 tk2 = 
   throwError [UnsupportedError (spanFromTo tk1 tk2) "Prefix tuple constructors are not yet supported" "(Consider using a tuple expression)"] 
 
+-- | Parse a whole module. The top-level declarations form a layout block with
+-- no enclosing @where@, so we seed the lexer in 'layoutSC' to open it at the
+-- first token (the job the module header's @where@ used to do).
 runParseModule :: FilePath -> String -> Either [Error] M.ParsedModule
-runParseModule = runLexer parseModule 
+runParseModule = runLexer (pushStartCode layoutSC *> parseModule)
 
 }

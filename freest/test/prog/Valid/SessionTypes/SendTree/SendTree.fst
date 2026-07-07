@@ -5,8 +5,6 @@
 -- Maintainer  :  balmeida@lasige.di.fc.ul.pt
 -- -}
 
-module SendTree where
-
 type Tree : *T
 data Tree = Leaf | Node Tree Int Tree
 

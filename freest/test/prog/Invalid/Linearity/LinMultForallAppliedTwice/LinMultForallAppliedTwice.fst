@@ -1,5 +1,3 @@
-module LinMultForallAppliedTwice where
-
 foo : Int -> forall #m -1-> (Int -m-> Int) -> Int
 foo x #m f = f x
 

@@ -2,8 +2,6 @@
 Benjamin C. Pierce:
 Types and programming languages. MIT Press 2002
 -}
-module Counter where
-
 type Counter : *T
 type Counter = (exists a, (a, a -> Int, a -> a))
 

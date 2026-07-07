@@ -1,5 +1,3 @@
-module InferredDeclSession where
-
 -- Declaration-kind inference for a session type with no signature: the body
 -- ends in `Close`, so the chan predicate infers `Stream : 1C` (a linear
 -- channel), letting it be used directly with `channel`/`fork`.

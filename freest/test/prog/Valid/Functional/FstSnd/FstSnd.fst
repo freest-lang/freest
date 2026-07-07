@@ -1,5 +1,3 @@
-module FstSend where
-
 fst' : forall a b -> (a, b) -> a
 fst' @a @b p = let (x, _) = p in x
 

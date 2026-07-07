@@ -15,8 +15,6 @@ back the sum of the integer values under (and including) that node.
 
 -}
 
-module TreeTransform where
-
 type Tree : *T -> *T
 data Tree a = Leaf | Node a (Tree a) (Tree a)
 

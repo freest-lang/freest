@@ -13,8 +13,6 @@ The language generated from S0 is not regular.
 This example is from unpublished notes by Frank Pfenning and Henry DeYoung
 on a simplified representation of deterministic pushdown automata.
 -}
-module AnBn where
-
 type S0, S1 : 1S
 -- Production S0
 type S0 = +{A: S1}

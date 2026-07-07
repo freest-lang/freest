@@ -13,8 +13,6 @@ exactly the same, but in fact 'select Push' works on two distinct types: EStack
 and NEStack. They both feature a Push-labelled field.
 -}
 
-module StackRecClient where
-
 type EStack, NEStack : 1S
 type EStack  = &{Push: ?Int; NEStack; EStack , Stop: Skip}
 type NEStack = &{Push: ?Int; NEStack; NEStack, Pop : !Int}

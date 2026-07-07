@@ -1,6 +1,4 @@
--- | The Prelude: a standard module. The Prelude is imported by default
--- into all FreeST modules.
-module Prelude where
+-- | The FreeST Prelude.
 
 -- * Undefined. Useful for builtins, but should also be builtin...
 undefined : forall (a : *T) -> a

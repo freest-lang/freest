@@ -1,5 +1,3 @@
-module FixPointAlt where
-
 -- The fixed-point Z combinator: Z=\f.(\x.f(\z.xxz))(\y.f(\z.yyz)) is
 -- used to calculate the factorial of 8
 

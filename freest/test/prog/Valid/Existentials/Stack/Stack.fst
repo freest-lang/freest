@@ -1,5 +1,3 @@
-module Stack where
-
 type StackADT : *T
 type StackADT = 
   (exists a

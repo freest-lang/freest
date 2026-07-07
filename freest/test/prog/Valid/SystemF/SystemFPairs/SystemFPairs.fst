@@ -6,8 +6,6 @@ Copyright   : (c) Vasco T. Vasconcelos, 2 jan 2021
 Church Encoding _ Pairs
 -}
 
-module SystemFPairs where
-
 type Pair : *T -> *T -> *T
 type Pair a b = forall c -> (a -> b -> c) -> c
 

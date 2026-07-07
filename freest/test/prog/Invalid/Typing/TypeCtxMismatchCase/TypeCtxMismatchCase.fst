@@ -1,5 +1,3 @@
-module TypeCtxMismatch where
-
 type T : *T
 data T = A | B | C
 

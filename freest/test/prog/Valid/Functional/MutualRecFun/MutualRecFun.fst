@@ -1,5 +1,3 @@
-module MutualRecFun where
-
 mutual 
   even : Int -> Bool
   even 0 = True

@@ -3,8 +3,6 @@
    without an annotation. Before as-pattern types were forced `*T`, the tuple
    here inferred `1T` and the as-pattern was rejected ("Non-linear pattern for
    linear type"). -}
-module AsPatInferUn where
-
 f : forall a b -> (a, b) -> ((a, b), a)
 f @a @b p = case p of q@(x, y) -> (q, x)
 

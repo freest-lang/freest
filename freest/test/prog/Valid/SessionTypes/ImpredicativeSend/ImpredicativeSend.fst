@@ -1,5 +1,3 @@
-module ImpredicativeSend where
-
 send' : forall a -> a -> forall b -1-> !a; b -1-> b
 send' @a x @b o = send x o
 

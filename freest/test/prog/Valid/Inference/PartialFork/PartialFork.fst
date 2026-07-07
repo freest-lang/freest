@@ -1,5 +1,3 @@
-module PartialFork where
-
 myfork : forall #m a -> (() -m-> a) -> ()
 myfork = fork
 

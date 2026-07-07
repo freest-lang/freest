@@ -1,5 +1,3 @@
-module UnInstanceOfLinSemi where
-
 id' : forall a b -> a; b -> a; b
 id' @a @b c = c
 

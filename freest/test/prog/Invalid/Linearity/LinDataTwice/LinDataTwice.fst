@@ -1,5 +1,3 @@
-module LinDataTwice where
-
 -- If a datatype contains a linear field, then it must be linear,
 -- otherwise that field can be used unrestrictedly.
 

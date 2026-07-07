@@ -1,5 +1,3 @@
-module PartialSend where
-
 consumeC : !Int;Wait -> ()
 consumeC c = send 7 c |> wait
 

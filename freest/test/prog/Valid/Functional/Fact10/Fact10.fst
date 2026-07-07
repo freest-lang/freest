@@ -1,5 +1,3 @@
-module Fact10 where
-
 type Choice : 1S
 type Choice = +{More: !Int;Choice, Enough: Skip}
 

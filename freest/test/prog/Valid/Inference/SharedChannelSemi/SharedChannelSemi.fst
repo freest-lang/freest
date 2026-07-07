@@ -1,5 +1,3 @@
-module SharedChannelSemi where
-
 -- Channel-conditional CK-Seq, inference path: `*!Int` is a shared channel
 -- (`*C`), so `*!Int ; a` is unrestricted regardless of the continuation `a`.
 -- Discarding the parameter only type-checks if that result is inferred

@@ -1,5 +1,3 @@
-module RegularTreeStream where
-
 -- Integer trees
 
 type Tree : *T

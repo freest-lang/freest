@@ -1,5 +1,3 @@
-module FiniteStreamEnd where
-
 type FiniteStream : 1S
 type FiniteStream = &{Done: Skip, More: ?Int;FiniteStream}
 

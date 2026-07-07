@@ -1,5 +1,3 @@
-module InferredUsageKinds where
-
 -- Usage-based multiplicity inference: with no kind written on `forall a`, a
 -- parameter that is duplicated or discarded forces `a` to `*T`, while a
 -- linearly-used one stays the most general `1T`.

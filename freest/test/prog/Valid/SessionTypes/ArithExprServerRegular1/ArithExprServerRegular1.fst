@@ -8,8 +8,6 @@ type Stream = +{
 	EOS: ?Int. end
 }
 -}
-module ArithExprServerRegular1 where 
-
 type StreamClient, StreamServer : 1C
 type StreamClient = +{ Add  : StreamClient
                      , Mult : StreamClient

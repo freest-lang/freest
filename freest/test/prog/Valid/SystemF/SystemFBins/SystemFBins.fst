@@ -12,8 +12,6 @@ European Mathematical Society, 2011
 "The previous integers are <<Cro-Magnon integer>>, anterior to the Babylonian numeration. A more modern version of integers requires finite sequences of zeros and ones." (page 119)
 -}
 
-module SystemFBins where
-
 type Bin : *T
 type Bin = forall a -> a -> (a -> a) -> (a -> a) -> a
 

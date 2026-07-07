@@ -8,8 +8,6 @@ Church Encoding _ Lists
 
 -- CANNOT INFER nil @T (QL limitation)
 
-module SystemFLists where
-
 type List : *T -> *T
 type List a = forall r -> (a -> r -> r) -> r -> r
 

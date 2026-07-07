@@ -1,5 +1,3 @@
-module Pmap where
-
 map, pmap : forall a b -> (a -> b) -> [a] -> [b]
 
 map @a @b _ [] = [] @b

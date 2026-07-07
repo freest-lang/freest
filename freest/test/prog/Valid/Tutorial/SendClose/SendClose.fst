@@ -1,5 +1,3 @@
-module SendClose where
-
 -- writeFive : !Int ; Close -> ()
 -- writeFive c =
 --   let c' = send 5 c in () -- KO

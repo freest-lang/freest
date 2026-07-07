@@ -5,8 +5,6 @@ Copyright   :  (c) LASIGE and University of Lisbon, Portugal
 Maintainer  :  balmeida@lasige.di.fc.ul.pt
 -}
 
-module SendTreeType where
-
 type Tree : *T
 data Tree = Leaf | Node Int Tree Tree
 

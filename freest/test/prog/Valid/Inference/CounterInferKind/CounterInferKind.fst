@@ -1,7 +1,5 @@
 {- Existential unpack with the binder kind omitted: `@c` (not `@(c : *T)`).
    The kind is inferred from the existential's binder kind at typing. -}
-module CounterInferKind where
-
 type Counter : *T
 type Counter = (exists (a : *T), (a, a -> Int, a -> a))
 

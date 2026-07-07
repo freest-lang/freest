@@ -1,5 +1,3 @@
-module ConjunctionPattern where
-
 type BoolC : 1C
 type BoolC = &{True: Wait, False: Wait}
 

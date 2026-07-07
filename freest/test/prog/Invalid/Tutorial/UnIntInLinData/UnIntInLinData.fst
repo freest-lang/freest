@@ -1,5 +1,3 @@
-module UnIntInLinData where
-
 type LinInt : 1T
 data LinInt = MkLinInt Int
 

@@ -8,8 +8,6 @@ Based on an example in
   ACM Trans. Program. Lang. Syst., 41(2):9:1–9:37, 2019.
 -}
 
-module Stack where
-
 type EStack, NEStack : 1S
 type EStack  = &{Push: ?Int; NEStack; EStack , Stop: Skip}
 type NEStack = &{Push: ?Int; NEStack; NEStack, Pop : !Int}

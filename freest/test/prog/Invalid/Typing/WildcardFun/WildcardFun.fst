@@ -1,5 +1,3 @@
-module WildcardFun where
-
 _ : Int -> Int
 _ x = x
 

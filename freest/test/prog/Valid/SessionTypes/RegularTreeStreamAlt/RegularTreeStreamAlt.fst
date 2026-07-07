@@ -1,5 +1,3 @@
-module RegularTreeStreamAlt where
-
 -- Represents a classical binary tree (Node LeftTree RightTree)
 type Tree : *T
 data Tree = Leaf | Node Int Tree Tree

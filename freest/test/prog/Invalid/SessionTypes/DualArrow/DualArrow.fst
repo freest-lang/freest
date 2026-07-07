@@ -1,5 +1,3 @@
-module DualArrow where
-
 type RcvInt : 1S
 type RcvInt = ?Int
 

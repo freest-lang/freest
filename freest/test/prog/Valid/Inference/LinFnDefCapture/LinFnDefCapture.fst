@@ -4,8 +4,6 @@
    function's signature multiplicity, a single-clause capture was reported as
    `Many` (mergeU has no identity), forcing `a` to *T and rejecting the linear
    instantiation. -}
-module LinFnDefCapture where
-
 once : forall a -> a -> a
 once @a x =
   let f : () -1-> a

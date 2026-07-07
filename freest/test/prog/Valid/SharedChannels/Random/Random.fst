@@ -1,5 +1,3 @@
-module Random where
-
 type IntStream : *C
 type IntStream = *!Int
 

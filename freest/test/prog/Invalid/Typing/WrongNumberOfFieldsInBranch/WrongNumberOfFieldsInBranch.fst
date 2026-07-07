@@ -1,5 +1,3 @@
-module WrongNumberOfFieldsInBranch where
-
 f : &{A: Skip, B: Skip} -> Int
 f c = case c of 
   &A _ -> 5

@@ -1,5 +1,3 @@
-module TypeVarNotShadowed where
-
 -- Type variables should not be shadowed by program variables.
 
 -- implicit type abstraction

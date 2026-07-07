@@ -1,4 +1,3 @@
-module Genetic where
 {-
 
 This program is an implementation of a Genetic Algorithm tailored

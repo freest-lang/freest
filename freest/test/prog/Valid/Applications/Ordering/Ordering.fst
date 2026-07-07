@@ -1,5 +1,3 @@
-module Ordering where
-
 {- |
 Module      :  Ordering
 Description :  Server that orders lists and returns them

@@ -6,8 +6,6 @@ Copyright   : (c) Vasco T. Vasconcelos, 31 dec 2020
 Church Encoding _ Natural Numbers
 -}
 
-module SystemFNats where
-
 type Nat : *T
 type Nat = forall a -> (a -> a) -> a -> a
 

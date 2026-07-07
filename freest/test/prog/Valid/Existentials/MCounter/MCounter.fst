@@ -3,8 +3,6 @@ Benjamin C. Pierce:
 Types and programming languages. MIT Press 2002
 -}
 
-module MCounter where
-
 type IntRef : *C
 type IntRef = *?IntRefSession
 

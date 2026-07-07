@@ -1,5 +1,3 @@
-module MultipleArgs where
-
 linBinApply : (Int -1-> Int -1-> Int) -*-> Int -1-> Int -1-> Int
 linBinApply f x y = f x y
 

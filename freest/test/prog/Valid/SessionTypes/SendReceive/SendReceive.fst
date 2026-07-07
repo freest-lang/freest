@@ -1,5 +1,3 @@
-module SendReceive where
-
 client : !Int; ?Bool; Close -> Bool 
 client c = c |> send 5 |> receiveAndClose
 

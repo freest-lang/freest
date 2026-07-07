@@ -1,5 +1,3 @@
-module MutualDataKinds where
-
 -- Three mutually recursive datatypes with no signatures. The complete
 -- multiplicity unifier plus the SCC least fixpoint infer the whole group as
 -- `*T` (no field forces linearity); before the fix the solver rejected this

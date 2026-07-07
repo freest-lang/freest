@@ -24,8 +24,6 @@ whether two context-free session types are equivalent.
 
 -}
 
-module Unnormed where
-
 type T : 1C
 type T = !Int; T; ?Int
 

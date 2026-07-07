@@ -4,8 +4,6 @@
    endpoint is freely usable — here discarded — without an annotation. (A
    *linear* sent type is the annotated case `!type (a:1T)`.) Dual to a `?type`
    binder's most-general `1T`, matching forall/exists. -}
-module SendTypeDefaultUn where
-
 type Chan : 1S
 type Chan = !type a. !a ; Skip
 

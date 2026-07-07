@@ -5,8 +5,6 @@ Based on the 'Ami and Boe' example from
 
 -}
 
-module CakeStoreFork where
-
 type CakeStore : *C
 type CakeStore   = *?CakeService
 

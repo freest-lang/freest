@@ -1,5 +1,3 @@
-module HigherKindedParam where
-
 -- A higher-kinded parameter `f` is applied in a field (`f a`); its arrow kind is
 -- inferred from that use, so the datatype kinds without an annotation. Recursive
 -- (`Fix`) and type-level application (`App Box Int`) work too. (Constructing a

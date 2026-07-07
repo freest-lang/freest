@@ -1,5 +1,3 @@
-module InvalidExtractPair where
-
 extractPair : Bool
 extractPair = True
 

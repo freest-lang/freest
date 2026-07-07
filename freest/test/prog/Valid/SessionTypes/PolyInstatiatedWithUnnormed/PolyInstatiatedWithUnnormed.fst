@@ -1,6 +1,4 @@
 
-module PolyInstantiatedWithUnnormed where
-
 f : forall (a : 1S) -> !Char;a -> a
 f @a c = send 'a' c
 

@@ -18,8 +18,6 @@ with XploreNodeChan (adapted from the paper).
 
 -}
 
-module LazyTreeTraversal where
-
 type Tree : *T
 data Tree = Leaf | Node Int Tree Tree
 

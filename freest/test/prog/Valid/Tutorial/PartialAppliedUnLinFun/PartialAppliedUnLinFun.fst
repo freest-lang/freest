@@ -1,5 +1,3 @@
-module PartialAppliedUnLinFun where
-
 f : Int -*-> Int -1-> Int
 f x y = x + y
 

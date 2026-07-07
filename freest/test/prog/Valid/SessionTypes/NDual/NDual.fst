@@ -1,5 +1,3 @@
-module NDual where 
-
 type DD : 1S
 -- type DD = Dual (Dual !Int;DD)
 type DD = Dual (Dual !Int)

@@ -1,5 +1,3 @@
-module RemoteListTransform where
-
 type IntList : *T
 type IntListC, IntListS : 1S
 data IntList = Nil | Cons Int IntList

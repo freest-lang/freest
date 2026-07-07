@@ -1,5 +1,3 @@
-module InfiniteChannels where
-
 -- Creates an unbounded number of channels; diverges
 write : !Int; Close -> Int -1-> ()
 write c n =

@@ -1,5 +1,3 @@
-module LinDataUnConsTwice where
-
 -- In datatype constructor types, all arrows except the first 
 -- after a linear field should be -1->, otherwise we can use 
 -- the linear fields unrestrictedly.

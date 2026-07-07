@@ -1,5 +1,3 @@
-module DupConsChan where
-
 type T : *T
 data T = A | B
 

@@ -1,5 +1,3 @@
-module SendListType where
-
 type List : *T
 data List = Cons Int List | Nil
 

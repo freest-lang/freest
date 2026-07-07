@@ -1,5 +1,3 @@
-module LinArgNotConsumed where
-
 f : !Int -> Char
 f shouldBeConsumed = 'a'
 

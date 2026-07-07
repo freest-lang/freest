@@ -1,5 +1,3 @@
-module SumSendPairError where
-
 -- TEST ERROR MESSAGES
 
 type Value : *T

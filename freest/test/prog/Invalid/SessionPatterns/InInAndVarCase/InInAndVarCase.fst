@@ -1,5 +1,3 @@
-module InInAndVarCase where
-
 f : ?(?Int ; Wait) ; Wait -> ()
 f c = case c of
   ?(?1 ; Wait) ; Wait -> print 1

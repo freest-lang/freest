@@ -1,5 +1,3 @@
-module SharedBool where
-
 type Bool' : *C
 type Bool' = *+{False', True'}
 

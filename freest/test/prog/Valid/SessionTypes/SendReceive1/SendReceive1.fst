@@ -1,5 +1,3 @@
-module SendReceive1 where
-
 client : ?Int; !Bool; Wait -> ()
 client c =
   let (n, c) = receive c in

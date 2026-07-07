@@ -1,5 +1,3 @@
-module Repeat where
-
 -- TODO: this test should be revised
 
 -- 1 _ Stream

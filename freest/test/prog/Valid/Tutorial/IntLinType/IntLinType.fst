@@ -1,5 +1,3 @@
-module IntLinType where
-
 type LinInt : 1T
 type LinInt = Int
 

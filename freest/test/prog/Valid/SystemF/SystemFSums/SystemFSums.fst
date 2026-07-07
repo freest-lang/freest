@@ -7,8 +7,6 @@ Church Encoding _ Sums
 as per Practical Foundations for Programming Languages, Robert Harper, 2nd edition, page 141
 -}
 
-module SystemFSums where
-
 type Sum : *T -> *T -> *T
 type Sum a b = forall c -> (a -> c) -> (b -> c) -> c
 

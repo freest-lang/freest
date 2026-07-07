@@ -1,5 +1,3 @@
-module ErrorPosChoice where
-
 type F : 1S
 type F = +{B: !Bool; Close}
 

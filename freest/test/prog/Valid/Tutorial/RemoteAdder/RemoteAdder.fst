@@ -1,5 +1,3 @@
-module RemoteAdder where
-
 adder : ?Int ; ?Int ; !Int ; Wait -> ()
 adder c =
     let (x, c) = receive c

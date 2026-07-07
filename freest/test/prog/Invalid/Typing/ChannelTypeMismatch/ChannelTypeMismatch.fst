@@ -1,5 +1,3 @@
-module ChannelTypeMismatch where
-
 main : Int
 main =
   let (o, i) = channel @(!Int)

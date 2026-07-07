@@ -1,5 +1,3 @@
-module TypeCtxMismatchValGuards where
-
 foo : ()
 foo =
   let (o, i) = channel @Close

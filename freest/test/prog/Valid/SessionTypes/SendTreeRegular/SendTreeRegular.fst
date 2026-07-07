@@ -6,8 +6,6 @@ Copyright   : (c) LASIGE and University of Lisbon, Portugal
 Maintainer  : vmavsconcelos@ciencias.ulisboa.pt
 -}
 
-module SendTreeRegular where
-
 type Tree : *T
 data Tree = Leaf | Node Tree Int Tree
 

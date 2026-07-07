@@ -1,5 +1,3 @@
-module BlockCommentInSig where 
-
 f : ()
 f {- comment -} = ()
 

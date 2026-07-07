@@ -1,5 +1,3 @@
-module EndTwice where
-
 main : ()
 main = 
     let (x, y) = channel @Close in

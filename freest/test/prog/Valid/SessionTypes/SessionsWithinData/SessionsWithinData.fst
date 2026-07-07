@@ -1,5 +1,3 @@
-module SessionsWithinData where
-
 type T : 1T
 data T = One Wait | Two (?Int; Wait)
 

@@ -1,5 +1,3 @@
-module OddEvenSort where
-
 type Sorter : 1C
 type Sorter = +{Done: Close, More: !Int ; ?Int; Sorter}
 

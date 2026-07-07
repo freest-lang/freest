@@ -1,5 +1,3 @@
-module InferredDataKinds where
-
 -- Datatype kinds are inferred with no signature: `Tree` as `*T -> *T`
 -- (recursion alone does not force linearity), and the per-parameter annotation
 -- `(a : 1T)` is honoured faithfully.

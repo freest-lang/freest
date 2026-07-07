@@ -4,8 +4,6 @@ Description : Examples from TAPL, Chapter 23, Universal Types
 Copyright   : (c) Vasco T. Vasconcelos, 31 dec 2020
 -}
 
-module SystemFWarmUps where
-
 double, quadruple : forall a -> (a -> a) -> a -> a
 
 double = \@a f x -> f (f x)

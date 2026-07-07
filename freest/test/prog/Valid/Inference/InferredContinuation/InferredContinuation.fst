@@ -1,5 +1,3 @@
-module InferredContinuation where
-
 -- The session continuation `a` has its kind omitted on the forall; kind
 -- inference infers it (1S) from its use in the `;` composition.
 sendInt : forall a -> Int -> (!Int ; a) -> a

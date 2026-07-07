@@ -1,5 +1,3 @@
-module SharedQueue where
-
 -- channel types
 
 type Head, Tail : *C

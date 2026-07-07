@@ -10,8 +10,6 @@ This implementation guarantees *none* of the following properties:
 https://en.wikipedia.org/wiki/Semaphore_(programming)
 -}
 
-module Semaphore where
-
 -- Start of module Semaphore
 
 -- | A queue for clients waiting on a semaphore

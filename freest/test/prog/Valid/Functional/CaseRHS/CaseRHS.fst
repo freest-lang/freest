@@ -1,5 +1,3 @@
-module CaseRHS where
-
 even : Int -> Bool
 even 0 = True
 even n | even (n - 1) = False

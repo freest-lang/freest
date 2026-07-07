@@ -1,5 +1,3 @@
-module Compose where
-
 compose : 
   forall #m #n (a : 1T) (b : 1T) (c : 1T) 
   -*->   (b -m-> c) 

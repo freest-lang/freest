@@ -1,5 +1,3 @@
-module ListSend where
-
 type SendList, RecvList : 1S
 type SendList = +{Nil: Skip, Cons: !Int; SendList}
 type RecvList = Dual SendList

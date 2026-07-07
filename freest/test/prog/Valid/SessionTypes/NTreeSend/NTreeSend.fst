@@ -1,5 +1,3 @@
-module NTreeSend where
-
 type Tree, TreeList : *T
 
 -- Represents a n-Tree structure where each node has 0..n children.

@@ -6,8 +6,6 @@ Copyright   : (c) Vasco T. Vasconcelos, 31 dec 2020
 Church Encoding _ Boolean Values
 -}
 
-module SystemFBooleans where
-
 type Bool' : *T
 type Bool' = forall b -> b -> b -> b
 

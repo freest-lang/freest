@@ -1,5 +1,3 @@
-module SimpleApp where
-
 half : Int -> Int
 half x = div x 2
 

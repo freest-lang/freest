@@ -14,8 +14,6 @@ This version uses the pipeline operator |>.
 
 -}
 
-module Pipeline where
-
 type TermChannel : 1S
 type TermChannel  = +{
    Const: !Int,

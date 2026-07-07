@@ -10,8 +10,6 @@ channel or with asynchronous channels. In a typical synchronous
 
 -}
 
-module CrissCross where
-
 writer : !Char;Close -> !Bool;Close -1-> ()
 writer w1 w2 =
   w1 |> send 'c' |> close; 

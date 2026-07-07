@@ -1,5 +1,3 @@
-module NTuples where
-
 f : Int -> Int
 f x = -x
 
