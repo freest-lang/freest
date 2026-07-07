@@ -337,13 +337,26 @@ scopeDefs ctx ds = do
           Nothing -> (ictx,) <$> freshInternal x
           Just x' -> pure (deleteEVar x ictx, x{internal = internal x'})
         let ctx' = insertEVar x' ctx
+        checkArity x' psrhss
         psrhss' <- forM psrhss \(pars, rhs) -> do
           checkConflictingDefs (ExpLevel (E.VarPat (getSpan x') x') : pars)
           (ctx'', pars') <- foldM scopeFnDefParam (ctx',[]) pars
           (pars',) <$> scopeRHS ctx'' rhs
         second (E.FnDef x' psrhss' :) <$> scopeDefs' isMutual ctx' ictx' ds
         where
-          scopeFnDefParam (ctx', pars') = \case 
+          checkArity f = \case
+            []                  -> pure ()
+            (params0 : paramss) -> forM_ paramss \paramsi -> do
+              let ni = valArity paramsi
+                  n0 = valArity params0
+              when (ni /= n0) do 
+                insertError (EquationArityMismatch (clauseSpan paramsi) f n0 ni)
+            where
+              valArity (partitionLevels -> (ps, _, _), _) = 
+                length ps
+              clauseSpan (partitionLevels -> (ps, _, _), rhs) = 
+                case ps of (p : _) -> getSpan p; [] -> getSpan rhs
+          scopeFnDefParam (ctx', pars') = \case
             (ExpLevel  p) -> do
               (_, p') <- scopePat ctx' emptyScopingCtx p
               let ctx'' = insertPatVars p' ctx'
