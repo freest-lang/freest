@@ -519,9 +519,11 @@ checkConflictingDefs (partitionLevels -> (ps, as, φs)) = do
   forM_ (Map.assocs $ Map.unions [evos, tvos, mvos]) \(xa, ss) -> 
     when (length ss > 1) $ insertError (ConflictingDefs (ss !! 1) xa ss)
   where
-    varOccurs lv = foldr (\v occs -> 
-        Map.insertWith (++) (lv $ external v) [getSpan v] occs) 
+    varOccurs lv = foldr (\v occs ->
+        if isWild v then occs
+        else Map.insertWith (++) (lv $ external v) [getSpan v] occs)
       Map.empty
+    isWild v = case external v of '_' : _ -> True; _ -> False
     patVarOccurs = \case
       E.VarPat s x      -> Map.singleton (ExpLevel $ external x) [getSpan x]
       E.DConsPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
