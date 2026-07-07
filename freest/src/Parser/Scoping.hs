@@ -30,7 +30,6 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
-import Validation.Substitution ( freeTypeVars )
 import Validation.Base
 import Syntax.Type.Unkinded qualified as T
 import UI.Error ( Error(..) )
@@ -42,7 +41,6 @@ import Control.Monad.Trans.Except ( runExceptT, throwE )
 import Data.Bifunctor ( first, second, bimap )
 import Data.Bitraversable ( bisequence, bimapM )
 import Data.Foldable ( foldrM )
-import Data.Function ( on )
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -375,7 +373,7 @@ scopeDefs ctx ds = do
             x' <- freshInternal x
             return (insertEVar x' ictx'', xs'' ++ [x'])) 
           (ictx, []) xs
-        t' <- scopeAndQuantifyType ctx t
+        t' <- scopeType ctx t
         let ctx' | isMutual  = foldr insertEVar ctx xs'
                  | otherwise = ctx
         second (E.TypeSig xs' t':) <$> scopeDefs' isMutual ctx' ictx' ds
@@ -595,18 +593,6 @@ scopeType ctx = \case
     T.Abs s (zip as' ks') <$> scopeType (fromTVarList as' `union` ctx) t
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
-
--- | Scope a type, universally quantifying any free variables it might have
--- with a fresh kind inference variable.
-scopeAndQuantifyType :: ScopingCtx -> T.ParsedType -> Validation T.ScopedType
-scopeAndQuantifyType ctx t = do
-  t' <- scopeType ctx t
-  let fvt' = Set.toList (freeTypeVars t' Set.\\ Set.fromList (toTVarList ctx))        
-  if null fvt'
-    then return t'
-    else do
-      let aks = map (, Nothing) $ List.sortBy (compare `on` getSpan) fvt'
-      scopeType ctx $ T.AppForall (getSpan t) (K.Un $ getSpan t) aks t
 
 -- | Scope a kind.
 scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
