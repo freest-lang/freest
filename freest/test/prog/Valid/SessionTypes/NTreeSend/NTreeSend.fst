@@ -1,5 +1,3 @@
-module NTreeSend where
-
 type Tree, TreeList : *T
 
 -- Represents a n-Tree structure where each node has 0..n children.
@@ -22,7 +20,7 @@ type TreeListChannel = +{
 -- ===== SENDING =====
 
 mutual
-  sendTree : forall (a : 1S) -> Tree -> TreeChannel;a -> a
+  sendTree : forall a -> Tree -> TreeChannel;a -> a
   sendTree @a tree c =
     case tree of
       Empty ->
@@ -30,7 +28,7 @@ mutual
       Node i children ->
         c |> select Node |> send i |> sendTreeList children
 
-  sendTreeList : forall (a : 1S) -> TreeList -> TreeListChannel;a -> a
+  sendTreeList : forall a -> TreeList -> TreeListChannel;a -> a
   sendTreeList @a list c =
     case list of
       Nil ->
@@ -41,7 +39,7 @@ mutual
 -- ===== RECEIVING =====
 
 mutual 
-  receiveTree : forall (a : 1S) -> Dual TreeChannel;a -> (Tree, a)
+  receiveTree : forall a -> Dual TreeChannel;a -> (Tree, a)
   receiveTree @a c =
     case c of
       &Empty c ->
@@ -51,7 +49,7 @@ mutual
         let (children, c) = receiveTreeList c in
         (Node i children, c)
 
-  receiveTreeList : forall (a : 1S) -> Dual TreeListChannel;a -> (TreeList, a)
+  receiveTreeList : forall a -> Dual TreeListChannel;a -> (TreeList, a)
   receiveTreeList @a c =
     case c of
       &Nil c ->

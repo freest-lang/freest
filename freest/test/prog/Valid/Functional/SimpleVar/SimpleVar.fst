@@ -1,5 +1,3 @@
-module SimpleVar where
-
 id' : Int -> Int
 id' x = x
 

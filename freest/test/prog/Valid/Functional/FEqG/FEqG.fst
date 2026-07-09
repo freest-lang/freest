@@ -1,5 +1,3 @@
-module FEqG where
-
 g : Int -> Int
 g x = x
 

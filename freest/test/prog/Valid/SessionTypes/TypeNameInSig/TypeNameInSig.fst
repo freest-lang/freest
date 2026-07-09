@@ -1,5 +1,3 @@
-module TypeNameInSig where
-
 type F : *T
 type F = Int -> Int
 

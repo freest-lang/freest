@@ -5,8 +5,6 @@
 -- Maintainer  :  balmeida@lasige.di.fc.ul.pt
 -- -}
 
-module SendTree where
-
 type Tree : *T
 data Tree = Leaf | Node Tree Int Tree
 
@@ -22,7 +20,7 @@ type TreeC = &{
   NodeC: TreeC; ?Int; TreeC
  }
 
-read : forall (a : 1S) -> TreeC; a -> (Tree, a)
+read : forall a -> TreeC; a -> (Tree, a)
 read @a (&LeafC c) = (Leaf, c)
 read @a (&NodeC c) =
   let (l, c) = read c in
@@ -36,7 +34,7 @@ readTree r =
   wait r;
   tree
 
-write : forall (a : 1S) -> Tree -> Dual TreeC; a -> a
+write : forall a -> Tree -> Dual TreeC; a -> a
 write @a Leaf c = select LeafC c
 write @a (Node l x r) c = 
   c |> select NodeC

@@ -6,27 +6,25 @@ Copyright   : (c) Vasco T. Vasconcelos, 31 dec 2020
 Church Encoding _ Natural Numbers
 -}
 
-module SystemFNats where
-
 type Nat : *T
-type Nat = forall (a : *T) -> (a -> a) -> a -> a
+type Nat = forall a -> (a -> a) -> a -> a
 
 zero : Nat 
-zero = \@(a : *T) s z -> z
+zero = \@a s z -> z
 
 succ', square : Nat -> Nat
-succ' n = \@(a : *T) s z -> s (n @a s z)
+succ' n = \@a s z -> s (n @a s z)
 
-square n = \@(a : *T) s z -> n  @a (n  @a s) z
+square n = \@a s z -> n  @a (n  @a s) z
 
 plus, plus', times, expr : Nat -> Nat -> Nat
 plus m n = m  @Nat succ' n
 
-plus' m n = \@(a : *T) s z -> m  @a s (n  @a s z)
+plus' m n = \@a s z -> m  @a s (n  @a s z)
 
-times m n = \@(a : *T) s -> n  @a (m  @a s)
+times m n = \@a s -> n  @a (m  @a s)
 
-expr m n = \@(a : *T) f -> n  @(a -> a) (m  @a) f
+expr m n = \@a f -> n  @(a -> a) (m  @a) f
 
 isZero : Nat -> Bool
 isZero n = n  @Bool (\_ -> False) True

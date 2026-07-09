@@ -65,14 +65,16 @@ import Syntax.Kind qualified as K
 import Data.Void
 
 type instance T.XType Parsed = Void
+type instance T.XBndKind Parsed = Maybe K.Kind
 
 type ParsedType = T.Type Parsed
 
 type instance T.XType Scoped = Void
+type instance T.XBndKind Scoped = Maybe K.Kind
 
 type ScopedType = T.Type Scoped
 
-type Unkinded x = (T.XType x ~ Void)
+type Unkinded x = (T.XType x ~ Void, T.XBndKind x ~ Maybe K.Kind)
 
 pattern Int :: Unkinded x => Span -> T.Type x
 pattern Int s <- T.Int s _
@@ -138,7 +140,7 @@ pattern Var :: Unkinded x => Span -> Variable -> T.Type x
 pattern Var s a <- T.Var s _ _ a
   where Var s a = T.Var s void ObjLv a
 
-pattern Abs :: Unkinded x => Span -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
+pattern Abs :: Unkinded x => Span -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
 pattern Abs s aks t <- T.Abs s _ aks t
   where Abs s aks t = T.Abs s void aks t
 
@@ -146,15 +148,15 @@ pattern App :: Unkinded x => Span -> T.Type x -> [T.Type x] -> T.Type x
 pattern App s t ts <- T.App s _ t ts
   where App s t ts = T.App s void t ts
 
-pattern AppQuant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
+pattern AppQuant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
 pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
   where AppQuant s p pk m aks t  = T.AppQuant s void void void p pk m aks t
 
-pattern AppForall :: Unkinded x => Span -> K.Multiplicity -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
+pattern AppForall :: Unkinded x => Span -> K.Multiplicity -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
 pattern AppForall s m aks t <- T.AppForall s _ _ _ m aks t
   where AppForall s m aks t =  T.AppForall s void void void m aks t
 
-pattern AppExists :: Unkinded x => Span -> [(Variable, K.Kind)] -> T.Type x -> T.Type x
+pattern AppExists :: Unkinded x => Span -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
 pattern AppExists s aks t <- T.AppExists s _ _ _ aks t
   where AppExists s aks t  = T.AppExists s void void void aks t
 
@@ -166,7 +168,7 @@ pattern AppMessage :: Unkinded x => Span -> K.Multiplicity -> T.Polarity -> T.Ty
 pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
   where AppMessage s m p t  = T.AppMessage s void void m p t
 
-pattern AppQuantS :: Unkinded x => Span -> T.Polarity -> Variable -> K.Kind -> T.Type x -> T.Type x
+pattern AppQuantS :: Unkinded x => Span -> T.Polarity -> Variable -> Maybe K.Kind -> T.Type x -> T.Type x
 pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
   where AppQuantS s p a k t  = T.AppQuantS s void void void p a k t
 

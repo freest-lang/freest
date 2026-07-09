@@ -1,5 +1,3 @@
-module ChainOfChannelOps where
-
 type T : 1C
 type T = +{More: !Int;T, Stop: Close}
 

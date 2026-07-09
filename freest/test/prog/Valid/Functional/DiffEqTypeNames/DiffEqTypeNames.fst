@@ -1,5 +1,3 @@
-module DiffEqTypeNames where
-
 type T : *T
 type T = Int
 type U : *T

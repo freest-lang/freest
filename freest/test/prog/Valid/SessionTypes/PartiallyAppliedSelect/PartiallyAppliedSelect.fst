@@ -1,5 +1,3 @@
-module PartiallyAppliedSelect where
-
 type T : 1S
 type T = +{A: !Int, B: ?Int}
 

@@ -1,5 +1,3 @@
-module TypeTeqU where
-
 type T, U : *T
 type T = U
 type U = Int

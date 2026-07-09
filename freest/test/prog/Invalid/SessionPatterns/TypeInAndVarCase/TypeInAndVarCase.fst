@@ -1,5 +1,3 @@
-module TypeInAndVarCase where
-
 foo : (?type (a : *T). Skip) -> Skip
 foo c = case c of
   ?type (a : *T). s -> s

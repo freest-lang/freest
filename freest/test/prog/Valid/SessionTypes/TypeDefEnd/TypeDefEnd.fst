@@ -1,5 +1,3 @@
-module TypeDefEnd where
-
 type T : 1C
 type T = Wait
 

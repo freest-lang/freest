@@ -1,5 +1,3 @@
-module ImplicitForall where
-
 id' : a -> a 
 id' x = x 
 

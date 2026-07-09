@@ -11,9 +11,7 @@ Using eta-conversion one can write a variant of send that accepts only
 unrestricted values. The partially evaluated function can then be reused, contrary to a partially evaluated send.
 -}
 
-module USend where
-
-unsend : forall (a : *T) -> a -> forall (b : 1S) -> () -> !a;b -1-> b
+unsend : forall a -> a -> forall b -> () -> !a;b -1-> b
 unsend @a x @b () = send x
 
 main : ()

@@ -5,8 +5,6 @@ Copyright   :  (c) LASIGE and University of Lisbon, Portugal
 Maintainer  :  balmeida@lasige.di.fc.ul.pt
 -}
 
-module SendTreeType where
-
 type Tree : *T
 data Tree = Leaf | Node Int Tree Tree
 
@@ -16,7 +14,7 @@ type TreeChannel = +{
   NodeC: !Int ; TreeChannel ; TreeChannel
  }
 
-write : forall (a : 1S) -> Tree -> TreeChannel; a -> a
+write : forall a -> Tree -> TreeChannel; a -> a
 write @a t c = case t of
   Leaf       -> c |> select LeafC
   Node x l r -> c |> select NodeC
@@ -24,7 +22,7 @@ write @a t c = case t of
                   |> write l
                   |> write r
 
-read : forall (a : 1S) -> Dual TreeChannel; a -> (Tree, a)
+read : forall a -> Dual TreeChannel; a -> (Tree, a)
 read @a c = case c of
   &LeafC c -> (Leaf             , c)
   &NodeC c -> (Node x left right, c)

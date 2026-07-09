@@ -1,6 +1,4 @@
-module Pmap where
-
-map, pmap : forall (a : 1T) (b : 1T) -> (a -> b) -> [a] -> [b]
+map, pmap : forall a b -> (a -> b) -> [a] -> [b]
 
 map @a @b _ [] = [] @b
 map @a @b f (x :: xs) = f x :: map f xs
@@ -14,5 +12,5 @@ pmap @a @b f xs =
 
 main : ()
 main =
-    print (pmap (2 *) ([1, 2, 3, 4, 5] @Int))
+    print (pmap (2 *) ([1, 2, 3, 4, 5]))
 

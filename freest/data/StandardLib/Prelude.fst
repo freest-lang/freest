@@ -1,6 +1,4 @@
--- | The Prelude: a standard module. The Prelude is imported by default
--- into all FreeST modules.
-module Prelude where
+-- | The FreeST Prelude.
 
 -- * Undefined. Useful for builtins, but should also be builtin...
 undefined : forall (a : *T) -> a
@@ -209,9 +207,13 @@ until @a p f = go
 (;) @a @b _ x = x
 
 -- * Lists
-(++) : forall #m (a : m T) -> [a] -> [a] -m-> [a]
-(++) #m @a []      ys = ys
-(++) #m @a (x::xs) ys = x :: ((++) #m xs ys) 
+(++) : forall (a : *T) -> [a] -> [a] -> [a]
+(++) @a []      ys = ys
+(++) @a (x::xs) ys = x :: ((++) @a xs ys)
+
+(++') : forall (a : 1T) -> [a]' -> [a]' -1-> [a]'
+(++') @a []'        ys = ys
+(++') @a (x ::' xs) ys = x ::' ((++') @a xs ys)
 
 head : forall (a : *T) -> [a] -> a
 head @a []       = error "head: empty list"
@@ -236,6 +238,50 @@ length : forall (a : *T) -> [a] -> Int
 length @a []        = 0
 length @a (_ :: xs) = succ (length xs)
 
+foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
+foldl #m #n @a @b f = go
+  where
+    go : a -> [b] -m-> a
+    go accum (x :: xs) = go (f accum x) xs
+    go accum _         = accum
+
+foldl' : forall #m #n (a : m T) (b : 1T) -> (a -> b -n-> a) -> a -> [b]' -m-> a
+foldl' #m #n @a @b f = go
+  where
+    go : a -> [b]' -m-> a
+    go accum (x ::' xs) = go (f accum x) xs
+    go accum []'        = accum
+
+foldr : forall #m #n (a : *T) (b : m T) -> (a -> b -n-> b) -> b -> [a] -m-> b
+foldr #m #n @a @b f = go
+  where
+    go : b -> [a] -m-> b
+    go accum (x :: xs) = f x $ go accum xs
+    go accum _         = accum
+
+foldr' : forall #m #n (a : 1T) (b : m T) -> (a -> b -n-> b) -> b -> [a]' -m-> b
+foldr' #m #n @a @b f = go
+  where
+    go : b -> [a]' -m-> b
+    go accum (x ::' xs) = f x $ go accum xs
+    go accum []'        = accum
+
+map : forall (a : *T) (b : *T) -> (a -> b) -> [a] -> [b]
+map @a @b _ []        = []
+map @a @b f (x :: xs) = f x :: map f xs
+
+map' : forall (a : 1T) (b : 1T) -> (a -> b) -> [a]' -> [b]'
+map' @a @b _ []'        = []'
+map' @a @b f (x ::' xs) = f x ::' map' f xs
+
+mapUL : forall (a : *T) (b : 1T) -> (a -> b) -> [a] -> [b]'
+mapUL @a @b _ []        = []'
+mapUL @a @b f (x :: xs) = f x ::' mapUL f xs
+
+mapLU : forall (a : 1T) (b : *T) -> (a -> b) -> [a]' -> [b]
+mapLU @a @b _ []'        = []
+mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
+
 -- * Concurrency
 
 fork : forall #m (a : *T) -> (() -m-> a) -> ()
@@ -255,13 +301,13 @@ close = undefined
 
 -- | Sends a value on a given channel and then waits for the channel to be
 -- | closed. Returns ().
-sendAndWait : forall (a : 1T) -> a -> !a ; Wait -1-> ()
-sendAndWait @a x c = c |> send x |> wait
+sendAndWait : forall #m (a : m T) -> a -> !a ; Wait -m-> ()
+sendAndWait #m @a x c = c |> send x |> wait
 
 -- | Sends a value on a given channel and then closes the channel.
 -- | Returns ().
-sendAndClose : forall (a : 1T) -> a -> !a ; Close -1-> ()
-sendAndClose @a x c = c |> send x |> close
+sendAndClose : forall #m (a : m T) -> a -> !a ; Close -m-> ()
+sendAndClose #m @a x c = c |> send x |> close
 
 -- | Receives a value from a channel that continues to `Wait`, closes the 
 -- | continuation and returns the value.
@@ -310,8 +356,8 @@ readApply @a @b f c =
   c
 
 -- | Sends a value on a star channel. Unrestricted version of `send`.
-send_ : forall (a : 1T) -> a -> *!a -1-> ()
-send_ @a = undefined -- @a x c = c |> send x |> sink @*!a
+send_ : forall #m (a : m T) -> a -> *!a -m-> ()
+send_ #m @a = undefined -- @a x c = c |> send x |> sink @*!a
 
 -- | Receives a value from a star channel. Unrestricted version of `receive`.
 receive_ : forall (a : 1T) -> *?a -> a

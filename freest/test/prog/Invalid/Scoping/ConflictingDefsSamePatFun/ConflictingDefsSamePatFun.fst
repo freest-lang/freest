@@ -1,5 +1,3 @@
-module ConflictingDefsSamePatFun where
-
 data Foo = Bar Int String
 
 foo : Foo -> String

@@ -15,7 +15,7 @@ import Syntax.Base
   mkPlusVar, mkMinusVar, mkTimesVar, mkDivVar, mkPowerVar, mkNegateVar,
   mkPlusDotVar, mkMinusDotVar, mkTimesDotVar, mkDivDotVar, mkTimesTimesVar, mkNegateFVar,
   mkDollarVar, mkRTriangleVar, mkSemiVar, mkDotVar,
-  mkPlusPlusVar, mkCaretCaretVar,
+  mkPlusPlusVar, mkPlusPlusPrimeVar, mkCaretCaretVar,
   mkSend, mkReceive, mkFork,
   mkUndefinedVar
   :: Located a => a -> Variable
@@ -38,6 +38,7 @@ mkRTriangleVar = mkDefaultVar "(|>)"
 mkSemiVar = mkDefaultVar "(;)"
 mkDotVar = mkDefaultVar "(.)"
 mkPlusPlusVar = mkDefaultVar "(++)"
+mkPlusPlusPrimeVar = mkDefaultVar "(++')"
 mkCaretCaretVar = mkDefaultVar "(^^)"
 mkSend = mkDefaultVar "send"
 mkReceive = mkDefaultVar "receive"
@@ -47,10 +48,12 @@ mkUndefinedVar = mkDefaultVar "undefined"
 mkCmpVar :: Located a => String -> a -> Variable
 mkCmpVar s = mkDefaultVar $ "("++s++")"
 
-mkUnitId, mkNilId, mkConsId :: Located a => a -> Identifier
-mkUnitId = mkId "()"
-mkNilId  = mkId "[]"
-mkConsId = mkId "(::)"
+mkUnitId, mkNilId, mkConsId, mkNilId', mkConsId' :: Located a => a -> Identifier
+mkUnitId  = mkId "()"
+mkNilId   = mkId "[]"
+mkConsId  = mkId "(::)"
+mkNilId'  = mkId "[]'"
+mkConsId' = mkId "(::')"
 
 mkTupleId :: Located a => Int -> a -> Identifier
 mkTupleId = \case 
@@ -73,5 +76,6 @@ isUnitId (Identifier _ cs) = cs == "()"
 mkBoolId :: Located a => a -> Identifier
 mkBoolId (getSpan -> s) = mkId "Bool" s
 
-mkListId :: Located a => a -> Identifier
-mkListId (getSpan -> s) = mkId "[]" s
+mkListId, mkListId' :: Located a => a -> Identifier
+mkListId  (getSpan -> s) = mkId "[]" s
+mkListId' (getSpan -> s) = mkId "[]'" s

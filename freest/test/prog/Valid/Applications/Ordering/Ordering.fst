@@ -1,5 +1,3 @@
-module Ordering where
-
 {- |
 Module      :  Ordering
 Description :  Server that orders lists and returns them
@@ -61,7 +59,7 @@ quicksort list direction =
 
 -- Server function
 --   This server sends the list reversed
-orderedServer : forall (a : 1S) -> (Dual OrderingChannel; a) -> IntList -1-> (IntList, a)
+orderedServer : forall a -> (Dual OrderingChannel; a) -> IntList -1-> (IntList, a)
 orderedServer @a c list =
   case c of
     &Vals c ->
@@ -90,7 +88,7 @@ initOrderedServer c =
 -- Function to send a list and receive it ordered
 --  direction : Bool - is used to determine if Asc(True) or
 --                     Desc(False) is selected
-order : forall (a : 1S) -> OrderingChannel; a -> IntList -1-> Bool -1-> (a, IntList)
+order : forall a -> OrderingChannel; a -> IntList -1-> Bool -1-> (a, IntList)
 order @a c sList direction =
   case sList of
     Nil -> if direction

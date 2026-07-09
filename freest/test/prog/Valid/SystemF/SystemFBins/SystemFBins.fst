@@ -12,10 +12,8 @@ European Mathematical Society, 2011
 "The previous integers are <<Cro-Magnon integer>>, anterior to the Babylonian numeration. A more modern version of integers requires finite sequences of zeros and ones." (page 119)
 -}
 
-module SystemFBins where
-
 type Bin : *T
-type Bin = forall (a : *T) -> a -> (a -> a) -> (a -> a) -> a
+type Bin = forall a -> a -> (a -> a) -> (a -> a) -> a
 
 zero, zero', one, two, three, four, fifteen : Bin
 
@@ -40,7 +38,7 @@ toInt : Bin -> Int
 toInt n = n @Int 0 (\x -> 2 * x) (\x -> 2 * x + 1)
 
 -- succ' : Bin -> Bin
--- succ' n = \@(a : *T) -> (one @a) (\(s0 : a -> a) -> s0 n @a) (\(s1 : a->a) -> s1 n@a)
+-- succ' n = \@a -> (one @a) (\(s0 : a -> a) -> s0 n @a) (\(s1 : a->a) -> s1 n@a)
 
 -- succ' : Bin -> Bin
 -- succ' n = n @Bin

@@ -19,6 +19,7 @@ module Syntax.Kind
   , isSession
   , isChannel
   , isProper
+  , hasMetavar
   , depth
   )
 where 
@@ -107,7 +108,7 @@ instance Show Multiplicity where
 
 -- 2. Prekinds
 
-data Prekind = Top | Session | Channel | VarPK Variable
+data Prekind = Top | Session | Channel | VarPK VarLv Variable
   deriving (Eq, Ord)
 
 instance Subsort Prekind where
@@ -139,27 +140,27 @@ instance Show Prekind where
     Top     -> "T"
     Session -> "S"
     Channel -> "C"
-    VarPK ψ -> external ψ
+    VarPK _ ψ -> external ψ
 
 -- 3. Kinds
 
-data Kind 
-  = Proper Span Multiplicity Prekind 
-  | Arrow Span Kind Kind 
-  | Var Span Variable
+data Kind
+  = Proper Span Multiplicity Prekind
+  | Arrow Span Kind Kind
+  | Var Span VarLv Variable
 
 instance Eq Kind where
   (==) = \cases
     (Proper _ m1 pk1) (Proper _ m2 pk2) -> m1 == m2 && pk1 == pk2
     (Arrow _ k11 k12) (Arrow _ k21 k22) -> k11 == k21 && k12 == k22
-    (Var _ τ1)        (Var _ τ2)        -> τ1 == τ2 
+    (Var _ _ τ1)      (Var _ _ τ2)      -> τ1 == τ2
     _                 _                 -> False
 
 instance Ord Kind where
   compare = \cases 
     (Proper _ m1 pk1) (Proper _ m2 pk2) -> compare (m1, pk1)  (m2, pk2)
     (Arrow _ k11 k12) (Arrow _ k21 k22) -> compare (k11, k12) (k21, k22)
-    (Var _ τ1)        (Var _ τ2)        -> compare τ1         τ2
+    (Var _ _ τ1)      (Var _ _ τ2)      -> compare τ1         τ2
     k1                k2                -> compare (rank k1)  (rank k2)
     where rank = \case 
             Proper{} -> 0
@@ -174,7 +175,7 @@ instance Join Kind where
 instance Subsort Kind where
   Proper _ m1 pk1 <: Proper _ m2 pk2 = m1 <: m2 && pk1 <: pk2
   Arrow _ k11 k12 <: Arrow _ k21 k22 = k21 <: k11 && k12 <: k22
-  Var _ τ1        <: Var _ τ2        = τ1 == τ2
+  Var _ _ τ1      <: Var _ _ τ2      = τ1 == τ2
   _               <: _               = False
 
 instance Located Kind where
@@ -190,7 +191,7 @@ instance Show Kind where
   show = \case 
     Proper _ m1 pk -> show m1 ++ " " ++ show pk
     Arrow  _ k1 k2 -> "(" ++ show k1 ++ "->" ++ show k2 ++ ")"
-    Var    _ τ     -> show τ
+    Var    _ _ τ   -> show τ
 
 -- | Abbreviations for the six proper kinds
 lt, ut, ls, us, lc, uc :: Span -> Kind
@@ -215,11 +216,21 @@ isProper = \case
   Proper{} -> True
   _        -> False
 
+-- | Whether a kind still contains a solvable (unsolved inference) metavariable.
+hasMetavar :: Kind -> Bool
+hasMetavar = \case
+  Proper _ m pk -> multMeta m || preMeta pk
+  Arrow _ k1 k2 -> hasMetavar k1 || hasMetavar k2
+  Var _ lv _    -> solvable lv
+  where
+    multMeta = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
+    preMeta  = \case VarPK lv _ -> solvable lv; _ -> False
+
 depth :: Kind -> Int
 depth = \case
-  k@Proper{} -> 0
+  Proper{}    -> 0
   Arrow _ _ k -> 1 + depth k
-  k -> internalError ("kind " ++ show k)
+  k@Var{}     -> internalError ("no arity for kind variable" ++ show k)
 
 -- Could be snd . Expose.kindArrow, was it not for a circularity the graph of modules
 -- image :: Kind -> Kind

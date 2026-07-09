@@ -382,8 +382,8 @@ currentInteractivePath = do
 -- | Scope and kind-synthesize a parsed type.
 validateType :: ReplState -> TU.ParsedType -> Validation TK.KindedType
 validateType s =
-  Scoping.scopeType (scopingCtx s) >=> 
-  Kinding.synth (kindCtx s)
+  Scoping.scopeType (scopingCtx s) >=>
+  Kinding.kindType (kindCtx s)
 
 -- | Kind the current module and scope/kind-synthesize a list of parsed types
 -- against it. The result list has the same length and order as the input.
@@ -393,8 +393,8 @@ validateTypes = mapM . validateType
 -- | Scope, kind and type-synthesize a parsed expression.
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s =
-  Scoping.scopeExp (scopingCtx s) 
-  >=> Kinding.kindExp (tdecls s) (kindCtx s)
+  Scoping.scopeExp (scopingCtx s)
+  >=> Kinding.kindExp (tdecls s) (ddecls s) (kindCtx s)
   >=> Typing.synth (tdecls s) (ddecls s) (kindCtx s) (typeCtx s)
   >=> pure . \(_, t, _) -> t
 

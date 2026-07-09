@@ -1,5 +1,3 @@
-module HelloWorldList where
-
 type List : *T
 data List = Nil | Cons Char List
 
@@ -8,7 +6,7 @@ type InCharStream = &{Done: Skip, More: ?Char;InCharStream}
 type OutCharStream = Dual InCharStream
 
 -- server : forall a -> InCharStream;a -> (List, a)
-server : forall (a : 1S) -> (InCharStream; a) -> (List, a)
+server : forall a -> (InCharStream; a) -> (List, a)
 server @a c =
   case c of
     &More c ->
@@ -18,7 +16,7 @@ server @a c =
     &Done c ->
       (Nil, c)
 
-client : forall (a : 1S) -> List -> (OutCharStream; a) -> a
+client : forall a -> List -> (OutCharStream; a) -> a
 client @a l c =
   case l of
     Nil ->

@@ -3,8 +3,6 @@ Benjamin C. Pierce:
 Types and programming languages. MIT Press 2002
 -}
 
-module MCounter where
-
 type IntRef : *C
 type IntRef = *?IntRefSession
 
@@ -26,7 +24,7 @@ intRef x = forkWith (handle x)
       &Read  s -> sendAndWait x s; handle x r
 
 type MCounter : *T
-type MCounter = (exists (a : *T), (() -> a, a -> Int, a -> ()))
+type MCounter = (exists a, (() -> a, a -> Int, a -> ()))
 
 mCounterADT : MCounter
 mCounterADT = (@IntRef, ( \_     -> intRef 0                -- new
@@ -39,5 +37,5 @@ mCounterADT = (@IntRef, ( \_     -> intRef 0                -- new
 main : ()
 main = inc x; print (get x)
   where
-    (@(c : *T), (new, get, inc)) = mCounterADT
+    (@c, (new, get, inc)) = mCounterADT
     x = new ()

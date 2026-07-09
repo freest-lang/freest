@@ -1,5 +1,3 @@
-module TAppAssoc where
-
 g : !Int; Close -> Close
 g c = send 5 c
 

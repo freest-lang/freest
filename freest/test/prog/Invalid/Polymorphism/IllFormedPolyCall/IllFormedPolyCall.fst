@@ -1,5 +1,3 @@
-module IllFormedPolyCall where
-
 type Tree : *T
 data Tree = Empty | Node Int Tree Tree
 

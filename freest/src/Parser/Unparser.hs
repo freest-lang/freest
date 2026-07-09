@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 {- |
 Module      :  Parser.Unparser
 Copyright   :  © The FreeST Team
@@ -16,7 +17,7 @@ module Parser.Unparser
   )
   where
 
-import Syntax.Base ( Variable, Identifier )  
+import Syntax.Base ( Variable, Identifier, solvable )
 import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
@@ -77,8 +78,11 @@ instance Unparse K.Multiplicity where
   fragment = \case
     K.Lin _ -> (maxRator, "1")
     K.Un  _ -> (maxRator, "*")
-    K.VarM _ lv φ -> (maxRator, unparse φ)
-    K.Sup _ lvφs -> (minRator, List.intercalate " + " (map (unparse . snd) lvφs))
+    K.VarM _ lv φ | solvable lv -> (maxRator, "_")
+                  | otherwise   -> (maxRator, unparse φ)
+    K.Sup _ lvφs -> (minRator, List.intercalate " + " (map atom lvφs))
+      where atom (lv, φ) | solvable lv = "_"
+                         | otherwise   = unparse φ
 
 instance Unparse K.Kind where
   fragment = \case
@@ -87,11 +91,21 @@ instance Unparse K.Kind where
       where
         l = bracket (fragment k1) LeftAssoc arrowRator
         r = bracket (fragment k2) RightAssoc arrowRator
-    K.Var _ τ       -> (maxRator, show τ)
+    K.Var _ _ τ     -> (maxRator, show τ)
 
 instance Unparse Variable where
   fragment a = (maxRator, show a)
-instance Unparse (T.Type x) where
+
+instance Unparse (Variable, K.Kind) where
+  fragment (a, k)
+    | K.hasMetavar k = fragment a
+    | otherwise      = (maxRator, "(" ++ show a ++ " : " ++ unparse k ++ ")")
+
+instance Unparse (Variable, Maybe K.Kind) where
+  fragment (a, Nothing) = fragment a
+  fragment (a, Just k)  = fragment (a, k)
+
+instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
   fragment = \case 
     T.Int  _ _ -> (maxRator, "Int")
     T.Float _ _ -> (maxRator, "Float")
@@ -114,7 +128,8 @@ instance Unparse (T.Type x) where
     T.Void _ _ k -> (appRator, "Void @" ++ r)
       where
         r = bracket (fragment k) RightAssoc appRator
-    T.Var  _ _ _ a -> fragment a
+    T.Var  _ _ lv a | solvable lv -> (maxRator, "_")
+                    | otherwise   -> fragment a
     T.Abs _ _ aks t -> (dotRator, "\\" ++ bindings aks ++ " -> " ++ unparse t)
     T.AppArrow _ _ _ m t u   -> (arrowRator, l ++ " " ++ multArrow m ++ " " ++ r)
       where
@@ -158,8 +173,7 @@ instance Unparse (T.Type x) where
       polarity = \case
         T.In  -> "?"
         T.Out -> "!"
-      bindings = 
-        unwords . map \(a, k) -> "(" ++ show a ++ " : " ++ unparse k ++ ")"
+      bindings = unwords . map unparse
       view = \case
         T.In  -> "&"
         T.Out -> "+"

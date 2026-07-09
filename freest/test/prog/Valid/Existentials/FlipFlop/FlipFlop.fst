@@ -2,10 +2,8 @@
 Benjamin C. Pierce:
 Types and programming languages. MIT Press 2002
 -}
-module FlipFlop where
-
 type Counter : *T
-type Counter = (exists (a : *T), (a, a -> Int, a -> a))
+type Counter = (exists a, (a, a -> Int, a -> a))
 
 counterADT : Counter
 counterADT = 
@@ -18,7 +16,7 @@ counterADT =
   : Counter
 
 type FlipFlop : *T
-type FlipFlop = (exists (a : *T), (a, a -> Bool, a -> a, a -> a))
+type FlipFlop = (exists a, (a, a -> Bool, a -> a, a -> a))
 
 flipFlopADT : FlipFlop
 flipFlopADT = 
@@ -34,4 +32,4 @@ flipFlopADT =
 
 main : ()
 main = print (read (toggle (reset (toggle new))))
-  where (@(f : *T), (new, read, toggle, reset)) = flipFlopADT
+  where (@f, (new, read, toggle, reset)) = flipFlopADT

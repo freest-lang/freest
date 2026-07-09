@@ -1,9 +1,7 @@
-module FstSend where
-
-fst' : forall (a : 1T) (b : *T) -> (a, b) -> a
+fst' : forall a b -> (a, b) -> a
 fst' @a @b p = let (x, _) = p in x
 
-snd' : forall (a : *T) (b : 1T) -> (a, b) -> b
+snd' : forall a b -> (a, b) -> b
 snd' @a @b p = let (_, y) = p in y
 
 main : ()

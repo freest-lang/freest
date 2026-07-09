@@ -1,5 +1,3 @@
-module ErrorPosMessage where
-
 type F : 1S
 type F = !Int; Close
 

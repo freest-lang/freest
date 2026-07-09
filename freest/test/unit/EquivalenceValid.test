@@ -275,6 +275,14 @@ case *&{A, B} == *&{B, A} : *C
 
 case Dual (*&{A, B}) == *+{A, B} : *C
 
+-- CK-Seq conditional multiplicity: the left operand of `;` is a *reference*
+-- (SeqB) whose channel-ness is inferred, not syntactically ground. SeqA stays
+-- *C; the eager fallback over-linearised the variable-left case to 1C.
+case SeqA == SeqB ; Close : *C
+where
+  type SeqB = *!Int ; SeqA
+  type SeqA = SeqB ; Close
+
 case *&{A, B} ; !Int == *&{B, A} : *S
 
 case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
@@ -520,7 +528,7 @@ where
 case Nested Skip == Nested (Skip ; Skip) : 1T
 where
   type Nested : 1T -> 1T
-  data Nested a = NestedCons a (Nested [a]) | Epsilon
+  data Nested a = NestedCons a (Nested [a]') | Epsilon
 
 case Tree Close == Tree (Close; Wait) : 1T
 where
@@ -777,3 +785,58 @@ case forall #m -*-> Int -m-> Int  == forall #n -*-> Int -n-> Int : *T
 case forall #m #n -*-> Int -m+n-> Int  == forall #m #n -*-> Int -n+m-> Int : *T
 
 case forall #m #n -*-> Int -m+n-> Int  == forall #n #m -*-> Int -m+n-> Int : *T
+
+-- Kind preservation under the context-free session algebra (channel-conditional
+-- `;` and CK-Rec). The declared kind is the tight one, so an over-linearising
+-- regression on either side fails the `<: k` check.
+
+-- identity: Skip;T ~ T ~ T;Skip   (T = *!Int;Close, a shared channel)
+case Skip ; (*!Int ; Close) == *!Int ; Close : *C
+
+case (*!Int ; Close) ; Skip == *!Int ; Close : *C
+
+-- associativity with a shared channel leftmost
+case (*!Int ; ?Int) ; Close == *!Int ; (?Int ; Close) : *C
+
+-- associativity with Close absorbing
+case (Close ; !Int) ; ?Int == Close ; (!Int ; ?Int) : 1C
+
+-- distributivity over an internal choice
+case (+{A: !Int}) ; ?Int == +{A: !Int ; ?Int} : 1S
+
+-- absorption: Close;T ~ Close
+case Close ; (*!Int ; Close) == Close : 1C
+
+-- recursion: unfolding preserves kind, for linear and shared channels
+case Stream == !Int ; Stream : 1C
+where
+  type Stream = !Int ; Stream
+
+case SStream == *!Int ; SStream : *C
+where
+  type SStream = *!Int ; SStream
+
+-- mutual recursion: channel-ness across the SCC (cross-declaration `chan`), kind
+-- preserved under unfolding, for linear and shared channels
+case Ping == !Int ; Pong : 1C
+where
+  type Ping = !Int ; Pong
+  type Pong = ?Int ; Ping
+
+case SPing == *!Int ; SPong : *C
+where
+  type SPing = *!Int ; SPong
+  type SPong = *!Int ; SPing
+
+-- applied sig-less synonym unfolded by `chan`: Loop is a channel only because the
+-- `Done` branch `F Int` unfolds to a channel (!Int ; Close); without unfolding
+-- it reads as a session and Loop would be 1S
+case Loop == &{Again: Loop, Done: F Int} : 1C
+where
+  type F a = !a ; Close
+  type Loop = &{Again: Loop, Done: F Int}
+
+-- recursive session quantifier is a channel (chan AppQuantS case)
+case RS == RS : 1C
+where
+  type RS = !type (a : *T). (!a ; RS)

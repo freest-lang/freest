@@ -1,5 +1,3 @@
-module FunAsArg where
-
 f1 : Int -> (Int -> Int) -> Int
 f1 x f = f x 
 

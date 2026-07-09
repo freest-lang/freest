@@ -1,12 +1,10 @@
-module RemoteListTransform where
-
 type IntList : *T
 type IntListC, IntListS : 1S
 data IntList = Nil | Cons Int IntList
 type IntListC = +{NilC: Skip, ConsC: !Int;IntListC;?Int}
 type IntListS = &{NilC: Skip, ConsC: ?Int;IntListS;!Int}
 
-transform : forall (a : 1S) -> IntList -> (IntListC; a) -> (IntList, a)
+transform : forall a -> IntList -> (IntListC; a) -> (IntList, a)
 transform @a list c =
     case list of
         Nil ->
@@ -19,7 +17,7 @@ transform @a list c =
             (Cons y rest, c)
 
 
-listSum : forall (a : 1S) -> (IntListS; a) -> (Int, a)
+listSum : forall a -> (IntListS; a) -> (Int, a)
 listSum @a c =
     case c of
         &NilC c ->

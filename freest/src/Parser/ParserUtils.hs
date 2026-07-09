@@ -6,7 +6,6 @@ Maintainer  :  freest-lang@listas.ciencias.ulisboa.pt
 This module contains utilities for parsing, namely for generating fresh variables
 and constructing types and expressions more succinctly.
 -}
-{-# LANGUAGE ViewPatterns #-}
 module Parser.ParserUtils where
 
 import Parser.Token
@@ -18,10 +17,6 @@ import Syntax.Kind qualified as K
 import Syntax.Type.Unkinded qualified as T
 
 import Data.List.NonEmpty qualified as NE
-
-dummyKindVar :: Located a => a -> K.Kind
-dummyKindVar (getSpan -> s) =
-  K.Var s (Variable s "τ" defaultInternal)
 
 split :: Eq a => a -> [a] -> [[a]]
 split d str =
@@ -43,6 +38,10 @@ binOp l op r = E.App (spanFromTo l r) op [ExpLevel l, ExpLevel r]
 
 unOp :: E.ParsedExp -> E.ParsedExp -> E.ParsedExp
 unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
+
+-- | Desugar a linear list literal @[e1, ..., en]'@ into a @(::')@\/@[]'@ chain.
+consListExp' :: Span -> [E.ParsedExp] -> E.ParsedExp
+consListExp' s = foldr (\e acc -> E.App s (E.DCons s (mkConsId' s)) [ExpLevel e, ExpLevel acc]) (E.DCons s (mkNilId' s))
 
 addArgExp :: Level E.ParsedExp T.ParsedType K.Multiplicity -> E.ParsedExp -> E.ParsedExp
 addArgExp a (E.App s e as) = E.App (spanFromTo s a) e (as ++ [a])

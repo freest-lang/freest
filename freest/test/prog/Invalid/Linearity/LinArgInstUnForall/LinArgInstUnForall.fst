@@ -1,5 +1,3 @@
-module LinArgInstUnForall where
-
 -- The argument-driven mirror of LinInstUnForall. A linear closure is passed where
 -- 'f's '*T'-bound (unrestricted) type variable is inferred, forcing an
 -- unsatisfiable '1 <= *'. Because the argument is not a variable or application,

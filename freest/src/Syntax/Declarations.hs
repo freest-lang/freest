@@ -80,7 +80,7 @@ type KindedTypeDecls = TypeDecls Kinded
 --
 --   > fromList [(Tree, ([a], fromList [Leaf, Node]))]
 type DataTypeDecls p =
-  DeclAssocs p Identifier ([(Variable, K.Kind)], [Identifier])
+  DeclAssocs p Identifier ([(Variable, T.XBndKind p)], [Identifier])
 
 type KindedDataTypeDecls = DataTypeDecls Kinded
 

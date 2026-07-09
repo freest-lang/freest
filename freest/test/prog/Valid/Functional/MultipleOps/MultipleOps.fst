@@ -1,5 +1,3 @@
-module MultipleOps where
-
 a : Int
 a = -5 + 8 * 6
 

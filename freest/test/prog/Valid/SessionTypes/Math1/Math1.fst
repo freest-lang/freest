@@ -1,5 +1,3 @@
-module Math1 where
-
 type MathServer, MathClient : 1C
 type MathServer = &{Negate: ?Int;!Int, Add: ?Int;?Int;!Int};Wait
 type MathClient = Dual MathServer

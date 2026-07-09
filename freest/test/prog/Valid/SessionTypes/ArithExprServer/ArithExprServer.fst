@@ -11,8 +11,6 @@ an arithmetic expression. The server reads the expression,
 computes its value and returns the value on the same channel.
 
 -}
-module ArithExprServer where
-
 type TermChannel : 1S
 type TermChannel  = +{
    Const: !Int,
@@ -23,7 +21,7 @@ type TermChannel  = +{
 -- Read an arithmetic expression in the front of a channel; compute
 -- its value; return the pair composed of this value and the channel
 -- residual.
-receiveEval : forall (a : 1S) -> (Dual TermChannel; a) -> (Int, a)
+receiveEval : forall a -> (Dual TermChannel; a) -> (Int, a)
 receiveEval @a c =
   case c of
     &Const c -> receive c

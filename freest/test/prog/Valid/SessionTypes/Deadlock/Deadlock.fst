@@ -6,8 +6,6 @@ does not deadlock with buffers of size 2.
 
 -}
 
-module Deadlock where
-
 writer : !Char;!Char;Close -> !Bool;!Bool;Close -1-> ()
 writer w1 w2 =
   let w1 = send 'c' w1 |> send 'd' in

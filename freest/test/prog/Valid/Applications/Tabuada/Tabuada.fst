@@ -1,5 +1,3 @@
-module Tabuada where
-
 -- ==================== Estruturas ====================
 type IntList : *T
 data IntList = Empty | Node Int IntList

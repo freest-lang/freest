@@ -1,5 +1,3 @@
-module GivenTooManyArgs where
-
 f : Int -> Int
 f x = x
 

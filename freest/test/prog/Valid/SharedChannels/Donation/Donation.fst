@@ -5,8 +5,6 @@ Based on the Donation.pi from SePi, available in
 Note that FreeST does not have refinement types
 -}
 
-module Donation where
-
 type CreditCard, Amount, Date : *T
 type CreditCard = String
 type Amount = Int

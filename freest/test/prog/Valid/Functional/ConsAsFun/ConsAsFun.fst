@@ -1,5 +1,3 @@
-module ConsAsFun where
-
 type Tree : *T
 data Tree = Node Int Tree Tree | Leaf
 

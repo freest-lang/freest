@@ -44,7 +44,7 @@ import qualified Syntax.Expression as E
 -- | Match a single pattern (one column) against a value, producing bindings on
 -- success or 'Nothing' on failure. Session patterns are matched against the
 -- *forced* representations produced by 'forceColumns'.
-matchPat :: Value -> E.Pat -> IO (Maybe ValueCtx)
+matchPat :: Value -> E.KindedPat -> IO (Maybe ValueCtx)
 matchPat v = \case
   E.IntPat _ i   -> pure $ case v of VInt   i' | i == i' -> Just empty ; _ -> Nothing
   E.FloatPat _ f -> pure $ case v of VFloat f' | f == f' -> Just empty ; _ -> Nothing
@@ -78,7 +78,7 @@ matchPat v = \case
 
 -- | Match a column of patterns left-to-right against a list of values, failing
 -- fast and unioning the bindings.
-matchClause :: [E.Pat] -> [Value] -> IO (Maybe ValueCtx)
+matchClause :: [E.KindedPat] -> [Value] -> IO (Maybe ValueCtx)
 matchClause []       []       = pure (Just empty)
 matchClause (p : ps) (v : vs) = do
   mb <- matchPat v p
@@ -97,7 +97,7 @@ forceColumns :: [Clause] -> [Value] -> IO [Value]
 forceColumns clauses = zipWithM forceCol (transpose (map (catMaybes . fst) clauses))
 
 -- | Force one position, given the patterns the clauses use there.
-forceCol :: [E.Pat] -> Value -> IO Value
+forceCol :: [E.KindedPat] -> Value -> IO Value
 forceCol pats val = case val of
   -- a channel reached by a session pattern: perform its effect (once)
   VChan _ ->
@@ -119,7 +119,7 @@ forceCol pats val = case val of
 -- too. (Mirrors the @VCons@ recursion in 'forceCol': commit to the branch the
 -- peer actually chose, then recurse into it. The type system guarantees the
 -- selected clauses agree on the continuation's session structure.)
-forceChoice :: [E.Pat] -> Value -> IO Value
+forceChoice :: [E.KindedPat] -> Value -> IO Value
 forceChoice pats (VChan c) = do
   (label, c') <- receiveLabel c
   let conts = [ q | E.ChoicePat _ (B.Identifier _ l) q <- map stripAs pats, l == label ]
@@ -130,7 +130,7 @@ forceChoice _ v = pure v
 -- | Perform a session pattern's effect on a channel, producing the forced value
 -- that 'matchPat' then matches purely. (External choice is handled by
 -- 'forceChoice', which needs the whole pattern column.)
-performEffect :: E.Pat -> Value -> IO Value
+performEffect :: E.KindedPat -> Value -> IO Value
 performEffect (E.InPat _ p1 p2) (VChan c) = do
   (v, c') <- receive c
   v'  <- forceCol [p1] v
@@ -144,7 +144,7 @@ performEffect (E.WaitPat _) (VChan c) = do
   pure VUnit
 performEffect _ v = pure v
 
-isSessionPat :: E.Pat -> Bool
+isSessionPat :: E.KindedPat -> Bool
 isSessionPat = \case
   E.ChoicePat{} -> True
   E.InPat{}     -> True
@@ -153,7 +153,7 @@ isSessionPat = \case
   _             -> False
 
 -- | 'AsPat' is transparent for the purpose of finding the session structure.
-stripAs :: E.Pat -> E.Pat
+stripAs :: E.KindedPat -> E.KindedPat
 stripAs = \case
   E.AsPat _ _ p -> stripAs p
   p             -> p

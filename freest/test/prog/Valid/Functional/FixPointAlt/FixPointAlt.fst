@@ -1,5 +1,3 @@
-module FixPointAlt where
-
 -- The fixed-point Z combinator: Z=\f.(\x.f(\z.xxz))(\y.f(\z.yyz)) is
 -- used to calculate the factorial of 8
 
@@ -7,7 +5,7 @@ module FixPointAlt where
 -- fix' : forall a  -> ((a -> a) -> (a -> a)) -> (a -> a)
 -- fix' f = f (fix' @a f) 
 
-fix' : forall (a : *T) -> ((a -> a) -> (a -> a)) -> a -> a
+fix' : forall a -> ((a -> a) -> (a -> a)) -> a -> a
 fix' @a f x = f (fix' f) x
 
 fact : Int -> Int

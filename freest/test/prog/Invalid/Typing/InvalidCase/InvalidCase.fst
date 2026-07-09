@@ -1,5 +1,3 @@
-module InvalidCase where
-
 data T = T1 | T2 
 
 fun : Int -> Int

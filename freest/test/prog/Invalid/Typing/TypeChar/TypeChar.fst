@@ -1,5 +1,3 @@
-module TypeChar where
-
 type C = Char
 type B = Bool
 

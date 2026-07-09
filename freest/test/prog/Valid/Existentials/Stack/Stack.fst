@@ -1,8 +1,6 @@
-module Stack where
-
 type StackADT : *T
 type StackADT = 
-  (exists (a : *T)
+  (exists a
   , ( a
     , Int -> a -> a
     , a -> (Int, a)
@@ -22,17 +20,17 @@ stackADT = ( @[Int]
 
 main' : Int
 main' = fst $ pop (push 5 (push 7 new))
-  where (@(s : *T), (new, push, pop, toList)) = stackADT
+  where (@s, (new, push, pop, toList)) = stackADT
 
 -- Reversing a list in O(n)
 rev : [Int] -> [Int]
 rev = rev' new
   where 
-    (@(s : *T), (new, push, pop, toList)) = stackADT
+    (@s, (new, push, pop, toList)) = stackADT
 
     rev' : s -> [Int] -> [Int]
     rev' s []        = toList s
     rev' s (x :: xs) = rev' (push x s) xs
 
 main : ()
-main = print (rev ([1, 2, 3] @Int))
+main = print (rev ([1, 2, 3]))

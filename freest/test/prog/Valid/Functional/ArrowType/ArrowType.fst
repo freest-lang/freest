@@ -1,5 +1,3 @@
-module ArrowType where
-
 type Arrow : *T
 type Arrow = Int -> Bool
 

@@ -1,5 +1,3 @@
-module FunLinearity where
-
 f : Int -> Int
 f x = 2 * x
 

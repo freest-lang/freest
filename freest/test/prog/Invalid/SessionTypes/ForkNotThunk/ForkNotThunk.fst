@@ -1,5 +1,3 @@
-module ForkNotThunk where
-
 main : Int
 main =
   let (w, r) = channel @(!Int;Close) in

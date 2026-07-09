@@ -1,5 +1,3 @@
-module FtpServer where
-
 -- 1 _ State
 
 -- |The elements in the state

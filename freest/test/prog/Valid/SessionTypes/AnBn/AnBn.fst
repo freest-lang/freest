@@ -13,8 +13,6 @@ The language generated from S0 is not regular.
 This example is from unpublished notes by Frank Pfenning and Henry DeYoung
 on a simplified representation of deterministic pushdown automata.
 -}
-module AnBn where
-
 type S0, S1 : 1S
 -- Production S0
 type S0 = +{A: S1}
@@ -22,7 +20,7 @@ type S0 = +{A: S1}
 type S1 = +{A: S1; +{B: Skip}, B: Skip}
 
 -- for each A selected a B is also selected
-client' : forall (a : 1S) -> Int -> S1;a -> a
+client' : forall a -> Int -> S1;a -> a
 client' @a 0 c = c |> select B
 client' @a n c = c |> select A |> client' (n - 1) |> select B
 
@@ -31,7 +29,7 @@ client : Int -> S0;Close -> ()
 client n c = c |> select A |> client' (n - 1) |> close
 
 -- For each A selected, a choice for B is also offered
-server' : forall (a : 1S) -> Dual S1; a -> a
+server' : forall a -> Dual S1; a -> a
 server' @a c =
   case c of
     &A c -> case server' c of

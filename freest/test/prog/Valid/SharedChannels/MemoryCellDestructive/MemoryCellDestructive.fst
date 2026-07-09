@@ -3,8 +3,6 @@
 -- the contents of the cell. In this way reading from a memory cell may be a
 -- blocking operation. Works only with no less writes than reads, properly
 -- interleaved.
-module MemoryCellDestructive where
-
 type IntCell : *C
 type IntCell = *!Int
 

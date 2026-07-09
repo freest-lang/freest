@@ -1,4 +1,3 @@
-module Genetic where
 {-
 
 This program is an implementation of a Genetic Algorithm tailored
@@ -230,7 +229,7 @@ type ListIslandChannel : 1T
 data ListIslandChannel = Nil () | Cons IslandChannel ListIslandChannel
 
 -- Fold function over a list of IslandChannels
-foldIslands : forall (a : *T) -> (a -> IslandChannel -> (a, IslandChannel)) -> a -> ListIslandChannel -> (a, ListIslandChannel)
+foldIslands : forall a -> (a -> IslandChannel -> (a, IslandChannel)) -> a -> ListIslandChannel -> (a, ListIslandChannel)
 foldIslands @a f x chs =
   case chs of
     Nil _ ->

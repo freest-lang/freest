@@ -1,5 +1,3 @@
-module SharedBool where
-
 type Bool' : *C
 type Bool' = *+{False', True'}
 
@@ -9,7 +7,7 @@ true' c = true' $ select True' c
 false' : Bool' -> Void @*T
 false' c = false' $ select False' c
 
-cond : forall (a : *T) -> Dual Bool' -> a -> a -> a
+cond : forall a -> Dual Bool' -> a -> a -> a
 cond @a c v1 v2 = 
   case c of 
     &True'  _ -> v1

@@ -1,5 +1,3 @@
-module MutualLinFun where
-
 mutual
   f : Int -1-> Int
   f x = g x

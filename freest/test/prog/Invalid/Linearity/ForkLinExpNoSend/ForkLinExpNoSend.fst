@@ -1,5 +1,3 @@
-module ForkLinExpNoSend where
-
 main : Int
 main = 
   let (r, w) = channel @(?Int; Wait) in 

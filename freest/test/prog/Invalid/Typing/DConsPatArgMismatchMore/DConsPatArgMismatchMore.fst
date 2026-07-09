@@ -1,5 +1,3 @@
-module ManyArgsCaseCons where
-
 data List = Cons Int List | Nil
 
 moreThanOneElem : List -> Bool

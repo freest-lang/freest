@@ -1,4 +1,2 @@
-module TypeInPat where
-
-foo : (?type (a : *T). Skip) -> Skip
-foo (?type (a : *T). s) = s
+foo : (?type a. Skip) -> Skip
+foo (?type a. s) = s

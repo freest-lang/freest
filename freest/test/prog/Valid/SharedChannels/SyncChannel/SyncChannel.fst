@@ -1,5 +1,3 @@
-module SyncChannel where
-
 type SyncServer : *C
 type SyncServer  = *?SyncService
 

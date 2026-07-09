@@ -1,5 +1,3 @@
-module SharedMathServer where
-
 type MathServer : *C
 type MathServer  = *?MathService
 

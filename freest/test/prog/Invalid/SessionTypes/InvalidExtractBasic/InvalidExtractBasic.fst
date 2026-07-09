@@ -1,5 +1,3 @@
-module InvalidExtractBasic where
-
 type Tree : *T
 data Tree = Leaf | Node Int Tree Tree
 

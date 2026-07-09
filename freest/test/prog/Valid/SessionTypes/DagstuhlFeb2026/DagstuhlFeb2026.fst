@@ -1,5 +1,3 @@
-module DagstuhlFeb2026 where
-
 -- Infinitely repeating some action a
 type IRepeat : 1S -> 1S
 type IRepeat a = a ; IRepeat a

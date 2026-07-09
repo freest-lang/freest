@@ -2,8 +2,6 @@
 -- operations perform session initiation the cell's (shared) channel. Reading
 -- from a memory cell can never block.
 
-module MemoryCell where
-
 type IntCell : *C
 type IntCell = *?IntCellSession
 

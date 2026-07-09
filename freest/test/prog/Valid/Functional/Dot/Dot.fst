@@ -1,6 +1,4 @@
-module Dot where
-
-dot : forall (a : 1T) (b : 1T) (c : 1T) -> (b -> c) -> (a -> b) -> a -> c
+dot : forall a b c -> (b -> c) -> (a -> b) -> a -> c
 dot @a @b @c f g x = f (g x)
 
 double : Int -> Int

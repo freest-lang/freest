@@ -1,5 +1,3 @@
-module BoolServer1 where
-
 type BoolClient, BoolServer : 1C
 
 type BoolServer = &{ And: ?Bool; ?Bool; !Bool; Skip

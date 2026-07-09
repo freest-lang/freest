@@ -1,0 +1,9 @@
+<pending>
+
+Type-threading pattern forcing (item 2, face c).
+
+The forceable binder is the `?type a` (`?type ≅ ∀`, defaults `1T`); it needs `*T`
+because the received value is discarded. Learning that requires kinding to walk
+the receive pattern against its session type (`Expose`, as `checkPat` does) — the
+kinding/typing duplication the fused kinding+typing pass removes (design doc §13,
+item 2). Once solved expect empty output.

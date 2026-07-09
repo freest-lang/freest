@@ -1,5 +1,3 @@
-module Triple where
-
 type Value : *T
 type Value = Int
 type Triple : *T

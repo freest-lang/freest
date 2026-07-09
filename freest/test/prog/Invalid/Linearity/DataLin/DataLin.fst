@@ -1,5 +1,3 @@
-module DataLin where
-
 type T : 1T
 data T = C (Int -1-> Int)
 

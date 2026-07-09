@@ -10,10 +10,9 @@ module Syntax.Module
   ( ParsedModule, ScopedModule, KindedModule, TypedModule
   , Module(..)
   , dataTypeDecls, dataConsDecls
-  , setName
-  , insertImport
   , insertKindSig
   , insertDataDecl
+  , insertBuiltinLists
   , insertTypeDecl
   , insertDef
   , emptyParsedModule
@@ -23,11 +22,13 @@ module Syntax.Module
 where
 
 import Syntax.Base
+import Syntax.Names
 import Syntax.Declarations
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Unkinded qualified as TU
+import Syntax.Type.Kinded () -- for the XBndKind Kinded/Typed type instances
 
 import Data.Bifunctor (second)
 import Data.List qualified as List
@@ -40,9 +41,7 @@ type KindedModule = Module Kinded
 type TypedModule  = Module Typed
 
 data Module p
-  = Module { name        :: Maybe [String] -- TODO: why do we need the Nothing case? Shouldn't all modules have a name? and do I need a List of Strings instead of just a String?
-           , imports     :: [[String]]
-           , kindSigs    :: KindSigs  p
+  = Module { kindSigs    :: KindSigs  p
            , typeDecls   :: TypeDecls p
            , dataDecls   :: DataDecls p
            , definitions :: [E.LetDecl p]
@@ -56,14 +55,8 @@ dataTypeDecls = ddTypes . dataDecls
 dataConsDecls :: Module p -> DataConsDecls p
 dataConsDecls = ddCons . dataDecls
 
-setName :: [String] -> Module p -> Module p
-setName n m = m {name = Just n}
-
-insertImport :: [String] -> Module p -> Module p
-insertImport i m = m{imports = i : imports m}
-
 insertDataDecl ::  Identifier
-               -> [(Variable, K.Kind)]
+               -> [(Variable, Maybe K.Kind)]
                -> [(Identifier, [TU.ParsedType])]
                -> ParsedModule
                -> ParsedModule
@@ -73,8 +66,23 @@ insertDataDecl i aks dcdecls m =
        , ddTypes = dataTypeDecls m ++ [(i, (aks, map fst dcdecls))]
        } }
 
+-- | Seed the built-in list datatypes (@[]@\/@(::)@ at @*T -> *T@, linear @[]'@\/@(::')@ at @1T -> 1T@) as ordinary datatypes.
+insertBuiltinLists :: ParsedModule -> ParsedModule
+insertBuiltinLists =
+    insertKindSig [mkListId s]  (K.Arrow s (K.ut s) (K.ut s))
+  . insertKindSig [mkListId' s] (K.Arrow s (K.lt s) (K.lt s))
+  . insertDataDecl (mkListId s)  [(a, Just (K.ut s))]
+      [ (mkNilId s, [])
+      , (mkConsId s, [TU.Var s a, TU.List s (TU.Var s a)]) ]
+  . insertDataDecl (mkListId' s) [(a, Just (K.lt s))]
+      [ (mkNilId' s, [])
+      , (mkConsId' s, [TU.Var s a, TU.AppDName s (mkListId' s) [TU.Var s a]]) ]
+  where
+    s = nullSpan
+    a = mkDefaultVar "a" s
+
 insertTypeDecl :: Identifier
-               -> [(Variable, K.Kind)]
+               -> [(Variable, Maybe K.Kind)]
                -> TU.ParsedType
                -> ParsedModule
                -> ParsedModule
@@ -89,9 +97,7 @@ insertDef d m = m{definitions = d : definitions m}
 
 emptyParsedModule :: ParsedModule
 emptyParsedModule =
-  Module{ name        = Nothing
-        , imports     = []
-        , kindSigs    = []
+  Module{ kindSigs    = []
         , typeDecls   = []
         , dataDecls   = DataDecls [] []
         , definitions = []
@@ -99,9 +105,7 @@ emptyParsedModule =
 
 emptyScopedModule :: ScopedModule
 emptyScopedModule =
-  Module{ name        = Nothing
-        , imports     = []
-        , kindSigs    = Map.empty
+  Module{ kindSigs    = Map.empty
         , typeDecls   = Map.empty
         , dataDecls   = DataDecls Map.empty Map.empty
         , definitions = []
@@ -109,9 +113,7 @@ emptyScopedModule =
 
 emptyKindedModule :: KindedModule
 emptyKindedModule =
-  Module{ name        = Nothing
-        , imports     = []
-        , kindSigs    = Map.empty
+  Module{ kindSigs    = Map.empty
         , typeDecls   = Map.empty
         , dataDecls   = emptyDataDecls
         , definitions = []
@@ -119,9 +121,7 @@ emptyKindedModule =
 
 instance Semigroup ParsedModule where
   m1 <> m2 =
-    Module{ name        = name m2
-          , imports     = imports     m1 ++ imports     m2
-          , kindSigs    = kindSigs    m1 ++ kindSigs    m2
+    Module{ kindSigs    = kindSigs    m1 ++ kindSigs    m2
           , typeDecls   = typeDecls   m1 ++ typeDecls   m2
           , dataDecls   = DataDecls (dataConsDecls m1 ++ dataConsDecls m2)
                                   (dataTypeDecls m1 ++ dataTypeDecls m2)
@@ -133,9 +133,7 @@ instance Monoid ParsedModule where
 
 instance Semigroup ScopedModule where
   m1 <> m2 =
-    Module{ name        = name m2
-          , imports     = imports     m1 ++          imports     m2
-          , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
+    Module{ kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
           , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
           , dataDecls   = DataDecls (dataConsDecls m1 `Map.union` dataConsDecls m2)
                                   (dataTypeDecls m1 `Map.union` dataTypeDecls m2)
@@ -147,9 +145,7 @@ instance Monoid ScopedModule where
 
 instance Semigroup KindedModule where
   m1 <> m2 =
-    Module{ name        = name m2
-          , imports     = imports     m1 ++          imports     m2
-          , kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
+    Module{ kindSigs    = kindSigs    m1 `Map.union` kindSigs    m2
           , typeDecls   = typeDecls   m1 `Map.union` typeDecls   m2
           , dataDecls   = dataDecls   m1 <>          dataDecls   m2
           , definitions = definitions m1 ++          definitions m2
@@ -159,19 +155,14 @@ instance Monoid KindedModule where
   mempty = emptyKindedModule
 
 instance Show ParsedModule where
-  show m@Module{name,imports,kindSigs,typeDecls,definitions} =
+  show m@Module{kindSigs,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
-      [ case name of 
-          Nothing -> ""
-          Just n -> "module "++ List.intercalate "." n++" where"
-      , List.intercalate "\n" (map showImport imports)
-      , List.intercalate "\n" (map showKindSig kindSigs)
+      [ List.intercalate "\n" (map showKindSig kindSigs)
       , List.intercalate "\n" (map showTypeDecl typeDecls)
       , List.intercalate "\n" (map showDataDecl (dataTypeDecls m))
       , List.intercalate "\n" (map show definitions)
       ]
-    where 
-      showImport ss = "import " ++ List.intercalate "." ss
+    where
       showKindSig (i, k) = "type " ++ show i ++ " : " ++ show k
       showDataDecl (i, (aks, is)) =
         "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = " 
@@ -183,49 +174,39 @@ instance Show ParsedModule where
         | otherwise = "type " ++ show i ++ " = " ++ show t
 
 instance Show ScopedModule where
-  show m@Module{name,imports,kindSigs,typeDecls,definitions} =
+  show m@Module{kindSigs,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
-      [ case name of 
-          Nothing -> ""
-          Just n -> "module "++ List.intercalate "." n++" where"
-      , List.intercalate "\n" (map showImport imports)
-      , List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
+      [ List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
       , List.intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
       , List.intercalate "\n" (map showDataDecl $ Map.toList (dataTypeDecls m))
       , List.intercalate "\n" (map show definitions)
       ]
-    where 
-      showImport ss = "import " ++ List.intercalate "." ss
+    where
       showKindSig (i, k) = "type " ++ show i ++ " : " ++ show k
       showDataDecl (i, (aks, is)) =
-        "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = " 
+        "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = "
         ++ List.intercalate " | " (map ((++ " ...") . show) is)
       showConsDecl (i, (i', aks, ts)) =
         "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
-      showTypeDecl = \case 
+      showTypeDecl = \case
         (i, (True, T.Abs _ _ aks t)) -> "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
         (i, (_, t)) -> "type " ++ show i ++ " = " ++ show t
 
 instance Show KindedModule where
-  show m@Module{name,imports,kindSigs,typeDecls,definitions} =
+  show m@Module{kindSigs,typeDecls,definitions} =
     List.intercalate "\n" $ filter (not . null)
-      [ case name of 
-          Nothing -> ""
-          Just n -> "module "++ List.intercalate "." n++" where"
-      , List.intercalate "\n" (map showImport imports)
-      , List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
+      [ List.intercalate "\n" (map showKindSig (Map.toList kindSigs))
       , List.intercalate "\n" (map showTypeDecl $ Map.toList typeDecls)
       , List.intercalate "\n" (map showDataDecl $ Map.toList (dataTypeDecls m))
       , List.intercalate "\n" (map show definitions)
       ]
-    where 
-      showImport ss = "import " ++ List.intercalate "." ss
+    where
       showKindSig (i, k) = "type " ++ show i ++ " : " ++ show k
       showDataDecl (i, (aks, is)) =
-        "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = " 
+        "data " ++ show i ++ " " ++ unwords (map show aks) ++ " = "
         ++ List.intercalate " | " (map ((++ " ...") . show) is)
       showConsDecl (i, (i', aks, ts)) =
         "cons " ++ show i ++ unwords (map (("@" ++) . show) aks) ++ unwords ts
-      showTypeDecl = \case 
+      showTypeDecl = \case
         (i, (True, T.Abs _ _ aks t)) -> "type " ++ show i ++ " " ++ unwords (map show aks) ++ " = " ++ show t
         (i, (_, t)) -> "type " ++ show i ++ " = " ++ show t

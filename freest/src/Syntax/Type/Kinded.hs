@@ -56,6 +56,9 @@ module Syntax.Type.Kinded
   , kindOf
   , isProper
   , smartApp
+  , appSemiWithKind
+  , appLinChoiceWithKind
+  , tupleWithKind
   )
 where
 
@@ -68,10 +71,12 @@ import Compiler.Bug (internalError)
 import Data.List (intercalate)
 
 type instance T.XType Kinded = K.Kind
+type instance T.XBndKind Kinded = K.Kind
 
 type KindedType = T.Type Kinded
 
 type instance T.XType Typed = K.Kind
+type instance T.XBndKind Typed = K.Kind
 
 type TypedType = T.Type Typed
 
@@ -170,7 +175,11 @@ pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Varia
 pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
   where AppQuant s p pk m aks t  = T.AppQuant s k quant abs p pk m aks t
           where k'@(K.Proper _ m' pk') = kindOf t
-                k = K.Proper s (case p of T.In -> m; T.Out -> m') pk'
+                -- a functional quantifier (∀/∃, supplied prekind Top) is itself
+                -- functional (Top); a session quantifier (!/?type, supplied Session)
+                -- follows its body's prekind (channel iff the body is)
+                rpk = case pk of K.Top -> K.Top; _ -> pk'
+                k = K.Proper s (case p of T.In -> m; T.Out -> m') rpk
                 quant = K.Arrow s abs k
                 abs = foldr (K.Arrow s . snd) k' aks
 
@@ -210,10 +219,28 @@ pattern UnChoice s p ls <- T.UnChoice s _ p ls
 pattern AppSemi :: Span -> KindedType -> KindedType -> KindedType
 pattern AppSemi s t u <- T.AppSemi s _ _ t u
   where AppSemi s t u  = T.AppSemi s app semi t u
-          where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2) 
+          where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2)
                 (K.Proper _ m1 pk1) = kindOf t
                 (K.Proper _ m2 pk2) = kindOf u
                 semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
+
+-- | Build a @;@ node with an explicitly-given result kind. 
+-- Used by kind inference to defer the result kind to the solver.
+appSemiWithKind :: Span -> K.Kind -> KindedType -> KindedType -> KindedType
+appSemiWithKind s app = T.AppSemi s app semi
+  where semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
+
+-- | Build a linear-choice node with an explicitly-given result kind (see
+-- 'appSemiWithKind'). Used by kind inference to defer the result prekind.
+appLinChoiceWithKind :: Span -> K.Kind -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
+appLinChoiceWithKind s app p lts = T.AppLinChoice s app choice p lts
+  where choice = foldr (const $ K.Arrow s (K.ls s)) app lts
+
+-- | Build a tuple node with an explicitly-given result kind (see
+-- 'appSemiWithKind').
+tupleWithKind :: Span -> K.Kind -> [KindedType] -> KindedType
+tupleWithKind s app ts = T.Tuple s app arrows ts
+  where arrows = foldr (const $ K.Arrow s (K.lt s)) app ts
             
 pattern AppDual :: Span -> KindedType -> KindedType
 pattern AppDual s t <- T.AppDual s _ _ t
@@ -241,8 +268,7 @@ pattern Tuple s ts <- T.Tuple s _ _ ts
   
 pattern List :: Span -> KindedType -> KindedType
 pattern List s t <- T.List s _ _ t
-  where List s t  = AppDName s (K.Arrow s (K.lt s) (K.Proper s m K.Top)) (mkListId s) [t]
-          where (K.Proper _ m _) = kindOf t 
+  where List s t  = AppDName s (K.Arrow s (K.ut s) (K.ut s)) (mkListId s) [t]
 
 pattern Bool :: Span -> KindedType
 pattern Bool s <- T.Bool s _

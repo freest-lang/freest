@@ -236,6 +236,9 @@ eval _ (E.String _ s) =
   return $ hsToFstString s
 eval _ (E.DCons _ (B.Identifier _ str)) =
   return $ VCons str []
+eval ctx (E.List _ es) = do
+  vs <- mapM (eval ctx) es
+  return $ foldr (\v acc -> VCons "(::)" [v, acc]) (VCons "[]" []) vs
 eval ctx (E.Var _ var) =
   case ctxLookup ctx var of
     VIO io -> io
@@ -267,8 +270,6 @@ eval ctx (E.Asc span exp typ) = do
 eval ctx (E.Let _ decls exp) = do
   letBindings <- collectLetDecls ctx decls
   eval (ctx `union` letBindings) exp
-eval ctx (E.Semi span exp1 exp2) =
-  eval ctx exp1 >> eval ctx exp2
 eval ctx (E.Case _ exp alternatives) = do
   val <- eval ctx exp
   -- a `case` is the one-column instance of the clause matcher (session effects,
@@ -357,7 +358,7 @@ resolveLetDecls global ((E.FnDef var levelRhss):letDecls) = do
 
 {- -- TODO: DELETE, refactor to use map and filter?
 -- do i need to do Nothing : doPatternMatching pats args or can i just return Nothing
-doPatternMatching :: [E.Pat] -> [Value] -> [String] -> [Maybe (String, Value)]
+doPatternMatching :: [E.KindedPat] -> [Value] -> [String] -> [Maybe (String, Value)]
 doPatternMatching [] [] _ = []
 doPatternMatching pats [] _ = []
 doPatternMatching [] args _ = []
@@ -375,7 +376,7 @@ doPatternMatching (pat:pats) (arg:args) labels = case pat of
   E.AsPat _ var pat2 -> Just (B.external var, arg) : doPatternMatching [pat2] [arg] labels ++ doPatternMatching pats args labels -}
 
 {- -- necessary to find out if there is an internal choice in the pattern matching to pre receive the label
-getInternalChoiceChannels :: [E.Pat] -> [Value] -> [ChannelEnd]
+getInternalChoiceChannels :: [E.KindedPat] -> [Value] -> [ChannelEnd]
 getInternalChoiceChannels [] [] = []
 getInternalChoiceChannels pats [] = []
 getInternalChoiceChannels [] args = []

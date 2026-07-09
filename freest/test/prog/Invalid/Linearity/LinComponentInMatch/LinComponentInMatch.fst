@@ -1,5 +1,3 @@
-module LinComponentInMatch where
-
 type Server : 1C
 type Server = &{A: !Int}; Wait
 

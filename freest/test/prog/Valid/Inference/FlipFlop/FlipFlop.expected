@@ -1,0 +1,9 @@
+<pending>
+
+Existential composition (item 2, type-level face).
+
+Awaiting: kinding that binds an unpacked abstract type at the existential's own
+binder kind (a typing fact from the unpack), so the type can be re-packed / re-used
+without the placeholder leaking as `1T`.
+
+Literal fully-stripped duplicate of Valid/Existentials/FlipFlop/FlipFlop.fst; the annotated original passes.

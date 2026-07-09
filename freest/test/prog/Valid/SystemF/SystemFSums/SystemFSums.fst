@@ -7,24 +7,22 @@ Church Encoding _ Sums
 as per Practical Foundations for Programming Languages, Robert Harper, 2nd edition, page 141
 -}
 
-module SystemFSums where
-
 type Sum : *T -> *T -> *T
-type Sum a b = forall (c : *T) -> (a -> c) -> (b -> c) -> c
+type Sum a b = forall c -> (a -> c) -> (b -> c) -> c
 
-inl : forall (a : *T) (b : *T) -> a -> Sum a b
-inl @a @b e = \@(c : *T) x _ -> x e
+inl : forall a b -> a -> Sum a b
+inl @a @b e = \@c x _ -> x e
 
-inr : forall (a : *T) (b : *T) -> b -> Sum a b
-inr @a @b e = \@(c : *T) _ y -> y e
+inr : forall a b -> b -> Sum a b
+inr @a @b e = \@c _ y -> y e
 
-cases : forall (a : *T) (b : *T) (c : *T) -> Sum a b -> (a -> c) -> (b -> c) -> c
+cases : forall a b c -> Sum a b -> (a -> c) -> (b -> c) -> c
 cases @a @b @c e cl cr = e  @c cl cr
 
-fromL : forall (a : *T) (b : *T) -> Sum a b -> a -> a
+fromL : forall a b -> Sum a b -> a -> a
 fromL @a @b l v = cases  @a @b @a l (id  @a) (\_ -> v)
 
-fromR : forall (a : *T) (b : *T) -> Sum a b -> b -> b
+fromR : forall a b -> Sum a b -> b -> b
 fromR @a @b r v = cases  @a @b @b r (\_ -> v) (id  @b)
 
 -- Examples

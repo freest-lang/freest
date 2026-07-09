@@ -4,8 +4,6 @@ module Validation.LocalInference.Multiplicities
   ( MultConstraints
   , MultEquation(..)
   , multEq
-  , kindEq
-  , arrowEq
   , kindEqConstraints
   , kindSubConstraints
   , solveMultConstraints
@@ -16,7 +14,7 @@ module Validation.LocalInference.Multiplicities
 import Syntax.Base
 import Syntax.Kind (Multiplicity(..), pattern Un)
 import Syntax.Kind qualified as K
-import Syntax.Provenance (Origin(..), Reason(..))
+import Syntax.Provenance (Origin(..))
 import Validation.Base (Validation, incCounter)
 import Validation.LocalInference.Substitution (Substitution(..), emptySubs, subsMult)
 
@@ -34,24 +32,19 @@ type MultConstraints = [MultEquation]
 data MultEquation = MultEquation Multiplicity Origin Multiplicity Origin
 
 -- | Build an equation between two multiplicities.
-multEq :: Reason -> Multiplicity -> Multiplicity -> MultEquation
-multEq r m1 m2 = MultEquation m1 (Origin (getSpan m1) r) m2 (Origin (getSpan m2) r)
-
--- | Specialized builders for multiplicity equations-
-kindEq, arrowEq :: Multiplicity -> Multiplicity -> MultEquation
-kindEq  = multEq FromKind
-arrowEq = multEq FromArrow
+multEq :: Multiplicity -> Multiplicity -> MultEquation
+multEq m1 m2 = MultEquation m1 (Origin (getSpan m1)) m2 (Origin (getSpan m2))
 
 kindEqConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindEqConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [kindEq m1 m2]
+  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [multEq m1 m2]
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindEqConstraints k11 k21
                                           ++ kindEqConstraints k12 k22
   _ _ -> []
 
 kindSubConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindSubConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [kindEq (K.join m1 m2) m2]
+  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [multEq (K.join m1 m2) m2]
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
                                           ++ kindSubConstraints k12 k22
   _ _ -> []
@@ -98,10 +91,22 @@ solve eqs = do
     Lin{}      -> Set.empty
     Sup _ lvφs -> Set.fromList lvφs
 
-  collapseSide m (SolverState sub n) = do 
-    (InstLv, φ) <- Set.toList (atoms m)
+  collapseSide m (SolverState sub n) = do
+    (lv, φ) <- Set.toList (atoms m)
+    guard (solvable lv)
     return $ SolverState (Map.insert φ (Lin (getSpan m)) sub) n
 
+  -- Most general unifier(s) of `⊔A = ⊔B` modulo ACUI (associativity,
+  -- commutativity, idempotence, unit), with the `ObjLv` atoms as constants.
+  -- Let AS, BS be the solvable variables of each side (a common variable is in
+  -- both). A fresh region variable z(x,y) stands for the content shared by
+  -- x∈AS and y∈BS; each variable is bound to the join of its row/column of
+  -- regions, so ⊔A = ⊔(all z) = ⊔B by construction. A constant occurring on one
+  -- side only must be absorbed by some solvable variable on the other side —
+  -- each absorption choice is a separate unifier (`assignTo`), and that is the
+  -- only source of non-unitarity; the region construction itself is
+  -- deterministic. The absorbing top `Lin` is not handled here but by the
+  -- `Lin = Sup` case (`collapseSide`).
   unifySup :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
   unifySup m1 m2 (SolverState sub n0) = do
     let s     = getSpan m1
@@ -109,40 +114,36 @@ solve eqs = do
         as2   = atoms m2
         only1 = Set.difference as1 as2
         only2 = Set.difference as2 as1
-        ovsL  = [φ | (ObjLv,  φ) <- Set.toList only1]
-        ovsR  = [φ | (ObjLv,  φ) <- Set.toList only2]
-        ivsL  = [φ | (InstLv, φ) <- Set.toList only1]
-        ivsR  = [φ | (InstLv, φ) <- Set.toList only2]
-        ivs2   = [φ | (InstLv, φ) <- Set.toList as2]
-        ivs1   = [φ | (InstLv, φ) <- Set.toList as1]
-    guard (null ovsL || not (null ivs2))   -- left-only ObjLv needs absorber on right
-    guard (null ovsR || not (null ivs1))   -- right-only ObjLv needs absorber on left
-    assignL <- assignTo ovsL ivs2
-    assignR <- assignTo ovsR ivs1
-    let merged          = Map.unionWith Set.union assignL assignR
-        toBind          = Set.toList (Set.fromList (ivsL ++ ivsR ++ Map.keys merged))
-        pairs           = [(x, y) | x <- ivsL, y <- ivsR]
-        (pairFresh, n1) = allocFresh s n0 pairs
-        ivsLSet          = Set.fromList ivsL
-        ivsRSet          = Set.fromList ivsR
-        bind acc u =
-          let absorbed  = Map.findWithDefault Set.empty u merged
-              objAtoms  = [(ObjLv, φ) | φ <- Set.toList absorbed]
-              freshAtms
-                | Set.member u ivsLSet = [(InstLv, pairFresh Map.! (u, y)) | y <- ivsR]
-                | Set.member u ivsRSet = [(InstLv, pairFresh Map.! (x, u)) | x <- ivsL]
-                | otherwise           = []
-          in Map.insert u (Sup s (objAtoms ++ freshAtms)) acc
+        asS   = [φ | (lv, φ) <- Set.toList as1, solvable lv]   -- solvable vars of A
+        bsS   = [φ | (lv, φ) <- Set.toList as2, solvable lv]   -- solvable vars of B
+        oL    = [φ | (ObjLv, φ) <- Set.toList only1]           -- only-A constants
+        oR    = [φ | (ObjLv, φ) <- Set.toList only2]           -- only-B constants
+    guard (null oL || not (null bsS))   -- an only-A constant needs an absorber on the right
+    guard (null oR || not (null asS))   -- an only-B constant needs an absorber on the left
+    assignL <- assignTo oL bsS
+    assignR <- assignTo oR asS
+    let absorbed = Map.unionWith Set.union assignL assignR
+        pairs    = [(x, y) | x <- asS, y <- bsS]
+        (zf, n1) = allocFresh s n0 pairs
+        asSet    = Set.fromList asS
+        bsSet    = Set.fromList bsS
+        bind acc v =
+          let row = [(InstLv, zf Map.! (v, y)) | Set.member v asSet, y <- bsS]
+              col = [(InstLv, zf Map.! (x, v)) | Set.member v bsSet, x <- asS]
+              rig = [(ObjLv, r) | r <- Set.toList (Map.findWithDefault Set.empty v absorbed)]
+          in Map.insert v (Sup s (row ++ col ++ rig)) acc
+        toBind = Set.toList (Set.union asSet bsSet)
     return (SolverState (foldl' bind sub toBind) n1)
 
   apply :: Map.Map Variable Multiplicity -> Multiplicity -> Multiplicity
-  apply sub = \case
-    m@Lin{}      -> m
-    (Sup s lvφs) -> foldl' K.join (Un s) (map expand lvφs)
-      where
-        expand = \case
-          (InstLv, φ) | Just m <- Map.lookup φ sub -> apply sub m
-          a                                        -> Sup s [a]
+  apply sub = go Set.empty
+    where
+      go _    m@Lin{}      = m
+      go seen (Sup s lvφs) = foldl' K.join (Un s) (map (expand seen s) lvφs)
+      expand seen s a@(lv, φ)
+        | solvable lv, Just m <- Map.lookup φ sub =
+            if Set.member φ seen then Un s else go (Set.insert φ seen) m
+        | otherwise = Sup s [a]
 
   assignTo :: [Variable] -> [Variable] -> [Map.Map Variable (Set Variable)]
   assignTo = \cases

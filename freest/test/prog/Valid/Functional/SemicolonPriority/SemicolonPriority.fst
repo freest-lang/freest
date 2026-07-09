@@ -1,5 +1,3 @@
-module SemicolonPriority where
-
 main : ()
 main = 1 + 1; ()
 

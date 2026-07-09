@@ -1,4 +1,3 @@
-module Json where
 {- |
 Module      :  Exchange a JSON values on a channel
 Description :  As in "Context-Free Session Types", ICFP'16
@@ -55,7 +54,7 @@ type ArrayChannel = +{
 
 -- Writing a JSON value on a channel
 mutual 
-  writeValue : forall (a : 1S) -> Value -> (ValueChannel; a) -> a
+  writeValue : forall a -> Value -> (ValueChannel; a) -> a
   writeValue @a v c =
     case v of
       StringVal s -> select StringVal c |> send s
@@ -65,7 +64,7 @@ mutual
       BoolVal   b -> select BoolVal   c |> send b
       NullVal     -> select NullVal   c
    
-  writeObject : forall (a : 1S) -> Object -> (ObjectChannel; a) -> a
+  writeObject : forall a -> Object -> (ObjectChannel; a) -> a
   writeObject @a j c =
     case j of
       ConsObject key val j1 ->
@@ -76,7 +75,7 @@ mutual
       EmptyObject ->
         select Empty c
   
-  writeArray : forall (a : 1S) -> Array -> (ArrayChannel; a) -> a
+  writeArray : forall a -> Array -> (ArrayChannel; a) -> a
   writeArray @a l c =
     case l of
       ConsArray j l1 ->
@@ -88,7 +87,7 @@ mutual
 
 -- Reading a JSON value from a channel
 mutual
-  readValue : forall (a : 1S) -> (Dual ValueChannel; a) -> (Value, a)
+  readValue : forall a -> (Dual ValueChannel; a) -> (Value, a)
   readValue @a c =
     case c of
       &StringVal c -> let (s, c) = receive c in (StringVal s, c)
@@ -98,7 +97,7 @@ mutual
       &BoolVal   c -> let (b, c) = receive c in (BoolVal b, c)
       &NullVal   c -> (NullVal, c)
   
-  readObject : forall (a : 1S) -> (Dual ObjectChannel; a) -> (Object, a)
+  readObject : forall a -> (Dual ObjectChannel; a) -> (Object, a)
   readObject @a c =
     case c of
       &ConsObject c ->
@@ -109,7 +108,7 @@ mutual
       &Empty c ->
         (EmptyObject, c)
 
-  readArray : forall (a : 1S) -> (Dual ArrayChannel; a) -> (Array, a)
+  readArray : forall a -> (Dual ArrayChannel; a) -> (Array, a)
   readArray @a c =
     case c of
       &ConsObject c ->

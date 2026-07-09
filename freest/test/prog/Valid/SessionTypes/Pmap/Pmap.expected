@@ -1,1 +1,1 @@
-[2,4,6,8,10]
+<pending> Pmap builds an intermediate list of session channels, so it needs cross-list-kind maps (unrestricted->linear, linear->unrestricted); not expressible with two monomorphic lists (needs #m kind polymorphism).

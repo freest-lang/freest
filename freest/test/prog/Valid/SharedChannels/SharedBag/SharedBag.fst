@@ -1,5 +1,3 @@
-module SharedBag where
-
 -- | The client view of a linear interaction with a bag (multiset) of integer values
 type Bag : 1C
 type Bag = +{Put: !Int, Get: ?Int}; Close 

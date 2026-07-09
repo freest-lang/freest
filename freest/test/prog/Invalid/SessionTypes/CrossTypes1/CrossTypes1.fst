@@ -1,5 +1,3 @@
-module CrossTypes1 where
-
 type ListOut, ListIn : 1S
 type ListOut = +{Nil : Skip, Cons: !Int;ListOut}
 type ListIn = Dual ListOut
@@ -27,4 +25,4 @@ main =
   list
 
 aList : [Int]
-aList = [2,3,4,5] @Int
+aList = [2,3,4,5]

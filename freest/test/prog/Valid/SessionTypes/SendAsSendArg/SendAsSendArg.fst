@@ -1,5 +1,3 @@
-module SendAsSendArg where
-
 f1 : !Int; !Int; Close -> ()
 f1 c = send 5 c |> send 5 |> close
 

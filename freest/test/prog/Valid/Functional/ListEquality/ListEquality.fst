@@ -1,5 +1,3 @@
-module ListEquality where
-
 type List : *T
 data List = Nil | Cons Int List
 

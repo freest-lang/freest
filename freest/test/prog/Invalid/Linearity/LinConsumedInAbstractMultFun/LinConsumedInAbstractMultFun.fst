@@ -1,5 +1,3 @@
-module LinConsumedInAbstractMultFun where
-
 typeAbs : forall #m -> !Int; Close -> Int -m-> ()
 typeAbs #m c x = send x c |> close 
 

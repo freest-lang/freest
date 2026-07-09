@@ -1,5 +1,3 @@
-module DualMessage where
-
 sendInt : !Int;Close -> ()
 sendInt c = c |> send 5 |> close
 

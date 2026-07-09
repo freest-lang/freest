@@ -6,10 +6,8 @@ Copyright   : (c) Vasco T. Vasconcelos, 31 dec 2020
 Church Encoding _ Boolean Values
 -}
 
-module SystemFBooleans where
-
 type Bool' : *T
-type Bool' = forall (b : *T) -> b -> b -> b
+type Bool' = forall b -> b -> b -> b
 
 true, false : Bool'
 
@@ -25,18 +23,18 @@ not' = \b -> \@(a : *T) -> \t -> \f -> b @a f t
 type Bool'' : *T -> *T
 type Bool'' b = b -> b -> b
 
-true', false': forall (b : *T) -> Bool'' b
+true', false': forall b -> Bool'' b
 
 true'  @b t _ = t
 
 false' @b _ f = f
 
-not'' : forall (b : *T) -> Bool'' b -> Bool'' b
+not'' : forall b -> Bool'' b -> Bool'' b
 not'' @b b = \t f -> b f t
 
 -- Destructor
 
-cond : forall (a : *T) -> Bool' -> a -> a -> a
+cond : forall a -> Bool' -> a -> a -> a
 cond @a b e1 e2 = b @a e1 e2
 
 -- Boolean ops based on the conditional

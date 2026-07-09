@@ -1,5 +1,3 @@
-module PartialReceive where
-
 apply : (?Int;Wait -> (Int, Wait)) -> ?Int; Wait -> (Int, Wait)
 apply f = f
 

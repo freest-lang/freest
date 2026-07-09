@@ -1,5 +1,3 @@
-module DataReuseBoundVar where
-
 type T : *T
 data T = C Int
 

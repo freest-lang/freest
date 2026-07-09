@@ -1,5 +1,3 @@
-module SendRecvSameThread where
-
 main : ()
 main =
   let (w, r) = channel @(!Int;Close) in
