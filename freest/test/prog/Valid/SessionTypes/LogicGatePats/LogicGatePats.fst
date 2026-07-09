@@ -1,5 +1,3 @@
-module LogicGatePats where
-
 type BStream : 1C
 type BStream = +{More: !Bool; BStream, Done: Close}
 

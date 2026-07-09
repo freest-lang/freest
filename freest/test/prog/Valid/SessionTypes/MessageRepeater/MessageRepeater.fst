@@ -1,5 +1,3 @@
-module MessageRepeater where
-
 type Code : *T
 type Code = Stream -> Stream
 
