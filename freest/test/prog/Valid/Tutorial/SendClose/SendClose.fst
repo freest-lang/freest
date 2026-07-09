@@ -31,3 +31,10 @@ readInt'' = receiveAndWait
 _ =
   let x = forkWith writeFive
   in print $ readInt' x
+
+
+readInt : ?Int ; Wait -> ()
+readInt (?x ; Wait) = print x
+
+sumThree : ?Int ; ?Int ; ?Int ; Wait -> ()
+sumThree (?x ; ?y ; ?z ; Wait) = print $ x + y + z
