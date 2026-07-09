@@ -55,6 +55,7 @@ data Error
   | ConflictingDefs Span (Level String String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
+  | EquationArityMismatch Span Variable Int Int
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | ExposeError Span (Either E.KindedPat E.KindedExp) String TK.KindedType
@@ -140,6 +141,7 @@ instance Located Error where
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
     DConsPatArgMismatch s _ _ _ -> s
+    EquationArityMismatch s _ _ _ -> s
     ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
     ExposeError s _ _ _ -> s
@@ -322,6 +324,9 @@ toMessage src = \case
   DConsPatArgMismatch s i n m -> makeError src s
     ("Constructor " ++ bt (show i) ++ " takes " ++ show n
       ++ " arguments, but it is given " ++ show m)
+  EquationArityMismatch s f n m -> makeError src s
+    ("Equations for " ++ bt (external f) ++ " have different numbers of value parameters:"
+      ++ " this equation binds " ++ show m ++ ", but an earlier one binds " ++ show n)
   ExpectsTooManyArgs s t n m -> makeError src s
      ("This function expects " ++ prettyArgs n
        ++ ", but its type " ++ bt (unparse t) ++ " takes"

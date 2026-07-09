@@ -891,10 +891,18 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
             subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u)
       (pi : ps', TK.AppArrow _ _ u _) ->
         throwE (UnexpectedParam (paramSpan pi) i (ExpLevel  u ) (voidLevel pi))
-      (pi : ps', TK.AppForall _ _ ((_, k) : _) u) ->
-        throwE (UnexpectedParam (paramSpan pi) i (TypeLevel k ) (voidLevel pi))
-      (pi : ps', TK.ForallM{}) -> 
-        throwE (UnexpectedParam (paramSpan pi) i (MultLevel ()) (voidLevel pi))
+      -- a signature quantifier with no matching abstraction param: reconstruct
+      -- the omitted binder from the signature (anonymous, rigid ObjLv) without
+      -- consuming the current param
+      (pi : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
+        a' <- freshInternal a
+        first (TypeLevel (a', k) :) <$> kindFun' (i + 1) tracked (capUnder m tracked capUn) (Map.insert (Left a') k kctx) tctxds (pi : ps')
+          rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv a' k) u)
+      (pi : ps', TK.ForallM s' m (φ' : φs) u) -> do
+        φ'' <- freshInternal φ'
+        first (MultLevel φ'' :) <$> kindFun' (i + 1) tracked (capUnder m tracked capUn) kctx tctxds (pi : ps') rhs
+          ((if null φs then id else TK.ForallM s' m φs) $
+            subsMultType ObjLv φ' (VarM (getSpan φ'') ObjLv φ'') u)
       (as, t') -> do
         throwE (ExpectsTooManyArgs (getSpan e) t (i + length as) i)
       where

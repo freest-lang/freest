@@ -235,6 +235,19 @@ TypeVar :: { Variable }
 MultVar :: { Variable }
   : Variable { $1 }
 
+TAbsVar :: { Variable }
+  : TypeVar  { $1 }
+  | WILDCARD { mkVarTk $1 }
+
+MAbsVar :: { Variable }
+  : MultVar  { $1 }
+  | WILDCARD { mkVarTk $1 }
+
+OptKindedTAbsVar :: { (Variable, Maybe K.Kind) }
+  : OptKindedVar              { $1 }
+  | WILDCARD                  { (mkVarTk $1, Nothing) }
+  | '(' WILDCARD ':' Kind ')' { (mkVarTk $2, Just $4) }
+
 Variable :: { Variable }
   : LOWER_ID { mkVarTk $1 }
 
@@ -558,11 +571,11 @@ TypedPat :: { (E.ParsedPat, Maybe T.ParsedType) }
 
 ExpParamsArrow :: { ([Level (E.ParsedPat, Maybe T.ParsedType) (Variable, Maybe K.Kind) Variable], K.Multiplicity) }
   :     TypedPat  ExpParamsArrow { first (ExpLevel  $1 :) $2 }
-  | '@' OptKindedVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
-  | '#' MultVar   ExpParamsArrow { first (MultLevel $2 :) $3 }
+  | '@' OptKindedTAbsVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
+  | '#' MAbsVar   ExpParamsArrow { first (MultLevel $2 :) $3 }
   |     TypedPat  MultArrow { ([ExpLevel  $1], snd $2) }
-  | '@' OptKindedVar MultArrow { ([TypeLevel $2], snd $3) }
-  | '#' MultVar   MultArrow { ([MultLevel $2], snd $3) }
+  | '@' OptKindedTAbsVar MultArrow { ([TypeLevel $2], snd $3) }
+  | '#' MAbsVar   MultArrow { ([MultLevel $2], snd $3) }
 
 CaseBlock :: { [(E.ParsedPat, E.ParsedRHS)] }
   : OPEN CaseListPIPE Close { $2 }
@@ -610,13 +623,13 @@ PatPrimaryListWS :: { [E.ParsedPat] }
   : PatPrimary PatPrimaryListWS { $1 : $2 }
   | PatPrimary { [$1] }
 
-FnDefParams :: { [Level E.ParsedPat Variable Variable] } 
+FnDefParams :: { [Level E.ParsedPat Variable Variable] }
   : PatPrimary  FnDefParams { ExpLevel  $1 : $2 }
-  | '@' TypeVar FnDefParams { TypeLevel $2 : $3 }
-  | '#' MultVar FnDefParams { MultLevel $2 : $3 }
-  | PatPrimary   { [ExpLevel  $1] }
-  | '@' TypeVar  { [TypeLevel $2] }
-  | '#' MultVar  { [MultLevel $2] }
+  | '@' TAbsVar FnDefParams { TypeLevel $2 : $3 }
+  | '#' MAbsVar FnDefParams { MultLevel $2 : $3 }
+  | PatPrimary  { [ExpLevel  $1] }
+  | '@' TAbsVar { [TypeLevel $2] }
+  | '#' MAbsVar { [MultLevel $2] }
 
 PatListComma :: { [E.ParsedPat] }
   : {- empty -} { [] }
