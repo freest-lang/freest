@@ -200,5 +200,7 @@ builtins = Map.fromList
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
   , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
-  , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VChan c))
+  -- The received type is erased at runtime; the returned 'VPack' exists so
+  -- that an explicit @let (\@a, c) = receiveType c@ pattern can decompose it.
+  , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VPack [] (VChan c)))
   ]
