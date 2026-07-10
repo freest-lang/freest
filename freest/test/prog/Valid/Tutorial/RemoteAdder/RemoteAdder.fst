@@ -8,6 +8,8 @@ onePlusOne : !Int ; !Int ; ?Int ; Close -> Int
 onePlusOne c =
     c |> send 1 |> send 1 |> receiveAndClose
 
-_ =
-    let x = forkWith adder
-    in print $ onePlusOne x
+_ = forkWith adder |> onePlusOne |> print
+
+_ = print (onePlusOne (forkWith adder))
+
+_ = print $ onePlusOne $ forkWith adder
