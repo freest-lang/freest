@@ -33,5 +33,5 @@ _ = print (charRenderer (forkWith render))
 
 _ =
   forkWith render |>
-  charRenderer |>
+  pairRenderer |>
   print
