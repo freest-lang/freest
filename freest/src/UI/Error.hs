@@ -496,7 +496,7 @@ toMessage src = \case
     fromClause primary src ty
       | sp == primary                      = "\n"
       | not (Map.member (filepath sp) src) = "\n"
-      | otherwise                          = ", from:\n" ++ snippet src sp True
+      | otherwise                          = ", taken from:\n" ++ snippet src sp True
       where sp = getSpan ty
   TypeMismatchExists s t poe -> makeError src s
     ("Couldn't match expected type " ++ bt (show t) ++ " with a package "
