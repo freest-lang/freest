@@ -275,6 +275,19 @@ makeError :: Located a => Source -> a -> String -> String
 makeError src (getSpan -> s) msg =
   errorHeader s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
 
+-- | Does a type still mention a solvable (unification) type variable? Such a
+-- variable is one the checker never resolved — it unparses to @_@. In a type
+-- mismatch it signals that a type argument could not be inferred, which is the
+-- shape of a false negative (a typeable program the checker rejects because its
+-- inference is incomplete). All the session constructors are 'App' synonyms, so
+-- the traversal only needs the three underlying shapes.
+hasSolvableTypeVar :: TK.KindedType -> Bool
+hasSolvableTypeVar = \case
+  TK.Var _ _ lv _ -> solvable lv
+  TK.Abs _ _ t    -> hasSolvableTypeVar t
+  TK.App _ t ts   -> hasSolvableTypeVar t || any hasSolvableTypeVar ts
+  _               -> False
+
 toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m om m' om' -> makeError src s
@@ -492,7 +505,18 @@ toMessage src = \case
   TypeMismatch s t u _ -> makeError src s "Type mismatch:"
     ++ "Couldn't match expected type " ++ bt (unparse t) ++ fromClause s src t
     ++ "with actual type " ++ bt (unparse u) ++ fromClause s src u
+    ++ falseNegativeHint
     where
+    -- Only when a type argument was left unresolved (it shows as `_`): the
+    -- mismatch may be a false negative of an incomplete inference, and an
+    -- explicit type argument is the fix. Stays silent on ordinary mismatches.
+    falseNegativeHint
+      | hasSolvableTypeVar t || hasSolvableTypeVar u =
+          "This may be a false negative: a type argument could not be inferred "
+          ++ "(shown as `_`).\nConsider annotating the application with an explicit "
+          ++ "type argument (e.g. `f @a`),\nbinding the signature's type variables with "
+          ++ "`@a` patterns on the left-hand side."
+      | otherwise = ""
     fromClause primary src ty
       | sp == primary                      = "\n"
       | not (Map.member (filepath sp) src) = "\n"
