@@ -5,7 +5,7 @@ undefined : forall (a : *T) -> a
 undefined @a = undefined
 
 -- * Error
-error : forall (a : *T) -> String -> a
+error : forall (a : 1T) -> String -> a
 error @a = undefined
 
 -- * Standard types, classes and related functions
