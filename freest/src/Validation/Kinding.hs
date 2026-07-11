@@ -437,6 +437,22 @@ freshDeclSig s anns = do
   ps  <- mapM (maybe (freshUnifKind s) pure) anns
   pure (foldr (Arrow s) (Proper s m (VarPK UnifLv pkv)) ps, pkv)
 
+-- | Like 'freshDeclSig', but for a datatype declaration. A datatype is
+-- functional, so its result prekind is fixed to 'Top' rather than left as a
+-- solvable variable: only its multiplicity (shared vs. linear) is inferred.
+-- Keeping the prekind ground lets 'checkOperand' reject a datatype used where a
+-- session type is required (e.g. @Data ; T@) eagerly, with a proper
+-- \"expected a session type\" error, instead of deferring a prekind variable that
+-- the solver would freely lower to Session — letting the non-session type reach
+-- normalisation and crash. The returned prekind variable is unused (kept for the
+-- shared @(Kind, Variable)@ shape of 'freshSigs').
+freshDataSig :: Span -> [Maybe Kind] -> Validation (Kind, Variable)
+freshDataSig s anns = do
+  m   <- freshUnifMult s
+  pkv <- freshUnifPrekindVar s
+  ps  <- mapM (maybe (freshUnifKind s) pure) anns
+  pure (foldr (Arrow s) (Proper s m Top) ps, pkv)
+
 -- | Does a declaration body reference the given type name (is the declaration
 -- recursive)?
 mentions :: Identifier -> T.ScopedType -> Bool
@@ -473,7 +489,7 @@ kindModule ctx mod = do
               (\i (hp, t) -> freshDeclSig (getSpan i) (declParams hp t))
               siglessTypes
   freshD <- Map.traverseWithKey
-              (\i (aks, _) -> freshDeclSig (getSpan i) (map snd aks))
+              (\i (aks, _) -> freshDataSig (getSpan i) (map snd aks))
               siglessDatas
   let freshSigs = Map.union freshT freshD
       ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
