@@ -288,6 +288,19 @@ hasSolvableTypeVar = \case
   TK.App _ t ts   -> hasSolvableTypeVar t || any hasSolvableTypeVar ts
   _               -> False
 
+-- | Does a type contain a universal quantifier (a @forall@)? When one side of a
+-- mismatch has one and the other does not, the likely cause is a polymorphic
+-- value (e.g. @Nothing : forall a. Maybe a@) whose leading quantifier was never
+-- instantiated — another shape of false negative, fixed by an explicit type
+-- argument or annotation on that value.
+hasForall :: TK.KindedType -> Bool
+hasForall = \case
+  TK.AppForall _ _ _ _ -> True
+  TK.ForallM _ _ _ _   -> True
+  TK.Abs _ _ t         -> hasForall t
+  TK.App _ t ts        -> hasForall t || any hasForall ts
+  _                    -> False
+
 toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m om m' om' -> makeError src s
@@ -516,6 +529,10 @@ toMessage src = \case
           ++ "(shown as `_`).\nConsider annotating the application with an explicit "
           ++ "type argument (e.g. `f @a`),\nbinding the signature's type variables with "
           ++ "`@a` patterns on the left-hand side."
+      | hasForall t /= hasForall u =
+          "This may be a false negative: a polymorphic value was not instantiated "
+          ++ "(note the `forall`).\nConsider giving it an explicit type argument "
+          ++ "(e.g. `Nothing @a`) or a type annotation."
       | otherwise = ""
     fromClause primary src ty
       | sp == primary                      = "\n"
