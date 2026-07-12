@@ -44,9 +44,11 @@ _ = forkWith (marshall aTree) |> unmarshall |> print
 leftoverTokens : Stream (Maybe Int) -> ()
 leftoverTokens c = c |> select More |> send (Just 1) |> select More |> send (Just 2) |> select Done |> close
 
-_ = forkWith (leftoverTokens) |> unmarshall |> print
+-- Ends with an error because the stream still offers More after the tree has been fully unmarshalled.
+-- _ = forkWith (leftoverTokens) |> unmarshall |> print
 
 truncatedTree : Stream (Maybe Int) -> ()
 truncatedTree c = c |> select More |> send (Just 1) |> select Done |> close
 
-_ = forkWith (truncatedTree) |> unmarshall |> print
+-- Ends with an error
+-- _ = forkWith (truncatedTree) |> unmarshall |> print

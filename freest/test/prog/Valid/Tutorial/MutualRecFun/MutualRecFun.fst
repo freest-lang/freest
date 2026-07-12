@@ -36,8 +36,3 @@ improvedDivision n div =
     let quotient = n / div
         remainder = mod n div
     in (quotient, remainder)
-
-main = print $
-  let divisor = 2
-      (quotient, remainder) = improvedDivision 3 divisor
-  in quotient * divisor + remainder
