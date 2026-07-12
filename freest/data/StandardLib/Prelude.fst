@@ -417,10 +417,6 @@ runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -1-> b) -> b -> *!a -> Void
 runServer @a @b handle state c =
   runServer handle (handle state (accept c)) c 
 
--- | Discards an unrestricted value
-sink : forall (a : *T) -> a -> ()
-sink @a _ = ()
-
 -- | Executes a thunk n times, sequentially 
 -- ```
 -- main : ()
