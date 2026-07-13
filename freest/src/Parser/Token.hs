@@ -57,8 +57,8 @@ data Token
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
   | TkVoidType Span
-  -- Prekinds 
-  | TkTopPrekind Span | TkSessionPrekind Span | TkChannelPrekind Span
+  -- BaseKinds 
+  | TkTopBaseKind Span | TkSessionBaseKind Span | TkChannelBaseKind Span
   deriving (Eq, Show)
 
 
@@ -173,9 +173,9 @@ instance Located Token where
     TkDualType s -> s
     TkVoidType s -> s
     -- Kinds
-    TkTopPrekind s -> s
-    TkSessionPrekind s -> s
-    TkChannelPrekind s -> s
+    TkTopBaseKind s -> s
+    TkSessionBaseKind s -> s
+    TkChannelBaseKind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
@@ -269,7 +269,7 @@ instance Located Token where
     TkWaitType _ -> TkWaitType s
     TkVoidType _ -> TkVoidType s
     -- Kinds
-    TkTopPrekind _ -> TkTopPrekind s
-    TkSessionPrekind _ -> TkSessionPrekind s
-    TkChannelPrekind _ -> TkChannelPrekind s
+    TkTopBaseKind _ -> TkTopBaseKind s
+    TkSessionBaseKind _ -> TkSessionBaseKind s
+    TkChannelBaseKind _ -> TkChannelBaseKind s
 

@@ -8,7 +8,7 @@ module Validation.Base
   , addKindConstraint
   , addKindBinding
   , addMultEquation
-  , addPrekindConstraint
+  , addBaseKindConstraint
   , addCondSeqMult
   , takeKindState
   , unfold
@@ -19,7 +19,7 @@ import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
-import Validation.LocalInference.Prekinds ( PrekindConstraint )
+import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -49,12 +49,12 @@ data ValidationState
     -- | Multiplicity equations @(o, m1, m2)@ meaning @m1 = m2@, emitted by
     -- multi-operand formers (e.g. the join of @;@).
     , multEquations :: [(Origin, K.Multiplicity, K.Multiplicity)]
-    -- | Prekind constraints (meet/join/sub) emitted by multi-operand formers.
-    , prekindConstraints :: [PrekindConstraint]
+    -- | BaseKind constraints (meet/join/sub) emitted by multi-operand formers.
+    , baseKindConstraints :: [BaseKindConstraint]
     -- | Channel-conditional @;@ multiplicities @(o, υ₁, φ, m₁, m₂)@ meaning
     -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
-    -- prekind υ₁ is still a variable; discharged once prekinds are solved.
-    , condSeqMults :: [(Origin, K.Prekind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
+    -- baseKind υ₁ is still a variable; discharged once baseKinds are solved.
+    , condSeqMults :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
     }
 
 -- | The empty validation state. No errors or declarations.
@@ -65,7 +65,7 @@ emptyValidationState = ValidationState
   , kindConstraints = []
   , kindBindings = Map.empty
   , multEquations = []
-  , prekindConstraints = []
+  , baseKindConstraints = []
   , condSeqMults = []
   }
 
@@ -100,27 +100,27 @@ addMultEquation :: Origin -> K.Multiplicity -> K.Multiplicity -> Validation ()
 addMultEquation o m1 m2 =
   modify \s -> s{multEquations = (o, m1, m2) : multEquations s}
 
--- | Record a prekind constraint.
-addPrekindConstraint :: PrekindConstraint -> Validation ()
-addPrekindConstraint c =
-  modify \s -> s{prekindConstraints = c : prekindConstraints s}
+-- | Record a baseKind constraint.
+addBaseKindConstraint :: BaseKindConstraint -> Validation ()
+addBaseKindConstraint c =
+  modify \s -> s{baseKindConstraints = c : baseKindConstraints s}
 
 -- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
-addCondSeqMult :: Origin -> K.Prekind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()
-addCondSeqMult o pk φ m1 m2 =
-  modify \s -> s{condSeqMults = (o, pk, φ, m1, m2) : condSeqMults s}
+addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()
+addCondSeqMult o bk φ m1 m2 =
+  modify \s -> s{condSeqMults = (o, bk, φ, m1, m2) : condSeqMults s}
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation
   ( Map.Map Variable K.Kind
   , [(Origin, K.Kind, K.Kind)]
   , [(Origin, K.Multiplicity, K.Multiplicity)]
-  , [PrekindConstraint]
-  , [(Origin, K.Prekind, K.Multiplicity, K.Multiplicity, K.Multiplicity)] )
+  , [BaseKindConstraint]
+  , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)] )
 takeKindState = do
   s <- gets id
-  modify \st -> st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], prekindConstraints = [], condSeqMults = []}
-  return (kindBindings s, kindConstraints s, multEquations s, prekindConstraints s, condSeqMults s)
+  modify \st -> st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = []}
+  return (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s)
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

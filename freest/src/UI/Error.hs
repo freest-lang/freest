@@ -44,7 +44,7 @@ data Error
       K.Multiplicity Origin
   | CannotInferHigherKindedTypeApp Span K.Kind
   | CannotSatisfyKindConstraint Origin K.Kind K.Kind
-  | CannotSatisfyPrekindConstraint Origin K.Prekind K.Prekind
+  | CannotSatisfyBaseKindConstraint Origin K.BaseKind K.BaseKind
   | InfiniteKind Origin Variable K.Kind
   | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
@@ -92,7 +92,7 @@ data Error
   | NonLinPat Span E.KindedPat TK.KindedType
   | ParseError Span (Token, [String])
   | PartiallyAppliedSelect Span Identifier
-  | PrekindMismatch Span K.Prekind TK.KindedType K.Kind
+  | BaseKindMismatch Span K.BaseKind TK.KindedType K.Kind
   | ProperKindMismatch Span TK.KindedType K.Kind
   | RestrictedFunInMutual Span Variable TK.KindedType
   | SigLacksDef Span Variable
@@ -133,7 +133,7 @@ instance Located Error where
     ArrowMultMismatch s _ _ _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
     CannotSatisfyKindConstraint o _ _ -> getSpan o
-    CannotSatisfyPrekindConstraint o _ _ -> getSpan o
+    CannotSatisfyBaseKindConstraint o _ _ -> getSpan o
     InfiniteKind o _ _ -> getSpan o
     CannotSatisfyMultConstraint s _ _ _ _ -> s
     CannotSynthesisePack s _ -> s
@@ -171,7 +171,7 @@ instance Located Error where
     MultVarOutOfScope s _ -> s
     NonLinPat s _ _ -> s
     ParseError s _ -> s
-    PrekindMismatch s _ _ _ -> s
+    BaseKindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     RestrictedFunInMutual s _ _ -> s
     SigLacksDef s _ -> s
@@ -321,8 +321,8 @@ toMessage src = \case
   CannotSatisfyKindConstraint o k1 k2 -> makeError src (getSpan o)
     ("Couldn't match kind " ++ bt a ++ " with kind " ++ bt b)
     where (a, b) = tidyKK k1 k2
-  CannotSatisfyPrekindConstraint o p1 p2 -> makeError src (getSpan o)
-    ("Expected a " ++ prettyPk p2 ++ ", but got a " ++ prettyPk p1)
+  CannotSatisfyBaseKindConstraint o p1 p2 -> makeError src (getSpan o)
+    ("Expected a " ++ prettyBk p2 ++ ", but got a " ++ prettyBk p1)
   InfiniteKind o v k -> makeError src (getSpan o)
     ("Cannot construct the infinite kind " ++ bt (va ++ " ~ " ++ vk))
     where e  = mkTidy (('k', v) : kMetas k)
@@ -479,10 +479,10 @@ toMessage src = \case
       [] -> ""
       [x] -> "(Expected " ++ x ++ ")"
       ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
-  PrekindMismatch s pk t k -> makeError src s
-    ("Expected a " ++ prettyPk pk ++ ", but got " ++
+  BaseKindMismatch s bk t k -> makeError src s
+    ("Expected a " ++ prettyBk bk ++ ", but got " ++
       (case k of
-        K.Proper _ m pk -> prettyPk pk ++ " " ++ bt (unparse t)
+        K.Proper _ m bk -> prettyBk bk ++ " " ++ bt (unparse t)
         k               -> bt (unparse t) ++ " of kind " ++ bt (tidyK k))
       ++ " instead")
   ProperKindMismatch s t k -> case k of
@@ -619,14 +619,14 @@ toMessage src = \case
   -- message — and leave every ground kind and rigid (object-level: @#m@,
   -- ∀-bound) variable exactly as the unparser prints it.
 
-  -- The solvable metavariables of a kind/multiplicity/prekind, tagged with the
+  -- The solvable metavariables of a kind/multiplicity/baseKind, tagged with the
   -- letter of their sort, in first-seen (left-to-right) order.
   kMetas = \case
-    K.Proper _ m pk -> mMetas m ++ pMetas pk
+    K.Proper _ m bk -> mMetas m ++ bkMetas bk
     K.Arrow _ a b   -> kMetas a ++ kMetas b
     K.Var _ lv v    -> [('k', v) | solvable lv]
   mMetas = \case K.Sup _ as -> [('m', v) | (lv, v) <- as, solvable lv]; _ -> []
-  pMetas = \case K.VarPK lv v | solvable lv -> [('p', v)]; _ -> []
+  bkMetas = \case K.VarBK lv v | solvable lv -> [('p', v)]; _ -> []
 
   -- Assign each distinct metavariable a name, in first-seen order, per sort.
   mkTidy = go Map.empty Map.empty
@@ -643,7 +643,7 @@ toMessage src = \case
   -- The renderers mirror the 'Parser.Unparser' kind instances exactly on ground
   -- and rigid input, diverging only to print a metavariable's tidy name.
   tidyKind env = \case
-    K.Proper _ m pk -> tidyMultB env m ++ tidyPrekind env pk
+    K.Proper _ m bk -> tidyMultB env m ++ tidyBaseKind env bk
     K.Arrow _ a b   -> dom ++ " -> " ++ tidyKind env b
       where dom = case a of K.Arrow{} -> "(" ++ tidyKind env a ++ ")"
                             _         -> tidyKind env a
@@ -657,18 +657,18 @@ toMessage src = \case
       where atom (lv, v) | solvable lv = tidyName env v
                          | otherwise   = show v
 
-  -- As 'tidyMult', but bracketing a multi-atom join before a prekind, as the
+  -- As 'tidyMult', but bracketing a multi-atom join before a baseKind, as the
   -- unparser does inside a proper kind.
   tidyMultB env = \case
     m@(K.Sup _ as) | length as > 1 -> "(" ++ tidyMult env m ++ ")"
     m                              -> tidyMult env m
 
-  tidyPrekind env = \case
+  tidyBaseKind env = \case
     K.Top -> "T"; K.Session -> "S"; K.Channel -> "C"
-    K.VarPK lv v | solvable lv -> tidyName env v
+    K.VarBK lv v | solvable lv -> tidyName env v
                  | otherwise   -> external v
 
-  -- Tidy a single kind/multiplicity/prekind, or a pair sharing one environment
+  -- Tidy a single kind/multiplicity/baseKind, or a pair sharing one environment
   -- (so a metavariable common to both sides of a mismatch prints one name).
   tidyK  k      = tidyKind (mkTidy (kMetas k)) k
   tidyKK k1 k2  = let e = mkTidy (kMetas k1 ++ kMetas k2)
@@ -676,7 +676,7 @@ toMessage src = \case
   tidyM  m      = tidyMult (mkTidy (mMetas m)) m
   tidyMM m1 m2  = let e = mkTidy (mMetas m1 ++ mMetas m2)
                   in (tidyMult e m1, tidyMult e m2)
-  tidyP  p      = tidyPrekind (mkTidy (pMetas p)) p
+  tidyBk  p      = tidyBaseKind (mkTidy (bkMetas p)) p
 
   prettyModifiedPlural w q  = \case
     0 -> "no "   ++ q ++ " " ++ w ++ "s"
@@ -696,11 +696,11 @@ toMessage src = \case
     Left x -> "variable " ++ bt (external x)
     Right i -> "constructor " ++ bt (show i)
 
-  prettyPk = \case
+  prettyBk = \case
     K.Top     -> "type"
     K.Session -> "session type"
     K.Channel -> "channel type"
-    ψ@K.VarPK{} -> "type of prekind " ++ bt (tidyP ψ)
+    ψ@K.VarBK{} -> "type of base kind " ++ bt (tidyBk ψ)
 
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String

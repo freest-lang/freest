@@ -558,7 +558,7 @@ scopeType ctx = \case
   T.Float s -> pure $ T.Float s
   T.Char s -> pure $ T.Char s
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity ctx m
-  T.Quant s p pk m -> pure $ T.Quant s p pk m
+  T.Quant s p bk m -> pure $ T.Quant s p bk m
   T.ForallM s m φs t -> do
     φs' <- mapM freshInternal φs
     T.ForallM s <$> scopeMultiplicity ctx m
@@ -595,13 +595,13 @@ scopeType ctx = \case
 scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
 scopeKind ctx = \case
     K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind ctx k1 <*> scopeKind ctx k2
-    K.Proper s m pk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopePrekind pk
+    K.Proper s m bk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopeBaseKind bk
     K.Var s lv τ    -> K.Var s lv <$> scopeKVar τ
   where
-    scopePrekind (K.VarPK lv ψ) = do
+    scopeBaseKind (K.VarBK lv ψ) = do
       ψ' <- freshInternal ψ
-      return $ K.VarPK lv ψ'{external = "ψ" ++ show (internal ψ')}
-    scopePrekind pk = pure pk
+      return $ K.VarBK lv ψ'{external = "ψ" ++ show (internal ψ')}
+    scopeBaseKind bk = pure bk
     scopeKVar τ = do
       τ' <- freshInternal τ
       return $ τ'{external = "τ" ++ show (internal τ')}

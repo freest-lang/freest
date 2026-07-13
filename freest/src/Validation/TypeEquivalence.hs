@@ -254,7 +254,7 @@ fatTerminal = \case
   t@T.Char{}  -> Just t
   t@T.Arrow{} -> Just t
   -- Polymorphism
-  T.AppQuant s p pk m aks t -> Just (T.AppQuant s p pk m aks) <*> fatTerminal t
+  T.AppQuant s p bk m aks t -> Just (T.AppQuant s p bk m aks) <*> fatTerminal t
   -- Higher-order
   t@T.Var{}      -> Just t
   T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts

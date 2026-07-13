@@ -1,6 +1,6 @@
 -- The unified kind-inference solution and its application to the kinded AST
 -- (the analogue of GHC zonking): one map per sort of solvable variable
--- (whole-kind, prekind, multiplicity), applied uniformly to every kind
+-- (whole-kind, baseKind, multiplicity), applied uniformly to every kind
 -- annotation. Only solvable (UnifLv/InstLv) variables are touched; object-level
 -- variables are left alone.
 module Validation.LocalInference.Solution
@@ -11,7 +11,7 @@ module Validation.LocalInference.Solution
   ) where
 
 import Syntax.Base
-import Syntax.Kind (Kind(..), Multiplicity(..), Prekind(..))
+import Syntax.Kind (Kind(..), Multiplicity(..), BaseKind(..))
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Expression qualified as E
@@ -27,7 +27,7 @@ import Data.Set qualified as Set
 -- variable, gathered from the three solvers.
 data KindSolution = KindSolution
   { kindVars :: Map.Map Variable Kind          -- ^ whole-kind variables (@K.Var@)
-  , prekinds :: Map.Map Variable Prekind        -- ^ prekind variables (@VarPK@)
+  , baseKinds :: Map.Map Variable BaseKind        -- ^ baseKind variables (@VarBK@)
   , mults    :: Map.Map Variable Multiplicity   -- ^ multiplicity variables
   }
 
@@ -38,7 +38,7 @@ resolveKind :: KindSolution -> Kind -> Kind
 resolveKind sol = go Set.empty
   where
     go seen = \case
-      Proper s m pk -> Proper s (resolveMult sol m) (resolvePrekind sol pk)
+      Proper s m bk -> Proper s (resolveMult sol m) (resolveBaseKind sol bk)
       Arrow s k1 k2 -> Arrow s (go seen k1) (go seen k2)
       k@(Var s lv ψ)
         | not (solvable lv)                      -> k
@@ -46,11 +46,11 @@ resolveKind sol = go Set.empty
         | Just k' <- Map.lookup ψ (kindVars sol) -> go (Set.insert ψ seen) k'
         | otherwise                              -> Proper s (Lin s) Top -- unconstrained → top (1T)
 
--- | Resolve a prekind, defaulting an unconstrained solvable variable to the top.
-resolvePrekind :: KindSolution -> Prekind -> Prekind
-resolvePrekind sol = \case
-  VarPK lv ψ | solvable lv -> Map.findWithDefault Top ψ (prekinds sol)
-  pk                       -> pk
+-- | Resolve a baseKind, defaulting an unconstrained solvable variable to the top.
+resolveBaseKind :: KindSolution -> BaseKind -> BaseKind
+resolveBaseKind sol = \case
+  VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ (baseKinds sol)
+  bk                       -> bk
 
 -- | Apply the solution to a multiplicity: replace each solved solvable atom by
 -- its value and join with the remaining (rigid or unsolved) atoms.

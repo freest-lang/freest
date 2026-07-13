@@ -35,14 +35,14 @@ instance NoDefaultVariables K.Multiplicity where
     K.Sup _ lvφs -> all (noDefault . snd) lvφs
     _            -> True
 
-instance NoDefaultVariables K.Prekind where
+instance NoDefaultVariables K.BaseKind where
   noDefault = \case
-    K.VarPK _ ψ -> noDefault ψ
+    K.VarBK _ ψ -> noDefault ψ
     _         -> True
 
 instance NoDefaultVariables K.Kind where
   noDefault = \case
-    K.Proper _ m pk -> noDefault m && noDefault pk
+    K.Proper _ m bk -> noDefault m && noDefault bk
     K.Arrow _ k1 k2 -> noDefault k1 && noDefault k2
     K.Var _ _ a     -> noDefault a
 

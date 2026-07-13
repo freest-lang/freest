@@ -156,7 +156,7 @@ pattern App s t ts <- T.App s _ t ts
   where App s t ts = -- TODO: this is not the most efficient way to kind these special cases, but it seems the most maintainable for now
           case T.App s (foldr (\_ (K.Arrow _ _ k) -> k) (kindOf t) ts) t ts of
             AppQuantS s p a k t -> AppQuantS s p a k t
-            AppQuant s p pk m aks t -> AppQuant s p pk m aks t
+            AppQuant s p bk m aks t -> AppQuant s p bk m aks t
             AppLinChoice s p lts -> AppLinChoice s p lts
             AppSemi s t1 t2 -> AppSemi s t1 t2
             AppDual s t -> AppDual s t
@@ -167,18 +167,18 @@ pattern App s t ts <- T.App s _ t ts
 pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
 pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
   where AppQuantS s p a k t  = T.AppQuantS s k' (K.Arrow s abs k') abs p a k t
-          where kt@(K.Proper s' _ pk) = kindOf t
+          where kt@(K.Proper s' _ bk) = kindOf t
                 abs = K.Arrow s k kt
-                k' = K.Proper s' (K.Lin s') pk
+                k' = K.Proper s' (K.Lin s') bk
 
-pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, K.Kind)] -> KindedType -> KindedType
-pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
-  where AppQuant s p pk m aks t  = T.AppQuant s k quant abs p pk m aks t
-          where k'@(K.Proper _ m' pk') = kindOf t
-                -- a functional quantifier (∀/∃, supplied prekind Top) is itself
+pattern AppQuant :: Span -> T.Polarity -> K.BaseKind -> K.Multiplicity -> [(Variable, K.Kind)] -> KindedType -> KindedType
+pattern AppQuant s p bk m aks t <- T.AppQuant s _ _ _ p bk m aks t
+  where AppQuant s p bk m aks t  = T.AppQuant s k quant abs p bk m aks t
+          where k'@(K.Proper _ m' bk') = kindOf t
+                -- a functional quantifier (∀/∃, supplied baseKind Top) is itself
                 -- functional (Top); a session quantifier (!/?type, supplied Session)
-                -- follows its body's prekind (channel iff the body is)
-                rpk = case pk of K.Top -> K.Top; _ -> pk'
+                -- follows its body's baseKind (channel iff the body is)
+                rpk = case bk of K.Top -> K.Top; _ -> bk'
                 k = K.Proper s (case p of T.In -> m; T.Out -> m') rpk
                 quant = K.Arrow s abs k
                 abs = foldr (K.Arrow s . snd) k' aks
@@ -204,9 +204,9 @@ pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
 
 pattern AppLinChoice :: Span -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
 pattern AppLinChoice s p lts <- T.AppLinChoice s _ _ p lts
-  where AppLinChoice s p lts  = T.AppLinChoice s (K.Proper s (K.Lin s) pk) app p lts
-          where pk = foldr (\(_, kindOf -> K.Proper _ _ pk) -> K.join pk) K.Channel lts
-                app = foldr (const $ K.Arrow s (K.ls s)) (K.Proper s (K.Lin s) pk) lts
+  where AppLinChoice s p lts  = T.AppLinChoice s (K.Proper s (K.Lin s) bk) app p lts
+          where bk = foldr (\(_, kindOf -> K.Proper _ _ bk) -> K.join bk) K.Channel lts
+                app = foldr (const $ K.Arrow s (K.ls s)) (K.Proper s (K.Lin s) bk) lts
 
 pattern UnMessage :: Span -> T.Polarity -> KindedType
 pattern UnMessage s p <- T.UnMessage s _ p
@@ -219,9 +219,9 @@ pattern UnChoice s p ls <- T.UnChoice s _ p ls
 pattern AppSemi :: Span -> KindedType -> KindedType -> KindedType
 pattern AppSemi s t u <- T.AppSemi s _ _ t u
   where AppSemi s t u  = T.AppSemi s app semi t u
-          where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2)
-                (K.Proper _ m1 pk1) = kindOf t
-                (K.Proper _ m2 pk2) = kindOf u
+          where app = K.Proper s (if bk1 == K.Channel then m1 else K.join m1 m2) (K.meet bk1 bk2)
+                (K.Proper _ m1 bk1) = kindOf t
+                (K.Proper _ m2 bk2) = kindOf u
                 semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
 
 -- | Build a @;@ node with an explicitly-given result kind. 
@@ -231,7 +231,7 @@ appSemiWithKind s app = T.AppSemi s app semi
   where semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
 
 -- | Build a linear-choice node with an explicitly-given result kind (see
--- 'appSemiWithKind'). Used by kind inference to defer the result prekind.
+-- 'appSemiWithKind'). Used by kind inference to defer the result baseKind.
 appLinChoiceWithKind :: Span -> K.Kind -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
 appLinChoiceWithKind s app p lts = T.AppLinChoice s app choice p lts
   where choice = foldr (const $ K.Arrow s (K.ls s)) app lts

@@ -59,9 +59,9 @@ freshInstVarT s k = do
   i <- incCounter
   let v = Variable s ("ạ" ++ show i) i
   case k of
-    K.Proper ks _ pk -> do
+    K.Proper ks _ bk -> do
       m <- freshInstVarM s
-      return (T.Var s (K.Proper ks m pk) InstLv v)
+      return (T.Var s (K.Proper ks m bk) InstLv v)
     _ -> internalError "non-proper instantiation kind"
 
 -- | Make a fresh multiplicity instantiation variable.

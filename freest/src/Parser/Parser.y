@@ -299,14 +299,14 @@ Kind :: { K.Kind }
   | KindPrimary                { $1 }
 
 ProperKind :: { K.Kind }
-  : MultiplicityPrimary Prekind { K.Proper (spanFromTo $1 (fst $2)) $1 (snd $2) }
+  : MultiplicityPrimary BaseKind { K.Proper (spanFromTo $1 (fst $2)) $1 (snd $2) }
 
-Prekind :: { (Span, K.Prekind) }
+BaseKind :: { (Span, K.BaseKind) }
   : UPPER_ID {% fmap (getSpan $1,) 
     case getText $1 of { "T" -> pure K.Top
                        ; "S" -> pure K.Session
                        ; "C" -> pure K.Channel
-                       ; s -> invalidPrekindError s $1}}
+                       ; s -> invalidBaseKindError s $1}}
 
 TypePrimary :: { T.ParsedType }
   -- Builtins (necessary?)
@@ -720,9 +720,9 @@ invalidMultiplicityError :: Int -> Token -> Lexer a
 invalidMultiplicityError i tk =
   throwError [UnsupportedError (getSpan tk) ("Invalid multiplicity: `" ++ show i++ "`") ("(Valid multiplicities include `" ++ show (K.Lin $ getSpan tk) ++ "`, `" ++ show (K.Un $ getSpan tk) ++ "` and variables)")]
 
-invalidPrekindError :: String -> Token -> Lexer a
-invalidPrekindError s tk = 
-  throwError [UnsupportedError (getSpan tk) ("Invalid prekind: `" ++ s ++ "`") ("(Valid prekinds include `" ++ show K.Top ++ "`, `" ++ show K.Session ++ "` and `" ++ show K.Channel ++"`)")]
+invalidBaseKindError :: String -> Token -> Lexer a
+invalidBaseKindError s tk = 
+  throwError [UnsupportedError (getSpan tk) ("Invalid baseKind: `" ++ s ++ "`") ("(Valid baseKinds include `" ++ show K.Top ++ "`, `" ++ show K.Session ++ "` and `" ++ show K.Channel ++"`)")]
 
 prefixTupleTypeConsError :: Token -> Token -> Lexer a
 prefixTupleTypeConsError tk1 tk2 = 
