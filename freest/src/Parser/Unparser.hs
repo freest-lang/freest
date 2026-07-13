@@ -112,7 +112,7 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
     T.Char _ _ -> (maxRator, "Char")
     T.Arrow _ _ m -> (maxRator, "(" ++ multArrow m ++ ")")
     T.Quant _ _ p bk m -> (maxRator, "(" ++ quant True p bk m ++ ")")
-    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ concatMap (('#':) . show) φs ++ " -" ++ show m ++ "-> " ++ unparse t)
+    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ unwords (map (('#':) . show) φs) ++ " -" ++ show m ++ "-> " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
     T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
                                         T.In  -> "Wait")
