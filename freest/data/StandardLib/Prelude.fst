@@ -200,8 +200,8 @@ until : forall (a : *T) -> (a -> Bool) -> (a -> a) -> a -> a
 until @a p f = go
   where
     go : a -> a
-    go x | p x          = x
-         | otherwise    = go (f x)
+    go x | p x       = x
+         | otherwise = go (f x)
 
 (;) : forall (a : *T) (b : 1T) -> a -> b -> b
 (;) @a @b _ x = x
@@ -357,11 +357,11 @@ readApply @a @b f c =
 
 -- | Sends a value on a star channel. Unrestricted version of `send`.
 send_ : forall #m (a : m T) -> a -> *!a -m-> ()
-send_ #m @a = undefined -- @a x c = c |> send x |> sink @*!a
+send_ #m @a = undefined
 
 -- | Receives a value from a star channel. Unrestricted version of `receive`.
 receive_ : forall (a : 1T) -> *?a -> a
-receive_ @a = undefined -- @a c =  c |> receive @a @*?a |> fst @a @*?a
+receive_ @a = undefined
 
 -- | Session initiation. Accepts a request for a linear session on a shared
 -- channel. The requester uses a conventional `receive` to obtain the channel
@@ -383,8 +383,8 @@ accept @a c =
 --   -- send the string to be printed
 --   c |> send "Hello!" |> wait
 -- ```
-forkWith : forall #m (a : 1C) (b : *T) -> (Dual a -m-> b) -> a
-forkWith #m @a @b f =
+forkWith : forall #m (a : 1C) -> (Dual a -m-> ()) -> a
+forkWith #m @a f =
   let (x, y) = channel @a in
   fork (\(_ : ()) -1-> f y);
   x
