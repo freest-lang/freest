@@ -23,8 +23,8 @@ circle =
     let (c1, d1) = channel @Forward
         (c2, d2) = channel @Forward
         (c3, d3) = channel @Forward
-    in fork (\_ -1-> forward c2 d2) ;
-       fork (\_ -1-> forward c1 d3) ;
-       master 10 c3 d1
+    in fork (\_ -1-> forward c1 d2) ;  -- ch1 → ch2
+       fork (\_ -1-> forward c2 d3) ;  -- ch2 → ch3
+       master 10 c3 d1                 -- ch3 → ch1  (closes the ring 1→2→3→1)
 
 -- _ = print $ fork #* @Int (\_ -> 5)
