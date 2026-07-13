@@ -5,7 +5,7 @@ undefined : forall (a : *T) -> a
 undefined @a = undefined
 
 -- * Error
-error : forall (a : *T) -> String -> a
+error : forall (a : 1T) -> String -> a
 error @a = undefined
 
 -- * Standard types, classes and related functions
@@ -416,10 +416,6 @@ forkWith #m @a @b f =
 runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -1-> b) -> b -> *!a -> Void @*T
 runServer @a @b handle state c =
   runServer handle (handle state (accept c)) c 
-
--- | Discards an unrestricted value
-sink : forall (a : *T) -> a -> ()
-sink @a _ = ()
 
 -- | Executes a thunk n times, sequentially 
 -- ```

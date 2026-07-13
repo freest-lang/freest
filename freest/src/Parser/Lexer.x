@@ -207,8 +207,11 @@ scan = do
   startcode <- startCode
   case alexScan input startcode of
     AlexEOF -> handleEOF
-    AlexError (Input l c _ inp f) -> throwError 
-      [LexicalError (Span{startPos=(l, c), endPos=(l, c + 1), filepath=f}) (head inp)]
+    AlexError (Input l c _ inp f) ->
+      let sp = Span{startPos=(l, c), endPos=(l, c + 1), filepath=f}
+      in throwError [ case inp of
+           ch : _ -> LexicalError sp ch
+           []     -> UnexpectedEOF sp ]
     AlexSkip input' _ -> do
       modify' $ \s -> s { lexerInput = input' }
       scan

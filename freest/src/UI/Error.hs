@@ -121,6 +121,9 @@ data Error
       (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
   | MixedSessionVarPats Span E.KindedPat E.KindedPat
+  | UnexpectedEOF Span
+    -- ^ Alex ran past the end of the file with no more input to inspect —
+    -- typically an unterminated string literal or block comment.
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -189,6 +192,7 @@ instance Located Error where
     PolymorphicTypeRecursion s _ _ _ -> s
     HigherOrderTypeRHS s _ -> s
     MixedSessionVarPats s _ _ -> s
+    UnexpectedEOF s -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -271,6 +275,32 @@ makeError :: Located a => Source -> a -> String -> String
 makeError src (getSpan -> s) msg =
   errorHeader s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
 
+-- | Does a type still mention a solvable (unification) type variable? Such a
+-- variable is one the checker never resolved — it unparses to @_@. In a type
+-- mismatch it signals that a type argument could not be inferred, which is the
+-- shape of a false negative (a typeable program the checker rejects because its
+-- inference is incomplete). All the session constructors are 'App' synonyms, so
+-- the traversal only needs the three underlying shapes.
+hasSolvableTypeVar :: TK.KindedType -> Bool
+hasSolvableTypeVar = \case
+  TK.Var _ _ lv _ -> solvable lv
+  TK.Abs _ _ t    -> hasSolvableTypeVar t
+  TK.App _ t ts   -> hasSolvableTypeVar t || any hasSolvableTypeVar ts
+  _               -> False
+
+-- | Does a type contain a universal quantifier (a @forall@)? When one side of a
+-- mismatch has one and the other does not, the likely cause is a polymorphic
+-- value (e.g. @Nothing : forall a. Maybe a@) whose leading quantifier was never
+-- instantiated — another shape of false negative, fixed by an explicit type
+-- argument or annotation on that value.
+hasForall :: TK.KindedType -> Bool
+hasForall = \case
+  TK.AppForall _ _ _ _ -> True
+  TK.ForallM _ _ _ _   -> True
+  TK.Abs _ _ t         -> hasForall t
+  TK.App _ t ts        -> hasForall t || any hasForall ts
+  _                    -> False
+
 toMessage :: Source -> Error -> String
 toMessage src = \case
   ArrowMultMismatch s xe i m om m' om' -> makeError src s
@@ -343,7 +373,7 @@ toMessage src = \case
     ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
   GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
-    ++ "(Cannot apply this expression: it has type " ++ bt (unparse t)
+    ++ "(This expression cannot be applied to further arguments: it has type " ++ bt (unparse t)
     ++ ", which is not a function type)"
   GivenTooManyArgsK s t k n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
@@ -374,6 +404,8 @@ toMessage src = \case
     ("Function " ++ bt (external x) ++ " is missing a type signature")
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
+  UnexpectedEOF s -> makeError src s
+    "Unexpected end of input (an unterminated string literal or comment?)"
   IncludeCycle s files -> makeError src s
     ("Include cycle: " ++ intercalate " -> " files)
   IncludeNotFound s path -> makeError src s
@@ -486,11 +518,26 @@ toMessage src = \case
   TypeMismatch s t u _ -> makeError src s "Type mismatch:"
     ++ "Couldn't match expected type " ++ bt (unparse t) ++ fromClause s src t
     ++ "with actual type " ++ bt (unparse u) ++ fromClause s src u
+    ++ falseNegativeHint
     where
+    -- Only when a type argument was left unresolved (it shows as `_`): the
+    -- mismatch may be a false negative of an incomplete inference, and an
+    -- explicit type argument is the fix. Stays silent on ordinary mismatches.
+    falseNegativeHint
+      | hasSolvableTypeVar t || hasSolvableTypeVar u =
+          "This may be a false negative: a type argument could not be inferred "
+          ++ "(shown as `_`).\nConsider annotating the application with an explicit "
+          ++ "type argument (e.g. `f @a`),\nbinding the signature's type variables with "
+          ++ "`@a` patterns on the left-hand side."
+      | hasForall t /= hasForall u =
+          "This may be a false negative: a polymorphic value was not instantiated "
+          ++ "(note the `forall`).\nConsider giving it an explicit type argument "
+          ++ "(e.g. `Nothing @a`) or a type annotation."
+      | otherwise = ""
     fromClause primary src ty
       | sp == primary                      = "\n"
       | not (Map.member (filepath sp) src) = "\n"
-      | otherwise                          = ", from:\n" ++ snippet src sp True
+      | otherwise                          = ", taken from:\n" ++ snippet src sp True
       where sp = getSpan ty
   TypeMismatchExists s t poe -> makeError src s
     ("Couldn't match expected type " ++ bt (show t) ++ " with a package "
@@ -658,7 +705,7 @@ toMessage src = \case
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String
   multSide src m (Origin sp) =
-    bt (tidyM m) ++ multAdj ++ locateSpan src sp
+    bt (tidyM m) ++ multAdj ++ " inferred from" ++locateSpan src sp
     where
     multAdj = case m of
       K.Lin{} -> " (linear)"

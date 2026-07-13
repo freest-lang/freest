@@ -15,6 +15,4 @@ selectGreen c = c |> select Green |> close
 selectGreen' : +{Green: Close, Yellow: Close, Red: Close} -> ()
 selectGreen' = close . select Green
 
-_ =
-  let x = forkWith selectGreen
-  in print $ showSemaphore x
+_ = forkWith selectGreen |> showSemaphore |> print
