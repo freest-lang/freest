@@ -9,15 +9,16 @@ consumeAndEnd (&Done Wait) = ()
 consumeAndEnd (&More (?b ; r)) = consumeAndEnd r
 
 logicGate : BinOp -> Dual BStream -> Dual BStream -1-> BStream -1-> ()
-logicGate binOp (&More (?b1 ; r1)) (&More (?b2 ; r2)) s = 
+logicGate binOp (&More (?b1 ; r1)) (&More (?b2 ; r2)) s =
     let s = s |> select More |> send (binOp b1 b2) in
     logicGate binOp r1 r2 s
-logicGate binOp (&Done Wait)       (&Done Wait)       s = s |> select Done |> close
+logicGate binOp (&Done Wait)       (&Done Wait)       s =
+    s |> select Done |> close
 logicGate _     (&Done Wait)       (&More (?_ ; r2))  s =
-    consumeAndEnd r2 ; 
+    consumeAndEnd r2 ;
     s |> select Done |> close
 logicGate _     (&More (?_ ; r1))  (&Done Wait)       s =
-    consumeAndEnd r1 ; 
+    consumeAndEnd r1 ;
     s |> select Done |> close
 
 sender1 : BStream -> ()
