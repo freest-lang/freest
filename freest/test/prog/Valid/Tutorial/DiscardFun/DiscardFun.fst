@@ -2,5 +2,4 @@ double : Int -> Int
 double x = x + x
 
 copy : ()
-copy = 
-    print 20
+copy = print 20
