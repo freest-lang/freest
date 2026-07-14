@@ -55,14 +55,16 @@ resolveBaseKind sol = \case
 -- | Apply the solution to a multiplicity: replace each solved solvable atom by
 -- its value and join with the remaining (rigid or unsolved) atoms.
 resolveMult :: KindSolution -> Multiplicity -> Multiplicity
-resolveMult sol = \case
-  m@Lin{}     -> m
-  Sup s atoms ->
+resolveMult sol = go Set.empty
+  where
+   go _ m@Lin{} = m
+   go seen (Sup s atoms) =
     let (subst, keep) = partitionEithers (map resolve atoms)
         resolve (lv, φ)
-          | not (solvable lv)                  = Right (lv, φ)   -- rigid: keep
-          | Just m <- Map.lookup φ (mults sol) = Left m          -- solved
-          | otherwise                          = Left (Lin s)    -- unconstrained → top (1)
+          | not (solvable lv)     = Right (lv, φ)                    -- rigid: keep
+          | φ `Set.member` seen   = Left (Lin s)                     -- cycle → top
+          | Just m <- Map.lookup φ (mults sol) = Left (go (Set.insert φ seen) m)  -- solved: recurse
+          | otherwise             = Left (Lin s)                     -- unconstrained → top (1)
     in foldr K.join (Sup s keep) subst
 
 -- | Apply the solution to every kind annotation in a type, reconstructing each
