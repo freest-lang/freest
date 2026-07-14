@@ -265,7 +265,7 @@ instance Show (XBndKind x) => Show (Type x) where
     Int{}     -> "Int"
     Float{}   -> "Float"
     Char{}    -> "Char"
-    Arrow _ _ m -> "("++show m++"->)"
+    Arrow _ _ m -> "-"++show m++"->"
     -- Quantifier heads (functional ∀/∃ and session ?type/!type alike): the
     -- polarity fixes the symbol and the head's own kind fixes @k@ (`show m ++
     -- show bk`, without the space that `show` on a proper kind would insert). A
@@ -301,8 +301,8 @@ instance Show (XBndKind x) => Show (Type x) where
     App _ _ t [] -> "(" ++ show t ++ "[])"
     App _ _ t ts -> foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts
     -- Equations
-    TName _ _ i -> show i ++ "#type"
-    DName _ _ i -> show i ++ "#data"
+    TName _ _ i -> show i {- ++ "#type" -}
+    DName _ _ i -> show i {- ++ "#data" -}
     -- The type of non-contractive types
     Void _ _ k -> "(Void @" ++ show k ++ ")"
     where
