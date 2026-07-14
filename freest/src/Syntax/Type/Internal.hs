@@ -304,7 +304,7 @@ instance Show (XBndKind x) => Show (Type x) where
     TName _ _ i -> show i {- ++ "#type" -}
     DName _ _ i -> show i {- ++ "#data" -}
     -- The type of non-contractive types
-    Void _ _ k -> "(Void @" ++ show k ++ ")"
+    Void _ _ k -> "Void @" ++ show k
     where
       showMsgMult = \case K.Lin{} -> ""; m -> show m
       showView = \case In -> "&"; Out -> "+"

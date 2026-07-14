@@ -189,7 +189,7 @@ instance Located Kind where
 -- for debugging
 instance Show Kind where
   show = \case 
-    Proper _ m1 bk -> show m1 ++ " " ++ show bk
+    Proper _ m1 bk -> show m1 ++ show bk
     Arrow  _ k1 k2 -> "(" ++ show k1 ++ "->" ++ show k2 ++ ")"
     Var    _ _ τ   -> show τ
 
