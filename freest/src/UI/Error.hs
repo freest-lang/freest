@@ -389,12 +389,14 @@ toMessage src = \case
     --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
     --    | otherwise ->
       (let (a, b) = tidyKK k1 (TK.kindOf t)
-       in "Couldn't match expected kind " ++ bt a ++ " with actual kind " ++ bt b)
+       in "Kind " ++ bt b ++ " is not a subkind of the expected kind " ++ bt a)
+    ++ kindMismatchHint (unparse t) (TK.kindOf t) k1
     -- where
     --   diff = (K.depth k2 - K.depth k1)
   KindMismatchK s k1 k2 t -> makeError src s
       (let (a, b) = tidyKK k1 k2
-       in "Couldn't match expected kind " ++ bt a ++ " with actual kind " ++ bt b)
+       in "Kind " ++ bt b ++ " is not a subkind of the expected kind " ++ bt a)
+    ++ kindMismatchHint (unparse t) k2 k1
     -- where
     --   diff = (K.depth k2 - K.depth k1)
   KSigLacksBinding s i -> makeError src s
@@ -701,6 +703,38 @@ toMessage src = \case
     K.Session -> "session type"
     K.Channel -> "channel type"
     ψ@K.VarBK{} -> "type of base kind " ++ bt (tidyBk ψ)
+
+  -- | Explain, component by component, why a kind is not a subkind of the one
+  -- required (the header already states the subkind relation failed). A kind
+  -- pairs a multiplicity (linear vs unrestricted -- how many times a value may be
+  -- used) with a base kind (plain type, session type, channel type); either
+  -- component can break the subkind relation, so we spell out each one that does,
+  -- relating it to the offending type. Silent for arrow or variable kinds, where
+  -- a component-wise story does not apply.
+  kindMismatchHint :: String -> K.Kind -> K.Kind -> String
+  kindMismatchHint t actual@K.Proper{} expected@K.Proper{} = multHint ++ bkHint
+    where
+      K.Proper _ am abk = actual
+      K.Proper _ em ebk = expected
+      multHint
+        | not (am K.<: em) =
+            "  hint: " ++ bt t ++ " is " ++ multWord am
+              ++ ", but this position requires " ++ multReq em ++ "\n"
+        | otherwise = ""
+      bkHint
+        | not (abk K.<: ebk) =
+            "  hint: " ++ bt t ++ " is a " ++ prettyBk abk
+              ++ ", but this position requires a " ++ prettyBk ebk ++ "\n"
+        | otherwise = ""
+      multWord = \case
+        K.Lin{} -> "linear (it must be used exactly once)"
+        K.Un{}  -> "unrestricted"
+        m       -> "of multiplicity " ++ bt (tidyM m)
+      multReq = \case
+        K.Un{}  -> "an unrestricted type (one that may be discarded or shared)"
+        K.Lin{} -> "a linear type"
+        m       -> "a type of multiplicity " ++ bt (tidyM m)
+  kindMismatchHint _ _ _ = ""
 
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String
