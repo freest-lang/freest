@@ -266,7 +266,13 @@ instance Show (XBndKind x) => Show (Type x) where
     Float{}   -> "Float"
     Char{}    -> "Char"
     Arrow _ _ m -> "("++show m++"->)"
-    Quant _ _ p K.Top m -> "("++showQuant p++ "#" ++ (if p == In then show m else "") ++ ")"
+    -- Quantifier heads (functional ∀/∃ and session ?type/!type alike): the
+    -- polarity fixes the symbol and the head's own kind fixes @k@ (`show m ++
+    -- show bk`, without the space that `show` on a proper kind would insert). A
+    -- functional `exists` has no multiplicity (`existsMult` is ⊥), so @k@ there
+    -- is its base kind alone.
+    Quant _ _ p bk m -> (case p of In -> "∀"; Out -> "∃")
+      ++ (case (p, bk) of (Out, K.Top) -> ""; _ -> show m) ++ show bk
     ForallM _ _ m φs t -> "(forall " ++ concatMap (("#"++) . show) φs ++ " -" ++ show m ++ "-> " ++ show t ++ ")"
     -- Session types
     Skip{}            -> "Skip"
@@ -275,13 +281,12 @@ instance Show (XBndKind x) => Show (Type x) where
     End _ _ In          -> "Wait"
     End _ _ Out         -> "Close"
     Message _ _ m p  -> "(" ++ showMsgMult m ++ show p ++ ")"
-    Quant _ _ p K.Session K.Lin{} -> "(" ++ show p ++ show p ++ ")"
     Choice _ _ m p ls   ->
       (case m  of K.Un{} -> "*"; _ -> "")
       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
     AppMessage _ _ _ m p t  -> showMsgMult m ++ show p ++ show t
-    AppQuantS _ _ _ _ p a k t -> 
-      "(" ++ show p ++ show p ++ "(" ++ show a ++ " : " ++ show k ++ "). "
+    AppQuantS _ _ _ _ p a k t ->
+      "(" ++ show p ++ "type (" ++ show a ++ " : " ++ show k ++ "). "
       ++ show t ++ ")"
     AppLinChoice  _ _ _ p lts -> showView p ++ "{"
       ++ intercalate ", " (map showField lts)

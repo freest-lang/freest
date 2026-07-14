@@ -127,8 +127,8 @@ word' = \case
         -- W-Abs, F : k => k'
         (internalα, internalβ) <- getKindIndices k
         let s = getSpan t -- The same span for all newly created vars & types?
-        let αk = Variable s ('α' : show k) internalα
-        let βk = Variable s ('β' : show k) internalβ
+        let αk = Variable s ('α' : ':' : unparse k) internalα
+        let βk = Variable s ('β' : ':' : unparse k) internalβ
         wtα <- word $ T.smartApp s t [T.fromVariable ObjLv αk k]
         wtβ <- word $ T.smartApp s t [T.fromVariable ObjLv βk k]
         getNonterminal $ Map.fromList
