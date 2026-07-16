@@ -2,14 +2,6 @@ renderer : ?type (a:*T) . ?(a -1-> String) ; ?a ; !String ; Wait -> ()
 renderer (?type a . ?f ; ?x ; c) =
   sendAndWait (f x) c
 
-
-
-
-
-
-
-
-
 -- Same as `render`, but using the `receiveType` primitive instead of
 -- pattern-matching the session on the left-hand side.
 renderer' : ?type (a:*T) . ?(a -1-> String) ; ?a ; !String ; Wait -> ()
@@ -18,9 +10,6 @@ renderer' c =
   let (f, c)  = receive c in
   let (x, c)  = receive c in
   sendAndWait (f x) c
-
-
-
 
 charRendererClient : !type a . !(a -1-> String) ; !a ; ?String ; Close -> String
 charRendererClient c =
@@ -36,10 +25,8 @@ pairRendererClient c =
     showPair : (String, Float) -1-> String
     showPair (x, y) = x ++ " " ++ show y
 
-
-
 _ = forkWith renderer |> charRendererClient |> print
 
--- _ = print (charRendererClient (forkWith renderer))
+_ = print (charRendererClient (forkWith renderer))
 
--- _ = forkWith renderer |> pairRendererClient |> print
+_ = forkWith renderer |> pairRendererClient |> print
