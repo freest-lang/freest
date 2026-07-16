@@ -430,12 +430,13 @@ chan tdecls = go
 -- into the inferred signature) and a fresh whole-kind variable otherwise, ending
 -- in a fresh proper kind. Also returns the result's baseKind variable (for the
 -- CK-Rec channel constraint).
-freshDeclSig :: Span -> [Maybe Kind] -> Validation (Kind, Variable)
-freshDeclSig s anns = do
+freshDeclSig :: Span -> Bool -> [Maybe Kind] -> Validation (Kind, Variable)
+freshDeclSig s recursive anns = do
   m   <- freshUnifMult s
   pkv <- freshUnifBaseKindVar s
   ps  <- mapM (maybe (freshUnifKind s) pure) anns
-  pure (foldr (Arrow s) (Proper s m (VarBK UnifLv pkv)) ps, pkv)
+  res <- if recursive then pure (Proper s m (VarBK UnifLv pkv)) else freshUnifKind s
+  pure (foldr (Arrow s) res ps, pkv)
 
 -- | Like 'freshDeclSig', but for a datatype declaration. A datatype is
 -- functional, so its result baseKind is fixed to 'Top' rather than left as a
@@ -466,6 +467,12 @@ mentions i = go
       T.ForallM _ _ _ t -> go t
       _                 -> False
 
+-- | Is a sig-less declaration recursive — self-referential, or a member of a
+-- non-trivial SCC of the reference graph (mutual recursion)?
+isRecursiveDecl :: Map.Map Identifier (Set.Set Identifier) -> Identifier -> T.ScopedType -> Bool
+isRecursiveDecl sccOf i t =
+  Set.size (Map.findWithDefault (Set.singleton i) i sccOf) > 1 || mentions i t
+
 -- | Check a module for type formation.
 kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
 kindModule ctx mod = do
@@ -486,7 +493,7 @@ kindModule ctx mod = do
   -- fresh binder kinds for type and datatype declarations lacking a signature
   -- (so self- and mutual references resolve while their bodies are kinded)
   freshT <- Map.traverseWithKey
-              (\i (hp, t) -> freshDeclSig (getSpan i) (declParams hp t))
+              (\i (hp, t) -> freshDeclSig (getSpan i) (isRecursiveDecl sccOf i t) (declParams hp t))
               siglessTypes
   freshD <- Map.traverseWithKey
               (\i (aks, _) -> freshDataSig (getSpan i) (map snd aks))
@@ -552,8 +559,7 @@ kindModule ctx mod = do
             t' -> check ctx t' k
         -- inferred signature
         Just (sig, pkv) -> do
-          let selfs     = Map.findWithDefault (Set.singleton i) i sccOf
-              recursive = Set.size selfs > 1 || mentions i t
+          let recursive = isRecursiveDecl sccOf i t
           case t of
             T.Abs s aks u | hasParams -> do
               (aks', resK) <- kindParams sig aks
