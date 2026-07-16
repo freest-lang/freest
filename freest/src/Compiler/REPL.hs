@@ -23,7 +23,7 @@ import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDecl
 import Parser.Scoping qualified as Scoping
 import Parser.Unparser ( Unparse, unparse, unparseDataDef, unparseTypeDef )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
-import Validation.Normalisation ( normalise, isWhnf )
+import Validation.Normalisation ( normalise, isWhnf, reduce )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
@@ -145,6 +145,7 @@ repl =
       , ("equivalent", handleEquivalent)
       , ("normalise" , handleNormalise)
       , ("whnf"      , handleWhnf)
+      , ("reduce"    , handleReduce)
       , ("grammar"   , handleGrammar)
       , ("quit"      , const $ liftIO exitSuccess)
       ]
@@ -242,6 +243,14 @@ handleWhnf src = runPipeline src parseType
   (\s t -> validateTypes s [t])
   (\[t'] -> putLines [show (isWhnf t')])
 
+handleReduce :: String -> Repl () -- freest> :red <type>
+handleReduce src = runPipeline src parseType
+  (\s t -> validateTypes s [t])
+  (\[t'] -> get >>= \s -> putLines
+    [ if isWhnf t'
+        then unparse t' ++ " is a weak head normal form (weak head normal forms do not reduce)"
+        else unparse (reduce (tdecls s) t') ])
+
 handleGrammar :: String -> Repl () -- freest> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
@@ -301,6 +310,7 @@ handleHelp args = putLines
   , ind ":kind <type>                  show the kind of <type>"
   , ind ":info                         display not sure what"
   , ind ":whnf <type>                  check if <type> is in weak head normal form"
+  , ind ":reduce <type>                reduce <type> one step (unless already a weak head normal form)"
   , ind ":normalise <type>             show the weak head normal form of <type>"
   , ind ":equivalent <type1> <type2>   check if <type1> is equivalent to <type2>"
   , ind ":grammar <type1> ... <typen>  show the grammar for types <type1> through <typen>"
