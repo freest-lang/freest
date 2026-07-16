@@ -287,7 +287,7 @@ mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
 fork : forall #m (a : *T) -> (() -m-> a) -> ()
 fork #m @a = undefined
 
-send : forall (a : 1T) -> a -> forall (b : 1S) -> !a;b -1-> b
+send : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b
 send @a = undefined
 
 receive : forall (a : 1T) (b : 1S) -> ?a;b -> (a, b)
