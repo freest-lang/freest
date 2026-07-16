@@ -28,4 +28,4 @@ selectGreen c = c |> select Green |> close
 selectGreen' : +{Green: Close, Yellow: Close, Red: Close} -> ()
 selectGreen' = close . select Green
 
-_ = forkWith selectGreen |> showSemaphore |> print
+_ = forkWith selectGreen |> showSemaphore |> putStrLn

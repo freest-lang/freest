@@ -25,8 +25,8 @@ pairRendererClient c =
     showPair : (String, Float) -1-> String
     showPair (x, y) = x ++ " " ++ show y
 
-_ = forkWith renderer |> charRendererClient |> print
+_ = forkWith renderer |> charRendererClient |> putStrLn
 
-_ = print (charRendererClient (forkWith renderer))
+_ = putStrLn (charRendererClient (forkWith renderer))
 
-_ = forkWith renderer |> pairRendererClient |> print
+_ = forkWith renderer |> pairRendererClient |> putStrLn
