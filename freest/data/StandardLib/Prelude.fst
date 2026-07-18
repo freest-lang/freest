@@ -336,25 +336,6 @@ receiveAndClose @a c =
   close c;
   x
 
--- | Receives a value from a linear channel and applies a function to it.
--- | Discards the result and returns the continuation channel.
--- | 
--- | ```
--- | main : ()
--- | main =
--- |   -- create channel endpoints
--- |   let (c, s) = new @(?String ; Wait) () in
--- |   -- fork a thread that prints the received value (and closes the channel)
--- |   fork (\_:() -1-> c |> readApply @String @End putStrLn |> wait);
--- |   -- send a string through the channel (and close it)
--- |   s |> send "Hello!" |> close
--- | ```
-readApply : forall (a : *T) (b : 1S) -> (a -> ()) {- Consumer a -} -> ?a ; b -1-> b
-readApply @a @b f c =
-  let (x, c) = receive c in
-  f x;
-  c
-
 -- | Sends a value on a star channel. Unrestricted version of `send`.
 send_ : forall #m (a : m T) -> a -> *!a -m-> ()
 send_ #m @a = undefined
@@ -413,7 +394,7 @@ forkWith #m @a f =
 -- runCounterServer : dualof SharedCounter -> Diverge
 -- runCounterServer = runServer @Counter @Int counterService 0 
 -- ```
-runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -1-> b) -> b -> *!a -> Void @*T
+runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -> b) -> b -> *!a -> () -- Void @*T
 runServer @a @b handle state c =
   runServer handle (handle state (accept c)) c 
 
@@ -452,12 +433,12 @@ parallel @a n thunk = repeat @() n (\(_ : ()) -> fork @a thunk)
 -- | The `InStream` type describes input streams (such as `stdin` and read
 -- files). `GetChar` reads a single character, `GetLine` reads a line, and
 -- `IsEOF` checks for the EOF (End-Of-File) token, i.e., if an input stream
--- reached the end. Operations in this channel end with the `SWait` option.
+-- reached the end. Operations in this channel end with the `Done` option.
 type InStream : 1C
 type InStream = +{ GetChar: ?Char   ; InStream
                  , GetLine: ?String ; InStream
                  , IsEOF  : ?Bool   ; InStream
-                 , SWait  : Wait
+                 , Done   : Wait
                  }
 
 -- | Unrestricted session type for the `OutStream` type.
@@ -466,7 +447,7 @@ type InStreamProvider = *?InStream
 
 -- | Closes an `InStream` channel endpoint. Behaves as a `close`.
 hCloseIn : InStream -> ()
-hCloseIn c = c |> select SWait |> wait
+hCloseIn c = c |> select Done |> wait
 
 hGenericGet : forall (a : *T) -> (InStream -> ?a; InStream) -> InStream -> (a, InStream)
 hGenericGet @a sel c = receive (sel c)
@@ -535,7 +516,7 @@ type OutStream : 1C
 type OutStream = +{ PutChar : !Char ; OutStream
                   , PutStr  : !String ; OutStream
                   , PutStrLn: !String ; OutStream
-                  , SWait   : Wait
+                  , Done    : Wait
                   }
 
 -- | Unrestricted session type for the `OutStream` type.
@@ -544,7 +525,7 @@ type OutStreamProvider = *?OutStream
 
 -- | Closes an `OutStream` channel endpoint. Behaves as a `close`.
 hCloseOut : OutStream -> ()
-hCloseOut c = c |> select SWait |> wait
+hCloseOut c = c |> select Done |> wait
 
 hGenericPut : forall (a : *T) -> (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
 hGenericPut @a sel x outStream = sel outStream |> send x
@@ -602,6 +583,15 @@ hPrint_ @a x c = hGenericPut_ (hPrint @a) x c
 
 -- *** stdin
 
+-- **** Internal stdin functions
+
+internalGetChar : () -> Char
+internalGetChar = undefined
+internalGetLine : () -> String
+internalGetLine = undefined
+internalGetContents : () -> String
+internalGetContents = undefined
+
 -- | Standard input stream. Reads from the console.
 stdinChan : (InStreamProvider, Dual InStreamProvider)
 stdinChan = channel @InStreamProvider
@@ -620,74 +610,50 @@ getChar _ = hGetChar_ stdin
 getLine : () -> String
 getLine _ = hGetLine_ stdin
 
--- **** Internal stdin functions
-
-internalGetChar : () -> Char
-internalGetChar = undefined
-internalGetLine : () -> String
-internalGetLine = undefined
-internalGetContents : () -> String
-internalGetContents = undefined
-
-runReader : () -> Dual InStream -1-> ()
+runReader : () -> Dual InStream -> ()
 runReader _ (&GetChar reader) = runReader () $ send (internalGetChar ()) reader
 runReader _ (&GetLine reader) = runReader () $ send (internalGetLine ()) reader
 runReader _ (&IsEOF   reader) = runReader () $ send False                reader -- stdin is always open
-runReader _ (&SWait   reader) = close reader
+runReader _ (&Done    reader) = close reader
 
 runStdin : ()
-runStdin = fork (\(_ : ()) -1-> runServer runReader () dualStdin)
+runStdin = fork (\(_ : ()) -> runServer runReader () dualStdin)
 
 -- *** stdout
 
--- | Standard output stream. Prints to the console.
-stdoutChan : (OutStreamProvider, Dual OutStreamProvider)
-stdoutChan = channel @OutStreamProvider
+-- Internal stdout function
+internalPutStrOut : String -> ()
+internalPutStrOut = undefined
 
 stdout : OutStreamProvider
-stdout = let (o,_) = stdoutChan in o
+stdout = forkWith (runServer (\_ -> printer) ())
+  where
+    readApply : forall (a : *T) (b : 1S) -> (a -> ()) -> ?a ; b -1-> b
+    readApply f c =
+      let (x, c) = receive c in f x; c
+    printer : Dual OutStream -> ()
+    printer (&PutChar p) = 
+      p |> readApply (internalPutStrOut . show) |> printer
+    printer (&PutStr p) = 
+      p |> readApply internalPutStrOut |> printer
+    printer (&PutStrLn p) = 
+      p |> readApply (\s -> internalPutStrOut (s ++ "\n")) |> printer
+    printer (&Done p) =
+      p |> close
 
-dualStdout : Dual OutStreamProvider
-dualStdout = let (_,i) = stdoutChan in i
-
--- | Prints a character to `stdout`. Behaves the same as `hPutChar_ c stdout`, where `c`
--- is the character to be printed.
+-- | Prints a character to `stdout`.
 putChar : Char -> ()
 putChar = flip #* #* #* hPutChar_ stdout
 
--- | Prints a string to `stdout`. Behaves the same as `hPutStr_ s stdout`, where `s` is
--- the string to be printed.
+-- | Prints a string to `stdout`.
 putStr : String -> ()
 putStr = flip #* #* #* hPutStr_ stdout
 
--- | Prints a string to `stdout`, followed by the newline character `\n`. Behaves
--- as `hPutStrLn_ s stdout`, where `s` is the string to be printed.
+-- | Prints a string to `stdout`, followed by the newline character `\n`.
 putStrLn : String -> ()
 putStrLn = flip #* #* #* hPutStrLn_ stdout
 
 -- | Prints the string representation of a given value to `stdout`, followed by
--- the newline character `\n`. Behaves the same as `hPrint_ @t v stdout`, where `v` is
--- the value to be printed and `t` its type.
+-- the newline character `\n`.
 print : forall (a : *T) -> a -> ()
-print @a x = putStrLn $ show x
-
--- **** Internal stdout functions
-
-internalPutStrOut : String -> ()
-internalPutStrOut = undefined
-
-runPrinter : () -> Dual OutStream -1-> ()
-runPrinter _ (&PutChar printer) = 
-  readApply (\(c : Char) -> internalPutStrOut (show c)) printer 
-    |> runPrinter ()
-runPrinter _ (&PutStr printer) = 
-  readApply internalPutStrOut printer 
-    |> runPrinter ()
-runPrinter _ (&PutStrLn printer) = 
-  readApply (\(s : String) -> internalPutStrOut (s ++ "\n")) printer 
-    |> runPrinter ()
-runPrinter _ (&SWait printer) = 
-  close printer
-
-runStdout  : ()
-runStdout = fork (\(_ : ()) -1-> runServer runPrinter () dualStdout)
+print @a = putStrLn . show
