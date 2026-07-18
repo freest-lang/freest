@@ -395,7 +395,7 @@ forkWith #m @a f =
 -- runCounterServer = runServer @Counter @Int counterService 0 
 -- ```
 runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -> b) -> b -> *!a -> () -- Void @*T
-runServer @a @b handle state c =
+runServer handle state c =
   runServer handle (handle state (accept c)) c 
 
 -- | Executes a thunk n times, sequentially 
@@ -406,12 +406,8 @@ runServer @a @b handle state c =
 --   repeat @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
 repeat : forall (a : *T) -> Int -> (() -> a) -> ()
-repeat @a n thunk =
-  if n <= 0
-  then ()
-  else 
-    thunk ();
-    repeat (n - 1) thunk
+repeat n _     | n <= 0    = ()
+repeat n thunk | otherwise = thunk (); repeat (n - 1) thunk
 
 -- | Forks n identical threads. Works the same as a `repeat` call but in parallel
 -- instead of sequentially. 
@@ -422,7 +418,7 @@ repeat @a n thunk =
 --   parallel @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
 parallel : forall (a : *T) -> Int -> (() -> a) -> ()
-parallel @a n thunk = repeat @() n (\(_ : ()) -> fork @a thunk)
+parallel n thunk = repeat n (\_ -> fork thunk)
 
 -- * I/O
 
@@ -452,20 +448,17 @@ hCloseIn c = c |> select Done |> wait
 hGenericGet : forall (a : *T) -> (InStream -> ?a; InStream) -> InStream -> (a, InStream)
 hGenericGet @a sel c = receive (sel c)
 
--- | Reads a character from an `InStream` channel endpoint. Behaves as 
--- `|> select GetChar |> receive`.
+-- | Reads a character from an `InStream` channel endpoint.
 hGetChar : InStream -> (Char, InStream)
-hGetChar = hGenericGet (\(c : InStream) -> select GetChar c)
+hGetChar = hGenericGet (select GetChar)
 
--- | Reads a line (as a string) from an `InStream` channel endpoint. Behaves as 
--- `|> select GetLine |> receive`.
+-- | Reads a line (as a string) from an `InStream` channel endpoint.
 hGetLine : InStream -> (String, InStream)
-hGetLine = hGenericGet (\(c : InStream) -> select GetLine c)
+hGetLine = hGenericGet (select GetLine)
 
--- | Checks if an `InStream` reached the EOF token that marks where no more input can be read. 
--- Does the same as `|> select IsEOF |> receive`.
+-- | Checks if an `InStream` reached the EOF mark. 
 hIsEOF : InStream -> (Bool, InStream)
-hIsEOF = hGenericGet (\(c : InStream) -> select IsEOF c)
+hIsEOF = hGenericGet (select IsEOF)
 
 -- | Reads the entire content from an `InStream` (i.e. until EOF is reached). Returns the content
 -- as a single string and the continuation channel.
@@ -511,7 +504,7 @@ hGetContent_ inp =
 -- | The `OutStream` type describes output streams (such as `stdout`, `stderr`
 -- and write mode files). `PutChar` outputs a character, `PutStr` outputs a string,
 -- and `PutStrLn` outputs a string followed by the newline character (`\n`).
--- Operations in this channel must end with the `Close` option.
+-- Operations in this channel must end with the `Done` option.
 type OutStream : 1C
 type OutStream = +{ PutChar : !Char ; OutStream
                   , PutStr  : !String ; OutStream
@@ -523,37 +516,33 @@ type OutStream = +{ PutChar : !Char ; OutStream
 type OutStreamProvider : *C
 type OutStreamProvider = *?OutStream
 
--- | Closes an `OutStream` channel endpoint. Behaves as a `close`.
+-- | Closes an `OutStream` channel endpoint.
 hCloseOut : OutStream -> ()
 hCloseOut c = c |> select Done |> wait
 
 hGenericPut : forall (a : *T) -> (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
 hGenericPut @a sel x outStream = sel outStream |> send x
 
--- | Sends a character through an `OutStream` channel endpoint. Behaves as 
--- `|> select PutChar |> send`.
+-- | Writes a character on an `OutStream` channel endpoint.
 hPutChar : Char -> OutStream -> OutStream
-hPutChar = hGenericPut (\(ch : OutStream) -> select PutChar ch)
+hPutChar = hGenericPut (select PutChar)
 
--- | Sends a String through an `OutStream` channel endpoint. Behaves as 
--- `|> select PutString |> send`.
+-- | Write a String on an `OutStream` channel endpoint.
 hPutStr : String -> OutStream -> OutStream
-hPutStr = hGenericPut (\(c : OutStream) -> select PutStr c)
+hPutStr = hGenericPut (select PutStr)
 
--- | Sends a string through an `OutStream` channel endpoint, to be output with
--- the newline character. Behaves as `|> select PutStringLn |> send`.
+-- | Writes a string followed by newline on an `OutStream` channel endpoint.
 hPutStrLn : String -> OutStream -> OutStream
-hPutStrLn = hGenericPut (\(c : OutStream) -> select PutStrLn c)
+hPutStrLn = hGenericPut (select PutStrLn)
 
--- | Sends the string representation of a value through an `OutStream` channel
--- endpoint, to be outputed with the newline character. Behaves as `hPutStrLn
--- (show @t v)`, where `v` is the value to be sent and `t` its type.
+-- | Writes the string representation of a value on an `OutStream` channel
+-- endpoint.
 hPrint : forall (a : *T) -> a -> OutStream -> OutStream
-hPrint @a x = hPutStrLn (show x)
+hPrint @a = hPutStrLn . show
 
 hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> OutStreamProvider -> ()
-hGenericPut_ @a putF x outProv = 
-  hCloseOut $ putF x $ receive_ outProv 
+hGenericPut_ sendF x outProvider = 
+  receive_ outProvider |> sendF x |> hCloseOut
 
 -- | Unrestricted version of `hPutChar`. Behaves the same, except it first
 -- receives an `OutStream` channel endpoint (via session initiation), executes
@@ -583,8 +572,7 @@ hPrint_ @a x c = hGenericPut_ (hPrint @a) x c
 
 -- *** stdin
 
--- **** Internal stdin functions
-
+-- Internal stdin functions
 internalGetChar : () -> Char
 internalGetChar = undefined
 internalGetLine : () -> String
@@ -592,15 +580,14 @@ internalGetLine = undefined
 internalGetContents : () -> String
 internalGetContents = undefined
 
--- | Standard input stream. Reads from the console.
-stdinChan : (InStreamProvider, Dual InStreamProvider)
-stdinChan = channel @InStreamProvider
-
 stdin : InStreamProvider
-stdin = let (i, _) = stdinChan in i
-
-dualStdin : Dual InStreamProvider
-dualStdin = let (_, o) = stdinChan in o
+stdin = forkWith (runServer (\_ -> reader) ())
+  where
+    reader : Dual InStream -> ()
+    reader (&GetChar r) = r |> send (internalGetChar ()) |> reader
+    reader (&GetLine r) = r |> send (internalGetLine ()) |> reader
+    reader (&IsEOF   r) = r |> send False |> reader -- stdin is always open
+    reader (&Done    r) = r |> close
 
 -- | Reads a single character from `stdin`.
 getChar : () -> Char
@@ -609,15 +596,6 @@ getChar _ = hGetChar_ stdin
 -- | Reads a single line from `stdin`. 
 getLine : () -> String
 getLine _ = hGetLine_ stdin
-
-runReader : () -> Dual InStream -> ()
-runReader _ (&GetChar reader) = runReader () $ send (internalGetChar ()) reader
-runReader _ (&GetLine reader) = runReader () $ send (internalGetLine ()) reader
-runReader _ (&IsEOF   reader) = runReader () $ send False                reader -- stdin is always open
-runReader _ (&Done    reader) = close reader
-
-runStdin : ()
-runStdin = fork (\(_ : ()) -> runServer runReader () dualStdin)
 
 -- *** stdout
 
