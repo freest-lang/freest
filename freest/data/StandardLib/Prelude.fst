@@ -429,7 +429,8 @@ parallel n thunk = repeat n (\_ -> fork thunk)
 -- | The `InStream` type describes input streams (such as `stdin` and read
 -- files). `GetChar` reads a single character, `GetLine` reads a line, and
 -- `IsEOF` checks for the EOF (End-Of-File) token, i.e., if an input stream
--- reached the end. Operations in this channel end with the `Done` option.
+-- has reached the end. Operations in this channel terminate with the `Done`
+-- option.
 type InStream : 1C
 type InStream = +{ GetChar: ?Char   ; InStream
                  , GetLine: ?String ; InStream
@@ -437,16 +438,12 @@ type InStream = +{ GetChar: ?Char   ; InStream
                  , Done   : Wait
                  }
 
--- | Unrestricted session type for the `OutStream` type.
-type InStreamProvider : *C
-type InStreamProvider = *?InStream
-
--- | Closes an `InStream` channel endpoint. Behaves as a `close`.
+-- | Closes an `InStream` channel endpoint.
 hCloseIn : InStream -> ()
 hCloseIn c = c |> select Done |> wait
 
 hGenericGet : forall (a : *T) -> (InStream -> ?a; InStream) -> InStream -> (a, InStream)
-hGenericGet @a sel c = receive (sel c)
+hGenericGet sel inStream = inStream |> sel |> receive
 
 -- | Reads a character from an `InStream` channel endpoint.
 hGetChar : InStream -> (Char, InStream)
@@ -460,44 +457,34 @@ hGetLine = hGenericGet (select GetLine)
 hIsEOF : InStream -> (Bool, InStream)
 hIsEOF = hGenericGet (select IsEOF)
 
--- | Reads the entire content from an `InStream` (i.e. until EOF is reached). Returns the content
--- as a single string and the continuation channel.
+-- | Reads the entire content from an `InStream` (i.e. until EOF is reached).
 hGetContent : InStream -> (String, InStream)
 hGetContent c = 
   let (isEOF, c) = hIsEOF c in
   if isEOF
   then ("", c)
   else 
-    let (line, c) = hGetLine c in 
+    let (line,     c) = hGetLine c in 
     let (contents, c) = hGetContent c in
-    ((++) line ((++) "\n" contents), c)
+    (line ++ "\n" ++ contents, c)
 
-hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> InStreamProvider -> a
-hGenericGet_ @a getF inp = 
-  let (x, c) = getF $ receive_ inp in
+hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> *?InStream -> a
+hGenericGet_ get inp = 
+  let (x, c) = get $ receive_ inp in
   hCloseIn c; 
   x
 
--- | Unrestricted version of `hGetChar`. Behaves the same, except it first receives an `InStream` 
--- channel endpoint (via session initiation), executes an `hGetChar` and then closes the 
--- enpoint with `hCloseIn`.
-hGetChar_ : InStreamProvider -> Char
+-- | `hGetChar` on an `*?InStream`
+hGetChar_ : *?InStream -> Char
 hGetChar_ = hGenericGet_ hGetChar
 
--- | Unrestricted version of `hGetLine`. Behaves the same, except it first receives an `InStream` 
--- channel endpoint (via session initiation), executes an `hGetLine` and then closes the 
--- enpoint with `hCloseIn`.
-hGetLine_ : InStreamProvider -> String
+-- | `hGetLine` on an `*?InStream`
+hGetLine_ : *?InStream -> String
 hGetLine_ = hGenericGet_ hGetLine
 
--- | Unrestricted version of `hGetContent`. Behaves the same, except it first receives an `InStream`
--- channel endpoint (via session initiation), executes an `hGetContent` and then closes the
--- endpoint with `hCloseIn`.
-hGetContent_ : InStreamProvider -> String
-hGetContent_ inp = 
-  let (s, c) = receive_ inp |> hGetContent in
-  hCloseIn c;
-  s
+-- | `hGetContent` on an `*?InStream`
+hGetContent_ : *?InStream -> String
+hGetContent_ = hGenericGet_ hGetContent
 
 -- *** Output Stream
 
@@ -512,16 +499,12 @@ type OutStream = +{ PutChar : !Char ; OutStream
                   , Done    : Wait
                   }
 
--- | Unrestricted session type for the `OutStream` type.
-type OutStreamProvider : *C
-type OutStreamProvider = *?OutStream
-
 -- | Closes an `OutStream` channel endpoint.
 hCloseOut : OutStream -> ()
 hCloseOut c = c |> select Done |> wait
 
 hGenericPut : forall (a : *T) -> (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
-hGenericPut @a sel x outStream = sel outStream |> send x
+hGenericPut sel x outStream = sel outStream |> send x
 
 -- | Writes a character on an `OutStream` channel endpoint.
 hPutChar : Char -> OutStream -> OutStream
@@ -540,32 +523,32 @@ hPutStrLn = hGenericPut (select PutStrLn)
 hPrint : forall (a : *T) -> a -> OutStream -> OutStream
 hPrint @a = hPutStrLn . show
 
-hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> OutStreamProvider -> ()
+hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> *?OutStream -> ()
 hGenericPut_ sendF x outProvider = 
   receive_ outProvider |> sendF x |> hCloseOut
 
 -- | Unrestricted version of `hPutChar`. Behaves the same, except it first
 -- receives an `OutStream` channel endpoint (via session initiation), executes
 -- an `hPutChar` and then closes the enpoint with `hCloseOut`.
-hPutChar_ : Char -> OutStreamProvider -> ()
+hPutChar_ : Char -> *?OutStream -> ()
 hPutChar_ = hGenericPut_ hPutChar
 
 -- | Unrestricted version of `hPutStr`. Behaves similarly, except that it first
 -- receives an `OutStream` channel endpoint (via session initiation), executes
 -- an `hPutStr` and then closes the enpoint with `hCloseOut`.
-hPutStr_ : String -> OutStreamProvider -> ()
+hPutStr_ : String -> *?OutStream -> ()
 hPutStr_ = hGenericPut_ hPutStr
 
 -- | Unrestricted version of `hPutStrLn`. Behaves similarly, except that it
 -- first receives an `OutStream` channel endpoint (via session initiation),
 -- executes an `hPutStrLn` and then closes the enpoint with `hCloseOut`.
-hPutStrLn_ : String -> OutStreamProvider -> ()
+hPutStrLn_ : String -> *?OutStream -> ()
 hPutStrLn_ = hGenericPut_ hPutStrLn
 
 -- | Unrestricted version of `hPrint`. Behaves similarly, except that it first
 -- receives an `OutStream` channel endpoint (via session initiation), executes
 -- an `hPrint` and then closes the enpoint with `hCloseOut`.
-hPrint_ : forall (a : *T) -> a -> OutStreamProvider -> ()
+hPrint_ : forall (a : *T) -> a -> *?OutStream -> ()
 hPrint_ @a x c = hGenericPut_ (hPrint @a) x c
 
 -- ** Standard I/O
@@ -580,13 +563,13 @@ internalGetLine = undefined
 internalGetContents : () -> String
 internalGetContents = undefined
 
-stdin : InStreamProvider
+stdin : *?InStream
 stdin = forkWith (runServer (\_ -> reader) ())
   where
     reader : Dual InStream -> ()
     reader (&GetChar r) = r |> send (internalGetChar ()) |> reader
     reader (&GetLine r) = r |> send (internalGetLine ()) |> reader
-    reader (&IsEOF   r) = r |> send False |> reader -- stdin is always open
+    reader (&IsEOF   r) = r |> send False                |> reader -- stdin is always open
     reader (&Done    r) = r |> close
 
 -- | Reads a single character from `stdin`.
@@ -603,7 +586,7 @@ getLine _ = hGetLine_ stdin
 internalPutStrOut : String -> ()
 internalPutStrOut = undefined
 
-stdout : OutStreamProvider
+stdout : *?OutStream
 stdout = forkWith (runServer (\_ -> printer) ())
   where
     readApply : forall (a : *T) (b : 1S) -> (a -> ()) -> ?a ; b -1-> b
