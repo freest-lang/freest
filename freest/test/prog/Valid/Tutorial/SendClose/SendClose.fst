@@ -11,7 +11,10 @@ writeFive'' c =
   c |> send 5 |> close
 
 writeFive''' : !Int ; Close -> ()
-writeFive''' = sendAndClose 5
+writeFive''' = close . send 5
+
+writeFive'''' : !Int ; Close -> ()
+writeFive'''' = sendAndClose 5
 
 readInt : ?Int ; Wait -> ()
 readInt c =
