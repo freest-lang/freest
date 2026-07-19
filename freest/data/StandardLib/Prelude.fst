@@ -504,8 +504,7 @@ hGetContent_ = hGenericGet_ hGetContent
 -- and `PutStrLn` outputs a string followed by the newline character (`\n`).
 -- Operations in this channel must end with the `Done` option.
 type OutStream : 1C
-type OutStream = +{ PutChar : !Char ; OutStream
-                  , PutStr  : !String ; OutStream
+type OutStream = +{ PutStr  : !String ; OutStream
                   , PutStrLn: !String ; OutStream
                   , Done    : Wait
                   }
@@ -517,13 +516,13 @@ hCloseOut c = c |> select Done |> wait
 hGenericPut : forall (a : *T) -> (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
 hGenericPut sel x outStream = sel outStream |> send x
 
--- | Writes a character on an `OutStream` channel endpoint.
-hPutChar : Char -> OutStream -> OutStream
-hPutChar = hGenericPut (select PutChar)
-
 -- | Write a String on an `OutStream` channel endpoint.
 hPutStr : String -> OutStream -> OutStream
 hPutStr = hGenericPut (select PutStr)
+
+-- | Writes a character on an `OutStream` channel endpoint.
+hPutChar : Char -> OutStream -> OutStream
+hPutChar c = hPutStr [c]
 
 -- | Writes a string followed by newline on an `OutStream` channel endpoint.
 hPutStrLn : String -> OutStream -> OutStream
@@ -604,9 +603,7 @@ stdout = forkWith (runServer (\_ -> printer) ())
     readApply f c =
       let (x, c) = receive c in f x; c
     printer : Dual OutStream -> ()
-    printer (&PutChar p) = 
-      p |> readApply (internalPutStrOut . show) |> printer
-    printer (&PutStr p) = 
+    printer (&PutStr p) =
       p |> readApply internalPutStrOut |> printer
     printer (&PutStrLn p) = 
       p |> readApply (\s -> internalPutStrOut (s ++ "\n")) |> printer
