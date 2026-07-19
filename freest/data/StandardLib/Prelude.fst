@@ -313,10 +313,9 @@ sendAndClose #m @a x c = c |> send x |> close
 -- | continuation and returns the value.
 -- | 
 -- | ```
--- | main : ()
--- | main =
+-- | _ =
 -- |   -- create channel endpoints
--- |   let (c, s) = new @(?String ; Wait) () in
+-- |   let (c, s) = channel @(?String ; Wait) () in
 -- |   -- fork a thread that prints the received value (and closes the channel)
 -- |   fork (\(_ : ()) -1-> c |> receiveAndWait @String |> putStrLn);
 -- |   -- send a string through the channel (and close it)
@@ -336,11 +335,11 @@ receiveAndClose @a c =
   close c;
   x
 
--- | Sends a value on a star channel. Unrestricted version of `send`.
+-- | Sends a value on an unrestricted channel. The unrestricted version of `send`.
 send_ : forall #m (a : m T) -> a -> *!a -m-> ()
 send_ #m @a = undefined
 
--- | Receives a value from a star channel. Unrestricted version of `receive`.
+-- | Receives a value from an unrestricted channel. The unrestricted version of `receive`.
 receive_ : forall (a : 1T) -> *?a -> a
 receive_ @a = undefined
 
@@ -357,8 +356,7 @@ accept @a c =
 -- communicate with its parent process. Returns the channel endpoint.
 --  
 -- ```
--- main : ()
--- main =
+-- _ =
 --   -- fork a thread that receives a string and prints
 --   let c = forkWith @(!String ; Wait) @() (\s:(?String ; End) -1-> s |> receiveAndWait @String |> putStrLn) in
 --   -- send the string to be printed
@@ -367,7 +365,7 @@ accept @a c =
 forkWith : forall #m (a : 1C) -> (Dual a -m-> ()) -> a
 forkWith #m @a f =
   let (x, y) = channel @a in
-  fork (\(_ : ()) -1-> f y);
+  fork (\_ -1-> f y);
   x
 
 -- | Runs an infinite shared server thread given a function to serve a client (a
@@ -400,8 +398,7 @@ runServer handle state c =
 
 -- | Executes a thunk n times, sequentially 
 -- ```
--- main : ()
--- main = 
+-- _ = 
 --   -- print "Hello!" 5 times sequentially
 --   repeat @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
@@ -409,16 +406,30 @@ repeat : forall (a : *T) -> Int -> (() -> a) -> ()
 repeat n _     | n <= 0    = ()
 repeat n thunk | otherwise = thunk (); repeat (n - 1) thunk
 
--- | Forks n identical threads. Works the same as a `repeat` call but in parallel
--- instead of sequentially. 
+-- | Forks n identical threads. Similar to `repeat` but working in parallel
+-- rather than sequentially. 
 -- ```
--- main : ()
--- main = 
+-- _ = 
 --   -- print "Hello!" 5 times in parallel
 --   parallel @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
 parallel : forall (a : *T) -> Int -> (() -> a) -> ()
 parallel n thunk = repeat n (\_ -> fork thunk)
+
+-- * Fork/Join
+
+-- | A simple channel-based fork/join coordination protocol: each child
+-- thread signals completion by selecting the `Join` branch, and the parent
+-- thread can wait for a fixed number of such completions.
+type ForkJoin = *+{Join}
+
+-- | Signal completion of a child thread to the parent waiting on the join channel.
+join : ForkJoin -> ()
+join c = select Join c ; ()
+
+-- | Wait until `n` child threads have signalled completion through the join channel.
+await : Int -> Dual ForkJoin -> ()
+await n c = repeat @() n (\_ -> case c of &Join _ -> ())
 
 -- * I/O
 
