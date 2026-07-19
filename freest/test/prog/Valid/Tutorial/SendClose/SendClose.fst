@@ -28,6 +28,8 @@ _ = forkWith writeFive |> readInt' |> print
 
 _ = print $ readInt' $ forkWith writeFive
 
+_ = forkWith writeFive |> readInt
+
 -- The same, using pattern matching
 readInt : ?Int ; Wait -> ()
 readInt (?x ; Wait) = print x
@@ -35,3 +37,5 @@ readInt (?x ; Wait) = print x
 -- A more complex protocol
 sumThree : ?Int ; ?Int ; ?Int ; Wait -> ()
 sumThree (?x ; ?y ; ?z ; Wait) = print $ x + y + z
+
+-- _ = forkWith readInt |> writeFive
