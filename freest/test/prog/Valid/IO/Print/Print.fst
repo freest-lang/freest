@@ -1,0 +1,1 @@
+_ = print "FreeST 5.0"

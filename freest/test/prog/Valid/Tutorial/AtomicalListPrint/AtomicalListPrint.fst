@@ -1,4 +1,4 @@
-printAList : forall a -> [a] -> *?OutStream -1-> *+{Join} -1-> ()
+printAList : forall a -> [a] -> *?OutStream -1-> ForkJoin -1-> ()
 printAList xs c d = printL xs (receive_ c |> hPutStr "[") ; join d ; ()
     where
         printL : forall a -> [a] -> OutStream -1-> ()
@@ -11,7 +11,7 @@ downTo 0 = []
 downTo n = n :: downTo (n - 1)
 
 _ = let n = 6
-        (w, r) = channel @*+{Join} in
+        (w, r) = channel @ForkJoin in
     parallel n (\_ -> printAList (downTo 200) stdout w) ;
     await n r
 
