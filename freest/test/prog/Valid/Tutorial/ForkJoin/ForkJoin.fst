@@ -1,8 +1,8 @@
 -- _ =
 --     let ()
---     fork (\_ -> print 'A') ;
---     fork (\_ -> print 'B') ;
---     fork (\_ -> print 'B') ;
+--     fork (\_ -> putChar 'A') ;
+--     fork (\_ -> putChar 'B') ;
+--     fork (\_ -> putChar 'C') ;
 --     ()
 
 _ =

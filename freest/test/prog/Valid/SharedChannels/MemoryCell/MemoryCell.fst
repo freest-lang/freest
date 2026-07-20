@@ -8,30 +8,26 @@ type IntCell = *?IntCellSession
 type IntCellSession : 1C
 type IntCellSession = +{Read: ?Int, Write: !Int} ; Close
 
-write: Int -> IntCell -1-> ()
-write n s = receive_ s |> select Write |> sendAndClose n 
+write: Int -> IntCell -1-> ForkJoin -1-> ()
+write n s j = receive_ s |> select Write |> sendAndClose n ; join j
 
-read: IntCell -> Int
-read s = receive_ s |> select Read |> receiveAndClose
+read: IntCell -> ForkJoin -1-> ()
+read s j = let x = receive_ s |> select Read |> receiveAndClose
+           in putStrLn ("Read " ++ show x) ; join j
 
-cell : Int -> Dual IntCell -> Void @*T
+cell : Int -> Dual IntCell -> () -- Void @*T
 cell n c =
   case accept c of
     &Write s -> cell (receiveAndWait s) c
     &Read  s -> sendAndWait n s; cell n c
 
-sleep : Int -> ()
-sleep 0 = () 
-sleep n = sleep (n - 1)
-
 -- Expect 0, 5 or 6
-main: Int
-main =
-  let c = forkWith (cell 0) in
-  let (r, w) = channel @*?IntCellSession in
-  fork (\_ -1-> read c);
-  fork (\_ -1-> read c);
-  fork (\_ -1-> write 5 c); 
-  fork (\_ -1-> write 6 c); 
-  sleep 10000;
-  read c
+_ =
+  let c = forkWith (cell 0)
+      (j, a) = channel @ForkJoin in
+  fork (\_ -1-> read c j);
+  fork (\_ -1-> read c j);
+  fork (\_ -1-> write 5 c j); 
+  fork (\_ -1-> write 6 c j); 
+  fork (\_ -1-> read c j);
+  await 5 a
