@@ -421,15 +421,15 @@ parallel n thunk = repeat n (\_ -> fork thunk)
 -- | A simple channel-based fork/join coordination protocol: each child
 -- thread signals completion by selecting the `Join` branch, and the parent
 -- thread can wait for a fixed number of such completions.
-type ForkJoin = *+{Join}
+type ForkJoin = *+{Over}
 
 -- | Signal completion of a child thread to the parent waiting on the join channel.
 join : ForkJoin -> ()
-join c = select Join c ; ()
+join c = select Over c ; ()
 
 -- | Wait until `n` child threads have signalled completion through the join channel.
 await : Int -> Dual ForkJoin -> ()
-await n c = repeat @() n (\_ -> case c of &Join _ -> ())
+await n c = repeat @() n (\_ -> case c of &Over _ -> ())
 
 -- * I/O
 
