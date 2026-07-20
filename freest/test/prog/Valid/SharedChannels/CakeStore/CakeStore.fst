@@ -43,6 +43,6 @@ cakeLover name (&Cake c)           = putStrLn (name ++ " got cake!")
 cakeLover name (&Disappointment c) = putStrLn (name ++ " got disappointment")
 
 _ = let (s, c) = channel @CakeStore in
-    fork (\_ -1-> cakeLover "Ami" c);
     fork (\_ -1-> cakeStore s);
+    fork (\_ -1-> cakeLover "Ami" c);
     cakeLover "Boé" c

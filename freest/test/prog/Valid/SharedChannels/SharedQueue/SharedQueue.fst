@@ -65,7 +65,7 @@ main =
     let counter = initCounter in
     -- writer-reader concurrency, no writter-writer nor reader-reader concurrency
     parallel maxSize (\_ -> enqueue (receive_ counter) queue);
-    repeat maxSize $ (\_ -> print (dequeue queue))
+    times maxSize $ (\_ -> print (dequeue queue))
     -- writer-reader, writter-writer and reader-reader concurrency
     -- parallel @() 10 $ (\(_ : ()) -> enqueue (receiveUn @Int counter) queue);
     -- parallel @() 10 $ (\(_ : ()) -> printIntLn (dequeue queue))

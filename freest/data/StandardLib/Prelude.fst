@@ -396,25 +396,25 @@ runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -> b) -> b -> *!a -> () -- 
 runServer handle state c =
   runServer handle (handle state (accept c)) c 
 
--- | Executes a thunk n times, sequentially 
+-- | Executes a thunk n times, sequentially.
 -- ```
--- _ = 
+-- _ =
 --   -- print "Hello!" 5 times sequentially
---   repeat @() 5 (\_:() -> putStrLn "Hello!")
+--   times @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
-repeat : forall (a : *T) -> Int -> (() -> a) -> ()
-repeat n _     | n <= 0    = ()
-repeat n thunk | otherwise = thunk (); repeat (n - 1) thunk
+times : forall (a : *T) -> Int -> (() -> a) -> ()
+times n _     | n <= 0    = ()
+times n thunk | otherwise = thunk (); times (n - 1) thunk
 
--- | Forks n identical threads. Similar to `repeat` but working in parallel
--- rather than sequentially. 
+-- | Forks n identical threads. Similar to `times` but working in parallel
+-- rather than sequentially.
 -- ```
--- _ = 
+-- _ =
 --   -- print "Hello!" 5 times in parallel
 --   parallel @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
 parallel : forall (a : *T) -> Int -> (() -> a) -> ()
-parallel n thunk = repeat n (\_ -> fork thunk)
+parallel n thunk = times n (\_ -> fork thunk)
 
 -- * Fork/Join
 
@@ -429,7 +429,7 @@ join c = select Over c ; ()
 
 -- | Wait until `n` child threads have signalled completion through the join channel.
 await : Int -> Dual ForkJoin -> ()
-await n c = repeat @() n (\_ -> case c of &Over _ -> ())
+await n c = times @() n (\_ -> case c of &Over _ -> ())
 
 -- * I/O
 
