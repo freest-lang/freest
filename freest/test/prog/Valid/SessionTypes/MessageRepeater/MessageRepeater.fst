@@ -34,7 +34,7 @@ repeater r s =
 
 receiver : Dual Stream -> Int
 receiver (&Done s) = wait s ; 0
-receiver (&More s) = let (i , s) = receive s in i + receiver s
+receiver (&More (?i; s)) = i + receiver s
 
 main : ()
 main =
