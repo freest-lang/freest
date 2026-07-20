@@ -18,11 +18,7 @@ runHeadNode prev head =
 runTailNode : Dual Internal -> Dual Tail -1-> ()
 runTailNode next tail =
     let i = receive_ tail in
-    let (prev', next') = channel @Internal in
-    fork (\_ -1-> send i next |> send prev' |> wait);
-    runTailNode next' tail
-    -- Internal error at Validation.Rename.rename: Dual
-    -- runTailNode (fork_ @Internal (\(c : Dual Internal) -> send c (send i next))) tail
+    runTailNode (forkWith (\prev -1-> next |> send i |> send prev |> wait)) tail
 
 -- queue
 
