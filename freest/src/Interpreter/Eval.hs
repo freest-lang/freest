@@ -191,8 +191,14 @@ handleApplication ctx (VClosure collected clauses cctx) args = do
     -- any leftover arguments are applied to the result
     if null rest then return result
     else handleApplication ctx result rest
-handleApplication _ (VBuiltin builtin) args =
-  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) (termArgs args)
+handleApplication ctx (VBuiltin builtin) args = foldM applyOne (VBuiltin builtin) (termArgs args)
+  where
+    -- Between builtin applications, force any 'VIO' result so effects
+    -- (e.g. the exception thrown by 'error') fire in time for the
+    -- enclosing App's 'catch' to attach the call-site span.
+    applyOne (VBuiltin f) arg = pure (f arg)
+    applyOne (VIO io)     arg = io >>= \v -> applyOne v arg
+    applyOne v            _   = internalError $ "handleApplication: cannot apply value " ++ show v
 handleApplication ctx VFork args = case termArgs args of
   [fun] -> forkIO (void $ handleApplication ctx fun [Just VUnit]) $> VUnit
   []    -> return VFork    -- only type/multiplicity applied so far
@@ -202,6 +208,14 @@ handleApplication ctx VFork args = case termArgs args of
 -- applications carry no runtime value.
 termArgs :: [Maybe Value] -> [Value]
 termArgs = catMaybes
+
+-- | Attach a span to an exception, but only if the exception has none yet.
+-- Enclosing 'App' layers keep the innermost span rather than clobbering it
+-- with their own outer call site.
+attachSpan :: B.Span -> Exception -> Exception
+attachSpan s e
+  | B.getSpan e == B.nullSpan = B.setSpan s e
+  | otherwise                 = e
 {- handleApplication (global, local) (VSelect label) args =
   case args of
     [VChan chan] -> do
@@ -248,9 +262,9 @@ eval ctx (E.App span exp args) = do
   -- evaluate term arguments; type/multiplicity applications carry no value but
   -- still consume one of the closure's slots (so it stays a value until filled)
   evalArgs <- mapM evalArg args
-  res <- handleApplication ctx func evalArgs `catch` \(e :: Exception) -> throwIO (B.setSpan span e)
+  res <- handleApplication ctx func evalArgs `catch` \(e :: Exception) -> throwIO (attachSpan span e)
   case res of
-    VIO io -> io `catch` \(e :: Exception) -> throwIO (B.setSpan span e)
+    VIO io -> io `catch` \(e :: Exception) -> throwIO (attachSpan span e)
     _ -> return res
   where
     evalArg (B.ExpLevel e) = Just <$> eval ctx e

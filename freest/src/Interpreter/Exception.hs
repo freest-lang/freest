@@ -20,14 +20,17 @@ import UI.Error ( Source, header, snippet )
 data Exception
   = NonExhaustivePatterns Span
   | BlockedIndefinitely Span String
+  | UserError Span String
 
 instance Located Exception where
   getSpan = \case
     NonExhaustivePatterns s -> s
     BlockedIndefinitely s _ -> s
+    UserError s _ -> s
   setSpan s = \case
     NonExhaustivePatterns _ -> NonExhaustivePatterns s
     BlockedIndefinitely _ msg -> BlockedIndefinitely s msg
+    UserError _ msg -> UserError s msg
 
 instance Show Exception where
   show e = show (getSpan e) ++ ": exception:\n" ++ message e
@@ -39,6 +42,7 @@ message :: Exception -> String
 message = \case
   NonExhaustivePatterns _ -> "Non-exhaustive patterns"
   BlockedIndefinitely _ msg -> msg
+  UserError _ msg -> msg
 
 makeException :: Located a => Source -> a -> String -> String
 makeException src (getSpan -> s) msg =

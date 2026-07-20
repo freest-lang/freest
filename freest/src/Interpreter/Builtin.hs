@@ -116,7 +116,7 @@ builtins = Map.fromList
   -- * Undefined
     ("undefined",     VBuiltin undefined)
   -- * Error
-  , ("error",         VBuiltin (errorWithoutStackTrace . fstToHsString))
+  , ("error",         VBuiltin (VIO . throwIO . UserError nullSpan . fstToHsString))
 
   -- * Standard types, classes and related functions
   -- ** Basic datatypes
