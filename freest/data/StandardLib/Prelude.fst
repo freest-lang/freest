@@ -612,15 +612,15 @@ stdout = forkWith (runServer (\_ -> printer) ())
 
 -- | Prints a character to `stdout`.
 putChar : Char -> ()
-putChar = flip #* #* #* hPutChar_ stdout
+putChar = flip hPutChar_ stdout
 
 -- | Prints a string to `stdout`.
 putStr : String -> ()
-putStr = flip #* #* #* hPutStr_ stdout
+putStr = flip hPutStr_ stdout
 
 -- | Prints a string to `stdout`, followed by the newline character `\n`.
 putStrLn : String -> ()
-putStrLn = flip #* #* #* hPutStrLn_ stdout
+putStrLn = flip hPutStrLn_ stdout
 
 -- | Prints the string representation of a given value to `stdout`, followed by
 -- the newline character `\n`.
