@@ -87,7 +87,7 @@ data Type x
   | Float Span (XType x)
   | Char Span (XType x)
   | Arrow Span (XType x) K.Multiplicity
-  | Quant Span (XType x) Polarity K.Prekind K.Multiplicity
+  | Quant Span (XType x) Polarity K.BaseKind K.Multiplicity
   | ForallM Span (XType x) K.Multiplicity [Variable] (Type x)
   | Void Span (XType x) K.Kind -- TODO: why a kind here and not in, say, Quant?
   --   Session types
@@ -117,11 +117,11 @@ deriving instance (Ord (XType x), Ord (XBndKind x)) => Ord (Type x)
 --           | null φs   = t
 --           | otherwise = ForallM' s x m φs t
 
-pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, XBndKind x)] -> Type x -> Type x
-pattern AppQuant s x1 x2 x3 p pk m aks t <- App s x1 (Quant _ x2 p pk m) [Abs _ x3 aks t]
-  where AppQuant s x1 x2 x3 p pk m aks t 
+pattern AppQuant :: Span -> XType x -> XType x -> XType x -> Polarity -> K.BaseKind -> K.Multiplicity -> [(Variable, XBndKind x)] -> Type x -> Type x
+pattern AppQuant s x1 x2 x3 p bk m aks t <- App s x1 (Quant _ x2 p bk m) [Abs _ x3 aks t]
+  where AppQuant s x1 x2 x3 p bk m aks t 
           | null aks  = t 
-          | otherwise = App s x1 (Quant s x2 p pk m) [Abs s x3 aks t]
+          | otherwise = App s x1 (Quant s x2 p bk m) [Abs s x3 aks t]
 
 pattern AppForall :: Span -> XType x -> XType x -> XType x -> K.Multiplicity -> [(Variable, XBndKind x)] -> Type x -> Type x
 pattern AppForall s x1 x2 x3 m aks t <- AppQuant s x1 x2 x3 In K.Top m aks t
@@ -265,8 +265,14 @@ instance Show (XBndKind x) => Show (Type x) where
     Int{}     -> "Int"
     Float{}   -> "Float"
     Char{}    -> "Char"
-    Arrow _ _ m -> "("++show m++"->)"
-    Quant _ _ p K.Top m -> "("++showQuant p++ "#" ++ (if p == In then show m else "") ++ ")"
+    Arrow _ _ m -> "-"++show m++"->"
+    -- Quantifier heads (functional ∀/∃ and session ?type/!type alike): the
+    -- polarity fixes the symbol and the head's own kind fixes @k@ (`show m ++
+    -- show bk`, without the space that `show` on a proper kind would insert). A
+    -- functional `exists` has no multiplicity (`existsMult` is ⊥), so @k@ there
+    -- is its base kind alone.
+    Quant _ _ p bk m -> (case p of In -> "∀"; Out -> "∃")
+      ++ (case (p, bk) of (Out, K.Top) -> ""; _ -> show m) ++ show bk
     ForallM _ _ m φs t -> "(forall " ++ concatMap (("#"++) . show) φs ++ " -" ++ show m ++ "-> " ++ show t ++ ")"
     -- Session types
     Skip{}            -> "Skip"
@@ -275,13 +281,12 @@ instance Show (XBndKind x) => Show (Type x) where
     End _ _ In          -> "Wait"
     End _ _ Out         -> "Close"
     Message _ _ m p  -> "(" ++ showMsgMult m ++ show p ++ ")"
-    Quant _ _ p K.Session K.Lin{} -> "(" ++ show p ++ show p ++ ")"
     Choice _ _ m p ls   ->
       (case m  of K.Un{} -> "*"; _ -> "")
       ++ showView p ++ "{" ++ intercalate ", " (map show ls) ++ "}"
     AppMessage _ _ _ m p t  -> showMsgMult m ++ show p ++ show t
-    AppQuantS _ _ _ _ p a k t -> 
-      "(" ++ show p ++ show p ++ "(" ++ show a ++ " : " ++ show k ++ "). "
+    AppQuantS _ _ _ _ p a k t ->
+      "(" ++ show p ++ "type (" ++ show a ++ " : " ++ show k ++ "). "
       ++ show t ++ ")"
     AppLinChoice  _ _ _ p lts -> showView p ++ "{"
       ++ intercalate ", " (map showField lts)
@@ -296,10 +301,10 @@ instance Show (XBndKind x) => Show (Type x) where
     App _ _ t [] -> "(" ++ show t ++ "[])"
     App _ _ t ts -> foldl (\s a -> "(" ++ s ++ " " ++ show a ++ ")") (show t) ts
     -- Equations
-    TName _ _ i -> show i ++ "#type"
-    DName _ _ i -> show i ++ "#data"
+    TName _ _ i -> show i {- ++ "#type" -}
+    DName _ _ i -> show i {- ++ "#data" -}
     -- The type of non-contractive types
-    Void _ _ k -> "(Void @" ++ show k ++ ")"
+    Void _ _ k -> "Void @" ++ show k
     where
       showMsgMult = \case K.Lin{} -> ""; m -> show m
       showView = \case In -> "&"; Out -> "+"
@@ -316,8 +321,8 @@ instance Eq (XBndKind x) => Congruence (Type x) where
     Float{} Float{} -> True
     Char{} Char{}  -> True
     (Arrow _ _ m1) (Arrow _ _ m2) -> congruent m m1 m2
-    (Quant _ _ p1 pk1 m1) (Quant _ _ p2 pk2 m2) -> 
-      p1 == p2 && pk1 == pk2
+    (Quant _ _ p1 bk1 m1) (Quant _ _ p2 bk2 m2) -> 
+      p1 == p2 && bk1 == bk2
       && (p1 /= In || p2 /= In || congruent m m1 m2)
     (ForallM _ _ m1 φs1 t1) (ForallM _ _ m2 φs2 t2) ->
       congruent m m1 m2 && φs1 == φs2 && t1 == t2
@@ -381,7 +386,7 @@ instance Located (Type x) where
     Float _ x          -> Float s x
     Char _ x          -> Char s x
     Arrow _ x m        -> Arrow s x m
-    Quant _ x p pk m -> Quant s x p pk m
+    Quant _ x p bk m -> Quant s x p bk m
     ForallM _ x m φs t -> ForallM s x m φs t
     -- Session types
     Message _ x m p    -> Message s x m p

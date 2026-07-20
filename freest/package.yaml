@@ -78,7 +78,7 @@ library:
     - Validation.Base
     - Validation.Expose
     - Validation.LocalInference.Kinds
-    - Validation.LocalInference.Prekinds
+    - Validation.LocalInference.BaseKinds
     - Validation.LocalInference.Solution
     - Validation.HOTRecursion
     - Validation.Kinding

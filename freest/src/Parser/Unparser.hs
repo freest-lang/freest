@@ -86,7 +86,7 @@ instance Unparse K.Multiplicity where
 
 instance Unparse K.Kind where
   fragment = \case
-    K.Proper _ m pk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ show pk)
+    K.Proper _ m bk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ show bk)
     K.Arrow _ k1 k2 -> (arrowRator, l ++ " -> " ++ r)
       where
         l = bracket (fragment k1) LeftAssoc arrowRator
@@ -111,8 +111,8 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
     T.Float _ _ -> (maxRator, "Float")
     T.Char _ _ -> (maxRator, "Char")
     T.Arrow _ _ m -> (maxRator, "(" ++ multArrow m ++ ")")
-    T.Quant _ _ p pk m -> (maxRator, "(" ++ quant True p pk m ++ ")")
-    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ concatMap (('#':) . show) φs ++ " -" ++ show m ++ "-> " ++ unparse t)
+    T.Quant _ _ p bk m -> (maxRator, "(" ++ quant True p bk m ++ ")")
+    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ unwords (map (('#':) . show) φs) ++ " -" ++ show m ++ "-> " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
     T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
                                         T.In  -> "Wait")
@@ -135,8 +135,8 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
-    T.AppQuant _ _ _ _ p pk m aks t -> 
-      (dotRator, quant False p pk m ++ bindings aks ++ quantSep p pk m ++ unparse t)
+    T.AppQuant _ _ _ _ p bk m aks t -> 
+      (dotRator, quant False p bk m ++ bindings aks ++ quantSep p bk m ++ unparse t)
     T.Tuple _ _ _ ts -> 
       (maxRator, "(" ++ List.intercalate ", " (map unparse ts) ++ ")")
     T.List _ _ _ t -> 

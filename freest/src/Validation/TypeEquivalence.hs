@@ -53,6 +53,13 @@ word t = wasVisited t >>= \case
   Just y -> pure [y]
   Nothing -> word' t
 
+-- | Terminal labels for a construct's operands: the construct's own head
+-- terminal @hd@ suffixed with @_1@, @_2@, …, so a numbered transition says which
+-- construct (and operand) it belongs to -- e.g. `-1->_1`, `&{A, B}_2`, rather
+-- than a bare `1`/`2`.
+operandLabels :: String -> [String]
+operandLabels hd = map (\i -> hd ++ '_' : show (i :: Int)) [1..]
+
 word' :: T.KindedType -> TransState Word
 word' = \case
   -- W-Skip
@@ -68,9 +75,11 @@ word' = \case
   t@T.DName{} -> getNonterminal $ Map.singleton (show t) []
   T.AppMessage _ m p t -> do
     w <- word t
+    -- linear multiplicity is implicit, as in the surface syntax (`!Int`, `*!Int`)
+    let hd = (case m of K.Lin{} -> ""; _ -> show m) ++ show p
     getNonterminal $ Map.fromList
-      [ (show m ++ show p, [bottom | K.isUn m])
-      , ("1", w ++ [bottom])
+      [ (hd, [bottom | K.isUn m])
+      , (hd ++ "_1", w ++ [bottom])
       ]
   -- W-Seq
   T.AppSemi _ t u -> do
@@ -80,7 +89,7 @@ word' = \case
     words <- mapM word ts
     getNonterminal $ Map.fromList $
       ("dual " ++ show a, []) :
-      zip (map show [1..]) (map (++ [bottom]) words)
+      zip (operandLabels ("dual " ++ show a)) (map (++ [bottom]) words)
   -- *+{} and *&{}
   t@(T.Choice _ K.Un{} _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
@@ -88,7 +97,7 @@ word' = \case
     words <- mapM word vs
     getNonterminal $ Map.fromList $
       (show u, [bottom]) :
-      zip (map show [1..]) words
+      zip (operandLabels (show u)) words
   T.ForallM _ _ [] _ -> internalError "ForallM with empty quantifier list"
   t@(T.ForallM s m (φ : φs) u) -> do
     let φ1 = Variable s "φ1" (-2)
@@ -104,7 +113,7 @@ word' = \case
     words <- mapM word us
     getNonterminal $ Map.fromList $
       (show a, []) :
-      zip (map show [1..]) (map (++ [bottom]) words)
+      zip (operandLabels (show a)) (map (++ [bottom]) words)
   -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
     tdecls <- gets typeDecls
@@ -127,8 +136,8 @@ word' = \case
         -- W-Abs, F : k => k'
         (internalα, internalβ) <- getKindIndices k
         let s = getSpan t -- The same span for all newly created vars & types?
-        let αk = Variable s ('α' : show k) internalα
-        let βk = Variable s ('β' : show k) internalβ
+        let αk = Variable s ('α' : ':' : unparse k) internalα
+        let βk = Variable s ('β' : ':' : unparse k) internalβ
         wtα <- word $ T.smartApp s t [T.fromVariable ObjLv αk k]
         wtβ <- word $ T.smartApp s t [T.fromVariable ObjLv βk k]
         getNonterminal $ Map.fromList
@@ -254,7 +263,7 @@ fatTerminal = \case
   t@T.Char{}  -> Just t
   t@T.Arrow{} -> Just t
   -- Polymorphism
-  T.AppQuant s p pk m aks t -> Just (T.AppQuant s p pk m aks) <*> fatTerminal t
+  T.AppQuant s p bk m aks t -> Just (T.AppQuant s p bk m aks) <*> fatTerminal t
   -- Higher-order
   t@T.Var{}      -> Just t
   T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts

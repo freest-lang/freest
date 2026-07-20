@@ -19,12 +19,15 @@ import UI.Error ( Source, header, snippet )
 -- | A runtime error raised by the interpreter.
 data Exception
   = NonExhaustivePatterns Span
+  | BlockedIndefinitely Span String
 
 instance Located Exception where
   getSpan = \case
     NonExhaustivePatterns s -> s
+    BlockedIndefinitely s _ -> s
   setSpan s = \case
     NonExhaustivePatterns _ -> NonExhaustivePatterns s
+    BlockedIndefinitely _ msg -> BlockedIndefinitely s msg
 
 instance Show Exception where
   show e = show (getSpan e) ++ ": exception:\n" ++ message e
@@ -35,6 +38,7 @@ instance E.Exception Exception
 message :: Exception -> String
 message = \case
   NonExhaustivePatterns _ -> "Non-exhaustive patterns"
+  BlockedIndefinitely _ msg -> msg
 
 makeException :: Located a => Source -> a -> String -> String
 makeException src (getSpan -> s) msg =

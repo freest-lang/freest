@@ -23,7 +23,7 @@ import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDecl
 import Parser.Scoping qualified as Scoping
 import Parser.Unparser ( Unparse, unparse, unparseDataDef, unparseTypeDef )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
-import Validation.Normalisation ( normalise )
+import Validation.Normalisation ( normalise, isWhnf, reduce )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
@@ -144,6 +144,8 @@ repl =
       , ("type"      , handleType)
       , ("equivalent", handleEquivalent)
       , ("normalise" , handleNormalise)
+      , ("whnf"      , handleWhnf)
+      , ("reduce"    , handleReduce)
       , ("grammar"   , handleGrammar)
       , ("quit"      , const $ liftIO exitSuccess)
       ]
@@ -207,41 +209,54 @@ cmd src = do
 -- Handling the various options
 
 -- TODO: handle relative paths
-handleLoad :: FilePath -> Repl () -- freesti> :l <path>
+handleLoad :: FilePath -> Repl () -- freest> :l <path>
 handleLoad path = do
   modify (\s -> s{filePath = Just path})
   ip <- gets implicitPrelude
   let loader = if ip then Pipeline.loadPreludeAndModule else Pipeline.loadModule
   runLoader (loader path)
 
-handleReload :: String -> Repl () -- freesti> :r
+handleReload :: String -> Repl () -- freest> :r
 handleReload "" =
   gets filePath >>= maybe (liftIO Pipeline.loadNoModule) handleLoad
 handleReload _  =
   putLines ["'reload' takes no arguments, just type ':r' to reload the current module"]
 
-handleKind :: String -> Repl () -- freesti> :k <type>
+handleKind :: String -> Repl () -- freest> :k <type>
 handleKind src = runPipeline src parseType validateType (printAs src . TK.kindOf)
 
-handleType :: String -> Repl () -- freesti> :t <exp>
+handleType :: String -> Repl () -- freest> :t <exp>
 handleType src = runPipeline src parseExp validateExp (printAs src)
 
-handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
+handleEquivalent :: String -> Repl () -- freest> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
     (\s (t, u) -> validateTypes s [t, u])
     (\[t', u'] -> get >>= \s -> putLines [show (equivalent (tdecls s) t' u')])
 
-handleNormalise :: String -> Repl () -- freesti> :n <type>
+handleNormalise :: String -> Repl () -- freest> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
   (\[t'] -> get >>= \s -> putLines [unparse (normalise (tdecls s) t')])
 
-handleGrammar :: String -> Repl () -- freesti> :g <type1> .., <typen>
+handleWhnf :: String -> Repl () -- freest> :w <type>
+handleWhnf src = runPipeline src parseType
+  (\s t -> validateTypes s [t])
+  (\[t'] -> putLines [show (isWhnf t')])
+
+handleReduce :: String -> Repl () -- freest> :red <type>
+handleReduce src = runPipeline src parseType
+  (\s t -> validateTypes s [t])
+  (\[t'] -> get >>= \s -> putLines
+    [ if isWhnf t'
+        then unparse t' ++ " is a weak head normal form (weak head normal forms do not reduce)"
+        else unparse (reduce (tdecls s) t') ])
+
+handleGrammar :: String -> Repl () -- freest> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
   (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (tdecls s) ts')])
 
-handleInfo :: String -> Repl () -- freesti> :i <id>
+handleInfo :: String -> Repl () -- freest> :i <id>
 handleInfo src = do
   path <- currentInteractivePath
   s <- get
@@ -285,7 +300,7 @@ handleInfo src = do
     notInScope :: Repl ()
     notInScope = putLines [src ++ " is not in scope"]
 
-handleHelp :: String -> Repl () -- freesti> :h
+handleHelp :: String -> Repl () -- freest> :h
 handleHelp args = putLines
   [ "Commands available from the prompt:"
   , ind "<type>                        show the normal form and kind of <type>"
@@ -294,7 +309,9 @@ handleHelp args = putLines
   , ind ":reload                       reload the current module"
   , ind ":kind <type>                  show the kind of <type>"
   , ind ":info                         display not sure what"
-  , ind ":normalise <type>             show the normal form of <type>"
+  , ind ":whnf <type>                  check if <type> is in weak head normal form"
+  , ind ":reduce <type>                reduce <type> one step (unless already a weak head normal form)"
+  , ind ":normalise <type>             show the weak head normal form of <type>"
   , ind ":equivalent <type1> <type2>   check if <type1> is equivalent to <type2>"
   , ind ":grammar <type1> ... <typen>  show the grammar for types <type1> through <typen>"
   , ind ":m                            enter multi-line mode"
@@ -313,7 +330,7 @@ handleHelp args = putLines
   ]
   where ind = ("  " ++)
 
-handleState :: String -> Repl () -- freesti> :s
+handleState :: String -> Repl () -- freest> :s
 handleState _ = get >>= liftIO . print
 
 -- Running pipelines

@@ -121,11 +121,11 @@ match e tdecls = match' e tdecls Set.empty Set.empty
         -> foldMatch e tdecls bindings visited (mcs, emptySubs) t1s t2s
         where mcs = [multEq m1 m2 | (T.Arrow _ m1, T.Arrow _ m2) <- [(t1', t2')]]
       -- M-Quant
-      (T.AppQuant s1 p1 pk1 m1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 pk2 m2 ((a2, k2) : aks2) t2')
-        | p1 == p2 && pk1 == pk2
+      (T.AppQuant s1 p1 bk1 m1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 bk2 m2 ((a2, k2) : aks2) t2')
+        | p1 == p2 && bk1 == bk2
         -> first (mcs ++) <$> match' e tdecls (Set.insert (a1, a2) bindings) visited
-            (T.AppQuant s1 p1 pk1 m1 aks1 t1') (T.AppQuant s2 p2 pk2 m2 aks2 t2')
-        where mcs = kindEqConstraints k1 k2 ++ [multEq m1 m2 | p1 == T.In && pk1 == K.Top]
+            (T.AppQuant s1 p1 bk1 m1 aks1 t1') (T.AppQuant s2 p2 bk2 m2 aks2 t2')
+        where mcs = kindEqConstraints k1 k2 ++ [multEq m1 m2 | p1 == T.In && bk1 == K.Top]
       -- M-Var
       (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
@@ -175,7 +175,7 @@ fiv = \case
   _ -> Set.empty
   where
   fivk = \case
-    K.Proper _ m pk -> fivm m
+    K.Proper _ m bk -> fivm m
     K.Arrow _ k1 k2 -> fivk k1 `Set.union` fivk k2
     _ -> Set.empty
   fivm = \case

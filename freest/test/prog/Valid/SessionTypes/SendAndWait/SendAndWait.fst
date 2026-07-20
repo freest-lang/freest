@@ -1,2 +1,2 @@
 main : ()
-main = forkWith receiveAndClose |> sendAndWait 5
+main = forkWith (\c -> receiveAndClose c ; ()) |> sendAndWait 5

@@ -493,14 +493,17 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
         return (List.snoc ds (E.Mutual ds''), Map.union tctxds' tctxds, kctxi', tctx')
 
 
--- | Check the prekinding half of subkinding for an instantiated type
+-- | Check the baseKinding half of subkinding for an instantiated type
 -- argument against the quantified variable's kind, once the substitution is
--- final. 
-checkInstPrekind :: T.KindedType -> K.Kind -> Validation ()
-checkInstPrekind t = go (T.kindOf t)
+-- final. The error is located at @sp@, the application that forced the
+-- instantiation: an /inferred/ type argument is stitched from the callee's
+-- signature and so carries that (unrelated) span, whereas the requirement is
+-- imposed here, at the call site.
+checkInstBaseKind :: Span -> T.KindedType -> K.Kind -> Validation ()
+checkInstBaseKind sp t = go (T.kindOf t)
   where
-    go (K.Proper _ m pk1) (K.Proper s _ pk2)
-      | not (pk1 K.<: pk2) = throwE (PrekindMismatch (getSpan t) pk2 t (K.Proper s m pk1))
+    go (K.Proper _ m bk1) (K.Proper s _ bk2)
+      | not (bk1 K.<: bk2) = throwE (BaseKindMismatch sp bk2 t (K.Proper s m bk1))
     go (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) = go k21 k11 >> go k12 k22
     go (K.Var _ _ _) _ = internalError "unhandled kind variable"
     go _ (K.Var _ _ _) = internalError "unhandled kind variable"
@@ -522,7 +525,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
   θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ''   -> return (θ'' <> θ')
-  forM_ kivs \(k, w) -> checkInstPrekind (LI.applySubs θ w) k
+  forM_ kivs \(k, w) -> checkInstBaseKind s (LI.applySubs θ w) k
   checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
@@ -545,7 +548,7 @@ checkArgsQL i s tdecls ddecls kctx tctx t args = do
   θ <- LMI.solveMultConstraints mcs >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ     -> return θ
-  forM_ kivs \(k, t) -> checkInstPrekind (LI.applySubs θ t) k
+  forM_ kivs \(k, t) -> checkInstBaseKind s (LI.applySubs θ t) k
   (args'', tctx') <- checkValArgs tdecls ddecls kctx θ tctx args' us
   return (args'', LI.applySubs θ t', tctx')
 

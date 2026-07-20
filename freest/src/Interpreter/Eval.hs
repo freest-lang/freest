@@ -20,7 +20,7 @@ TODO:
  -}
 
 import Control.Concurrent (forkIO)
-import Control.Exception (throwIO)
+import Control.Exception (catch, throwIO)
 import Control.Monad (zipWithM, foldM)
 import Data.Bifunctor (first)
 import Data.Functor (($>), void)
@@ -30,7 +30,7 @@ import Data.Maybe (isJust, fromJust, catMaybes, fromMaybe)
 import qualified Data.Set as Set
 
 import Compiler.Bug (internalError)
-import Interpreter.Exception (Exception(NonExhaustivePatterns))
+import Interpreter.Exception (Exception(..))
 import Interpreter.PatternMatching (matchPat, matchClause, forceColumns)
 import Interpreter.Value (ValueCtx, Clause, Value(..), mkClosure)
 import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
@@ -243,14 +243,14 @@ eval ctx (E.Var _ var) =
   case ctxLookup ctx var of
     VIO io -> io
     val -> return val
-eval ctx (E.App _ exp args) = do
+eval ctx (E.App span exp args) = do
   func <- eval ctx exp
   -- evaluate term arguments; type/multiplicity applications carry no value but
   -- still consume one of the closure's slots (so it stays a value until filled)
   evalArgs <- mapM evalArg args
-  res <- handleApplication ctx func evalArgs
+  res <- handleApplication ctx func evalArgs `catch` \(e :: Exception) -> throwIO (B.setSpan span e)
   case res of
-    VIO io -> io
+    VIO io -> io `catch` \(e :: Exception) -> throwIO (B.setSpan span e)
     _ -> return res
   where
     evalArg (B.ExpLevel e) = Just <$> eval ctx e

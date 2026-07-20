@@ -146,13 +146,14 @@ instance Ord Variable where
 instance Eq Variable where 
   a == b = internal a == internal b
 
-instance Show Variable where 
-  show (Variable _ extl intl) = extl++subscript intl
-    where 
-      subscript = 
-        map (\case '0'->'₀'; '1'->'₁'; '2'->'₂'; '3'->'₃'; '4'->'₄'
-                   '5'->'₅'; '6'->'₆'; '7'->'₇'; '8'->'₈'; '9'->'₉'
-                   '-' -> '₋') . show
+instance Show Variable where
+  show (Variable _ extl _) = extl
+  -- show (Variable _ extl intl) = extl++subscript intl
+  --   where
+  --     subscript =
+  --       map (\case '0'->'₀'; '1'->'₁'; '2'->'₂'; '3'->'₃'; '4'->'₄'
+  --                  '5'->'₅'; '6'->'₆'; '7'->'₇'; '8'->'₈'; '9'->'₉'
+  --                  '-' -> '₋') . show
 instance Located Variable where 
   getSpan = varSpan
   setSpan s x = x{varSpan=s}

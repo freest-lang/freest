@@ -744,7 +744,7 @@ case Dual (!Int ; Close) == Dual !Int ; Wait : 1S
 
 -- Example from a paper
 
--- needs prekind bounded polymorhism?
+-- needs base kind bounded polymorhism?
 case
   IFRepeat
   ==

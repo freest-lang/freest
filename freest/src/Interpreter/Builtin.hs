@@ -19,13 +19,16 @@ module Interpreter.Builtin
   ) where
 
 import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
+import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, SomeException, catch, fromException, throwIO)
 import Data.Char ( chr, ord )
 import Data.Functor ( ($>) )
 import qualified Data.Map as Map
 import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
 
+import Interpreter.Exception (Exception(..))
 import Interpreter.Value ( Value(..), ChannelEnd )
 import Parser.Unparser ( unparse )
+import Syntax.Base ( nullSpan )
 
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
@@ -67,8 +70,19 @@ chan = do
   c2 <- C.newChan
   return ((c1, c2), (c2, c1))
 
+handleBlockedRead :: IO a -> IO a
+handleBlockedRead action =
+  action `catch` \(e :: SomeException) ->
+    case fromException e of
+      Just (_ :: BlockedIndefinitelyOnMVar) ->
+        throwIO (BlockedIndefinitely nullSpan "Thread blocked indefinitely while waiting to read from a channel endpoint")
+      _ -> case fromException e of
+        Just (_ :: BlockedIndefinitelyOnSTM) ->
+          throwIO (BlockedIndefinitely nullSpan "Thread blocked indefinitely while waiting to read from a channel endpoint")
+        Nothing -> throwIO e
+
 receive :: ChannelEnd -> IO (Value, ChannelEnd)
-receive c = do
+receive c = handleBlockedRead $ do
   v <- C.readChan (fst c)
   return (v, c)
 
@@ -89,7 +103,7 @@ sendLabel s c = do
 
 wait :: Value -> Value
 wait (VChan c) =
-  VIO $ C.readChan (fst c)
+  VIO $ handleBlockedRead (C.readChan (fst c))
 
 close :: Value -> IO Value
 close (VChan c) = do
@@ -102,6 +116,7 @@ builtins = Map.fromList
   -- * Undefined
     ("undefined",     VBuiltin undefined)
   -- * Error
+  , ("error",         VBuiltin (errorWithoutStackTrace . fstToHsString))
 
   -- * Standard types, classes and related functions
   -- ** Basic datatypes
@@ -200,5 +215,7 @@ builtins = Map.fromList
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
   , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
-  , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VChan c))
+  -- The received type is erased at runtime; the returned 'VPack' exists so
+  -- that an explicit @let (\@a, c) = receiveType c@ pattern can decompose it.
+  , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VPack [] (VChan c)))
   ]

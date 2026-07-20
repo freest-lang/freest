@@ -14,7 +14,7 @@ module Validation.Kinding
   , checkSubkindOf
   , checkProper
   , checkProperK
-  , checkPrekind
+  , checkBaseKind
   , checkSession
   , checkChannel
   , isRestricted
@@ -47,7 +47,7 @@ import Validation.Substitution ( subs, subsAll, subsMultType )
 import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
-import Validation.LocalInference.Prekinds ( PrekindConstraint(..), solvePrekindConstraints )
+import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveModule )
 import Validation.LocalInference.Substitution ( Substitution(..) )
 
@@ -86,16 +86,16 @@ resolveBndKind (a, Nothing) = (a,) <$> freshUnifKind a
 -- | Resolve a quantifier's (possibly omitted) binder kind. An output-polarity
 -- quantifier (∃ and its session twin @!type@, both polarity 'Out') defaults an
 -- omitted binder to *unrestricted* — the multiplicity is fixed to 'Un', its
--- prekind still inferred from the body. Rationale: an 'Out' binder is covariant,
+-- baseKind still inferred from the body. Rationale: an 'Out' binder is covariant,
 -- so the most-usable default is the subkind '*T' (the abstract type is freely
 -- usable by the consumer — the party that unpacks it, or the @?type@ receiver at
 -- the dual endpoint), dual to an 'In' binder's most-general '1T'; and there is no
 -- local usage to tighten from, since that consumer is remote. A linear binder is
 -- the annotated case @exists (a:1T)@ / @!type (a:1T)@. Input-polarity quantifiers
 -- (∀ and @?type@) keep the most-general default ('resolveBndKind').
-resolveQuantBinder :: T.Polarity -> Prekind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
+resolveQuantBinder :: T.Polarity -> BaseKind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
 resolveQuantBinder T.Out _ (a, Nothing) =
-  (a,) . Proper (getSpan a) (Un (getSpan a)) . VarPK UnifLv <$> freshUnifPrekindVar (getSpan a)
+  (a,) . Proper (getSpan a) (Un (getSpan a)) . VarBK UnifLv <$> freshUnifBaseKindVar (getSpan a)
 resolveQuantBinder _ _ ak = resolveBndKind ak
 
 -- | A fresh unification kind variable (see 'resolveBndKind').
@@ -108,10 +108,10 @@ freshUnifKind (getSpan -> s) = do
 freshUnifMult :: Span -> Validation Multiplicity
 freshUnifMult s = incCounter >>= \i -> pure (VarM s UnifLv (Variable s ("φ" ++ show i) i))
 
--- | A fresh unification prekind variable (the underlying 'Variable'; wrap in
--- @VarPK UnifLv@ to use as a prekind).
-freshUnifPrekindVar :: Span -> Validation Variable
-freshUnifPrekindVar s = incCounter >>= \i -> pure (Variable s ("ψ" ++ show i) i)
+-- | A fresh unification baseKind variable (the underlying 'Variable'; wrap in
+-- @VarBK UnifLv@ to use as a baseKind).
+freshUnifBaseKindVar :: Span -> Validation Variable
+freshUnifBaseKindVar s = incCounter >>= \i -> pure (Variable s ("ψ" ++ show i) i)
 
 -- | Synthesize the (minimal?) kind of a type.
 synth :: KindCtx -> T.ScopedType -> Validation TK.KindedType
@@ -126,28 +126,28 @@ synth ctx = \case
   T.UnChoice s p ls -> pure $ TK.UnChoice s p ls
   T.AppLinChoice s p lts -> do
     ltpks <- forM lts (\(i, t) -> do
-      (_, pk, u) <- checkOperand ctx Session t
-      return ((i, u), pk))
-    let (lts', pks) = unzip ltpks
-    ψ <- joinPrekinds s pks   -- result prekind = join of the branches
+      (_, bk, u) <- checkOperand ctx Session t
+      return ((i, u), bk))
+    let (lts', bks) = unzip ltpks
+    ψ <- joinBaseKinds s bks   -- result baseKind = join of the branches
     return $ TK.appLinChoiceWithKind s (Proper s (Lin s) ψ) p lts'
   T.End s p -> pure $ TK.End s p
   T.Skip s -> pure $ TK.Skip s
   T.Void s k -> pure $ TK.Void s k
   T.AppSemi s t u -> do
-    (m1, pk1, t') <- checkOperand ctx Session t
-    (m2, pk2, u') <- checkOperand ctx Session u
-    if hasSolvableVar (Proper s m1 pk1) || hasSolvableVar (Proper s m2 pk2)
+    (m1, bk1, t') <- checkOperand ctx Session t
+    (m2, bk2, u') <- checkOperand ctx Session u
+    if hasSolvableVar (Proper s m1 bk1) || hasSolvableVar (Proper s m2 bk2)
       then do
-        -- defer: prekind is the meet, multiplicity the channel-conditional join.
-        -- A *variable* left prekind defers the choice (CondSeqMult) until prekinds
+        -- defer: baseKind is the meet, multiplicity the channel-conditional join.
+        -- A *variable* left baseKind defers the choice (CondSeqMult) until baseKinds
         -- are solved, rather than conservatively falling back to the plain join.
-        ψ <- meetPrekinds s [pk1, pk2]
-        φ <- case pk1 of
-          _ | pk1 == Channel       -> pure m1
-          VarPK lv _ | solvable lv -> do
+        ψ <- meetBaseKinds s [bk1, bk2]
+        φ <- case bk1 of
+          _ | bk1 == Channel       -> pure m1
+          VarBK lv _ | solvable lv -> do
             φv <- freshUnifMult s
-            addCondSeqMult (Origin s) pk1 φv m1 m2
+            addCondSeqMult (Origin s) bk1 φv m1 m2
             pure φv
           _                         -> pure (join m1 m2)
         return $ TK.appSemiWithKind s (Proper s φ ψ) t' u'
@@ -156,11 +156,11 @@ synth ctx = \case
     t' <- check ctx t (ls s)
     return (TK.AppDual s t')
   -- Polymorphism
-  T.AppQuant s p pk m aks t -> do
-    aks' <- mapM (resolveQuantBinder p pk) aks
+  T.AppQuant s p bk m aks t -> do
+    aks' <- mapM (resolveQuantBinder p bk) aks
     let ctx' = Map.fromList (first Left <$> aks') `Map.union` ctx
-    (_, _, kt) <- checkOperand ctx' pk t
-    return $ TK.AppQuant s p pk m aks' kt
+    (_, _, kt) <- checkOperand ctx' bk t
+    return $ TK.AppQuant s p bk m aks' kt
   T.ForallM s m φs t -> TK.ForallM s m φs <$> synth ctx t
   -- Equations (including built-ins)
   T.TName s i -> flip (TK.TName s) i <$> lookupKind' ctx i
@@ -239,23 +239,23 @@ foldCheckProperJoin ctx m = foldM checkProperJoin (m, [])
           pure (join m' m'', ts ++ [t'])
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
--- and prekind. Otherwise, throw an error.
-checkProper :: KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+-- and baseKind. Otherwise, throw an error.
+checkProper :: KindCtx -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
 checkProper ctx t = synth ctx t >>= \t' -> case TK.kindOf t' of
-    Proper _ mult pk -> pure (mult, pk, t')
+    Proper _ mult bk -> pure (mult, bk, t')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
--- and prekind. Otherwise, throw an error.
-checkProperK :: TK.KindedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+-- and baseKind. Otherwise, throw an error.
+checkProperK :: TK.KindedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
 checkProperK t = case TK.kindOf t of
-    Proper _ m pk -> pure (m, pk, t)
+    Proper _ m bk -> pure (m, bk, t)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
--- and prekind. Otherwise, throw an error.
-checkSession :: KindCtx -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
-checkSession ctx t = checkPrekind ctx t Session
+-- and baseKind. Otherwise, throw an error.
+checkSession :: KindCtx -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
+checkSession ctx t = checkBaseKind ctx t Session
 
 -- | Like 'checkSession', but tolerant of a variable-kinded operand: a solvable
 -- whole-kind variable is resolved to a (fresh) proper session kind via gathered
@@ -264,86 +264,86 @@ checkSession ctx t = checkPrekind ctx t Session
 -- 'checkSession'.
 -- | A variable-tolerant proper-operand check, the single check used by the
 -- multi-operand formers (@;@, choice, tuple) and a quantifier body. The operand
--- must be a proper type whose prekind is below @req@; a solvable whole-kind
+-- must be a proper type whose baseKind is below @req@; a solvable whole-kind
 -- variable is resolved to a fresh proper kind via a direct binding (reused if
--- the variable recurs), and a variable prekind is gathered as a constraint
+-- the variable recurs), and a variable baseKind is gathered as a constraint
 -- rather than checked eagerly. Replaces the former @check…Defer@ variants.
-checkOperand :: KindCtx -> Prekind -> T.ScopedType -> Validation (Multiplicity, Prekind, TK.KindedType)
+checkOperand :: KindCtx -> BaseKind -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
 checkOperand ctx req t = do
   t' <- synth ctx t
   let o = Origin (getSpan t)
   case TK.kindOf t' of
-    Proper _ m pk
-      | isVarPrekind pk -> addPrekindConstraint (SubPrekind o pk req) >> return (m, pk, t')
-      | pk <: req       -> return (m, pk, t')
-      | otherwise       -> throwE (PrekindMismatch (getSpan t) req t' (Proper (getSpan t) m pk))
+    Proper _ m bk
+      | isVarBaseKind bk -> addBaseKindConstraint (SubBaseKind o bk req) >> return (m, bk, t')
+      | bk <: req       -> return (m, bk, t')
+      | otherwise       -> throwE (BaseKindMismatch (getSpan t) req t' (Proper (getSpan t) m bk))
     Var _ lv a | solvable lv -> do
       existing <- gets kindBindings
-      (m, pk) <- case Map.lookup a existing of
-        Just (Proper _ m pk) -> pure (m, pk)
+      (m, bk) <- case Map.lookup a existing of
+        Just (Proper _ m bk) -> pure (m, bk)
         _ -> do
           m  <- freshUnifMult (getSpan t)
-          ψv <- freshUnifPrekindVar (getSpan t)
-          let pk = VarPK UnifLv ψv
-          addKindBinding a (Proper (getSpan t) m pk)
-          addPrekindConstraint (SubPrekind o pk req)
-          pure (m, pk)
+          ψv <- freshUnifBaseKindVar (getSpan t)
+          let bk = VarBK UnifLv ψv
+          addKindBinding a (Proper (getSpan t) m bk)
+          addBaseKindConstraint (SubBaseKind o bk req)
+          pure (m, bk)
       -- carry the instantiated 'Proper' kind on the returned type rather than the
       -- bare solvable kind variable. A quantifier body that is exactly this
       -- variable (e.g. @exists a, a@, @?type a. a@) would otherwise reach a smart
       -- constructor whose eager @Proper _ _ _@ match on the body's kind crashes.
       let t'' = case t' of
-                  TK.Var s _ vl v -> TK.Var s (Proper (getSpan t) m pk) vl v
+                  TK.Var s _ vl v -> TK.Var s (Proper (getSpan t) m bk) vl v
                   _               -> t'
-      return (m, pk, t'')
+      return (m, bk, t'')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
   where
-    isVarPrekind = \case VarPK lv _ -> solvable lv; _ -> False
+    isVarBaseKind = \case VarBK lv _ -> solvable lv; _ -> False
 
--- | The greatest lower bound (@meetPrekinds@) or least upper bound
--- (@joinPrekinds@) of operand prekinds, computed eagerly when all are ground and
+-- | The greatest lower bound (@meetBaseKinds@) or least upper bound
+-- (@joinBaseKinds@) of operand baseKinds, computed eagerly when all are ground and
 -- deferred to a fresh variable plus a constraint when any is a variable
 -- (meet/join are partial on variables).
-meetPrekinds, joinPrekinds :: Span -> [Prekind] -> Validation Prekind
-meetPrekinds = combinePrekinds meet Top     MeetPrekind
-joinPrekinds = combinePrekinds join Channel JoinPrekind
+meetBaseKinds, joinBaseKinds :: Span -> [BaseKind] -> Validation BaseKind
+meetBaseKinds = combineBaseKinds meet Top     MeetBaseKind
+joinBaseKinds = combineBaseKinds join Channel JoinBaseKind
 
-combinePrekinds
-  :: (Prekind -> Prekind -> Prekind)                        -- ^ eager lattice op
-  -> Prekind                                                -- ^ its identity
-  -> (Origin -> Variable -> [Prekind] -> PrekindConstraint) -- ^ the deferred form
-  -> Span -> [Prekind] -> Validation Prekind
-combinePrekinds op unit mkC s pks
-  | all ground pks = pure (foldr op unit pks)
+combineBaseKinds
+  :: (BaseKind -> BaseKind -> BaseKind)                        -- ^ eager lattice op
+  -> BaseKind                                                -- ^ its identity
+  -> (Origin -> Variable -> [BaseKind] -> BaseKindConstraint) -- ^ the deferred form
+  -> Span -> [BaseKind] -> Validation BaseKind
+combineBaseKinds op unit mkC s bks
+  | all ground bks = pure (foldr op unit bks)
   | otherwise = do
-      ψv <- freshUnifPrekindVar s
-      addPrekindConstraint (mkC (Origin s) ψv pks)
-      return (VarPK UnifLv ψv)
-  where ground = \case VarPK lv _ -> not (solvable lv); _ -> True
+      ψv <- freshUnifBaseKindVar s
+      addBaseKindConstraint (mkC (Origin s) ψv bks)
+      return (VarBK UnifLv ψv)
+  where ground = \case VarBK lv _ -> not (solvable lv); _ -> True
 
-checkSessionK :: TK.KindedType -> Validation (Multiplicity, Prekind)
-checkSessionK t = checkPrekindK t Session
+checkSessionK :: TK.KindedType -> Validation (Multiplicity, BaseKind)
+checkSessionK t = checkBaseKindK t Session
 
 -- | Check if a type is a session type. If so, return its minimal multiplicity
--- and prekind. Otherwise, throw an error.
-checkChannel :: TK.KindedType -> Validation (Multiplicity, Prekind) -- TODO: parsed version?
-checkChannel t = checkPrekindK t Channel
+-- and baseKind. Otherwise, throw an error.
+checkChannel :: TK.KindedType -> Validation (Multiplicity, BaseKind) -- TODO: parsed version?
+checkChannel t = checkBaseKindK t Channel
 
--- | Check if a type is a proper type of the given prekind. If so, return its 
--- minimal multiplicity and prekind. Otherwise, throw an error.
-checkPrekind :: KindCtx -> T.ScopedType -> Prekind -> Validation (Multiplicity, Prekind, TK.KindedType)
-checkPrekind ctx t pk = do
-  (m, pk', kt) <- checkProper ctx t
-  unless (pk' <: pk) $
-    throwE (PrekindMismatch (getSpan t) pk kt (Proper (getSpan t) m pk'))
-  return (m, pk', kt)
+-- | Check if a type is a proper type of the given baseKind. If so, return its 
+-- minimal multiplicity and baseKind. Otherwise, throw an error.
+checkBaseKind :: KindCtx -> T.ScopedType -> BaseKind -> Validation (Multiplicity, BaseKind, TK.KindedType)
+checkBaseKind ctx t bk = do
+  (m, bk', kt) <- checkProper ctx t
+  unless (bk' <: bk) $
+    throwE (BaseKindMismatch (getSpan t) bk kt (Proper (getSpan t) m bk'))
+  return (m, bk', kt)
 
-checkPrekindK :: TK.KindedType -> Prekind -> Validation (Multiplicity, Prekind)
-checkPrekindK t pk = do
-  (m, pk', _) <- checkProperK t
-  unless (pk' <: pk) $
-    throwE (PrekindMismatch (getSpan t) pk t (Proper (getSpan t) m pk'))
-  return (m, pk')
+checkBaseKindK :: TK.KindedType -> BaseKind -> Validation (Multiplicity, BaseKind)
+checkBaseKindK t bk = do
+  (m, bk', _) <- checkProperK t
+  unless (bk' <: bk) $
+    throwE (BaseKindMismatch (getSpan t) bk t (Proper (getSpan t) m bk'))
+  return (m, bk')
 
 -- | Check that the kind of a type is a subkind of another. When a solvable
 -- variable is involved, the relation cannot be decided locally, so the
@@ -357,12 +357,12 @@ checkSubkindOf t k' k
 -- | Does a kind mention a solvable (inference) variable?
 hasSolvableVar :: Kind -> Bool
 hasSolvableVar = \case
-  Proper _ m pk -> multVar m || prekindVar pk
+  Proper _ m bk -> multVar m || baseKindVar bk
   Arrow _ k1 k2 -> hasSolvableVar k1 || hasSolvableVar k2
   Var _ lv _    -> solvable lv
   where
     multVar    = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
-    prekindVar = \case VarPK lv _ -> solvable lv; _ -> False
+    baseKindVar = \case VarBK lv _ -> solvable lv; _ -> False
 
 -- | Check if the kind of a type is a subkind of another in a contravariant 
 -- position. If not, throw an error located at the type.
@@ -395,7 +395,7 @@ lookupKind' ctx i = do
 -- | The @chan@ predicate (paper Fig. 9): is @t@ a channel type, i.e. do its
 -- finite complete traces terminate in 'Wait'/'Close'? @selfs@ holds the names
 -- treated as channels (the recursive group being defined, via Chan-Var). Used to
--- decide the prekind of a recursive declaration (CK-Rec): channel if its body is
+-- decide the baseKind of a recursive declaration (CK-Rec): channel if its body is
 -- a channel type, session otherwise.
 --
 -- A reference to a /sig-less/ named type (@TName@/@AppTName@, name not in
@@ -428,14 +428,31 @@ chan tdecls = go
 -- (optional) kind annotations: an arrow whose slot for each parameter is the
 -- written annotation when present (so a sub-top annotation like @*S@ survives
 -- into the inferred signature) and a fresh whole-kind variable otherwise, ending
--- in a fresh proper kind. Also returns the result's prekind variable (for the
+-- in a fresh proper kind. Also returns the result's baseKind variable (for the
 -- CK-Rec channel constraint).
-freshDeclSig :: Span -> [Maybe Kind] -> Validation (Kind, Variable)
-freshDeclSig s anns = do
+freshDeclSig :: Span -> Bool -> [Maybe Kind] -> Validation (Kind, Variable)
+freshDeclSig s recursive anns = do
   m   <- freshUnifMult s
-  pkv <- freshUnifPrekindVar s
+  pkv <- freshUnifBaseKindVar s
   ps  <- mapM (maybe (freshUnifKind s) pure) anns
-  pure (foldr (Arrow s) (Proper s m (VarPK UnifLv pkv)) ps, pkv)
+  res <- if recursive then pure (Proper s m (VarBK UnifLv pkv)) else freshUnifKind s
+  pure (foldr (Arrow s) res ps, pkv)
+
+-- | Like 'freshDeclSig', but for a datatype declaration. A datatype is
+-- functional, so its result baseKind is fixed to 'Top' rather than left as a
+-- solvable variable: only its multiplicity (shared vs. linear) is inferred.
+-- Keeping the baseKind ground lets 'checkOperand' reject a datatype used where a
+-- session type is required (e.g. @Data ; T@) eagerly, with a proper
+-- \"expected a session type\" error, instead of deferring a baseKind variable that
+-- the solver would freely lower to Session — letting the non-session type reach
+-- normalisation and crash. The returned baseKind variable is unused (kept for the
+-- shared @(Kind, Variable)@ shape of 'freshSigs').
+freshDataSig :: Span -> [Maybe Kind] -> Validation (Kind, Variable)
+freshDataSig s anns = do
+  m   <- freshUnifMult s
+  pkv <- freshUnifBaseKindVar s
+  ps  <- mapM (maybe (freshUnifKind s) pure) anns
+  pure (foldr (Arrow s) (Proper s m Top) ps, pkv)
 
 -- | Does a declaration body reference the given type name (is the declaration
 -- recursive)?
@@ -449,6 +466,12 @@ mentions i = go
       T.Abs _ _ t       -> go t
       T.ForallM _ _ _ t -> go t
       _                 -> False
+
+-- | Is a sig-less declaration recursive — self-referential, or a member of a
+-- non-trivial SCC of the reference graph (mutual recursion)?
+isRecursiveDecl :: Map.Map Identifier (Set.Set Identifier) -> Identifier -> T.ScopedType -> Bool
+isRecursiveDecl sccOf i t =
+  Set.size (Map.findWithDefault (Set.singleton i) i sccOf) > 1 || mentions i t
 
 -- | Check a module for type formation.
 kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
@@ -470,10 +493,10 @@ kindModule ctx mod = do
   -- fresh binder kinds for type and datatype declarations lacking a signature
   -- (so self- and mutual references resolve while their bodies are kinded)
   freshT <- Map.traverseWithKey
-              (\i (hp, t) -> freshDeclSig (getSpan i) (declParams hp t))
+              (\i (hp, t) -> freshDeclSig (getSpan i) (isRecursiveDecl sccOf i t) (declParams hp t))
               siglessTypes
   freshD <- Map.traverseWithKey
-              (\i (aks, _) -> freshDeclSig (getSpan i) (map snd aks))
+              (\i (aks, _) -> freshDataSig (getSpan i) (map snd aks))
               siglessDatas
   let freshSigs = Map.union freshT freshD
       ctx' = Map.mapKeys Right (Map.union declared (Map.map fst freshSigs)) `Map.union` ctx
@@ -536,8 +559,7 @@ kindModule ctx mod = do
             t' -> check ctx t' k
         -- inferred signature
         Just (sig, pkv) -> do
-          let selfs     = Map.findWithDefault (Set.singleton i) i sccOf
-              recursive = Set.size selfs > 1 || mentions i t
+          let recursive = isRecursiveDecl sccOf i t
           case t of
             T.Abs s aks u | hasParams -> do
               (aks', resK) <- kindParams sig aks
@@ -554,7 +576,7 @@ kindModule ctx mod = do
             go []  k' = pure ([], k')
             go _ _ = throwE (ExpectsTooManyArgsK (getSpan i) i k)
 
-        -- A recursive body follows CK-Rec (body <: binder, channel prekind if its
+        -- A recursive body follows CK-Rec (body <: binder, channel baseKind if its
         -- body is a channel type); a non-recursive body fixes the declaration's
         -- kind to be exactly the body's kind.
         inferBody recursive s ctxB body resK pkv
@@ -567,7 +589,7 @@ kindModule ctx mod = do
                 (Proper _ φ _, Proper _ mb _) -> addMultEquation o φ mb
                 _                             -> pure ()
               when (chan siglessTypeDecls (Map.findWithDefault (Set.singleton i) i sccOf) body) $
-                addPrekindConstraint (SubPrekind o (VarPK UnifLv pkv) Channel)
+                addBaseKindConstraint (SubBaseKind o (VarBK UnifLv pkv) Channel)
               return b
           | otherwise = do
               b <- synth ctxB body
@@ -1045,20 +1067,20 @@ kindType ctx t = do
   return (resolveType sol kt)
 
 -- | Solve the subkinding constraints gathered during kinding into a single kind
--- solution, via the kind unifier and the multiplicity and prekind solvers.
+-- solution, via the kind unifier and the multiplicity and baseKind solvers.
 solveKindConstraints :: Validation KindSolution
 solveKindConstraints = do
   (binds, cs, meqs, pcs0, condmults) <- takeKindState
   KindUnifier ksub mcs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
-  -- prekinds first: the channel-conditional @;@ multiplicities depend on the left
-  -- operand's prekind, and prekinds are independent of multiplicities
-  psub <- either (throwE . preErr) pure (solvePrekindConstraints (pcs ++ pcs0))
-  let condEqs = [ MultEquation φ o (if resolvePK psub pk == Channel then m1 else join m1 m2) o
-                | (o, pk, φ, m1, m2) <- condmults ]
+  -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
+  -- operand's baseKind, and baseKinds are independent of multiplicities
+  psub <- either (throwE . preErr) pure (solveBaseKindConstraints (pcs ++ pcs0))
+  let condEqs = [ MultEquation φ o (if resolveBK psub bk == Channel then m1 else join m1 m2) o
+                | (o, bk, φ, m1, m2) <- condmults ]
   msub <- solveMultConstraints (mcs ++ map toMultEq meqs ++ condEqs) >>= either (throwE . multErr) (pure . multsOf)
   return (KindSolution ksub psub msub)
   where
-    resolvePK psub = \case VarPK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; pk -> pk
+    resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o
     multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]
     unifyErr = \case
@@ -1066,11 +1088,11 @@ solveKindConstraints = do
       Occurs o v k     -> InfiniteKind o v k
     multErr (MultEquation m1 o1 m2 o2) = CannotSatisfyMultConstraint (getSpan o1) m1 o1 m2 o2
     preErr = \case
-      SubPrekind o p1 p2 -> CannotSatisfyPrekindConstraint o p1 p2
-      -- The prekind solver only ever fails a subkinding constraint; a meet/join
+      SubBaseKind o p1 p2 -> CannotSatisfyBaseKindConstraint o p1 p2
+      -- The baseKind solver only ever fails a subkinding constraint; a meet/join
       -- constraint is always satisfiable (it defines its own variable).
-      MeetPrekind{} -> internalError "prekind meet reported as unsatisfiable"
-      JoinPrekind{} -> internalError "prekind join reported as unsatisfiable"
+      MeetBaseKind{} -> internalError "baseKind meet reported as unsatisfiable"
+      JoinBaseKind{} -> internalError "baseKind join reported as unsatisfiable"
 
 -- | Run kinding on a module, building the initial validation state from it.
 -- This returns either:

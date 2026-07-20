@@ -37,14 +37,14 @@ multEq m1 m2 = MultEquation m1 (Origin (getSpan m1)) m2 (Origin (getSpan m2))
 
 kindEqConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindEqConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 == pk2 -> [multEq m1 m2]
+  (K.Proper _ m1 bk1) (K.Proper _ m2 bk2) | bk1 == bk2 -> [multEq m1 m2]
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindEqConstraints k11 k21
                                           ++ kindEqConstraints k12 k22
   _ _ -> []
 
 kindSubConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindSubConstraints = \cases
-  (K.Proper _ m1 pk1) (K.Proper _ m2 pk2) | pk1 K.<: pk2 -> [multEq (K.join m1 m2) m2]
+  (K.Proper _ m1 bk1) (K.Proper _ m2 bk2) | bk1 K.<: bk2 -> [multEq (K.join m1 m2) m2]
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
                                           ++ kindSubConstraints k12 k22
   _ _ -> []

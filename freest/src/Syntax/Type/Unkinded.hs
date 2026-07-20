@@ -92,9 +92,9 @@ pattern Arrow :: Unkinded x => Span -> K.Multiplicity -> T.Type x
 pattern Arrow s m <- T.Arrow s _ m
   where Arrow s m = T.Arrow s void m
 
-pattern Quant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> T.Type x
-pattern Quant s p pk m <- T.Quant s _ p pk m
-  where Quant s p pk m = T.Quant s void p pk m
+pattern Quant :: Unkinded x => Span -> T.Polarity -> K.BaseKind -> K.Multiplicity -> T.Type x
+pattern Quant s p bk m <- T.Quant s _ p bk m
+  where Quant s p bk m = T.Quant s void p bk m
 
 pattern ForallM :: Unkinded x => Span -> K.Multiplicity -> [Variable] -> T.Type x -> T.Type x
 pattern ForallM s m φs t <- T.ForallM s _ m φs t
@@ -148,9 +148,9 @@ pattern App :: Unkinded x => Span -> T.Type x -> [T.Type x] -> T.Type x
 pattern App s t ts <- T.App s _ t ts
   where App s t ts = T.App s void t ts
 
-pattern AppQuant :: Unkinded x => Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
-pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
-  where AppQuant s p pk m aks t  = T.AppQuant s void void void p pk m aks t
+pattern AppQuant :: Unkinded x => Span -> T.Polarity -> K.BaseKind -> K.Multiplicity -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
+pattern AppQuant s p bk m aks t <- T.AppQuant s _ _ _ p bk m aks t
+  where AppQuant s p bk m aks t  = T.AppQuant s void void void p bk m aks t
 
 pattern AppForall :: Unkinded x => Span -> K.Multiplicity -> [(Variable, Maybe K.Kind)] -> T.Type x -> T.Type x
 pattern AppForall s m aks t <- T.AppForall s _ _ _ m aks t
