@@ -238,6 +238,16 @@ length : forall (a : *T) -> [a] -> Int
 length @a []        = 0
 length @a (_ :: xs) = succ (length xs)
 
+-- | Executes a thunk n times, sequentially.
+-- ```
+-- _ =
+--   -- print "Hello!" 5 times sequentially
+--   times5 (\_ -> putStrLn "Hello!")
+-- ```
+times : forall (a : *T) -> Int -> (() -> a) -> ()
+times n _     | n <= 0    = ()
+times n thunk | otherwise = thunk (); times (n - 1) thunk
+
 foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
 foldl #m #n @a @b f = go
   where
@@ -395,16 +405,6 @@ forkWith #m @a f =
 runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -> b) -> b -> *!a -> () -- Void @*T
 runServer handle state c =
   runServer handle (handle state (accept c)) c 
-
--- | Executes a thunk n times, sequentially.
--- ```
--- _ =
---   -- print "Hello!" 5 times sequentially
---   times @() 5 (\_:() -> putStrLn "Hello!")
--- ```
-times : forall (a : *T) -> Int -> (() -> a) -> ()
-times n _     | n <= 0    = ()
-times n thunk | otherwise = thunk (); times (n - 1) thunk
 
 -- | Forks n identical threads. Similar to `times` but working in parallel
 -- rather than sequentially.
