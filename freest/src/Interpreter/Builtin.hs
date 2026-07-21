@@ -29,6 +29,7 @@ import Interpreter.Exception (Exception(..))
 import Interpreter.Value ( Value(..), ChannelEnd )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
+import System.IO ( hFlush, stdout )
 
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
@@ -210,7 +211,7 @@ builtins = Map.fromList
   , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
   , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
   , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
-  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ putStr (fstToHsString s)))
+  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ (putStr (fstToHsString s) >> hFlush stdout)))
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
