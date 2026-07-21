@@ -444,18 +444,18 @@ await n c = times @() n (\_ -> case c of &Over _ -> ())
 -- | The `InStream` type describes input streams (such as `stdin` and read
 -- files). `GetChar` reads a single character, `GetLine` reads a line, and
 -- `IsEOF` checks for the EOF (End-Of-File) token, i.e., if an input stream
--- has reached the end. Operations in this channel terminate with the `Done`
+-- has reached the end. Operations in this channel terminate with the `Stop`
 -- option.
 type InStream : 1C
-type InStream = +{ GetChar: ?Char   ; InStream
-                 , GetLine: ?String ; InStream
-                 , IsEOF  : ?Bool   ; InStream
-                 , Done   : Wait
+type InStream = +{ GetChar : ?Char   ; InStream
+                 , GetLine : ?String ; InStream
+                 , IsEOF   : ?Bool   ; InStream
+                 , Stop    : Wait
                  }
 
 -- | Closes an `InStream` channel endpoint.
 hCloseIn : InStream -> ()
-hCloseIn c = c |> select Done |> wait
+hCloseIn c = c |> select Stop |> wait
 
 hGenericGet : forall (a : *T) -> (InStream -> ?a; InStream) -> InStream -> (a, InStream)
 hGenericGet sel inStream = inStream |> sel |> receive
@@ -506,40 +506,40 @@ hGetContent_ = hGenericGet_ hGetContent
 -- | The `OutStream` type describes output streams (such as `stdout`, `stderr`
 -- and write mode files). `PutChar` outputs a character, `PutStr` outputs a string,
 -- and `PutStrLn` outputs a string followed by the newline character (`\n`).
--- Operations in this channel must end with the `Done` option.
+-- Operations in this channel must end with the `Stop` option.
 type OutStream : 1C
-type OutStream = +{ PutStr  : !String ; OutStream
-                  , PutStrLn: !String ; OutStream
-                  , Done    : Wait
+type OutStream = +{ PutStr   : !String ; OutStream
+                  , PutStrLn : !String ; OutStream
+                  , Stop     : Wait
                   }
 
--- | Closes an `OutStream` channel endpoint.
-hCloseOut : OutStream -> ()
-hCloseOut c = c |> select Done |> wait
-
 hGenericPut : forall (a : *T) -> (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
-hGenericPut sel x outStream = sel outStream |> send x
+hGenericPut sel x outStream = outStream |> sel |> send x
 
--- | Write a String on an `OutStream` channel endpoint.
+-- | Writes a String on an `OutStream` channel endpoint.
 hPutStr : String -> OutStream -> OutStream
 hPutStr = hGenericPut (select PutStr)
-
--- | Writes a character on an `OutStream` channel endpoint.
-hPutChar : Char -> OutStream -> OutStream
-hPutChar c = hPutStr [c]
 
 -- | Writes a string followed by newline on an `OutStream` channel endpoint.
 hPutStrLn : String -> OutStream -> OutStream
 hPutStrLn = hGenericPut (select PutStrLn)
+
+-- | Writes a character on an `OutStream` channel endpoint.
+hPutChar : Char -> OutStream -> OutStream
+hPutChar c = hPutStr [c]
 
 -- | Writes the string representation of a value on an `OutStream` channel
 -- endpoint.
 hPrint : forall (a : *T) -> a -> OutStream -> OutStream
 hPrint @a = hPutStrLn . show
 
+-- | Closes an `OutStream` channel endpoint.
+hCloseOut : OutStream -> ()
+hCloseOut c = c |> select Stop |> wait
+
 hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> *?OutStream -> ()
-hGenericPut_ sendF x outProvider = 
-  receive_ outProvider |> sendF x |> hCloseOut
+hGenericPut_ sendF x outStream = 
+  outStream |> receive_  |> sendF x |> hCloseOut
 
 -- | Unrestricted version of `hPutChar`. Behaves the same, except it first
 -- receives an `OutStream` channel endpoint (via session initiation), executes
@@ -583,8 +583,8 @@ stdin = forkWith (runServer (\_ -> reader) ())
     reader : Dual InStream -> ()
     reader (&GetChar r) = r |> send (internalGetChar ()) |> reader
     reader (&GetLine r) = r |> send (internalGetLine ()) |> reader
-    reader (&IsEOF   r) = r |> send False                |> reader -- stdin is always open
-    reader (&Done    r) = r |> close
+    reader (&IsEOF   r) = r |> send False                |> reader
+    reader (&Stop    r) = r |> close
 
 -- | Reads a single character from `stdin`.
 getChar : () -> Char
@@ -611,7 +611,7 @@ stdout = forkWith (runServer (\_ -> printer) ())
       p |> readApply internalPutStrOut |> printer
     printer (&PutStrLn p) = 
       p |> readApply (\s -> internalPutStrOut (s ++ "\n")) |> printer
-    printer (&Done p) =
+    printer (&Stop p) =
       p |> close
 
 -- | Prints a character to `stdout`.
