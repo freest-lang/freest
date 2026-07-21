@@ -472,17 +472,6 @@ hGetLine = hGenericGet (select GetLine)
 hIsEOF : InStream -> (Bool, InStream)
 hIsEOF = hGenericGet (select IsEOF)
 
--- | Reads the entire content from an `InStream` (i.e. until EOF is reached).
-hGetContent : InStream -> (String, InStream)
-hGetContent c = 
-  let (isEOF, c) = hIsEOF c in
-  if isEOF
-  then ("", c)
-  else 
-    let (line,     c) = hGetLine c in 
-    let (contents, c) = hGetContent c in
-    (line ++ "\n" ++ contents, c)
-
 hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> *?InStream -> a
 hGenericGet_ get inp = 
   let (x, c) = get $ receive_ inp in
@@ -496,10 +485,6 @@ hGetChar_ = hGenericGet_ hGetChar
 -- | `hGetLine` on an `*?InStream`
 hGetLine_ : *?InStream -> String
 hGetLine_ = hGenericGet_ hGetLine
-
--- | `hGetContent` on an `*?InStream`
-hGetContent_ : *?InStream -> String
-hGetContent_ = hGenericGet_ hGetContent
 
 -- *** Output Stream
 
@@ -574,8 +559,6 @@ internalGetChar : () -> Char
 internalGetChar = undefined
 internalGetLine : () -> String
 internalGetLine = undefined
-internalGetContents : () -> String
-internalGetContents = undefined
 
 stdin : *?InStream
 stdin = forkWith (runServer (\_ -> reader) ())

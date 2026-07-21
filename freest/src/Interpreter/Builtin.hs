@@ -210,7 +210,8 @@ builtins = Map.fromList
   -- **** Internal stdin functions
   , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
   , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
-  , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
+  -- getContents makes sense in a lazy setting; FreeST is eager.
+  -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
   , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ (putStr (fstToHsString s) >> hFlush stdout)))
 
   -- * Other Expressions
