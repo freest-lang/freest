@@ -354,7 +354,7 @@ receive_ : forall (a : 1T) -> *?a -> a
 receive_ @a = undefined
 
 -- | Session initiation. Accepts a request for a linear session on a shared
--- channel. The requester uses a conventional `receive` to obtain the channel
+-- channel. The requester uses a `receive_` operation to obtain the channel
 -- end.
 accept : forall (a : 1C) -> *!a -> Dual a
 accept @a c =
