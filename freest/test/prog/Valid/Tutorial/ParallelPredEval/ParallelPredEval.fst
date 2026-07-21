@@ -19,6 +19,6 @@ _ =
     fork (\_ -> c |> client 5    |> print ; join j) ;
     fork (\_ -> c |> client (-1) |> print ; join j) ;
     fork (\_ -> s |> gz                   ; join j) ;
-    -- fork (\_ -> s |> gz                   ; join j) ;
+    fork (\_ -> s |> gz                   ; join j) ;
     fork (\_ -> c |> client 0    |> print ; join j) ;
     await 6 a

@@ -238,6 +238,10 @@ length : forall (a : *T) -> [a] -> Int
 length @a []        = 0
 length @a (_ :: xs) = succ (length xs)
 
+sum : [Int] -> Int
+sum []        = 0
+sum (x :: xs) = x + sum xs
+
 -- | Executes a thunk n times, sequentially.
 -- ```
 -- _ =
