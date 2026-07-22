@@ -52,6 +52,7 @@ data Error
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span Identifier
   | CannotSynthesiseSendType Span
+  | CannotSynthesiseSection Span (Either Variable Identifier)
   | ConflictingDefs Span (Level String String String) [Span]
   | ConsOutOfScope Span Identifier
   | DConsPatArgMismatch Span Identifier Int Int
@@ -141,6 +142,7 @@ instance Located Error where
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ -> s
     CannotSynthesiseSendType s -> s
+    CannotSynthesiseSection s _ -> s
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
     DConsPatArgMismatch s _ _ _ -> s
@@ -343,6 +345,10 @@ toMessage src = \case
     "Could not infer a type for this `select` expression"
   CannotSynthesiseSendType s -> makeError src s
     "Could not infer a type for this `sendType` expression"
+  CannotSynthesiseSection s op -> makeError src s
+    ("Could not infer a type for this section over " ++ bt (either show show op))
+    ++ "Its operator is polymorphic, so the omitted operand's type is ambiguous here.\n"
+    ++ "Consider giving the section a type annotation."
   ConflictingDefs s xa ss -> makeError src s
     ("Conflicting definitions for " ++ case xa of
       ExpLevel x -> "variable " ++ bt x

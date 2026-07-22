@@ -469,11 +469,12 @@ ExpPrimary :: { E.ParsedExp }
   | '(' ConsOp ')' { E.DCons (spanFromTo $1 $3) (setSpan (spanFromTo $1 $3) $2) }
   | '(' '-' ')' { E.Var (spanFromTo $1 $3) (mkMinusVar (spanFromTo $1 $3))}
   | '(' '-.' ')' { E.Var (spanFromTo $1 $3) (mkMinusDotVar (spanFromTo $1 $3))}
-  -- | '(' Op Exp ')' { setSpan (spanFromTo $1 $4) (leftSection $2 $3) } -- TODO: waiting for type inference
-  | '(' Exp Op ')'  { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) $3) $2) }
-  | '(' Exp ConsOp ')'  { setSpan (spanFromTo $1 $4) (unOp (E.DCons (getSpan $3) $3) $2) }
-  | '(' Exp '-' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusVar $3)) $2) }
-  | '(' Exp '-.' ')' { setSpan (spanFromTo $1 $4) (unOp (E.Var (getSpan $3) (mkMinusDotVar $3)) $2) }
+  | '(' Op Exp ')'      { E.SectionR (spanFromTo $1 $4) (sectionBinder $1) (Left $2) $3 }
+  | '(' ConsOp Exp ')'  { E.SectionR (spanFromTo $1 $4) (sectionBinder $1) (Right $2) $3 }
+  | '(' Exp Op ')'      { E.SectionL (spanFromTo $1 $4) $2 (Left $3) }
+  | '(' Exp ConsOp ')'  { E.SectionL (spanFromTo $1 $4) $2 (Right $3) }
+  | '(' Exp '-' ')'     { E.SectionL (spanFromTo $1 $4) $2 (Left (mkMinusVar $3)) }
+  | '(' Exp '-.' ')'    { E.SectionL (spanFromTo $1 $4) $2 (Left (mkMinusDotVar $3)) }
   | '[' ']'  { let s = spanFromTo $1 $2 in E.DCons s (mkNilId  s) }
   | '[' "]'" { let s = spanFromTo $1 $2 in E.DCons s (mkNilId' s) }
   | '[' ExpListComma ']'  { E.List (spanFromTo $1 $3) $2 }

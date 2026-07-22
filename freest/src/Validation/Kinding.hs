@@ -1056,6 +1056,8 @@ kindExp tdecls ddecls kctx = \case
   E.Select s i -> pure $ E.Select s i
   E.SendType s t -> E.SendType s <$> synth kctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
+  E.SectionL s e op -> E.SectionL s <$> kindExp tdecls ddecls kctx e <*> pure op
+  E.SectionR s x op e -> E.SectionR s x op <$> kindExp tdecls ddecls kctx e
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
 -- apply the resulting solution to the kinded type. The entry point for kinding
