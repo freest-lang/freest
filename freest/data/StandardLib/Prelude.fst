@@ -298,8 +298,8 @@ mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
 
 -- * Concurrency
 
-fork : forall #m (a : *T) -> (() -m-> a) -> ()
-fork #m @a = undefined
+fork : forall #m -> (() -m-> ()) -> ()
+fork #m = undefined
 
 send : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b
 send @a = undefined
@@ -417,7 +417,7 @@ runServer handle state c =
 --   -- print "Hello!" 5 times in parallel
 --   parallel @() 5 (\_:() -> putStrLn "Hello!")
 -- ```
-parallel : forall (a : *T) -> Int -> (() -> a) -> ()
+parallel : Int -> (() -> ()) -> ()
 parallel n thunk = times n (\_ -> fork thunk)
 
 -- * Fork/Join
