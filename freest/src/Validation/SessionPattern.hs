@@ -60,6 +60,8 @@ collectInExp = \case
     checkPatColumn (Just s) (map fst cs) ++ concatMap (collectInRHS . snd) cs
   E.If _ a b c     -> collectInExp a ++ collectInExp b ++ collectInExp c
   E.List _ es      -> concatMap collectInExp es
+  E.SectionL _ e _   -> collectInExp e
+  E.SectionR _ _ _ e -> collectInExp e
   _                -> []
 
 collectInArg :: Level E.KindedExp t m -> [Error]

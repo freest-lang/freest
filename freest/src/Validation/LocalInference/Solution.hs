@@ -141,4 +141,6 @@ resolveExp sol = \case
   E.List s es     -> E.List s (map (resolveExp sol) es)
   E.Channel s t   -> E.Channel s (resolveType sol t)
   E.SendType s t  -> E.SendType s (resolveType sol t)
+  E.SectionL s e op   -> E.SectionL s (resolveExp sol e) op
+  E.SectionR s x op e -> E.SectionR s x op (resolveExp sol e)
   e               -> e

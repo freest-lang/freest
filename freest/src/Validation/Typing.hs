@@ -97,8 +97,18 @@ typeCtxDifference kctx tctx1 tctx2 = do
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
 
--- | Synthesis for expressions. Given kind and type contexts, it synthesizes 
--- the type of an expression, returning its type and the updated type context 
+sectionOpExp :: Span -> Either Variable Identifier -> E.KindedExp
+sectionOpExp s = either (E.Var s) (E.DCons s)
+
+-- | Multiplicity bound contributed by a right section's captured operand,
+-- joined with the operator's own multiplicity.
+operandMult :: D.KindedTypeDecls -> Span -> T.KindedType -> K.Multiplicity
+operandMult tdecls s rest = case normalise tdecls rest of
+  T.AppArrow _ _ t2 _ | K.Proper _ mq _ <- T.kindOf t2 -> mq
+  _                                                    -> K.Un s
+
+-- | Synthesis for expressions. Given kind and type contexts, it synthesizes
+-- the type of an expression, returning its type and the updated type context
 -- without the linear variables consumed in it.
 synth :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> E.KindedExp
       -> Validation (E.KindedExp, T.KindedType, TypeCtx)
@@ -190,6 +200,17 @@ synth tdecls ddecls kctx tctx = \case
                 ti' ->
                   T.ForallM (spanFromTo φi e') m [φi] ti'
           return (e'', ti'', tctxi')
+  E.SectionL s e op ->
+    synth tdecls ddecls kctx tctx (E.App s (sectionOpExp s op) [ExpLevel e])
+  E.SectionR s x op e -> do
+    let opE = sectionOpExp s op
+    (_, tOp, _) <- synth tdecls ddecls kctx tctx opE
+    case normalise tdecls tOp of
+      T.AppArrow _ m dom rest -> do
+        let body = E.App s opE [ExpLevel (E.Var s x), ExpLevel e]
+            q    = K.join m (operandMult tdecls s rest)
+        synth tdecls ddecls kctx tctx (E.Abs s [ExpLevel (E.VarPat s x, Just dom)] q body)
+      _ -> throwE (CannotSynthesiseSection s op)
   E.Pack s ts e -> throwE (CannotSynthesisePack s e)
   E.Asc s e t -> do
     (e', tctx') <- check tdecls ddecls kctx tctx e t
@@ -343,6 +364,16 @@ check tdecls ddecls kctx tctx e t = case e of
     checkFun tdecls ddecls kctx tctx (Right e) pars (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
       (E.UnguardedRHS e'' Nothing, tctx') -> return (E.Abs s pars m e'', tctx')
       _ -> internalError "elaborated abstraction cannot be guarded"
+  E.SectionL s e' op ->
+    check tdecls ddecls kctx tctx (E.App s (sectionOpExp s op) [ExpLevel e']) t
+  E.SectionR s x op e' -> do
+    let opE  = sectionOpExp s op
+        body = E.App s opE [ExpLevel (E.Var s x), ExpLevel e']
+    (_, tOp, _) <- synth tdecls ddecls kctx tctx opE
+    let q = case normalise tdecls tOp of
+              T.AppArrow _ m _ rest -> K.join m (operandMult tdecls s rest)
+              _                     -> K.Un s
+    check tdecls ddecls kctx tctx (E.Abs s [ExpLevel (E.VarPat s x, Nothing)] q body) t
   E.Pack s ts e' ->
     case normalise tdecls t of
       T.AppExists _ aks t' -> first (E.Pack s ts) <$> checkPack ts aks t'

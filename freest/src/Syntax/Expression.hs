@@ -138,6 +138,8 @@ data Exp x
   | Select Span Identifier
   | SendType Span (Type x)
   | ReceiveType Span
+  | SectionL Span (Exp x) (Either Variable Identifier)
+  | SectionR Span Variable (Either Variable Identifier) (Exp x)
 
 pattern Tuple :: Span -> [Exp x] -> Exp x
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
@@ -214,6 +216,8 @@ instance Located (Exp x) where
     Select s _   -> s
     SendType s _ -> s
     ReceiveType s -> s
+    SectionL s _ _ -> s
+    SectionR s _ _ _ -> s
 
   setSpan s = \case
     Int _ i       -> Int s i
@@ -234,6 +238,8 @@ instance Located (Exp x) where
     Select _ i -> Select s i
     SendType _ t -> SendType s t
     ReceiveType _ -> ReceiveType s
+    SectionL _ e op -> SectionL s e op
+    SectionR _ x op e -> SectionR s x op e
 
 instance Located (RHS x) where
   getSpan = \case
@@ -319,6 +325,8 @@ instance Show (XBndKind x) => Show (Exp x) where
     Select _ i     -> "(select "++show i++")"
     SendType _ t   -> "(sendType @" ++ show t ++ ")"
     ReceiveType _  -> "receiveType"
+    SectionL _ e op   -> "(" ++ show e ++ " " ++ either show show op ++ ")"
+    SectionR _ _ op e -> "(" ++ either show show op ++ " " ++ show e ++ ")"
 
 -- | The set of all variables ocurring in a pattern.
 allVarsPat :: Pat x -> Set.Set Variable
@@ -388,4 +396,7 @@ freeVars = \case
                                 in freeVars target `Set.union` freeVarsAlts
   If _ ifExp thenExp elseExp  -> freeVars ifExp `Set.union` freeVars thenExp `Set.union` freeVars elseExp
   List _ es                   -> Set.unions (map freeVars es)
+  SectionL _ e op             -> freeVars e `Set.union` opVar op
+  SectionR _ _ op e           -> opVar op `Set.union` freeVars e
   _                           -> Set.empty
+  where opVar = either Set.singleton (const Set.empty)

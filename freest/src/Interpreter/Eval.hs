@@ -308,6 +308,13 @@ eval _ (E.SendType _ _) =
 eval _ (E.ReceiveType _) =
   return $ fromJust $ Data.Map.lookup "receiveType" builtins
   {- return VRecvType -}
+eval ctx (E.SectionL s e op) =
+  eval ctx (E.App s (either (E.Var s) (E.DCons s) op) [B.ExpLevel e])
+eval ctx (E.SectionR s x op e) =
+  return $ mkClosure ctx
+    [ ( [Just (E.VarPat s x)]
+      , E.UnguardedRHS (E.App s (either (E.Var s) (E.DCons s) op)
+                          [B.ExpLevel (E.Var s x), B.ExpLevel e]) Nothing ) ]
 
 -- OLD DEFINITIONS
 

@@ -461,6 +461,14 @@ scopeExp ctx = \case
   E.SendType s t ->
     E.SendType s <$> scopeType ctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
+  E.SectionL s e op ->
+    E.SectionL s <$> scopeExp ctx e <*> pure (scopeOp op)
+  E.SectionR s x op e -> do
+    x' <- freshInternal x
+    E.SectionR s x' (scopeOp op) <$> scopeExp ctx e
+  where
+    scopeOp (Left x)  = Left $ maybe x (\x' -> x{internal = internal x'}) (lookupEVar x ctx)
+    scopeOp (Right i) = Right i
 
 -- | Scope a pattern. This function takes two contexts: the first being the main
 -- lexical context, and the second being an auxilliary context for 'let' definitions,
