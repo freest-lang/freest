@@ -29,7 +29,7 @@ import Interpreter.Exception (Exception(..))
 import Interpreter.Value ( Value(..), ChannelEnd )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
-import System.IO ( hFlush, stdout )
+import System.IO ( hFlush, isEOF, stdout )
 
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
@@ -204,6 +204,7 @@ builtins = Map.fromList
   -- **** Internal stdin functions
   , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
   , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
+  , ("internalIsEOF",         VBuiltin (const $ VIO $ hsToFstBool <$> isEOF))
   -- getContents makes sense in a lazy setting; FreeST is eager.
   -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
   , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ (putStr (fstToHsString s) >> hFlush stdout)))

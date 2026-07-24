@@ -604,6 +604,8 @@ internalGetChar : () -> Char
 internalGetChar = undefined
 internalGetLine : () -> String
 internalGetLine = undefined
+internalIsEOF : () -> Bool
+internalIsEOF = undefined
 
 stdin : *?InStream
 stdin = forkWith (runServer (\_ -> reader) ())
@@ -611,7 +613,7 @@ stdin = forkWith (runServer (\_ -> reader) ())
     reader : Dual InStream -> ()
     reader (&GetChar r) = r |> send (internalGetChar ()) |> reader
     reader (&GetLine r) = r |> send (internalGetLine ()) |> reader
-    reader (&IsEOF   r) = r |> send False                |> reader
+    reader (&IsEOF   r) = r |> send (internalIsEOF   ()) |> reader
     reader (&Stop    r) = r |> close
 
 -- | Reads a single character from `stdin`.
