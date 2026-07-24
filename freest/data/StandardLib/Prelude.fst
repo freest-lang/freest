@@ -207,6 +207,11 @@ until @a p f = go
 (;) @a @b _ x = x
 
 -- * Lists
+
+null : forall a -> [a] -> Bool
+null @a [] = true
+null @a _ = false
+
 (++) : forall (a : *T) -> [a] -> [a] -> [a]
 (++) @a []      ys = ys
 (++) @a (x::xs) ys = x :: ((++) @a xs ys)

@@ -129,6 +129,8 @@ builtins = Map.fromList
   , ("chr",           VBuiltin (\(VInt x) -> VChar (chr x)))
   , ("(^^)",          VBuiltin (\s1 -> VBuiltin (\s2 -> hsToFstString (fstToHsString s1 ++ fstToHsString s2))))
   , ("show",          VBuiltin (hsToFstString . unparse))
+  -- *** Lists
+  , ("null",          VBuiltin (\(VCons con _) -> hsToFstBool (con == "[]")))
   -- ** Comparison
   , ("(<)",           VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x < y))))
   , ("(<=)",          VBuiltin (\(VInt x) -> VBuiltin (\(VInt y) -> hsToFstBool (x <= y))))
