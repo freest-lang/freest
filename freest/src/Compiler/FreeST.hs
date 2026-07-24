@@ -30,9 +30,10 @@ runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip} =
 runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
-runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip} =
+runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip, typecheckOnly = tc} =
   loadSilent ip programPath >>= \case
     Nothing -> exitFailure
-    Just (src, _, _, _, _, modl) ->
-      catch (evalModule emptyValueCtx modl >> exitSuccess)
-            (\e -> printException src e >> exitFailure)
+    Just (src, _, _, _, _, modl)
+      | tc        -> exitSuccess
+      | otherwise -> catch (evalModule emptyValueCtx modl >> exitSuccess)
+                           (\e -> printException src e >> exitFailure)

@@ -56,6 +56,7 @@ data RunOpts = RunOpts
   { filePath :: Maybe FilePath
   , implicitPrelude :: Bool
   , interactive :: Bool
+  , typecheckOnly :: Bool
   }
 
 defaultRunOpts :: RunOpts
@@ -63,6 +64,7 @@ defaultRunOpts = RunOpts
   { filePath = Nothing
   , implicitPrelude = True
   , interactive = False
+  , typecheckOnly = False
   }
 
 -- | The parser for the command line options.
@@ -78,6 +80,10 @@ freestOpts = RunOpts
         ( short 'i'
        <> long "interactive"
        <> help "Start the interactive REPL")
+  <*> switch
+        ( short 't'
+       <> long "typecheck"
+       <> help "Type-check the module but do not run it")
 
 opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper <**> simpleVersioner version)
