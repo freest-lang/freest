@@ -52,18 +52,12 @@ fstToHsString = \case
   VCons "(::)" [VChar c, rest] -> c : fstToHsString rest
   v                            -> error ("fstToHsString: not a string: " ++ show v)
 
--- | A FreeST string value as a Haskell 'String', if it is one (used for
--- pattern matching; an empty list stays a list, since "" and [] are
--- indistinguishable).
+-- | A FreeST string value as a Haskell 'String', if it is one.
 asString :: Value -> Maybe String
 asString = \case
-  VCons "(::)" [VChar c, rest] -> (c :) <$> go rest
+  VCons "[]"   []              -> Just ""
+  VCons "(::)" [VChar c, rest] -> (c :) <$> asString rest
   _                            -> Nothing
-  where
-    go = \case
-      VCons "[]"   []              -> Just ""
-      VCons "(::)" [VChar d, more] -> (d :) <$> go more
-      _                            -> Nothing
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do
