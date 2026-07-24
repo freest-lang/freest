@@ -206,11 +206,14 @@ until @a p f = go
 (;) : forall (a : *T) (b : 1T) -> a -> b -> b
 (;) @a @b _ x = x
 
+isSpace : Char -> Bool
+isSpace c = let n = ord c in (n == 32) || (9 <= n && n <= 13)
+
 -- * Lists
 
 null : forall a -> [a] -> Bool
-null @a [] = true
-null @a _ = false
+null @a [] = True
+null @a _ = False
 
 (++) : forall (a : *T) -> [a] -> [a] -> [a]
 (++) @a []      ys = ys
@@ -246,16 +249,6 @@ length @a (_ :: xs) = succ (length xs)
 sum : [Int] -> Int
 sum []        = 0
 sum (x :: xs) = x + sum xs
-
--- | Executes a thunk n times, sequentially.
--- ```
--- _ =
---   -- print "Hello!" 5 times sequentially
---   times5 (\_ -> putStrLn "Hello!")
--- ```
-times : forall (a : *T) -> Int -> (() -> a) -> ()
-times n _     | n <= 0    = ()
-times n thunk | otherwise = thunk (); times (n - 1) thunk
 
 foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
 foldl #m #n @a @b f = go
@@ -300,6 +293,43 @@ mapUL @a @b f (x :: xs) = f x ::' mapUL f xs
 mapLU : forall (a : 1T) (b : *T) -> (a -> b) -> [a]' -> [b]
 mapLU @a @b _ []'        = []
 mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
+
+-- | Reverses a list, using an accumulator so it runs in linear time (as in
+-- Haskell's `Data.List.reverse`).
+reverse : forall (a : *T) -> [a] -> [a]
+reverse @a = go ([] @a)
+  where
+    go : [a] -> [a] -> [a]
+    go acc []        = acc
+    go acc (x :: xs) = go (x :: acc) xs
+
+takeWhile : forall (a : *T) -> (a -> Bool) -> [a] -> [a]
+takeWhile @a _ []                    = []
+takeWhile @a p (x :: xs) | p x       = x :: takeWhile p xs
+                         | otherwise = []
+
+dropWhile : forall (a : *T) -> (a -> Bool) -> [a] -> [a]
+dropWhile @a _ []                    = []
+dropWhile @a p (x :: xs) | p x       = dropWhile p xs
+                         | otherwise = x :: xs
+
+span : forall (a : *T) -> (a -> Bool) -> [a] -> ([a], [a])
+span p xs = (takeWhile p xs, dropWhile p xs)
+
+words : String -> [String]
+words s =
+  case dropWhile isSpace s of
+    "" -> []
+    s' -> w :: words s''
+      where (w, s'') = span (not . isSpace) s'
+
+unwords : [String] -> String
+unwords []        = ""
+unwords (w :: ws) = w ++ go ws
+  where
+    go : [String] -> String
+    go []        = ""
+    go (v :: vs) = ' ' :: (v ++ go vs)
 
 -- * Concurrency
 
@@ -414,6 +444,16 @@ forkWith #m @a f =
 runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -> b) -> b -> *!a -> () -- Void @*T
 runServer handle state c =
   runServer handle (handle state (accept c)) c 
+
+-- | Executes a thunk n times, sequentially.
+-- ```
+-- _ =
+--   -- print "Hello!" 5 times sequentially
+--   times5 (\_ -> putStrLn "Hello!")
+-- ```
+times : forall (a : *T) -> Int -> (() -> a) -> ()
+times n _     | n <= 0    = ()
+times n thunk | otherwise = thunk (); times (n - 1) thunk
 
 -- | Forks n identical threads. Similar to `times` but working in parallel
 -- rather than sequentially.
