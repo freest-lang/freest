@@ -209,8 +209,8 @@ until @a p f = go
 -- * Lists
 
 null : forall a -> [a] -> Bool
-null @a [] = true
-null @a _ = false
+null @a [] = True
+null @a _  = False
 
 (++) : forall (a : *T) -> [a] -> [a] -> [a]
 (++) @a []      ys = ys
