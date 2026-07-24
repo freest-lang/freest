@@ -279,10 +279,10 @@ makeError src (getSpan -> s) msg =
 
 -- | Does a type still mention a solvable (unification) type variable? Such a
 -- variable is one the checker never resolved — it unparses to @_@. In a type
--- mismatch it signals that a type argument could not be inferred, which is the
--- shape of a false negative (a typeable program the checker rejects because its
--- inference is incomplete). All the session constructors are 'App' synonyms, so
--- the traversal only needs the three underlying shapes.
+-- mismatch it signals that a type argument could not be inferred, a limitation
+-- of type inference that an explicit type argument works around. All the session
+-- constructors are 'App' synonyms, so the traversal only needs the three
+-- underlying shapes.
 hasSolvableTypeVar :: TK.KindedType -> Bool
 hasSolvableTypeVar = \case
   TK.Var _ _ lv _ -> solvable lv
@@ -293,7 +293,7 @@ hasSolvableTypeVar = \case
 -- | Does a type contain a universal quantifier (a @forall@)? When one side of a
 -- mismatch has one and the other does not, the likely cause is a polymorphic
 -- value (e.g. @Nothing : forall a. Maybe a@) whose leading quantifier was never
--- instantiated — another shape of false negative, fixed by an explicit type
+-- instantiated — another limitation of type inference, fixed by an explicit type
 -- argument or annotation on that value.
 hasForall :: TK.KindedType -> Bool
 hasForall = \case
@@ -526,19 +526,19 @@ toMessage src = \case
   TypeMismatch s t u _ -> makeError src s "Type mismatch:"
     ++ "Couldn't match expected type " ++ bt (unparse t) ++ fromClause s src t
     ++ "with actual type " ++ bt (unparse u) ++ fromClause s src u
-    ++ falseNegativeHint
+    ++ inferenceHint
     where
     -- Only when a type argument was left unresolved (it shows as `_`): the
-    -- mismatch may be a false negative of an incomplete inference, and an
-    -- explicit type argument is the fix. Stays silent on ordinary mismatches.
-    falseNegativeHint
+    -- mismatch may stem from a limitation of type inference, and an explicit
+    -- type argument is the fix. Stays silent on ordinary mismatches.
+    inferenceHint
       | hasSolvableTypeVar t || hasSolvableTypeVar u =
-          "This may be a false negative: a type argument could not be inferred "
+          "Type inference could not determine a type argument here "
           ++ "(shown as `_`).\nConsider annotating the application with an explicit "
           ++ "type argument (e.g. `f @a`),\nbinding the signature's type variables with "
           ++ "`@a` patterns on the left-hand side."
       | hasForall t /= hasForall u =
-          "This may be a false negative: a polymorphic value was not instantiated "
+          "A polymorphic value was not instantiated here "
           ++ "(note the `forall`).\nConsider giving it an explicit type argument "
           ++ "(e.g. `Nothing @a`) or a type annotation."
       | otherwise = ""
