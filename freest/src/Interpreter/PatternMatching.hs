@@ -35,7 +35,7 @@ import Data.Map (empty, singleton, union, insert)
 import Data.Maybe (catMaybes)
 
 import Interpreter.Value (Value(..), ValueCtx, Clause)
-import Interpreter.Builtin (asString, receive, receiveLabel)
+import Interpreter.Builtin (receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 
@@ -49,7 +49,7 @@ matchPat v = \case
   E.IntPat _ i   -> pure $ case v of VInt   i' | i == i' -> Just empty ; _ -> Nothing
   E.FloatPat _ f -> pure $ case v of VFloat f' | f == f' -> Just empty ; _ -> Nothing
   E.CharPat _ c  -> pure $ case v of VChar  c' | c == c' -> Just empty ; _ -> Nothing
-  E.StringPat _ s -> pure $ case asString v of Just s' | s == s' -> Just empty ; _ -> Nothing
+  E.StringPat _ s -> pure $ if stringMatches s v then Just empty else Nothing
   E.WildPat _ _  -> pure (Just empty)
   E.VarPat _ x   -> pure (Just (singleton x v))
   E.AsPat _ x p  -> fmap (insert x v) <$> matchPat v p
@@ -75,6 +75,15 @@ matchPat v = \case
       _                    -> pure Nothing
   E.TypeInPat _ _ p -> matchPat v p   -- the type input was already consumed
   E.WaitPat _       -> pure (Just empty)
+
+-- | Does a string value equal a string-literal pattern? Matches structurally,
+-- so the empty literal @""@ matches the empty list. (Contrast 'asString', which
+-- leaves the empty list undecided because @""@ and @[]@ share a representation;
+-- here typing guarantees @v@ is a String, so the empty list can only be @""@.)
+stringMatches :: String -> Value -> Bool
+stringMatches []       (VCons "[]"   [])              = True
+stringMatches (c : cs) (VCons "(::)" [VChar d, rest]) = c == d && stringMatches cs rest
+stringMatches _        _                              = False
 
 -- | Match a column of patterns left-to-right against a list of values, failing
 -- fast and unioning the bindings.
