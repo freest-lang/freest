@@ -56,6 +56,7 @@ data Error
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
   | ExposeError Span (Either E.Pat E.KindedExp) String TK.KindedType
+  | FileReadError FilePath
   | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType

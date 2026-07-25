@@ -11,6 +11,7 @@ module Syntax.Base
   ( Parsed, Scoped, Kinded, Typed 
   -- Span
   , Span (..)
+  , Pos
   , nullSpan
   , Located (..)
   -- Identifier
