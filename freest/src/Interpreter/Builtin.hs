@@ -9,6 +9,7 @@ the evaluator rely on. Value rendering for output goes through 'unparse'.
 -}
 module Interpreter.Builtin
   ( builtins
+  , setupStdin
   , asString
   , fstToHsBool
   , hsToFstString
@@ -29,7 +30,23 @@ import Interpreter.Exception (Exception(..))
 import Interpreter.Value ( Value(..), ChannelEnd )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
-import System.IO ( hFlush, isEOF, stdout )
+import System.IO ( BufferMode(NoBuffering), hFlush, hIsTerminalDevice, hSetBuffering, isEOF, stdin, stdout )
+
+-- | Prepare 'stdin' for a running FreeST program.
+--
+-- A terminal buffers a whole line before handing it over, so under the default
+-- settings 'getChar' only returns once the user has typed a newline, and then
+-- yields the first character of the line. Selecting 'NoBuffering' takes the
+-- terminal out of canonical mode, so a character read returns as soon as that
+-- character is available, which is what @getChar@ is meant to do. Line-oriented
+-- reads are unaffected: 'getLine' still reads up to the next newline.
+--
+-- Only terminals are adjusted. When 'stdin' is a pipe or a file there is no
+-- line discipline to disable, so 'NoBuffering' would not change what a read
+-- returns, and would merely cost a system call per character.
+setupStdin :: IO ()
+setupStdin = hIsTerminalDevice stdin >>= \tty ->
+  if tty then hSetBuffering stdin NoBuffering else pure ()
 
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value

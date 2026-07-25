@@ -29,6 +29,7 @@ import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Compiler.Pipeline qualified as Pipeline
 import Interpreter.Value ( ValueCtx, emptyValueCtx )
+import Interpreter.Builtin ( setupStdin )
 import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
 import Interpreter.Exception ( printException )
@@ -429,6 +430,8 @@ validateModule s =
 eval :: M.KindedModule -> Repl ()
 eval m = do
   s <- get
+  -- After the prompt has been read, so that we do not disturb line editing.
+  liftIO setupStdin
   liftIO (try (evalModule (valueCtx s) m)) >>= \case
     Right vctx -> put s{valueCtx = vctx}
     Left e     -> liftIO (printException (source s) e)   -- TODO: keep the old ctx, or not?
