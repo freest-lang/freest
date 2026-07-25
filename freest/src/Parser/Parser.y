@@ -243,7 +243,7 @@ MAbsVar :: { Variable }
   : MultVar  { $1 }
   | WILDCARD { mkVarTk $1 }
 
-OptKindedTAbsVar :: { (Variable, Maybe K.Kind) }
+OptKindedVarBinding :: { (Variable, Maybe K.Kind) }
   : OptKindedVar              { $1 }
   | WILDCARD                  { (mkVarTk $1, Nothing) }
   | '(' WILDCARD ':' Kind ')' { (mkVarTk $2, Just $4) }
@@ -572,10 +572,10 @@ TypedPat :: { (E.ParsedPat, Maybe T.ParsedType) }
 
 ExpParamsArrow :: { ([Level (E.ParsedPat, Maybe T.ParsedType) (Variable, Maybe K.Kind) Variable], K.Multiplicity) }
   :     TypedPat  ExpParamsArrow { first (ExpLevel  $1 :) $2 }
-  | '@' OptKindedTAbsVar ExpParamsArrow { first (TypeLevel $2 :) $3 }
+  | '@' OptKindedVarBinding ExpParamsArrow { first (TypeLevel $2 :) $3 }
   | '#' MAbsVar   ExpParamsArrow { first (MultLevel $2 :) $3 }
   |     TypedPat  MultArrow { ([ExpLevel  $1], snd $2) }
-  | '@' OptKindedTAbsVar MultArrow { ([TypeLevel $2], snd $3) }
+  | '@' OptKindedVarBinding MultArrow { ([TypeLevel $2], snd $3) }
   | '#' MAbsVar   MultArrow { ([MultLevel $2], snd $3) }
 
 CaseBlock :: { [(E.ParsedPat, E.ParsedRHS)] }
@@ -600,7 +600,7 @@ PatPrimary :: { E.ParsedPat }
   | '[' PatListComma "]'"          { E.listPat' (spanFromTo $1 $3) $2 }
   | '(' ')'                        { E.TuplePat (spanFromTo $1 $2) [] }
   | '(' Pat ',' PatNEListComma ')' { E.TuplePat (spanFromTo $1 $5) ($2 : $4) }
-  | '(' '@' OptKindedVar ',' AtKindedVarListCommaPat ')'{ uncurry (E.PackPat (spanFromTo $1 $6)) (first ($3:) $5) }
+  | '(' '@' OptKindedVarBinding ',' AtKindedVarListCommaPat ')'{ uncurry (E.PackPat (spanFromTo $1 $6)) (first ($3:) $5) }
   | DataConstructor                { E.DConsPat   (getSpan $1) $1 [] }
   | '(' Pat ')'                    { setSpan  (spanFromTo $1 $3) $2 }
   | LOWER_ID_AT PatPrimary         { E.AsPat (spanFromTo $1 $2) (mkVarTk $1) $2 }
@@ -641,7 +641,7 @@ PatNEListComma :: { [E.ParsedPat] }
   | Pat ',' PatNEListComma { $1 : $3 }
 
 AtKindedVarListCommaPat :: { ([(Variable, Maybe K.Kind)], E.ParsedPat) }
-  : '@' OptKindedVar ',' AtKindedVarListCommaPat { first ($2 :) $4 }
+  : '@' OptKindedVarBinding ',' AtKindedVarListCommaPat { first ($2 :) $4 }
   | Pat { ([], $1) }
 
 LetDeclBlock :: { [E.ParsedLetDecl] }
