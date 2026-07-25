@@ -498,10 +498,6 @@ type InStream = +{ GetChar : ?Char   ; InStream
                  , Stop    : Wait
                  }
 
--- | Closes an `InStream` channel endpoint.
-hCloseIn : InStream -> ()
-hCloseIn c = c |> select Stop |> wait
-
 hGenericGet : forall (a : *T) -> (InStream -> ?a; InStream) -> InStream -> (a, InStream)
 hGenericGet sel inStream = inStream |> sel |> receive
 
@@ -516,6 +512,10 @@ hGetLine = hGenericGet (select GetLine)
 -- | Checks if an `InStream` reached the EOF mark. 
 hIsEOF : InStream -> (Bool, InStream)
 hIsEOF = hGenericGet (select IsEOF)
+
+-- | Closes an `InStream` channel endpoint.
+hCloseIn : InStream -> ()
+hCloseIn c = c |> select Stop |> wait
 
 hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> *?InStream -> a
 hGenericGet_ get inp = 
