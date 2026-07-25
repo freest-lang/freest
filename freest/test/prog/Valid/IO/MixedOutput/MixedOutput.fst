@@ -27,4 +27,9 @@ put2Chars a b = receive_ stdout |> hPutChar a |> hPutChar b |> hCloseOut
 --     hCloseIn instream ; 
 --     print str
 
-_ = print $ getLine ()
+-- Expect outputs `xab` or `abx`, but never `axb`.
+_ =
+    let (j, a) = channel @ForkJoin in
+    fork (\_ -> put2Chars 'a' 'b' ; join j) ;
+    fork (\_ -> putChar 'x' ; join j) ;
+    await 2 a
