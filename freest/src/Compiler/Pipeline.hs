@@ -170,7 +170,8 @@ loadM post paths = do
   result <- loadME paths
 
   case result of
-    Left errors -> do
+    Left (sources, errors) -> do
+      printErrors sources errors
       hPutStrLn stderr failedToLoadModule
       pure Nothing
     Right loadState -> do

@@ -19,8 +19,8 @@ errorTypeToDiagnostic s runOpts err =
 posToPosition :: Pos -> Position
 posToPosition (line, column) =
   Position
-    (fromIntegral (max 0 (line - 1)))
-    (fromIntegral (max 0 (column - 1)))
+    (fromIntegral (max 0 line))
+    (fromIntegral (max 0 column))
 
 spanToRange :: Span -> Range
 spanToRange s =
