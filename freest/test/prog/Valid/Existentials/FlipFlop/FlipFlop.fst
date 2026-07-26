@@ -8,9 +8,9 @@ type Counter = (exists a, (a, a -> Int, a -> a))
 counterADT : Counter
 counterADT = 
   ( @Int
-  , ( 1            -- new
-    , \i -> i      -- get
-    , \i -> succ i -- inc
+  , ( 0       -- new
+    , id      -- get
+    , succ    -- inc
     )
   )
 
