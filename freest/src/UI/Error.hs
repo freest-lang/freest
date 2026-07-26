@@ -14,6 +14,7 @@ module UI.Error
   , snippet
   , showErrors -- for testing
   , printErrors
+  , bt
   )
 where
 
@@ -698,8 +699,6 @@ toMessage src = \case
 
   prettyMoreParams = prettyModifiedPlural "parameter" "more"
 
-  bt s = "`" ++ s ++ "`"
-
   prettyVarCons = \case
     Left x -> "variable " ++ bt (external x)
     Right i -> "constructor " ++ bt (show i)
@@ -784,6 +783,10 @@ sessionHint = go
       TK.AppQuantS _ TK.In  _ _ _  -> Just "receiveType"
       TK.AppSemi _ t _             -> go t
       _                            -> Nothing
+
+-- | Wrap a string in backtick characters 
+bt :: String -> String
+bt s = "`" ++ s ++ "`"
 
 showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)

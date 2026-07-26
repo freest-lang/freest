@@ -23,6 +23,7 @@ import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import Validation.Base ( unfold )
 import Validation.Substitution ( freeTypeVars, subs, subsAll, betaRule )
+import UI.Error ( bt )
 import Compiler.Bug ( internalError )
 
 import Data.Bifunctor (second)
@@ -116,7 +117,7 @@ reduce tdecls = \case
   T.App s f ts -> T.App s (reduce tdecls f) ts
 
   -- 4. Should not happen
-  t -> internalError $ "Trying to reduce " ++ show t ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
+  t -> internalError $ "Trying to reduce type " ++ bt(show t) ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
