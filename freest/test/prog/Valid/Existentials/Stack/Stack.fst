@@ -1,25 +1,24 @@
 type StackADT : *T
 type StackADT = 
   (exists a
-  , ( a
-    , Int -> a -> a
-    , a -> (Int, a)
-    , a -> [Int]
+  , ( a               -- the stack
+    , Int -> a -> a   -- push
+    , a -> (Int, a)   -- pop
+    , a -> [Int]      -- toList
     )
   )
 
 stackADT : StackADT
 stackADT = ( @[Int]
-           , ( [] @Int                             -- new -- CANNOT INFER
-             , \x xs -> x :: xs  -- push
+           , ( [] -- @Int                             -- new -- CANNOT INFER
+             , (::) -- \x xs -> x :: xs  -- push
              , \xs -> (head xs, tail xs) -- pop
-             , \xs -> xs                 -- toList
+             , id -- \xs -> xs                 -- toList
              )
            )
          : StackADT
 
-main' : Int
-main' = fst $ pop (push 5 (push 7 new))
+_ = print $ fst $ pop (push 5 (push 7 new))
   where (@s, (new, push, pop, toList)) = stackADT
 
 -- Reversing a list in O(n)
@@ -32,5 +31,4 @@ rev = rev' new
     rev' s []        = toList s
     rev' s (x :: xs) = rev' (push x s) xs
 
-main : ()
-main = print (rev ([1, 2, 3]))
+_ = print (rev ([1, 2, 3]))

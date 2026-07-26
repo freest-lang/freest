@@ -3,17 +3,29 @@ Benjamin C. Pierce:
 Types and programming languages. MIT Press 2002
 -}
 type Counter : *T
-type Counter = (exists a, (a, a -> Int, a -> a))
+type Counter = (exists a, ( a         -- new
+                          , a -> Int  -- get
+                          , a -> a    -- inc
+                          )
+               )
 
-counterADT : Counter
-counterADT = (@Int, ( 1 
-                    , \i -> i
-                    , \i -> succ i
+intCounter : Counter
+intCounter = (@Int, ( 0     -- new
+                    , id    -- get
+                    , succ  -- inc
                     )
              ) 
-           : Counter
 
-main : ()
-main =
-  let (@c, (new, get, inc)) = counterADT
-  in print (get (inc new))
+listCounter : Counter
+listCounter = (@[()], ( []
+                      , length
+                      , (()::)
+                      )
+              ) 
+
+incTwice : Counter -> ()
+incTwice counter =
+  let (@_, (new, get, inc)) = counter
+  in new |> inc |> inc |> get |> print
+
+_ = incTwice intCounter ; incTwice listCounter

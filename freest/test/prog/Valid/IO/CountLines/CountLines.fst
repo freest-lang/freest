@@ -1,4 +1,3 @@
-
 countLines : Int -> InStream -> (Int, InStream)
 countLines n inp =
   let (eof, inp) = hIsEOF inp in

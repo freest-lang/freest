@@ -1,3 +1,4 @@
+-- Heteregenous binary tree
 type HTree : 1S
 type HTree = +{Node: HTree; !type a. !a; HTree, Empty: Skip}
 

@@ -8,12 +8,11 @@ type Counter = (exists a, (a, a -> Int, a -> a))
 counterADT : Counter
 counterADT = 
   ( @Int
-  , ( 1                    -- new
+  , ( 1            -- new
     , \i -> i      -- get
     , \i -> succ i -- inc
     )
-  ) 
-  : Counter
+  )
 
 type FlipFlop : *T
 type FlipFlop = (exists a, (a, a -> Bool, a -> a, a -> a))
@@ -21,15 +20,14 @@ type FlipFlop = (exists a, (a, a -> Bool, a -> a, a -> a))
 flipFlopADT : FlipFlop
 flipFlopADT = 
   ( @c 
-  , ( new                      -- new
+  , ( new                -- new
     , \c -> even (get c) -- read
     , \c -> inc c        -- toggle
     , \c -> new          -- reset
     )
-  ) 
-  : FlipFlop
+  )
   where (@(c : *T), (new, get, inc)) = counterADT
 
 main : ()
-main = print (read (toggle (reset (toggle new))))
+main = new |> toggle |> reset |> toggle |> read |> print
   where (@f, (new, read, toggle, reset)) = flipFlopADT
