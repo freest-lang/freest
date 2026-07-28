@@ -12,16 +12,14 @@ write i c = send_ i c; ()
 read: Dual IntCell -> Int
 read = receive_
 
-sleep : Int -> ()
-sleep n = if n == 0 then () else sleep (n - 1)
-
 main: Int
 main =
   let (w, r) = channel @IntCell in
-  fork (\_ -1-> read r);
-  fork (\_ -1-> read r);
-  fork (\_ -1-> write 4 w); -- comment this line for a deadlock
-  fork (\_ -1-> write 5 w); 
-  fork (\_ -1-> write 6 w); 
-  sleep 10000;
+  let (f, j) = channel @ForkJoin in
+  fork (\_ -1-> read r    ; join f);
+  fork (\_ -1-> read r    ; join f);
+  fork (\_ -1-> write 4 w ; join f); -- comment this line for a deadlock
+  fork (\_ -1-> write 5 w ; join f);
+  fork (\_ -1-> write 6 w ; join f);
+  await 5 j;
   read r

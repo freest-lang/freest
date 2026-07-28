@@ -30,19 +30,7 @@ type Donation = +{ SetTitle: !String ; Donation
                  , Commit  : Decision
                  }
 
--- 1. Fork join
-
-type Fork, Join : *C
-type Fork = *+{Over}
-type Join = Dual Fork
-
-waitFor : Int -> Join -> ()
-waitFor n join
-  | n == 0    = ()
-  | otherwise = case join of &Over _ -> waitFor (n - 1) join
-
-
--- 2. Two clients
+-- 1. Two clients
 
 donate : PromotionS -> String -> CreditCard -> Amount -> ()
 donate p donor ccard amount =
@@ -79,16 +67,16 @@ wrongYear d =
       putStrLn $ receiveAndClose d
 
 
--- 3. The bank that charges credit cards
+-- 2. The bank that charges credit cards
 charge : CreditCard -> Amount -> ()
 charge ccard amount =
   putStrLn $ ("Charging " ++ show amount ++ " euros on card " ++ ccard)
 
 
--- 4. The Online Donation Server
-promotion : Int -> Fork -> Dual PromotionS -> ()
+-- 3. The Online Donation Server
+promotion : Int -> ForkJoin -> Dual PromotionS -> ()
 promotion k f pc
-  | k == 0 = select Over f; ()
+  | k == 0 = join f
   | otherwise =
     let p = accept pc in
     let (donor, p) = receive p in
@@ -97,20 +85,20 @@ promotion k f pc
     charge ccard amount;
     promotion (k - 1) f pc
 
-setup : String -> Date -> Fork -> PromotionS -> Dual Donation -> ()
+setup : String -> Date -> ForkJoin -> PromotionS -> Dual Donation -> ()
 setup title _    f p (&SetDate  d) = let (date,  d) = receive d in setup title date f p d
 setup _     date f p (&SetTitle d) = let (title, d) = receive d in setup title date f p d
 setup title date f p (&Commit   d) =
   (if date < 2013 then 
     select Denied d |> send "Can only accept donations from year 2013"
   else 
-    select Accepted d |> send p) 
+    select Accepted d |> send p)
     |> wait ;
-  select Over f ; ()
+  join f
 
-server : Int -> Int -> (Fork, Join) -> PromotionS -> DonationS -> ()
+server : Int -> Int -> (ForkJoin, Dual ForkJoin) -> PromotionS -> DonationS -> ()
 server k n fj p ds
-  | k == 0    = waitFor n (snd fj)
+  | k == 0    = await n (snd fj)
   | otherwise =
     let d = accept ds in
     fork (\_ -1-> setup "<default>" 0000 (fst fj) p d);
@@ -118,12 +106,12 @@ server k n fj p ds
 
 donationServer : Int -> Int -> DonationS -> ()
 donationServer noOfClients noOfDonations ds =
-  let (f, j) = channel @Fork in
+  let (f, j) = channel @ForkJoin in
   let p = forkWith (promotion noOfDonations f) in
-  server noOfClients noOfClients (channel @Fork) p ds;
-  case j of &Over _ -> ()
+  server noOfClients noOfClients (channel @ForkJoin) p ds;
+  await 1 j
 
--- 5. Main
+-- 4. Main
 main : ()
 main = 
   let (ds, dc) = channel @DonationS in
