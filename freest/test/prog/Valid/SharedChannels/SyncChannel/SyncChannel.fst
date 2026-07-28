@@ -12,7 +12,7 @@ syncServerOnce limit ch =
         -- create endpoints for syncing
         let (c, s) = channel @SyncService in
         -- send client's endpoint; recursive call
-        send_ c ch; syncServerOnce (limit - 1) ch;
+        ch |> send_ c |> syncServerOnce (limit - 1);
         -- sync client
         send 0 s |> close
 

@@ -385,7 +385,8 @@ receiveAndClose @a c =
   x
 
 -- | Sends a value on an unrestricted channel. The unrestricted version of `send`.
-send_ : forall #m (a : m T) -> a -> *!a -m-> ()
+-- Returns the (unrestricted) channel, so further operations can be chained.
+send_ : forall #m (a : m T) -> a -> *!a -m-> *!a
 send_ #m @a = undefined
 
 -- | Receives a value from an unrestricted channel. The unrestricted version of `receive`.

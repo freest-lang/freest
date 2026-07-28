@@ -8,7 +8,7 @@ type Random    = Dual IntStream
 -- Args -> *!SendType
 genericUnSender : forall a -> a -> *!a -> ()
 genericUnSender @a x chan =
-    send_ x chan; genericUnSender x chan
+    chan |> send_ x |> genericUnSender x
 
 receiveBits : Int -> Dual BitStream -> Int
 receiveBits nBits bitS = 

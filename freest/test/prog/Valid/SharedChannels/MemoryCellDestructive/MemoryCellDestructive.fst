@@ -7,7 +7,7 @@ type IntCell : *C
 type IntCell = *!Int
 
 write: Int -> IntCell -1-> ()
-write = send_
+write i c = send_ i c; ()
 
 read: Dual IntCell -> Int
 read = receive_

@@ -12,8 +12,7 @@ type Internal = ?Int; ?Internal; Close
 runHeadNode : Internal -> Dual Head -1-> ()
 runHeadNode prev head = 
     let (i, prev) = receive prev in
-    send_ i head;
-    runHeadNode (receiveAndClose prev) head
+    head |> send_ i |> runHeadNode (receiveAndClose prev)
 
 runTailNode : Dual Internal -> Dual Tail -1-> ()
 runTailNode next tail =
@@ -32,8 +31,8 @@ initQueue =
      forkWith (runTailNode internalS))
 
 enqueue : Int -> Queue -> ()
-enqueue i queue = 
-    send_ i $ snd queue
+enqueue i queue =
+    send_ i (snd queue); ()
 
 dequeue : Queue -> Int
 dequeue queue = 
@@ -45,8 +44,7 @@ type Counter = *?Int
 
 runCounter : Int -> Dual Counter -> ()
 runCounter i counter =
-    send_ i counter;
-    runCounter (i + 1) counter
+    counter |> send_ i |> runCounter (i + 1)
 
 initCounter : Counter
 initCounter = 

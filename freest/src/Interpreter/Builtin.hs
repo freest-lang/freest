@@ -219,7 +219,7 @@ builtins = Map.fromList
   , ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
   , ("wait",          VBuiltin wait)
   , ("close",         VBuiltin (VIO . close))
-  , ("send_",         VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VUnit <$ send val c)))
+  , ("send_",         VBuiltin (\val -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ send val c)))
   , ("receive_",      VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return val))
   -- * I/O
   -- ** Standard I/O

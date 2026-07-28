@@ -18,7 +18,7 @@ handleClient state chan =
   let (readFromState, writeOnState) = state in
   case chan of
     &Get chan -> send (receive_ readFromState) chan |> wait 
-    &Put chan -> send_ (receiveAndWait chan) writeOnState
+    &Put chan -> send_ (receiveAndWait chan) writeOnState; ()
     
 -- | A shared bag server with a state
 bagServer : State -> Dual SharedBag -> Void@*T
