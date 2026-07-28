@@ -25,7 +25,17 @@ listCounter = (@[()], ( []
 
 incTwice : Counter -> ()
 incTwice counter =
-  let (@_, (new, get, inc)) = counter
+  let (@a, (new, get, inc)) = counter
   in new |> inc |> inc |> get |> print
+
+incTwiceAnnotated : Counter -> ()
+incTwiceAnnotated counter =
+  let (@a, (new, get, inc)) = counter
+  in (new : a)        |> 
+     (inc : a -> a)   |>
+     (inc : a -> a)   |>
+     (get : a -> Int) |>
+     print
+
 
 _ = incTwice intCounter ; incTwice listCounter

@@ -5,29 +5,29 @@ Types and programming languages. MIT Press 2002
 type Counter : *T
 type Counter = (exists a, (a, a -> Int, a -> a))
 
-counterADT : Counter
-counterADT = 
-  ( @Int
-  , ( 0       -- new
-    , id      -- get
-    , succ    -- inc
-    )
-  )
+counter : Counter
+counter = ( @Int, ( 0       -- new
+                  , id      -- get
+                  , succ    -- inc
+                  )
+          )
 
 type FlipFlop : *T
-type FlipFlop = (exists a, (a, a -> Bool, a -> a, a -> a))
+type FlipFlop = (exists a, ( a          -- new
+                           , a -> Bool -- read
+                           , a -> a    -- toggle
+                           , a -> a    -- reset
+                           )
+                )
 
-flipFlopADT : FlipFlop
-flipFlopADT = 
-  ( @c 
-  , ( new                -- new
-    , \c -> even (get c) -- read
-    , \c -> inc c        -- toggle
-    , \c -> new          -- reset
-    )
-  )
-  where (@(c : *T), (new, get, inc)) = counterADT
+flipFlop : FlipFlop
+flipFlop = ( @c, ( new        -- new
+                 , even . get -- read
+                 , inc        -- toggle
+                 , \_ -> new  -- reset
+                 )
+            )
+  where (@c, (new, get, inc)) = counter
 
-main : ()
-main = new |> toggle |> reset |> toggle |> read |> print
-  where (@f, (new, read, toggle, reset)) = flipFlopADT
+_ = new |> toggle |> reset |> toggle |> read |> print
+  where (@f, (new, read, toggle, reset)) = flipFlop
