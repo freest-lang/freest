@@ -37,13 +37,13 @@ function tdecls e t = do
   case normalise tdecls t of
     t'@(T.AppArrow s m u v) -> pure t'
     t'@(T.AppForall s m aks u) -> pure t'
-    _ -> throwE (ExposeError (getSpan e) (Right e) "a function" t)
+    t' -> throwE (ExposeError (getSpan e) (Right e) "a function" t t')
 
 arrow :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
 arrow tdecls e t = do
   case normalise tdecls t of
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
-    _ -> throwE (ExposeError (getSpan e) (Right e) "a monomorphic function" t)
+    t' -> throwE (ExposeError (getSpan e) (Right e) "a monomorphic function" t t')
 
 exists :: D.KindedTypeDecls
        -> Either E.KindedPat E.KindedExp
@@ -63,12 +63,12 @@ externalChoice tdecls m p t i
   | K.isUn m = case normalise tdecls t of
       t'@(T.UnChoice _ T.In ls)               -> pick t' ls
       T.AppSemi _ t'@(T.UnChoice _ T.In ls) _ -> pick t' ls
-      _ -> throwE (ExposeError (getSpan p) (Left p) "an unrestricted (`*&`) external choice channel" t)
+      t' -> throwE (ExposeError (getSpan p) (Left p) "an unrestricted (`*&`) external choice channel" t t')
   | otherwise = case normalise tdecls t of
       T.AppLinChoice _ T.In lts -> case lookup i lts of
         Just ti -> return ti
         Nothing -> throwE (IllegalChoice (getSpan i) i t)
-      _ -> throwE (ExposeError (getSpan p) (Left p) "a linear external choice channel" t)
+      t' -> throwE (ExposeError (getSpan p) (Left p) "a linear external choice channel" t t')
   where
     pick t' ls | i `elem` ls = return t'
                | otherwise   = throwE (IllegalChoice (getSpan i) i t)
@@ -81,13 +81,13 @@ internalChoice tdecls m e t i
   | K.isUn m = case normalise tdecls t of
       t'@(T.UnChoice s T.Out ls)               -> pick s t' ls
       T.AppSemi _ t'@(T.UnChoice s T.Out ls) _ -> pick s t' ls
-      _ -> throwE (ExposeError (getSpan e) (Right e) "an unrestricted (`*+`) internal choice channel" t)
+      t' -> throwE (ExposeError (getSpan e) (Right e) "an unrestricted (`*+`) internal choice channel" t t')
   | otherwise = case normalise tdecls t of
       T.AppLinChoice s T.Out its ->
         case lookup i its of
           Just t' -> return t'
           Nothing -> throwE (IllegalChoice s i t)
-      _ -> throwE (ExposeError (getSpan e) (Right e) "a linear internal choice channel" t)
+      t' -> throwE (ExposeError (getSpan e) (Right e) "a linear internal choice channel" t t')
   where
     pick s t' ls | i `elem` ls = return t'
                  | otherwise   = throwE (IllegalChoice s i t)
@@ -108,11 +108,11 @@ message tdecls p m pe t
   | K.isUn m = case normalise tdecls t of
       t'@(T.AppMessage _ K.Un{} p' u)                | p == p' -> return (u, t')
       T.AppSemi _ t'@(T.AppMessage _ K.Un{} p' u) _  | p == p' -> return (u, t')
-      _ -> throwE (ExposeError (getSpan pe) pe (msg ("an unrestricted (`*" ++ sigil ++ "`) ")) t)
+      t' -> throwE (ExposeError (getSpan pe) pe (msg ("an unrestricted (`*" ++ sigil ++ "`) ")) t t')
   | otherwise = case normalise tdecls t of
       T.AppMessage s K.Lin{} p' u                    | p == p' -> return (u, T.Skip s)
       T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> return (u, v)
-      _ -> throwE (ExposeError (getSpan pe) pe (msg "a linear ") t)
+      t' -> throwE (ExposeError (getSpan pe) pe (msg "a linear ") t t')
   where
     msg q = q ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
     sigil = case p of T.In -> "?"; T.Out -> "!"
@@ -130,7 +130,7 @@ typeMsg :: D.KindedTypeDecls -> T.Polarity -> Either E.KindedPat E.KindedExp -> 
 typeMsg tdecls p pe t = do
   case normalise tdecls t of
     T.AppQuantS _ p' a k t' | p == p' -> return (a, k, t')
-    _ -> throwE (ExposeError (getSpan pe) pe msg t)
+    t' -> throwE (ExposeError (getSpan pe) pe msg t t')
   where msg = "a type-" ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
 
 wait :: D.KindedTypeDecls -> E.KindedPat -> T.KindedType -> Validation ()
@@ -138,4 +138,4 @@ wait tdecls p t = do
   case normalise tdecls t of
     T.End _ T.In -> return ()
     T.AppSemi _ (T.End _ T.In) _ -> return ()
-    _ -> throwE (ExposeError (getSpan p) (Left p) "a `Wait` channel" t)
+    t' -> throwE (ExposeError (getSpan p) (Left p) "a `Wait` channel" t t')

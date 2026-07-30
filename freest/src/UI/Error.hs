@@ -60,7 +60,8 @@ data Error
   | EquationArityMismatch Span Variable Int Int
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span (Either E.KindedPat E.KindedExp) String TK.KindedType
+  | ExposeError Span (Either E.KindedPat E.KindedExp) String TK.KindedType TK.KindedType
+    -- ^ The type as written, then its weak head normal form (used for hints).
   | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
@@ -84,7 +85,8 @@ data Error
       K.Multiplicity
   | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
     (Either (Either Variable E.KindedPat) E.KindedExp)
-  | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType
+  | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType TK.KindedType
+    -- ^ The type as written, then its weak head normal form (used for hints).
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
   | MultipleKindSigs Span [Identifier]
@@ -150,7 +152,7 @@ instance Located Error where
     EquationArityMismatch s _ _ _ -> s
     ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
-    ExposeError s _ _ _ -> s
+    ExposeError s _ _ _ _ -> s
     GivenTooManyArgs s _ _ _ -> s
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
@@ -163,7 +165,7 @@ instance Located Error where
     IncludeNotFound s _ -> s
     MalformedInclude s -> s
     LinNotConsumedEvenly s _ _ _ -> s
-    LinVarAtEndOfScope s _ _ -> s
+    LinVarAtEndOfScope s _ _ _ -> s
     LinConsumedInGuard s _ _ -> s
     LinConsumedInUnFun s _ _ _ _ -> s
     MultipleConsDecls s _ -> s
@@ -373,11 +375,14 @@ toMessage src = \case
   ExpectsTooManyArgsK s i k -> makeError src s
     ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
       ++ bt (tidyK k) ++ " takes only " ++ show (K.depth k))
-  ExposeError s pe msg t -> makeError src s
+  ExposeError s pe msg t whnf -> makeError src s
     case pe of
       Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
       Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
-    ++ case pe of Left _ -> "(It matches " ++ msg ++ ")"; Right{} -> ""
+    ++ case pe of
+         Left _  -> "(It matches " ++ msg ++ ")"
+                 ++ maybe "" (("\n  hint: this type is matched by " ++) . bt) (patternHint whnf)
+         Right _ -> maybe "" (("  hint: consume it with " ++) . bt) (sessionHint whnf)
   GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(This expression cannot be applied to further arguments: it has type " ++ bt (unparse t)
@@ -421,10 +426,10 @@ toMessage src = \case
     ("Cannot find included file \"" ++ path ++ "\"")
   MalformedInclude s -> makeError src s
     "Malformed INCLUDE pragma, expected {-# INCLUDE \"path\" #-}"
-  LinVarAtEndOfScope s xi t ->
+  LinVarAtEndOfScope s xi t whnf ->
     makeError src s
       ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse t) ++ " is not consumed")
-    ++ case sessionHint t of
+    ++ case sessionHint whnf of
          Just op -> "  hint: consume it with " ++ bt op ++ "\n"
          Nothing -> ""
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
@@ -758,31 +763,45 @@ toMessage src = \case
     | Map.member fp src = ":\n" ++ snippet src sp True
     | otherwise         = "\n"
 
--- | For each of the eight session-type constructors, name the operator that
--- consumes the endpoint. Returns 'Nothing' when the type does not currently
--- expose a session action at its head (e.g. it is a function type, a name
--- yet to be unfolded, or an unsolved metavariable). Walks through @;@
--- ('AppSemi') so the /next/ action of a sequenced session is reported.
+-- | Name the operator that consumes the endpoint of a session type. The type
+-- must be in weak head normal form. Returns 'Nothing' when its head is not a
+-- session action (e.g. a function type, an unapplied type constructor, or an
+-- unsolved metavariable). Walks through @;@ ('AppSemi') so the /next/ action of
+-- a sequenced session is reported; in weak head normal form the left of a @;@
+-- is itself an action, never a linear choice (R-SChoiceDist distributes those).
 sessionHint :: TK.KindedType -> Maybe String
 sessionHint = go
   where
     go = \case
-      TK.End _ TK.Out              -> Just "close"        -- Close
-      TK.End _ TK.In               -> Just "wait"         -- Wait
-      TK.Message _ m TK.Out        -> Just (atMult m "send")    -- Message Out
-      TK.Message _ m TK.In         -> Just (atMult m "receive") -- Message In
+      TK.End _ TK.Out              -> Just "close"
+      TK.End _ TK.In               -> Just "wait"
       TK.AppMessage _ m TK.Out _   -> Just (atMult m "send")
       TK.AppMessage _ m TK.In  _   -> Just (atMult m "receive")
-      TK.Choice _ m TK.Out _       -> Just (atMult m "select")  -- Choice Out (select)
-      TK.Choice _ m TK.In  _       -> Just "case"
+      TK.UnChoice _ TK.Out _       -> Just "select_"
+      TK.UnChoice _ TK.In  _       -> Just "case"
       TK.AppLinChoice _ TK.Out _   -> Just "select"
       TK.AppLinChoice _ TK.In  _   -> Just "case"
-      TK.QuantS _ _ TK.Out         -> Just "sendType"     -- Type Out
-      TK.QuantS _ _ TK.In          -> Just "receiveType"  -- Type In
       TK.AppQuantS _ TK.Out _ _ _  -> Just "sendType"
       TK.AppQuantS _ TK.In  _ _ _  -> Just "receiveType"
       TK.AppSemi _ t _             -> go t
       _                            -> Nothing
+
+-- | Name a pattern that matches a type, so a pattern of the wrong shape or
+-- multiplicity can point at the right one. The type must be in weak head normal
+-- form. Mirrors, case for case, the forms 'Validation.Expose' accepts for a
+-- pattern, so a hint is offered exactly when some pattern does match.
+patternHint :: TK.KindedType -> Maybe String
+patternHint = \case
+  TK.End _ TK.In                             -> Just "Wait"
+  TK.AppSemi _ (TK.End _ TK.In) _            -> Just "Wait"
+  TK.AppMessage _ m TK.In _                  -> Just (inPat m)
+  TK.AppSemi _ (TK.AppMessage _ m TK.In _) _ -> Just (inPat m)
+  TK.UnChoice _ TK.In _                      -> Just "*&l"
+  TK.AppSemi _ (TK.UnChoice _ TK.In _) _     -> Just "*&l"
+  TK.AppLinChoice _ TK.In _                  -> Just "&l p"
+  TK.AppQuantS _ TK.In _ _ _                 -> Just "?type a. p"
+  _                                          -> Nothing
+  where inPat m = if K.isUn m then "*?p" else "?p; q"
 
 -- | The unrestricted sibling of an operator is its name with a trailing @_@.
 atMult :: K.Multiplicity -> String -> String

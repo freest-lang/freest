@@ -87,12 +87,12 @@ lookupFunType tctx x = case tctx Map.!? Left x of
 -- | The context difference operation. Removes the variables in the second type 
 -- context from the first type context, throwing an error for any strictly
 -- linear variable it encounters. To be used at the end of a scope.
-typeCtxDifference :: KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
-typeCtxDifference kctx tctx1 tctx2 = do
+typeCtxDifference :: D.KindedTypeDecls -> KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
+typeCtxDifference tdecls kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just t  -> do
         when (Kinding.isRestricted t) do
-          throwE (LinVarAtEndOfScope (getSpan x) x t)
+          throwE (LinVarAtEndOfScope (getSpan x) x t (normalise tdecls t))
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
@@ -178,7 +178,7 @@ synth tdecls ddecls kctx tctx = \case
           Kinding.checkProperK ti
           (kctxi', tctxp) <- checkPat tdecls ddecls kctxi pi ti
           (e'', ti', tctxi') <- synthAbs kctxi' (Map.union tctxp tctxi) ps'
-          tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
+          tctxi'' <- typeCtxDifference tdecls kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
           return (e'', T.AppArrow (spanFromTo pi e') m ti ti', tctxi'')
         TypeLevel (ai, mki) : ps' -> do
@@ -218,17 +218,17 @@ synth tdecls ddecls kctx tctx = \case
   E.Let s ds e -> do
     (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
     (e', t, tctxe) <- synth tdecls ddecls kctx' tctx' e
-    (E.Let s ds' e', t,) <$> typeCtxDifference kctx' tctxe tctxds
+    (E.Let s ds' e', t,) <$> typeCtxDifference tdecls kctx' tctxe tctxds
   e@(E.Case s e' cs@((p1, rhs1) : cs'))   -> do
     -- TODO: detect redundant and incomplete patterns
     (e'', t, tctx') <- synth tdecls ddecls kctx tctx e'
     (kctxp1, tctxp1) <- checkPat tdecls ddecls kctx p1 t
     (rhs1', t1, tctxrhs1) <- synthRHS tdecls ddecls kctxp1 (tctxp1 `Map.union` tctx') (Right e') rhs1
-    tctx1 <- typeCtxDifference kctxp1 tctxrhs1 tctxp1
+    tctx1 <- typeCtxDifference tdecls kctxp1 tctxrhs1 tctxp1
     (unzip -> (cs'', tctxis)) <- forM cs' \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi t
       (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctxpi (tctxpi `Map.union` tctx') (Right e') rhsi t1
-      ((pi, rhsi') ,) <$> typeCtxDifference kctxpi tctxrhsi tctxpi
+      ((pi, rhsi') ,) <$> typeCtxDifference tdecls kctxpi tctxrhsi tctxpi
     checkEquivTypeCtxsCase (Right e) (tctx1 : tctxis)
     return (E.Case s e'' ((p1, rhs1') : cs''), t1, tctx1)
   e@(E.If s e1 e2 e3) -> do
@@ -273,7 +273,7 @@ synthRHS tdecls ddecls kctx tctx fep = \case
       (ei', tctxei) <- check tdecls ddecls kctx' tctxgi ei t1
       return ((gi', ei'), tctxei)
     checkEquivTypeCtxsCase fep (tctxe1 : tctxes)
-    tctx'' <- typeCtxDifference kctx' tctxe1 tctxds
+    tctx'' <- typeCtxDifference tdecls kctx' tctxe1 tctxds
     return (E.GuardedRHS ((g1', e1') : ges') ds', t1, tctx'')
   E.UnguardedRHS e mds -> do
     (mds', tctxds, kctx', tctx') <- case mds of
@@ -282,7 +282,7 @@ synthRHS tdecls ddecls kctx tctx fep = \case
         (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
     (e', t, tctx'') <- synth tdecls ddecls kctx' tctx' e
-    (E.UnguardedRHS e' mds', t,) <$> typeCtxDifference kctx' tctx'' tctxds
+    (E.UnguardedRHS e' mds', t,) <$> typeCtxDifference tdecls kctx' tctx'' tctxds
 
 -- | Check-against for expressions. Given kind and type contexts, it checks
 -- whether an expression has a given type, throwing an error if it does not.
@@ -398,14 +398,14 @@ check tdecls ddecls kctx tctx e t = case e of
   E.Let s ds e' -> do
     (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
     (e'', tctx'') <- check tdecls ddecls kctx' tctx' e' t
-    (E.Let s ds' e'',) <$> typeCtxDifference kctx' tctx'' tctxds
+    (E.Let s ds' e'',) <$> typeCtxDifference tdecls kctx' tctx'' tctxds
   E.Case s e' psrhss -> do
     (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
     (unzip -> (psrhss', tctxs)) <- forM psrhss \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi u
       let kctx' = kctxpi `Map.union` kctx
       (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctx' (tctxpi `Map.union` tctx') (Right e) rhsi t
-      ((pi, rhsi'),) <$> typeCtxDifference kctx' tctxrhsi tctxpi
+      ((pi, rhsi'),) <$> typeCtxDifference tdecls kctx' tctxrhsi tctxpi
     checkEquivTypeCtxsCase (Right e) tctxs
     return (E.Case s e'' psrhss', head tctxs)
   E.If s e1 e2 e3 -> do
@@ -653,7 +653,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
           let kctxi' = Map.union kctxp kctxi
           (rhs', tctxi') <- checkFun' (i + 1) kctxi' (Map.union tctxp tctxi) ps'' v
-          tctxi'' <- typeCtxDifference kctxi' tctxi' tctxp
+          tctxi'' <- typeCtxDifference tdecls kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (spanFromTo pi rhs)
           return (rhs', tctxi'')
         (MultLevel φi : ps'', T.ForallM s' m (φ : φs) u) -> do
@@ -824,7 +824,7 @@ checkRHS tdecls ddecls kctx tctx ep rhs t = case rhs of
       (ej', tctxej) <- check tdecls ddecls kctx' tctxgj ej t
       return ((gj', ej'), tctxej)
     checkEquivTypeCtxsCase ep tctxes
-    (E.GuardedRHS ges' mds',) <$> typeCtxDifference kctx' (head tctxes) tctxds
+    (E.GuardedRHS ges' mds',) <$> typeCtxDifference tdecls kctx' (head tctxes) tctxds
   E.UnguardedRHS e mds -> do
     (mds', tctxds, kctx', tctx')  <- case mds of
       Nothing -> pure (Nothing, Map.empty, kctx, tctx)
@@ -832,7 +832,7 @@ checkRHS tdecls ddecls kctx tctx ep rhs t = case rhs of
         (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
     (e', tctx'') <- check tdecls ddecls kctx' tctx' e t
-    (E.UnguardedRHS e' mds',) <$> typeCtxDifference kctx' tctx'' tctxds
+    (E.UnguardedRHS e' mds',) <$> typeCtxDifference tdecls kctx' tctx'' tctxds
 
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
 -- if they are not. An expression or pattern is provided to locate the error.
@@ -1073,7 +1073,7 @@ typeModule :: KindCtx -> TypeCtx -> M.KindedModule -> Validation (M.KindedModule
 typeModule kctx tctx modl = do
   tctx' <- flip Map.union tctx <$> buildDConsCtx
   (ds, tctxds, kctx', tctx'') <- checkDecls tdecls ddecls kctx tctx' (M.definitions modl)
-  _ <- typeCtxDifference kctx' tctxds tctx''
+  _ <- typeCtxDifference tdecls kctx' tctxds tctx''
   return (modl{M.definitions=ds}, kctx', tctx'')
   where
     tdecls = M.typeDecls modl
