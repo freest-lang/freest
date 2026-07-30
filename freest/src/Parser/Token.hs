@@ -30,7 +30,8 @@ data Token
   | TkLet Span | TkIn Span | TkMutual Span
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
-  | TkSelect Span | TkChannel Span | TkSendType Span | TkReceiveType Span
+  | TkSelect Span | TkSelectUn Span
+  | TkChannel Span | TkSendType Span | TkReceiveType Span
   | TkForall Span | TkExists Span | TkRec Span
   -- Punctuation
   | TkOpen Span | TkPipe Span | TkClose Span
@@ -108,6 +109,7 @@ instance Located Token where
     TkThen s -> s
     TkElse s -> s
     TkSelect s -> s
+    TkSelectUn s -> s
     TkSendType s -> s
     TkReceiveType s -> s
     TkForall s -> s
@@ -205,6 +207,7 @@ instance Located Token where
     TkThen _ -> TkThen s
     TkElse _ -> TkElse s
     TkSelect _ -> TkSelect s
+    TkSelectUn _ -> TkSelectUn s
     TkSendType _ -> TkSendType s
     TkReceiveType _ -> TkReceiveType s
     TkForall _ -> TkForall s

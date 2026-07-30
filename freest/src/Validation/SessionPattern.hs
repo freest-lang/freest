@@ -10,6 +10,7 @@ module Validation.SessionPattern ( checkNoVarsInSessionPatterns ) where
 
 import Syntax.Base ( Identifier, Level(..), Located(getSpan), Span )
 import Syntax.Expression qualified as E
+import Syntax.Kind qualified as K
 import UI.Error ( Error(..) )
 import Validation.Base ( Validation, ValidationState(..), runValidation, emptyValidationState )
 
@@ -90,8 +91,8 @@ checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subCol
             Nothing -> case col of
               p : _ -> getSpan p
               []    -> internalError "an empty column cannot contain a mix"
-    -- Same-shape groups: ChoicePats with the same identifier, DConsPats with
-    -- the same identifier, plus each non-Choice/DCons constructor.
+    -- Same-shape groups: ChoicePats with the same multiplicity and identifier,
+    -- DConsPats with the same identifier, plus each non-Choice/DCons constructor.
     sameShape  = List.groupBy ((==) `on` shapeKey)
                . List.sortOn shapeKey
                . filter (not . null . subPats)
@@ -102,8 +103,8 @@ checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subCol
 -- 'AsPat' is transparent: @x\@p@ has the sub-patterns of @p@.
 subPats :: E.KindedPat -> [E.KindedPat]
 subPats = \case
-  E.InPat _ p1 p2   -> [p1, p2]
-  E.ChoicePat _ _ p -> [p]
+  E.InPat _ _ p1 p2 -> [p1, p2]
+  E.ChoicePat _ _ _ p -> [p]
   E.TypeInPat _ _ p -> [p]
   E.PackPat _ _ p   -> [p]
   E.DConsPat _ _ ps -> ps
@@ -114,8 +115,10 @@ subPats = \case
 -- comparable sub-positions. 'AsPat' is transparent: @x\@p@ shares its key
 -- with @p@.
 data ShapeKey
-  = InShape
-  | ChoiceShape Identifier
+  = LinInShape
+  | UnInShape
+  | LinChoiceShape Identifier
+  | UnChoiceShape Identifier
   | TypeInShape
   | DConsShape Identifier
   | PackShape
@@ -124,8 +127,8 @@ data ShapeKey
 
 shapeKey :: E.KindedPat -> ShapeKey
 shapeKey = \case
-  E.InPat{}         -> InShape
-  E.ChoicePat _ i _ -> ChoiceShape i
+  E.InPat _ m _ _   -> if K.isUn m then UnInShape else LinInShape
+  E.ChoicePat _ m i _ -> (if K.isUn m then UnChoiceShape else LinChoiceShape) i
   E.TypeInPat{}     -> TypeInShape
   E.DConsPat _ i _  -> DConsShape i
   E.PackPat{}       -> PackShape
@@ -138,10 +141,10 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     -- Choice patterns, non-Choice session patterns, variables.
     -- Other patterns (data constructors, literals, ...) are ignored.
     (choices, nonChoiceSessions, vars) = partition3 pats
-    -- Choice patterns grouped by identifier, plus all variables.
+    -- Choice patterns grouped by multiplicity and identifier, plus all variables.
     choiceGroups      = map (++ vars)
-                      . List.groupBy ((==) `on` choiceId)
-                      . List.sortOn choiceId
+                      . List.groupBy ((==) `on` shapeKey)
+                      . List.sortOn shapeKey
                       $ choices
     -- Non-Choice session patterns plus all variables.
     otherSessionGroup = nonEmpty (nonChoiceSessions ++ vars)
@@ -158,10 +161,6 @@ groupBySession pats = choiceGroups ++ otherSessionGroup
     nonEmpty :: [a] -> [[a]]
     nonEmpty xs = [xs | not (null xs)]
 
-    choiceId :: E.KindedPat -> Identifier
-    choiceId (E.ChoicePat _ i _) = i
-    choiceId (E.AsPat _ _ p)     = choiceId p
-    choiceId _                   = internalError "not a ChoicePat"
 
 containsVarPat, containsSessionPat, isMixedPat :: [E.KindedPat] -> Bool
 containsVarPat = any isVar

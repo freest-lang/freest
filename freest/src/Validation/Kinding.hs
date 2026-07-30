@@ -983,12 +983,12 @@ kindPat tdecls kctx = \case
       (kctx, []) ps
     return (kctx', E.DConsPat s i ps')
   E.WaitPat s       -> pure (kctx, E.WaitPat s)
-  E.InPat s p1 p2 -> do
+  E.InPat s m p1 p2 -> do
     (kctx', p1') <- kindPat tdecls kctx p1
     (kctx'', p2') <- kindPat tdecls kctx p2
-    return (kctx'', E.InPat s p1' p2')
-  E.ChoicePat s i p -> 
-    second (E.ChoicePat s i) 
+    return (kctx'', E.InPat s m p1' p2')
+  E.ChoicePat s m i p -> 
+    second (E.ChoicePat s m i) 
     <$> kindPat tdecls kctx p
   E.TypeInPat s ak p -> do
     ak'@(a, k) <- resolveBndKind ak
@@ -1053,7 +1053,7 @@ kindExp tdecls ddecls kctx = \case
            <*> kindExp tdecls ddecls kctx e3
   E.List s es -> E.List s <$> mapM (kindExp tdecls ddecls kctx) es
   E.Channel s t -> E.Channel s <$> synth kctx t
-  E.Select s i -> pure $ E.Select s i
+  E.Select s m i -> pure $ E.Select s m i
   E.SendType s t -> E.SendType s <$> synth kctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
   E.SectionL s e op -> E.SectionL s <$> kindExp tdecls ddecls kctx e <*> pure op

@@ -19,14 +19,14 @@ waitFor : Int -> Join -> ()
 waitFor n join =
   if n == 0
   then ()
-  else case join of &Over _ -> waitFor (n - 1) join
+  else case join of *&Over -> waitFor (n - 1) join
 
 handleClient : Bool -> Fork -> Dual CakeService -> ()
 handleClient gotCake f s =
   -- Whishful :
   -- s |> (if gotCake then select Cake else select Disappointment) |> wait
   (if gotCake then select Cake s else select Disappointment s) |> wait ; 
-  select Over f; ()
+  select_ Over f; ()
 
 runCakeStore : Bool -> Int -> Int -> Dual CakeStore -> (Fork, Join) -> ()
 runCakeStore gotCake k n cakeStore fj =

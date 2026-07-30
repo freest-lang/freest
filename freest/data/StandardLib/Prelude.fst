@@ -475,11 +475,11 @@ type ForkJoin = *+{Over}
 
 -- | Signal completion of a child thread to the parent waiting on the join channel.
 join : ForkJoin -> ()
-join c = select Over c ; ()
+join c = select_ Over c ; ()
 
 -- | Wait until `n` child threads have signalled completion through the join channel.
 await : Int -> Dual ForkJoin -> ()
-await n c = times @() n (\_ -> case c of &Over _ -> ())
+await n c = times @() n (\_ -> case c of *&Over -> ())
 
 -- * I/O
 

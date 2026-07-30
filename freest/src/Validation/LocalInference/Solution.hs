@@ -110,8 +110,8 @@ resolvePat sol = \case
   E.PackPat s aks p   -> E.PackPat s (map (second (resolveKind sol)) aks) (resolvePat sol p)
   E.TypeInPat s ak p  -> E.TypeInPat s (second (resolveKind sol) ak) (resolvePat sol p)
   E.DConsPat s i ps   -> E.DConsPat s i (map (resolvePat sol) ps)
-  E.InPat s p1 p2     -> E.InPat s (resolvePat sol p1) (resolvePat sol p2)
-  E.ChoicePat s i p   -> E.ChoicePat s i (resolvePat sol p)
+  E.InPat s m p1 p2   -> E.InPat s m (resolvePat sol p1) (resolvePat sol p2)
+  E.ChoicePat s m i p -> E.ChoicePat s m i (resolvePat sol p)
   E.AsPat s x p       -> E.AsPat s x (resolvePat sol p)
   p                   -> p
 

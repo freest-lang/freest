@@ -131,12 +131,12 @@ synth tdecls ddecls kctx tctx = \case
   e@(E.Var s x) -> do
     (t, tctx') <- lookupType kctx tctx (Left x)
     return (e, t, tctx')
-  E.App s f@(E.Select s' i) as ->
+  E.App s f@(E.Select s' m i) as ->
     case as of
-      [] -> throwE (CannotSynthesiseSelect s' i)
+      [] -> throwE (CannotSynthesiseSelect s' m i)
       (ExpLevel  e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
-        ui <- Expose.internalChoice tdecls e u i
+        ui <- Expose.internalChoice tdecls m e u i
         (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _  ) ->
@@ -240,8 +240,8 @@ synth tdecls ddecls kctx tctx = \case
   e@(E.Channel s t) -> do
     Kinding.checkChannel t
     pure (e, T.Tuple s [t, T.AppDual s t], tctx)
-  E.Select s i -> do
-    throwE (CannotSynthesiseSelect s i)
+  E.Select s m i -> do
+    throwE (CannotSynthesiseSelect s m i)
   E.SendType s t -> do
     throwE (CannotSynthesiseSendType s)
   E.ReceiveType s -> do
@@ -323,12 +323,12 @@ check tdecls ddecls kctx tctx e t = case e of
     (u, tctx') <- lookupType kctx tctx (Left x)
     --   checkEquivTypes tdecls ddecls (Left e) t u >> return (e, tctx') -- no bare-head app inference
     checkApp tdecls ddecls kctx e s e u tctx' [] t                       -- bare-head app inference
-  E.App s h@(E.Select s' i) args ->
+  E.App s h@(E.Select s' m i) args ->
     case args of
-      [] -> throwE (CannotSynthesiseSelect s' i)
+      [] -> throwE (CannotSynthesiseSelect s' m i)
       (ExpLevel  e' : args') -> do
         (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
-        ui <- Expose.internalChoice tdecls e' u i
+        ui <- Expose.internalChoice tdecls m e' u i
         (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui args'
         checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
@@ -424,20 +424,15 @@ check tdecls ddecls kctx tctx e t = case e of
       _ -> do
         (_, u, _) <- synth tdecls ddecls kctx tctx e
         throwE (TypeMismatch s t u (Left e))
-  E.Select s i -> do
+  E.Select s mi i -> do
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        case normalise tdecls t1 of
-          T.AppLinChoice _ T.Out t1s ->
-            case lookup i t1s of
-              Just t1i -> do
-                checkEquivTypes tdecls ddecls (Left e)
-                  (T.AppArrow s' m t1 t1i)
-                  (T.AppArrow s' m t1 t2 )
-                return (e, tctx)
-              Nothing -> throwE (IllegalChoice s i t1)
-          _ -> throwE (TypeMismatchSelect s t i e)
-      _ -> throwE (TypeMismatchSelect s t i e)
+        t1i <- Expose.internalChoice tdecls mi e t1 i
+        checkEquivTypes tdecls ddecls (Left e)
+          (T.AppArrow s' m t1 t1i)
+          (T.AppArrow s' m t1 t2 )
+        return (e, tctx)
+      _ -> throwE (TypeMismatchSelect s mi t i e)
   E.SendType s u -> do
     case normalise tdecls t of
       T.AppArrow s m t1 t2 -> do
@@ -785,9 +780,9 @@ checkPat tdecls ddecls kctx p t = case p of
   E.WaitPat s -> do
     Expose.wait tdecls p t
     return (kctx, Map.empty)
-  -- ?p; p
-  E.InPat s p1 p2 -> do
-    (t1, t2) <- Expose.input tdecls (Left p) t
+  -- ?p; p and *?p; p
+  E.InPat s m p1 p2 -> do
+    (t1, t2) <- Expose.input tdecls m (Left p) t
     (kctx' , tctxp1) <- checkPat tdecls ddecls kctx p1 t1
     (kctx'', tctxp2) <- checkPat tdecls ddecls kctx' p2 t2
     return (kctx'', Map.union tctxp1 tctxp2)
@@ -796,9 +791,9 @@ checkPat tdecls ddecls kctx p t = case p of
     (b, k', t') <- Expose.typeInput tdecls (Left p) t
     Kinding.checkK (T.fromVariable ObjLv a k') k
     checkPat tdecls ddecls (Map.insert (Left a) k' kctx) p' (subs b (T.fromVariable ObjLv a k') t')
-  -- (&C p)
-  E.ChoicePat s i p' -> do
-    ti <- Expose.externalChoice tdecls p t i
+  -- (&C p) and (*&C p)
+  E.ChoicePat s m i p' -> do
+    ti <- Expose.externalChoice tdecls m p t i
     checkPat tdecls ddecls kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
@@ -989,11 +984,11 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
               (_, _, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
-            e@(E.App s f@(E.Select s' i) args) t1 -> case args of
-              [] -> throwE (CannotSynthesiseSelect s' i)
+            e@(E.App s f@(E.Select s' m i) args) t1 -> case args of
+              [] -> throwE (CannotSynthesiseSelect s' m i)
               (ExpLevel  e : args') -> do
                 (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                t2 <- Expose.internalChoice tdecls e u1 i
+                t2 <- Expose.internalChoice tdecls m e u1 i
                 (_, _, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
                 LTI.match e tdecls t1 t3
               (arg : _) -> 

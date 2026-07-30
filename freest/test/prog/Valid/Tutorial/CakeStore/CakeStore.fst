@@ -35,12 +35,12 @@ _ = let (c, s) = channel @CakeStore in
 type CakeStore = *+{Cake, Disappointment}
 
 cakeStore : CakeStore -> ()
-cakeStore  c = c |> select Cake
-                 |> select Disappointment ; ()
+cakeStore  c = c |> select_ Cake
+                 |> select_ Disappointment ; ()
 
 cakeLover : String -> Dual CakeStore -> ()
-cakeLover name (&Cake c)           = putStrLn (name ++ " got cake!")
-cakeLover name (&Disappointment c) = putStrLn (name ++ " got disappointment")
+cakeLover name (*&Cake)           = putStrLn (name ++ " got cake!")
+cakeLover name (*&Disappointment) = putStrLn (name ++ " got disappointment")
 
 _ = let (s, c) = channel @CakeStore in
     fork (\_ -1-> cakeStore s);

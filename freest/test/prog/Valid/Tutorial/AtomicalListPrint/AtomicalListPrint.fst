@@ -22,4 +22,4 @@ _ = let n = 6
 --     fork (\_ -> printAList (downTo 200) stdout w) ;
 --     fork (\_ -> printAList (downTo 200) stdout w) ;
 --     fork (\_ -> printAList (downTo 200) stdout w) ;
---     case r of &Join r -> case r of &Join r -> case r of &Join r -> case r of &Join _ -> ()
+--     case r of *&Join -> case r of *&Join -> case r of *&Join -> case r of *&Join -> ()

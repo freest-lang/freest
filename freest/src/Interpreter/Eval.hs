@@ -36,6 +36,7 @@ import Interpreter.Value (ValueCtx, Clause, Value(..), mkClosure)
 import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
+import qualified Syntax.Kind as K
 import qualified Syntax.Module as M
 
 -- | Bind a clause/alternative's `where` declarations; they are in scope for
@@ -298,8 +299,9 @@ eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
-eval _ (E.Select _ (B.Identifier _ iden)) = do
-  let (Just (VBuiltin selectBuiltin)) = Data.Map.lookup "select" builtins
+eval _ (E.Select _ m (B.Identifier _ iden)) = do
+  let (Just (VBuiltin selectBuiltin)) =
+        Data.Map.lookup (if K.isUn m then "select_" else "select") builtins
   return $ selectBuiltin (VLabel iden)
   {- return $ VSelect iden -}
 eval _ (E.SendType _ _) =

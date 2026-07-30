@@ -35,7 +35,7 @@ module Syntax.Expression
 where
 
 import Syntax.Base
-import Syntax.Kind ( Multiplicity, Kind )
+import Syntax.Kind ( Multiplicity, Kind, isUn )
 import Syntax.Names
 import Syntax.Type.Internal ( Type, XBndKind )
 
@@ -66,8 +66,8 @@ data Pat x
   | PackPat Span [(Variable, XBndKind x)] (Pat x)
   | DConsPat Span Identifier [Pat x]
   | WaitPat Span
-  | InPat Span (Pat x) (Pat x)
-  | ChoicePat Span Identifier (Pat x)
+  | InPat Span Multiplicity (Pat x) (Pat x)
+  | ChoicePat Span Multiplicity Identifier (Pat x)
   | TypeInPat Span (Variable, XBndKind x) (Pat x)
   | AsPat Span Variable (Pat x)
 
@@ -79,7 +79,7 @@ instance Eq (XBndKind x) => Eq (Pat x) where
   VarPat _ v1 == VarPat _ v2 = v1 == v2
   PackPat _ vars1 pat1 == PackPat _ vars2 pat2 = vars1 == vars2 && pat1 == pat2
   DConsPat _ id1 pat1 == DConsPat _ id2 pat2 = id1 == id2 && pat1 == pat2
-  ChoicePat _ id1 pat1 == ChoicePat _ id2 pat2 = id1 == id2 && pat1 == pat2
+  ChoicePat _ m1 id1 pat1 == ChoicePat _ m2 id2 pat2 = m1 == m2 && id1 == id2 && pat1 == pat2
   AsPat _ var1 pat1 == AsPat _ var2 pat2 = var1 == var2 && pat1 == pat2
   _ == _ = False
 
@@ -135,7 +135,7 @@ data Exp x
   | If     Span (Exp x) (Exp x) (Exp x)
   | List   Span [Exp x]
   | Channel Span (Type x)
-  | Select Span Identifier
+  | Select Span Multiplicity Identifier
   | SendType Span (Type x)
   | ReceiveType Span
   | SectionL Span (Exp x) (Either Variable Identifier)
@@ -169,8 +169,8 @@ instance Located (Pat x) where
     PackPat s _ _   -> s
     DConsPat s _ _  -> s
     WaitPat s       -> s
-    InPat s _ _     -> s
-    ChoicePat s _ _ -> s
+    InPat s _ _ _   -> s
+    ChoicePat s _ _ _ -> s
     TypeInPat s _ _ -> s
     AsPat s _ _     -> s
 
@@ -184,8 +184,8 @@ instance Located (Pat x) where
     PackPat _ as p  -> PackPat s as p
     DConsPat _ c ps -> DConsPat s c ps
     WaitPat _       -> WaitPat s
-    InPat s p1 p2   -> InPat s p1 p2
-    ChoicePat _ i p -> ChoicePat s i p
+    InPat _ m p1 p2 -> InPat s m p1 p2
+    ChoicePat _ m i p -> ChoicePat s m i p
     TypeInPat _ a p -> TypeInPat s a p
     AsPat _ x p     -> AsPat s x p
 
@@ -213,7 +213,7 @@ instance Located (Exp x) where
     If s _ _ _   -> s
     List s _     -> s
     Channel s _  -> s
-    Select s _   -> s
+    Select s _ _ -> s
     SendType s _ -> s
     ReceiveType s -> s
     SectionL s _ _ -> s
@@ -235,7 +235,7 @@ instance Located (Exp x) where
     If _ e1 e2 e3 -> If s e1 e2 e3
     List _ es     -> List s es
     Channel _ t   -> Channel s t
-    Select _ i -> Select s i
+    Select _ m i -> Select s m i
     SendType _ t -> SendType s t
     ReceiveType _ -> ReceiveType s
     SectionL _ e op -> SectionL s e op
@@ -261,10 +261,11 @@ instance Show (XBndKind x) => Show (Pat x) where
     PackPat _ aks p  -> "(" ++intercalate ", " (map (\(a, k) -> "@("++ show a ++ " : " ++ show k ++ ")") aks) ++ ", " ++ show p ++ ")"
     DConsPat _ c ps -> "("++show c++" "++unwords (map show ps)++")"
     WaitPat _       -> "Wait"
-    InPat _ p1 p2   -> "(?" ++ show p1 ++ "; " ++ show p2 ++ ")"
-    ChoicePat _ l p -> "(&"++show l++" "++show p++")"
+    InPat _ m p1 p2 -> "(" ++ star m ++ "?" ++ show p1 ++ "; " ++ show p2 ++ ")"
+    ChoicePat _ m l p -> "(" ++ star m ++ "&" ++ show l ++ " " ++ show p ++ ")"
     TypeInPat _ (a, k) p -> "(?@(" ++ show a ++ " : " ++ show k ++ "). " ++ show p ++ ")"
     AsPat _ x p     -> show x++"@"++show p
+    where star m = if isUn m then "*" else ""
 
 instance Show (XBndKind x) => Show (LetDecl x) where
   show = \case
@@ -322,7 +323,7 @@ instance Show (XBndKind x) => Show (Exp x) where
     If _ e1 e2 e3  -> "(if "++show e1++" then "++show e2++" else "++show e3++")"
     List _ es      -> "["++intercalate ", " (map show es)++"]"
     Channel _ t    -> "(channel @"++show t++")"
-    Select _ i     -> "(select "++show i++")"
+    Select _ m i   -> "(select" ++ (if isUn m then "_ " else " ") ++ show i ++ ")"
     SendType _ t   -> "(sendType @" ++ show t ++ ")"
     ReceiveType _  -> "receiveType"
     SectionL _ e op   -> "(" ++ show e ++ " " ++ either show show op ++ ")"
@@ -334,8 +335,8 @@ allVarsPat = \case
   VarPat _ var              -> Set.singleton var
   PackPat _ vars pat        -> let vars' = map fst vars in Set.unions (map Set.singleton vars') `Set.union` allVarsPat pat
   DConsPat _ _ pats         -> Set.unions $ map allVarsPat pats
-  InPat _ pat1 pat2         -> Set.union (allVarsPat pat1) (allVarsPat pat2)
-  ChoicePat _ _ pat         -> allVarsPat pat
+  InPat _ _ pat1 pat2       -> Set.union (allVarsPat pat1) (allVarsPat pat2)
+  ChoicePat _ _ _ pat       -> allVarsPat pat
   TypeInPat _ (var, _) pat  -> Set.singleton var `Set.union` allVarsPat pat
   AsPat _ var pat           -> Set.singleton var `Set.union` allVarsPat pat
   _                         -> Set.empty

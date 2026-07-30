@@ -65,11 +65,11 @@ matchPat v = \case
   --   a chosen branch  &l   →  VCons l [continuation]
   --   a received value ?p;q →  VCons "(,)" [forced p, forced q]
   --   a closed channel Wait →  any (the wait was performed)
-  E.ChoicePat _ (B.Identifier _ label) q ->
+  E.ChoicePat _ _ (B.Identifier _ label) q ->
     case v of
       VCons label' [cont] | label == label' -> matchPat cont q
       _                                     -> pure Nothing
-  E.InPat _ p1 p2 ->
+  E.InPat _ _ p1 p2 ->
     case v of
       VCons "(,)" [v1, v2] -> matchClause [p1, p2] [v1, v2]
       _                    -> pure Nothing
@@ -131,7 +131,7 @@ forceCol pats val = case val of
 forceChoice :: [E.KindedPat] -> Value -> IO Value
 forceChoice pats (VChan c) = do
   (label, c') <- receiveLabel c
-  let conts = [ q | E.ChoicePat _ (B.Identifier _ l) q <- map stripAs pats, l == label ]
+  let conts = [ q | E.ChoicePat _ _ (B.Identifier _ l) q <- map stripAs pats, l == label ]
   forced <- forceCol conts (VChan c')
   pure (VCons label [forced])
 forceChoice _ v = pure v
@@ -140,7 +140,7 @@ forceChoice _ v = pure v
 -- that 'matchPat' then matches purely. (External choice is handled by
 -- 'forceChoice', which needs the whole pattern column.)
 performEffect :: E.KindedPat -> Value -> IO Value
-performEffect (E.InPat _ p1 p2) (VChan c) = do
+performEffect (E.InPat _ _ p1 p2) (VChan c) = do
   (v, c') <- receive c
   v'  <- forceCol [p1] v
   c'' <- forceCol [p2] (VChan c')

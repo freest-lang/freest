@@ -68,7 +68,7 @@ waitFor : Int -> Dual Join -> ()
 waitFor n fork_ =
   if n == 0
   then ()
-  else case fork_ of &Join _ -> waitFor (n - 1) fork_
+  else case fork_ of *&Join -> waitFor (n - 1) fork_
 
 -- End of module ForkJoin. An application from here on
 
@@ -81,7 +81,7 @@ client pid sem join _ =
       wait s;
       putStrLn (show pid ++ " is leaving critical region");
       receive_ sem |> select SemSignal |> wait;
-      select Join join;
+      select_ Join join;
       ()
 
 -- | Launch a semaphore server and a few clients

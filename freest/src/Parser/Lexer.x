@@ -65,6 +65,7 @@ $upper = [ A-Z ]
 <0> "exists" { token TkExists }
 <0> "rec"    { token TkRec }
 <0> "channel"{ token TkChannel }
+<0> "select_" { token TkSelectUn }
 <0> "select" { token TkSelect }
 <0> "sendType"    { token TkSendType }
 <0> "receiveType" { token TkReceiveType }

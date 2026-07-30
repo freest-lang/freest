@@ -82,6 +82,7 @@ import Data.List ( sortBy )
   'of'     { TkOf _ }
   'channel'{ TkChannel _ }
   'select' {TkSelect _ }
+  'select_' {TkSelectUn _ }
   'sendType'    { TkSendType _ }
   'receiveType' { TkReceiveType _ }
   'if'     { TkIf _ }
@@ -526,7 +527,8 @@ Exp :: { E.ParsedExp }
 
 ExpApp :: { E.ParsedExp }
   : ExpApp ExpPrimary { addArgExp (ExpLevel $2) $1 }
-  | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (mkIdTk $2) }
+  | 'select' UPPER_ID { E.Select (spanFromTo $1 $2) (K.Lin (getSpan $1)) (mkIdTk $2) }
+  | 'select_' UPPER_ID { E.Select (spanFromTo $1 $2) (K.Un (getSpan $1)) (mkIdTk $2) }
   | 'sendType' '@' TypePrimary { E.SendType (spanFromTo $1 $3) $3 }
   | 'channel' '@' TypePrimary { E.Channel (spanFromTo $1 $3) $3 }
   | '[' ']' '@' TypePrimary { let s = spanFromTo $1 $2 in E.App (spanFromTo $1 $4) (E.DCons s (mkNilId s)) [TypeLevel $4] } -- TODO: multiplicities
@@ -607,9 +609,13 @@ PatPrimary :: { E.ParsedPat }
 
 Pat :: { E.ParsedPat }
   : DataConstructor PatPrimaryListWS { E.DConsPat (spanFromTo $1 (last $2)) $1 $2 }
-  | '?' PatPrimary ';' Pat           { E.InPat (spanFromTo $1 $4) $2 $4 } 
-  | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) $2 $3 }
-  | '?' 'type' OptKindedVar '.' Pat     { E.TypeInPat (spanFromTo $1 $5) $3 $5 } 
+  | '?' PatPrimary ';' Pat           { E.InPat (spanFromTo $1 $4) (K.Lin (getSpan $1)) $2 $4 }
+  | '&' DataConstructor PatPrimary   { E.ChoicePat (spanFromTo $1 $3) (K.Lin (getSpan $1)) $2 $3 }
+  | '*' '?' PatPrimary ';' Pat       { E.InPat (spanFromTo $1 $5) (K.Un (getSpan $1)) $3 $5 }
+  | '*' '&' DataConstructor PatPrimary { E.ChoicePat (spanFromTo $1 $4) (K.Un (getSpan $1)) $3 $4 }
+  | '*' '?' PatPrimary               { let s = spanFromTo $1 $3 in E.InPat s (K.Un (getSpan $1)) $3 (unContPat s) }
+  | '*' '&' DataConstructor          { let s = spanFromTo $1 $3 in E.ChoicePat s (K.Un (getSpan $1)) $3 (unContPat s) }
+  | '?' 'type' OptKindedVar '.' Pat     { E.TypeInPat (spanFromTo $1 $5) $3 $5 }
   | Pat '::' Pat                     { E.ConsPat (spanFromTo $1 $3) $1 $3 }
   | Pat "::'" Pat                    { E.DConsPat (spanFromTo $1 $3) (mkConsId' $2) [$1, $3] }
   | PatPrimary                       { $1 }

@@ -54,48 +54,68 @@ exists tdecls pe t = do
     t'@(T.AppExists s aks u) -> pure (aks, u)
     _ -> throwE (TypeMismatchExists (getSpan pe) t pe) 
 
-externalChoice :: D.KindedTypeDecls -> E.KindedPat -> T.KindedType -> Identifier -> Validation T.KindedType
-externalChoice tdecls p t i = do
-  case normalise tdecls t of
-    T.AppLinChoice _ T.In lts -> case lookup i lts of
-      Just ti -> return ti
-      Nothing -> throwE (IllegalChoice (getSpan i) i t)
-    t'@(T.UnChoice _ T.In ls)
-      | i `elem` ls -> return t'
-      | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-    (T.AppSemi _ t'@(T.UnChoice _ T.In ls) u)
-      | i `elem` ls -> return t'
-      | otherwise   -> throwE (IllegalChoice (getSpan i) i t)
-    _ -> throwE (ExposeError (getSpan p) (Left p) "an external choice channel" t)
+-- | Expose the continuation of an external choice matched by a @&l p@ pattern
+-- (linear) or a @*&l p@ pattern (unrestricted). An unrestricted choice makes no
+-- progress, so its continuation is the channel itself.
+externalChoice :: D.KindedTypeDecls -> K.Multiplicity -> E.KindedPat -> T.KindedType -> Identifier
+               -> Validation T.KindedType
+externalChoice tdecls m p t i
+  | K.isUn m = case normalise tdecls t of
+      t'@(T.UnChoice _ T.In ls)               -> pick t' ls
+      T.AppSemi _ t'@(T.UnChoice _ T.In ls) _ -> pick t' ls
+      _ -> throwE (ExposeError (getSpan p) (Left p) "an unrestricted (`*&`) external choice channel" t)
+  | otherwise = case normalise tdecls t of
+      T.AppLinChoice _ T.In lts -> case lookup i lts of
+        Just ti -> return ti
+        Nothing -> throwE (IllegalChoice (getSpan i) i t)
+      _ -> throwE (ExposeError (getSpan p) (Left p) "a linear external choice channel" t)
+  where
+    pick t' ls | i `elem` ls = return t'
+               | otherwise   = throwE (IllegalChoice (getSpan i) i t)
 
-internalChoice :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Identifier -> Validation T.KindedType
-internalChoice tdecls e t i = do
-  case normalise tdecls t of
-    T.AppLinChoice s T.Out its -> 
-      case lookup i its of
-        Just t' -> return t'
-        Nothing -> throwE (IllegalChoice s i t)
-    t'@(T.UnChoice s T.Out its)
-      | i `elem` its -> return t'
-      | otherwise    -> throwE (IllegalChoice s i t)
-    _ -> throwE (ExposeError (getSpan e) (Right e) "an internal choice channel" t)
+-- | Expose the continuation of an internal choice selected by @select l@
+-- (linear) or @select_ l@ (unrestricted).
+internalChoice :: D.KindedTypeDecls -> K.Multiplicity -> E.KindedExp -> T.KindedType -> Identifier
+               -> Validation T.KindedType
+internalChoice tdecls m e t i
+  | K.isUn m = case normalise tdecls t of
+      t'@(T.UnChoice s T.Out ls)               -> pick s t' ls
+      T.AppSemi _ t'@(T.UnChoice s T.Out ls) _ -> pick s t' ls
+      _ -> throwE (ExposeError (getSpan e) (Right e) "an unrestricted (`*+`) internal choice channel" t)
+  | otherwise = case normalise tdecls t of
+      T.AppLinChoice s T.Out its ->
+        case lookup i its of
+          Just t' -> return t'
+          Nothing -> throwE (IllegalChoice s i t)
+      _ -> throwE (ExposeError (getSpan e) (Right e) "a linear internal choice channel" t)
+  where
+    pick s t' ls | i `elem` ls = return t'
+                 | otherwise   = throwE (IllegalChoice s i t)
 
-output :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
-output tdecls = message tdecls T.Out . Right
-
-input :: D.KindedTypeDecls -> Either E.KindedPat E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
+-- | Expose the payload and continuation of an input matched by a @?p; q@
+-- pattern (linear) or a @*?p; q@ pattern (unrestricted). An unrestricted input
+-- makes no progress, so its continuation is the channel itself.
+input :: D.KindedTypeDecls -> K.Multiplicity -> Either E.KindedPat E.KindedExp -> T.KindedType
+      -> Validation (T.KindedType, T.KindedType)
 input tdecls = message tdecls T.In
 
-message :: D.KindedTypeDecls -> T.Polarity -> Either E.KindedPat E.KindedExp -> T.KindedType 
+output :: D.KindedTypeDecls -> K.Multiplicity -> E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
+output tdecls m = message tdecls T.Out m . Right
+
+message :: D.KindedTypeDecls -> T.Polarity -> K.Multiplicity -> Either E.KindedPat E.KindedExp -> T.KindedType
         -> Validation (T.KindedType, T.KindedType)
-message tdecls p pe t = do
-  case normalise tdecls t of
-    T.AppMessage s K.Lin{} p' u                    | p == p' -> return (u, T.Skip s)
-    t'@(T.AppMessage s K.Un{}  p' u)               | p == p' -> return (u, t')
-    T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> return (u, v)
-    T.AppSemi _ t'@(T.AppMessage _ K.Un{}  p' u) v | p == p' -> return (u, t')
-    _ -> throwE (ExposeError (getSpan pe) pe msg t)
-  where msg = "an " ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
+message tdecls p m pe t
+  | K.isUn m = case normalise tdecls t of
+      t'@(T.AppMessage _ K.Un{} p' u)                | p == p' -> return (u, t')
+      T.AppSemi _ t'@(T.AppMessage _ K.Un{} p' u) _  | p == p' -> return (u, t')
+      _ -> throwE (ExposeError (getSpan pe) pe (msg ("an unrestricted (`*" ++ sigil ++ "`) ")) t)
+  | otherwise = case normalise tdecls t of
+      T.AppMessage s K.Lin{} p' u                    | p == p' -> return (u, T.Skip s)
+      T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> return (u, v)
+      _ -> throwE (ExposeError (getSpan pe) pe (msg "a linear ") t)
+  where
+    msg q = q ++ (case p of T.In -> "input"; T.Out -> "output") ++ " channel"
+    sigil = case p of T.In -> "?"; T.Out -> "!"
 
 typeOutput :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType 
            -> Validation (Variable, K.Kind, T.KindedType)

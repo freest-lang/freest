@@ -43,6 +43,10 @@ unOp op x = E.App (spanFromTo op x) op [ExpLevel x]
 sectionBinder :: Located a => a -> Variable
 sectionBinder = mkDefaultVar "_section"
 
+-- | The implicit continuation of an abbreviated unrestricted session pattern.
+unContPat :: Span -> E.ParsedPat
+unContPat s = E.WildPat s (mkDefaultVar "_" s)
+
 -- | Desugar a linear list literal @[e1, ..., en]'@ into a @(::')@\/@[]'@ chain.
 consListExp' :: Span -> [E.ParsedExp] -> E.ParsedExp
 consListExp' s = foldr (\e acc -> E.App s (E.DCons s (mkConsId' s)) [ExpLevel e, ExpLevel acc]) (E.DCons s (mkNilId' s))

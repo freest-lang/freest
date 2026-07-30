@@ -51,7 +51,7 @@ data Error
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesisePat Span E.KindedPat
   | CannotSynthesiseReceiveType Span
-  | CannotSynthesiseSelect Span Identifier
+  | CannotSynthesiseSelect Span K.Multiplicity Identifier
   | CannotSynthesiseSendType Span
   | CannotSynthesiseSection Span (Either Variable Identifier)
   | ConflictingDefs Span (Level String String String) [Span]
@@ -104,7 +104,7 @@ data Error
   | TypeMismatchChoice Span TK.KindedType Identifier E.KindedPat
   | TypeMismatchExists Span TK.KindedType (Either E.KindedPat E.KindedExp) -- TODO: should be (Either E.KindedPat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
   | TypeMismatchReceiveType Span TK.KindedType
-  | TypeMismatchSelect Span TK.KindedType Identifier E.KindedExp
+  | TypeMismatchSelect Span K.Multiplicity TK.KindedType Identifier E.KindedExp
   | TypeMismatchSendType Span TK.KindedType
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.KindedPat)
   | TypeVarOutOfScope Span Variable
@@ -141,7 +141,7 @@ instance Located Error where
     CannotSynthesisePack s _ -> s
     CannotSynthesisePat s _ -> s
     CannotSynthesiseReceiveType s -> s
-    CannotSynthesiseSelect s _ -> s
+    CannotSynthesiseSelect s _ _ -> s
     CannotSynthesiseSendType s -> s
     CannotSynthesiseSection s _ -> s
     ConflictingDefs s _ _ -> s
@@ -184,7 +184,7 @@ instance Located Error where
     TypeMismatchList s _ _ -> s
     TypeMismatchChoice s _ _ _ -> s
     TypeMismatchReceiveType s _ -> s
-    TypeMismatchSelect s _ _ _ -> s
+    TypeMismatchSelect s _ _ _ _ -> s
     TypeMismatchSendType s _ -> s
     TypeMismatchTuple s _ _ _ -> s
     TypeVarOutOfScope s _ -> s
@@ -338,12 +338,12 @@ toMessage src = \case
   CannotSynthesisePack s e -> makeError src s
     "Could not infer a type for this package expression"
   CannotSynthesisePat s p -> makeError src s
-    ("Could not infer a type for pattern " ++ bt (show p))
-    ++ "Consider giving it a type annotation: " ++ bt ("(" ++ show p ++ " : T)")
+    ("Could not infer a type for pattern " ++ bt (getFromSpan src p))
+    ++ "Consider giving it a type annotation: " ++ bt ("(" ++ getFromSpan src p ++ " : T)")
   CannotSynthesiseReceiveType s -> makeError src s
     "Could not infer a type for this `receiveType` expression"
-  CannotSynthesiseSelect s id -> makeError src s
-    "Could not infer a type for this `select` expression"
+  CannotSynthesiseSelect s m id -> makeError src s
+    ("Could not infer a type for this " ++ bt (selectOp m) ++ " expression")
   CannotSynthesiseSendType s -> makeError src s
     "Could not infer a type for this `sendType` expression"
   CannotSynthesiseSection s op -> makeError src s
@@ -561,9 +561,9 @@ toMessage src = \case
   TypeMismatchReceiveType s t -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a `receiveType` expression")
-  TypeMismatchSelect s t i _ -> makeError src s
+  TypeMismatchSelect s m t i _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with a `select` expression")
+      ++ " with a " ++ bt (selectOp m) ++ " expression")
   TypeMismatchSendType s t -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a `sendType` expression")
@@ -769,14 +769,14 @@ sessionHint = go
     go = \case
       TK.End _ TK.Out              -> Just "close"        -- Close
       TK.End _ TK.In               -> Just "wait"         -- Wait
-      TK.Message _ _ TK.Out        -> Just "send"         -- Message Out
-      TK.Message _ _ TK.In         -> Just "receive"      -- Message In
-      TK.AppMessage _ _ TK.Out _   -> Just "send"
-      TK.AppMessage _ _ TK.In  _   -> Just "receive"
-      TK.Choice _ _ TK.Out _       -> Just "select"       -- Choice Out (select)
-      TK.Choice _ _ TK.In  _       -> Just "match"        -- Choice In  (branch)
+      TK.Message _ m TK.Out        -> Just (atMult m "send")    -- Message Out
+      TK.Message _ m TK.In         -> Just (atMult m "receive") -- Message In
+      TK.AppMessage _ m TK.Out _   -> Just (atMult m "send")
+      TK.AppMessage _ m TK.In  _   -> Just (atMult m "receive")
+      TK.Choice _ m TK.Out _       -> Just (atMult m "select")  -- Choice Out (select)
+      TK.Choice _ m TK.In  _       -> Just "case"
       TK.AppLinChoice _ TK.Out _   -> Just "select"
-      TK.AppLinChoice _ TK.In  _   -> Just "match"
+      TK.AppLinChoice _ TK.In  _   -> Just "case"
       TK.QuantS _ _ TK.Out         -> Just "sendType"     -- Type Out
       TK.QuantS _ _ TK.In          -> Just "receiveType"  -- Type In
       TK.AppQuantS _ TK.Out _ _ _  -> Just "sendType"
@@ -784,7 +784,14 @@ sessionHint = go
       TK.AppSemi _ t _             -> go t
       _                            -> Nothing
 
--- | Wrap a string in backtick characters 
+-- | The unrestricted sibling of an operator is its name with a trailing @_@.
+atMult :: K.Multiplicity -> String -> String
+atMult m op = if K.isUn m then op ++ "_" else op
+
+selectOp :: K.Multiplicity -> String
+selectOp = flip atMult "select"
+
+-- | Wrap a string in backtick characters
 bt :: String -> String
 bt s = "`" ++ s ++ "`"
 
