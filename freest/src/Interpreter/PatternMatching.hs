@@ -150,7 +150,7 @@ performEffect (E.TypeInPat _ _ p) (VChan c) = do
   forceCol [p] (VChan c')
 performEffect (E.WaitPat _) (VChan c) = do
   _ <- receive c                        -- wait for the peer to close
-  pure VUnit
+  pure (VCons "()" [])
 performEffect _ v = pure v
 
 isSessionPat :: E.KindedPat -> Bool

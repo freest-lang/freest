@@ -41,7 +41,6 @@ type ChannelEnd = (C.Chan Value, C.Chan Value)
 data Value
   = VInt Int
   | VFloat Double
-  | VUnit
   | VChar Char
   | VCons String [Value]
   | VClosure [Maybe Value] [Clause] ValueCtx
@@ -58,7 +57,6 @@ data Value
 instance Show Value where
   show (VInt n)         = show n
   show (VFloat n)       = show n
-  show VUnit            = "()"
   show (VChar c)        = show c
   show (VCons str vals) = unwords (str : map show vals)
   show (VClosure {})    = "<closure>"

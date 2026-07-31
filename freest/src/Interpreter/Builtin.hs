@@ -125,8 +125,8 @@ wait (VChan c) =
 
 close :: Value -> IO Value
 close (VChan c) = do
-  C.writeChan (snd c) VUnit
-  return VUnit
+  C.writeChan (snd c) (VCons "()" [])
+  return (VCons "()" [])
 
 builtins :: Map.Map String Value
 builtins = Map.fromList
@@ -230,12 +230,12 @@ builtins = Map.fromList
   , ("internalIsEOF",         VBuiltin (const $ VIO $ hsToFstBool <$> isEOF))
   -- getContents makes sense in a lazy setting; FreeST is eager.
   -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
-  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ (putStr (fstToHsString s) >> hFlush stdout)))
+  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VCons "()" [] <$ (putStr (fstToHsString s) >> hFlush stdout)))
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
   , ("select_",       VBuiltin (\(VLabel label) -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ sendLabel label c)))
-  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
+  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send (VCons "()" []) c))
   -- The received type is erased at runtime; the returned 'VPack' exists so
   -- that an explicit @let (\@a, c) = receiveType c@ pattern can decompose it.
   , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VPack [] (VChan c)))

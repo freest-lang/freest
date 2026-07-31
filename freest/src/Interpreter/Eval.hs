@@ -201,7 +201,7 @@ handleApplication ctx (VBuiltin builtin) args = foldM applyOne (VBuiltin builtin
     applyOne (VIO io)     arg = io >>= \v -> applyOne v arg
     applyOne v            _   = internalError $ "handleApplication: cannot apply value " ++ show v
 handleApplication ctx VFork args = case termArgs args of
-  [fun] -> forkIO (void $ handleApplication ctx fun [Just VUnit]) $> VUnit
+  [fun] -> forkIO (void $ handleApplication ctx fun [Just (VCons "()" [])]) $> VCons "()" []
   []    -> return VFork    -- only type/multiplicity applied so far
   _     -> internalError "fork applied to too many arguments"
 
