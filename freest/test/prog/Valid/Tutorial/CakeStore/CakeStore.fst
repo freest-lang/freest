@@ -46,3 +46,11 @@ _ = let (s, c) = channel @CakeStore in
     fork (\_ -1-> cakeStore s);
     fork (\_ -1-> cakeLover "Ami" c);
     cakeLover "Boé" c
+
+-- Nested patterns
+-- cake : Dual CakeStore -> ()
+-- cake (*&Cake (*&Disappointment c)) = print c -- putStrLn "Got one of each!"
+
+-- _ = let (s, c) = channel @CakeStore in
+--     fork (\_ -1-> cakeStore s) ;
+--     cake c

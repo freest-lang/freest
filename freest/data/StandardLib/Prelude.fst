@@ -440,11 +440,11 @@ forkWith #m @a f =
 --
 -- -- | Counter server
 -- runCounterServer : dualof SharedCounter -> Diverge
--- runCounterServer = runServer @Counter @Int counterService 0 
+-- runCounterServer = runServer @Int @Counter counterService 0
 -- ```
-runServer : forall (a : 1C) (b : *T) -> (b -> Dual a -> b) -> b -> *!a -> () -- Void @*T
+runServer : forall (a : *T) (b : 1C) -> (a -> Dual b -> a) -> a -> *!b -> ()
 runServer handle state c =
-  runServer handle (handle state (accept c)) c 
+  runServer handle (handle state (accept c)) c
 
 -- | Executes a thunk n times, sequentially.
 -- ```

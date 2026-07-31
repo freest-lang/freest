@@ -9,21 +9,34 @@ type CellOp a = +{Read: ?a, Write: !a} ; Close
 type CellRef : *T -> *C
 type CellRef a = *?(CellOp a)
 
+-- clients
 write : forall (a : *T) -> a -> CellRef a -> ()
 write x s = receive_ s |> select Write |> sendAndClose x
 
 read : forall (a : *T) -> CellRef a -> a
 read s = receive_ s |> select Read |> receiveAndClose
 
+-- servers I _ using accept
 cell : forall (a : *T) -> a -> Dual (CellRef a) -> ()
 cell n c =
   case accept c of
     &Write s -> cell (receiveAndWait s) c
     &Read  s -> sendAndWait n s ; cell n c
 
+-- servers II _ using runServer
+
+cell : forall (a : *T) -> a -> Dual (CellRef a) -> ()
+cell @a =
+  runServer serveOne
+  where
+    serveOne : forall a -> a -> Dual (CellOp a) -> a
+    serveOne _ (&Write c) = receiveAndWait c
+    serveOne x (&Read  c) = sendAndWait x c ; x
+
 -- Multiple Producer, Single Consumer (mpsc)
 
 -- Expect three numbers, taken from {0, 5, 6}, possibly duplicated or triplicated_ =
+_ =
   let c      = forkWith (cell 0)
       (j, a) = channel @ForkJoin in
   fork (\_ -> c |> read |> print ; join j) ;
