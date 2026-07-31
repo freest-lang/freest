@@ -26,6 +26,7 @@ import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin(..) )
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Type.Unkinded qualified as TU
+import Validation.Substitution ( betaRule )
 import Compiler.Bug ( internalError )
 
 import Data.List ( intercalate, nub )
@@ -377,8 +378,8 @@ toMessage src = \case
       ++ bt (tidyK k) ++ " takes only " ++ show (K.depth k))
   ExposeError s pe msg t whnf -> makeError src s
     case pe of
-      Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse t)
-      Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse t)
+      Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse (unRedex t))
+      Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse (unRedex t))
     ++ case pe of
          Left _  -> "(It matches " ++ msg ++ ")"
                  ++ maybe "" (("\n  hint: this type is matched by " ++) . bt) (patternHint whnf)
@@ -428,7 +429,7 @@ toMessage src = \case
     "Malformed INCLUDE pragma, expected {-# INCLUDE \"path\" #-}"
   LinVarAtEndOfScope s xi t whnf ->
     makeError src s
-      ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse t) ++ " is not consumed")
+      ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse (unRedex t)) ++ " is not consumed")
     ++ case sessionHint whnf of
          Just op -> "  hint: consume it with " ++ bt op ++ "\n"
          Nothing -> ""
@@ -625,6 +626,23 @@ toMessage src = \case
     ++ snippet src vp True
     ++ "(Session and variable patterns cannot appear together in the same match)"
   where
+  -- | Collapse the type-level β-redexes that 'Validation.Normalisation'
+  -- leaves behind when computing 'Dual' of a @!type@/@?type@ quantifier (rule
+  -- R-DQuant): @Dual ((λa. T) U)@ instead of @Dual (T[U/a])@. That shape is
+  -- always a compiler-introduced artifact of the Dual/quantifier interplay
+  -- and never something written in source, so reducing it on sight is always
+  -- safe and purely cosmetic. Unlike full 'Validation.Normalisation.normalise'
+  -- it does not unfold named type synonyms, so a type like @Dual SharedCounter@
+  -- keeps showing the familiar name instead of its expanded body.
+  unRedex :: TK.KindedType -> TK.KindedType
+  unRedex = \case
+    TK.App _ h@TK.Abs{} us  -> unRedex (betaRule h us)
+    TK.AppDual s t          -> TK.AppDual s (unRedex t)
+    TK.AppSemi s t u        -> TK.AppSemi s (unRedex t) (unRedex u)
+    TK.AppQuantS s p a k t  -> TK.AppQuantS s p a k (unRedex t)
+    TK.AppLinChoice s p lts -> TK.AppLinChoice s p [(i, unRedex t) | (i, t) <- lts]
+    t                       -> t
+
   -- Tidying (GHC-style cosmetics). Kind inference leaves solvable metavariables
   -- in a type's kind precisely when it cannot pin one down; those must never
   -- reach the user as raw internal names. Following GHC's tidying, we rewrite
