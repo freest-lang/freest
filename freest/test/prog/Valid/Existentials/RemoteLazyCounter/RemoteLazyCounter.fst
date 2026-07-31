@@ -14,15 +14,18 @@ intCounter = (@Int, ( 0     -- new
              )
 -- End from
 
-type CounterProvider = !Counter ; Close
+type Provide a = +{New : !a ; Provide a, Get: !(a -> Int) ; Provide a,  Succ: !(a -> a) ; Provide a, Done: Close}
 
-counterProvider : CounterProvider -> ()
-counterProvider = sendAndClose intCounter
+type CounterProvider = !type a. Provide a
 
 incTwice : Dual CounterProvider -> ()
-incTwice s =
-  let (@_, (new, get, inc)) = receiveAndWait s
-  in new |> inc |> inc |> get |> print
+incTwice c =
+  let (@a, c) = receiveType c
+      (counter, c) = c |> select New |> receive
+      () = c |> select Done |> wait in
+  ()
+--   let (@_, (new, get, inc)) = receiveAndWait s
+--   in new |> inc |> inc |> get |> print
 
-_ =
-    forkWith counterProvider |> incTwice
+-- _ =
+--     forkWith counterProvider |> incTwice
