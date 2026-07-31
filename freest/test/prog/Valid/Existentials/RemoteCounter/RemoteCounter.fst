@@ -12,6 +12,7 @@ intCounter = (@Int, ( 0     -- new
                     , id    -- get
                     , succ  -- inc
                     )
+<<<<<<< HEAD
              ) 
 
 -- 2. The counter transmited in one go
@@ -51,3 +52,20 @@ counterProvider c = forkWith_ c go
     &Get s ->
     &Inc s ->
     &Done s -> wait s
+=======
+             )
+-- End from
+
+type CounterProvider = !Counter ; Close
+
+counterProvider : CounterProvider -> ()
+counterProvider = sendAndClose intCounter
+
+incTwice : Dual CounterProvider -> ()
+incTwice s =
+  let (@_, (new, get, inc)) = receiveAndWait s
+  in new |> inc |> inc |> get |> print
+
+_ =
+    forkWith counterProvider |> incTwice
+>>>>>>> 5bc97b23537ade121322fd94b45447ac2268efb7
