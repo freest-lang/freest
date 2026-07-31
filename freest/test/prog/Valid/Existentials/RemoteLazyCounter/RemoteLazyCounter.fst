@@ -1,31 +1,24 @@
--- From Counter.fst
-type Counter : *T
-type Counter = (exists a, ( a         -- new
-                          , a -> Int  -- get
-                          , a -> a    -- inc
-                          )
-               )
-
-intCounter : Counter
-intCounter = (@Int, ( 0     -- new
-                    , id    -- get
-                    , succ  -- inc
-                    )
-             )
--- End from
-
-type Provide a = +{New : !a ; Provide a, Get: !(a -> Int) ; Provide a,  Succ: !(a -> a) ; Provide a, Done: Close}
+type Provide a = &{New : !a ; Provide a, Get: !(a -> Int) ; Provide a,  Inc: !(a -> a) ; Provide a, Done: Wait}
 
 type CounterProvider = !type a. Provide a
+
+counterProvider : CounterProvider -> ()
+counterProvider c = 
+  c |> sendType @Int |> provide
+  where
+    provide : Provide Int -> ()
+    provide (&New  c) = c |> send 0                |> provide
+    provide (&Get  c) = c |> send id |> provide
+    provide (&Inc  c) = c |> send succ             |> provide
+    provide (&Done c) = c |> wait
 
 incTwice : Dual CounterProvider -> ()
 incTwice c =
   let (@a, c) = receiveType c
-      (counter, c) = c |> select New |> receive
-      () = c |> select Done |> wait in
-  ()
---   let (@_, (new, get, inc)) = receiveAndWait s
---   in new |> inc |> inc |> get |> print
+      (inc, c) = c |> select Inc  |> receive @(a -> a) @(Dual (Provide a))
+      (new, c) = c |> select New  |> receive
+      (get, c) = c |> select Get  |> receive
+      ()       = c |> select Done |> close
+  in new |> inc |> inc |> get |> print
 
--- _ =
---     forkWith counterProvider |> incTwice
+_ = forkWith counterProvider |> incTwice
