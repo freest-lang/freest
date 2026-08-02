@@ -179,12 +179,14 @@ instance Subsort Kind where
   _               <: _               = False
 
 instance Located Kind where
-  getSpan = \case 
-    Proper s _ _ -> s 
+  getSpan = \case
+    Proper s _ _ -> s
     Arrow s _ _  -> s
+    Var s _ _    -> s
   setSpan s = \case
-    Proper _ m bk -> Proper s m bk 
-    Arrow _ k1 k2 -> Arrow s k1 k2 
+    Proper _ m bk -> Proper s m bk
+    Arrow _ k1 k2 -> Arrow s k1 k2
+    Var _ lv v    -> Var s lv v
   
 -- for debugging
 instance Show Kind where

@@ -25,7 +25,6 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin(..) )
 import Syntax.Type.Kinded qualified as TK
-import Syntax.Type.Unkinded qualified as TU
 import Validation.Substitution ( betaRule )
 import Compiler.Bug ( internalError )
 
@@ -67,7 +66,6 @@ data Error
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
   | KindMismatch Span K.Kind TK.KindedType
-  | KindMismatchK Span K.Kind K.Kind TU.ScopedType
   | KSigLacksBinding Span Identifier
   | LacksTypeSig Span Variable
   | LexicalError Span Char
@@ -158,7 +156,6 @@ instance Located Error where
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
     KindMismatch s _ _ -> s
-    KindMismatchK s _ _ _ -> s
     KSigLacksBinding s _ -> s
     LacksTypeSig s _ -> s
     LexicalError s _ -> s
@@ -324,9 +321,7 @@ toMessage src = \case
     ++ "The type parameter has kind " ++ bt (tidyK k) ++ ", declared at"
     ++ locateSpan src (getSpan k)
     ++ "Higher-kinded type arguments are not inferred; please provide them explicitly"
-  CannotSatisfyKindConstraint o k1 k2 -> makeError src (getSpan o)
-    ("Couldn't match kind " ++ bt a ++ " with kind " ++ bt b)
-    where (a, b) = tidyKK k1 k2
+  CannotSatisfyKindConstraint o k1 k2 -> kindMismatch src (getSpan o) k2 k1
   CannotSatisfyBaseKindConstraint o p1 p2 -> makeError src (getSpan o)
     ("Expected a " ++ prettyBk p2 ++ ", but got a " ++ prettyBk p1)
   InfiniteKind o v k -> makeError src (getSpan o)
@@ -393,25 +388,8 @@ toMessage src = \case
     ++ "(A type of kind " ++ bt (tidyK k) ++ " cannot be applied to further arguments)"
   IllegalChoice s i t -> makeError src (getSpan i)
     ("Choice " ++ bt (show i) ++ " is not offered by type " ++ bt (unparse t))
-  KindMismatch s k1 t -> makeError src s
-    -- TODO: this would give us weird errors, like "Expected 1 less argument to
-    -- type `Int`" with `type T : *T -> *T` and `type T = Int`
-    -- if | K.depth k1 < K.depth k2 ->
-    --      ("Expected " ++ prettyMoreArgs diff ++ " to type " ++ bt (unparse t))
-    --    | K.depth k1 > K.depth k2 ->
-    --      ("Expected " ++ prettyLessArgs (- diff) ++ " to type " ++ bt (unparse t))
-    --    | otherwise ->
-      (let (a, b) = tidyKK k1 (TK.kindOf t)
-       in "Kind " ++ bt b ++ " is not a subkind of the expected kind " ++ bt a)
+  KindMismatch s k1 t -> kindMismatch src s k1 (TK.kindOf t)
     ++ kindMismatchHint (unparse t) (TK.kindOf t) k1
-    -- where
-    --   diff = (K.depth k2 - K.depth k1)
-  KindMismatchK s k1 k2 t -> makeError src s
-      (let (a, b) = tidyKK k1 k2
-       in "Kind " ++ bt b ++ " is not a subkind of the expected kind " ++ bt a)
-    ++ kindMismatchHint (unparse t) k2 k1
-    -- where
-    --   diff = (K.depth k2 - K.depth k1)
   KSigLacksBinding s i -> makeError src s
     ("The kind signature for type " ++ bt (show i)
       ++ " lacks an accompanying binding")
@@ -500,6 +478,7 @@ toMessage src = \case
         K.Proper _ m bk -> prettyBk bk ++ " " ++ bt (unparse t)
         k               -> bt (unparse t) ++ " of kind " ++ bt (tidyK k))
       ++ " instead")
+    ++ takenFrom src s ("Its kind " ++ bt (unparse k) ++ " is ") k
   ProperKindMismatch s t k -> case k of
     -- an unsolved kind variable: inference could not determine a proper kind here
     K.Var{} -> makeError src s
@@ -508,7 +487,7 @@ toMessage src = \case
     _ -> makeError src s
       ("Expected " ++ prettyMoreArgs (K.depth k) ++ " to " ++ bt (unparse t))
       ++ "(Expected a proper type, but got " ++ bt (unparse t)
-      ++ " of kind " ++ bt (tidyK k) ++ ")"
+      ++ " of kind " ++ bt (tidyK k) ++ ")" ++ takenFrom src s "\nIts kind is " k
   RestrictedFunInMutual s x t -> makeError src s
     ("Mutually recursive function " ++ bt (external x)
       ++ " must be unrestricted, but has type " ++ bt (unparse t))
@@ -531,8 +510,8 @@ toMessage src = \case
           _        -> "n expression") ++ "\n"
       ++ snippet src fpe True)
   TypeMismatch s t u _ -> makeError src s "Type mismatch:"
-    ++ "Couldn't match expected type " ++ bt (unparse t) ++ fromClause s src t
-    ++ "with actual type " ++ bt (unparse u) ++ fromClause s src u
+    ++ "Couldn't match expected type " ++ bt (unparse t) ++ takenFrom src s ", " t
+    ++ "with actual type " ++ bt (unparse u) ++ takenFrom src s ", " u
     ++ inferenceHint
     where
     -- Only when a type argument was left unresolved (it shows as `_`): the
@@ -549,11 +528,6 @@ toMessage src = \case
           ++ "(note the `forall`).\nConsider giving it an explicit type argument "
           ++ "(e.g. `Nothing @a`) or a type annotation."
       | otherwise = ""
-    fromClause primary src ty
-      | sp == primary                      = "\n"
-      | not (Map.member (filepath sp) src) = "\n"
-      | otherwise                          = ", taken from:\n" ++ snippet src sp True
-      where sp = getSpan ty
   TypeMismatchExists s t poe -> makeError src s
     ("Couldn't match expected type " ++ bt (show t) ++ " with a package "
       ++ case poe of Left  p -> "pattern"
@@ -764,6 +738,24 @@ toMessage src = \case
         m       -> "a type of multiplicity " ++ bt (tidyM m)
   kindMismatchHint _ _ _ = ""
 
+  -- | The two sides of a kind mismatch, each with its provenance, laid out as a
+  -- type mismatch is.
+  kindMismatch :: Source -> Span -> K.Kind -> K.Kind -> String
+  kindMismatch src s expected actual = makeError src s "Kind mismatch:"
+    ++ "Couldn't match expected kind " ++ bt e ++ takenFrom src s ", " expected
+    ++ "with actual kind " ++ bt a ++ takenFrom src s ", " actual
+    where (e, a) = tidyKK expected actual
+
+  -- | Where the thing at hand comes from, as a clause opened by @lead@. Silent
+  -- when its span is the one the error already reports at, or names source we do
+  -- not hold. A kind's span delimits the kind as written when there is one and
+  -- the type it was inferred for otherwise, and it was taken from either.
+  takenFrom :: Located a => Source -> Span -> String -> a -> String
+  takenFrom src primary lead (getSpan -> sp)
+    | sp == primary                      = "\n"
+    | not (Map.member (filepath sp) src) = "\n"
+    | otherwise = lead ++ "taken from:\n" ++ snippet src sp True
+
   -- | Render one side of a multiplicity mismatch
   multSide :: Source -> K.Multiplicity -> Origin -> String
   multSide src m (Origin sp) =
@@ -791,18 +783,18 @@ sessionHint :: TK.KindedType -> Maybe String
 sessionHint = go
   where
     go = \case
-      TK.End _ TK.Out              -> Just "close"
-      TK.End _ TK.In               -> Just "wait"
-      TK.AppMessage _ m TK.Out _   -> Just (atMult m "send")
-      TK.AppMessage _ m TK.In  _   -> Just (atMult m "receive")
-      TK.UnChoice _ TK.Out _       -> Just "select_"
-      TK.UnChoice _ TK.In  _       -> Just "case"
-      TK.AppLinChoice _ TK.Out _   -> Just "select"
-      TK.AppLinChoice _ TK.In  _   -> Just "case"
-      TK.AppQuantS _ TK.Out _ _ _  -> Just "sendType"
-      TK.AppQuantS _ TK.In  _ _ _  -> Just "receiveType"
-      TK.AppSemi _ t _             -> go t
-      _                            -> Nothing
+      TK.End _ Pos             -> Just "close"
+      TK.End _ Neg             -> Just "wait"
+      TK.AppMessage _ m Pos _  -> Just (atMult m "send")
+      TK.AppMessage _ m Neg _  -> Just (atMult m "receive")
+      TK.UnChoice _ Pos _      -> Just "select_"
+      TK.UnChoice _ Neg _      -> Just "case"
+      TK.AppLinChoice _ Pos _  -> Just "select"
+      TK.AppLinChoice _ Neg _  -> Just "case"
+      TK.AppQuantS _ Pos _ _ _ -> Just "sendType"
+      TK.AppQuantS _ Neg _ _ _ -> Just "receiveType"
+      TK.AppSemi _ t _         -> go t
+      _                        -> Nothing
 
 -- | Name a pattern that matches a type, so a pattern of the wrong shape or
 -- multiplicity can point at the right one. The type must be in weak head normal
@@ -810,15 +802,15 @@ sessionHint = go
 -- pattern, so a hint is offered exactly when some pattern does match.
 patternHint :: TK.KindedType -> Maybe String
 patternHint = \case
-  TK.End _ TK.In                             -> Just "Wait"
-  TK.AppSemi _ (TK.End _ TK.In) _            -> Just "Wait"
-  TK.AppMessage _ m TK.In _                  -> Just (inPat m)
-  TK.AppSemi _ (TK.AppMessage _ m TK.In _) _ -> Just (inPat m)
-  TK.UnChoice _ TK.In _                      -> Just "*&l"
-  TK.AppSemi _ (TK.UnChoice _ TK.In _) _     -> Just "*&l"
-  TK.AppLinChoice _ TK.In _                  -> Just "&l p"
-  TK.AppQuantS _ TK.In _ _ _                 -> Just "?type a. p"
-  _                                          -> Nothing
+  TK.End _ Neg                             -> Just "Wait"
+  TK.AppSemi _ (TK.End _ Neg) _            -> Just "Wait"
+  TK.AppMessage _ m Neg _                  -> Just (inPat m)
+  TK.AppSemi _ (TK.AppMessage _ m Neg _) _ -> Just (inPat m)
+  TK.UnChoice _ Neg _                      -> Just "*&l"
+  TK.AppSemi _ (TK.UnChoice _ Neg _) _     -> Just "*&l"
+  TK.AppLinChoice _ Neg _                  -> Just "&l p"
+  TK.AppQuantS _ Neg _ _ _                 -> Just "?type a. p"
+  _                                        -> Nothing
   where inPat m = if K.isUn m then "*?p" else "?p; q"
 
 -- | The unrestricted sibling of an operator is its name with a trailing @_@.

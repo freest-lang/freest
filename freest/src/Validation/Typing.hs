@@ -437,7 +437,7 @@ check tdecls ddecls kctx tctx e t = case e of
     case normalise tdecls t of
       T.AppArrow s m t1 t2 -> do
         case normalise tdecls t2 of
-          T.AppQuantS s T.Out a k t2' -> do
+          T.AppQuantS s Pos a k t2' -> do
             checkEquivTypes tdecls ddecls (Left e)
               (T.AppArrow s m t1 (subs a u t2'))
               (T.AppArrow s m t1 t2)
@@ -448,7 +448,7 @@ check tdecls ddecls kctx tctx e t = case e of
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
         case normalise tdecls t2 of
-          T.AppQuantS s'' T.In a k t2' -> do
+          T.AppQuantS s'' Neg a k t2' -> do
             checkEquivTypes tdecls ddecls (Left e)
               (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t2'))
               (T.AppArrow s' m t1 t2)

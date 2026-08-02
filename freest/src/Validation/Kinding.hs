@@ -93,8 +93,8 @@ resolveBndKind (a, Nothing) = (a,) <$> freshUnifKind a
 -- local usage to tighten from, since that consumer is remote. A linear binder is
 -- the annotated case @exists (a:1T)@ / @!type (a:1T)@. Input-polarity quantifiers
 -- (∀ and @?type@) keep the most-general default ('resolveBndKind').
-resolveQuantBinder :: T.Polarity -> BaseKind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
-resolveQuantBinder T.Out _ (a, Nothing) =
+resolveQuantBinder :: Polarity -> BaseKind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
+resolveQuantBinder Pos _ (a, Nothing) =
   (a,) . Proper (getSpan a) (Un (getSpan a)) . VarBK UnifLv <$> freshUnifBaseKindVar (getSpan a)
 resolveQuantBinder _ _ ak = resolveBndKind ak
 
@@ -273,10 +273,10 @@ checkOperand ctx req t = do
   t' <- synth ctx t
   let o = Origin (getSpan t)
   case TK.kindOf t' of
-    Proper _ m bk
+    k@(Proper _ m bk)
       | isVarBaseKind bk -> addBaseKindConstraint (SubBaseKind o bk req) >> return (m, bk, t')
       | bk <: req       -> return (m, bk, t')
-      | otherwise       -> throwE (BaseKindMismatch (getSpan t) req t' (Proper (getSpan t) m bk))
+      | otherwise       -> throwE (BaseKindMismatch (getSpan t) req t' k)
     Var _ lv a | solvable lv -> do
       existing <- gets kindBindings
       (m, bk) <- case Map.lookup a existing of
@@ -335,14 +335,14 @@ checkBaseKind :: KindCtx -> T.ScopedType -> BaseKind -> Validation (Multiplicity
 checkBaseKind ctx t bk = do
   (m, bk', kt) <- checkProper ctx t
   unless (bk' <: bk) $
-    throwE (BaseKindMismatch (getSpan t) bk kt (Proper (getSpan t) m bk'))
+    throwE (BaseKindMismatch (getSpan t) bk kt (TK.kindOf kt))
   return (m, bk', kt)
 
 checkBaseKindK :: TK.KindedType -> BaseKind -> Validation (Multiplicity, BaseKind)
 checkBaseKindK t bk = do
   (m, bk', _) <- checkProperK t
   unless (bk' <: bk) $
-    throwE (BaseKindMismatch (getSpan t) bk t (Proper (getSpan t) m bk'))
+    throwE (BaseKindMismatch (getSpan t) bk t (TK.kindOf t))
   return (m, bk')
 
 -- | Check that the kind of a type is a subkind of another. When a solvable
@@ -363,12 +363,6 @@ hasSolvableVar = \case
   where
     multVar    = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
     baseKindVar = \case VarBK lv _ -> solvable lv; _ -> False
-
--- | Check if the kind of a type is a subkind of another in a contravariant 
--- position. If not, throw an error located at the type.
-checkSubkindOf' :: TK.KindedType -> Kind -> Kind -> Validation ()
-checkSubkindOf' t k' k = unless (k' <: k) $
-     throwE (KindMismatch (getSpan t) k' t)
 
 isRestricted, isStrictlyChannel, isStrictlySession :: TK.KindedType -> Bool
 

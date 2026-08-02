@@ -34,7 +34,7 @@ data KindUnifier = KindUnifier
 -- | Why unification failed. Each carries the 'Origin' of the constraint being
 -- solved, so the error can be reported at the right source location.
 data UnifyError
-  = Mismatch Origin Kind Kind    -- ^ incompatible kind structure (e.g. proper vs. arrow)
+  = Mismatch Origin Kind Kind    -- ^ incompatible kind structure (e.g. proper vs. arrow), the kind given before the one required
   | Occurs Origin Variable Kind  -- ^ a variable would be bound to a kind that mentions it
 
 -- The solver threads a fresh-variable counter (decreasing negative internal IDs,
@@ -59,12 +59,12 @@ unifyKindSub o k1 k2 = unifyKindSubs Map.empty [(o, k1, k2)]
 -- elsewhere during kinding).
 unifyKindSubs :: Map.Map Variable Kind -> [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
 unifyKindSubs binds cs =
-  case runStateT (mapM_ (\(o, k1, k2) -> go o k1 k2) cs) (Acc (-2) binds [] []) of
+  case runStateT (mapM_ (\(o, k1, k2) -> go o Pos k1 k2) cs) (Acc (-2) binds [] []) of
     Left e         -> Left e
     Right (_, acc) -> Right (KindUnifier (kSub acc) (mCs acc) (pCs acc))
 
-go :: Origin -> Kind -> Kind -> U ()
-go o k1 k2 = do
+go :: Origin -> Polarity -> Kind -> Kind -> U ()
+go o pol k1 k2 = do
   k1' <- chase k1
   k2' <- chase k2
   case (k1', k2') of
@@ -72,14 +72,19 @@ go o k1 k2 = do
       | a == b      -> pure ()
       | solvable l1 -> bind o a k2'
       | solvable l2 -> bind o b k1'
-      | otherwise   -> lift (Left (Mismatch o k1' k2'))
-    (Var s l a, _) | solvable l -> do occursCheck o a k2'; k <- instLike s k2'; bind o a k; go o k k2'
-    (_, Var s l a) | solvable l -> do occursCheck o a k1'; k <- instLike s k1'; bind o a k; go o k1' k
-    (Arrow _ d1 c1, Arrow _ d2 c2) -> go o d2 d1 >> go o c1 c2  -- contravariant / covariant
+      | otherwise   -> mismatch k1' k2'
+    (Var s l a, _) | solvable l -> do occursCheck o a k2'; k <- instLike s k2'; bind o a k; go o pol k k2'
+    (_, Var s l a) | solvable l -> do occursCheck o a k1'; k <- instLike s k1'; bind o a k; go o pol k1' k
+    (Arrow _ d1 c1, Arrow _ d2 c2) ->  -- contravariant / covariant
+      go o (dual pol) d2 d1 >> go o pol c1 c2
     (Proper _ m1 p1, Proper _ m2 p2) -> do
       emitMult (multEq (K.join m1 m2) m2)  -- m1 <: m2, as the ACUI encoding
       emitPre  (SubBaseKind o p1 p2)
-    _ -> lift (Left (Mismatch o k1' k2'))
+    _ -> mismatch k1' k2'
+  where
+    mismatch k1' k2' = lift (Left (uncurry (Mismatch o) (oriented k1' k2')))
+    oriented :: a -> a -> (a, a)
+    oriented = case pol of Pos -> (,); Neg -> flip (,)
 
 -- | A fresh kind of the same structure as the argument, with fresh leaf/whole-
 -- kind variables — so a whole-kind variable resolves to a /shape/, keeping its

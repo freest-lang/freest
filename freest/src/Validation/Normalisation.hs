@@ -87,16 +87,16 @@ reduce tdecls = \case
     -- R-DVoid
   T.AppDual _ t@T.Void{} -> t
     -- R-DEnd
-  T.AppDual _ t@T.End{} -> T.dual t
+  T.AppDual _ t@T.End{} -> dual t
     -- R-DMsg
-  T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (T.dual u) ts
+  T.AppDual _ (T.App s u@T.Message{} ts) -> T.App s (dual u) ts
     -- R-DChoice, un
-  T.AppDual _ u@T.UnChoice{} -> T.dual u -- for *& and *+
+  T.AppDual _ u@T.UnChoice{} -> dual u -- for *& and *+
     -- R-DChoice, lin
-  T.AppDual s (T.AppLinChoice _ p lts) -> T.AppLinChoice s (T.dual p) (map (second $ T.AppDual s) lts)
+  T.AppDual s (T.AppLinChoice _ p lts) -> T.AppLinChoice s (dual p) (map (second $ T.AppDual s) lts)
     -- R-DQuant
   T.AppDual s1 (T.App s2 (T.QuantS s3 (K.Arrow _ (K.Arrow _ k _) _) p) [f]) ->
-    T.AppQuantS s1 (T.dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable ObjLv a k]))
+    T.AppQuantS s1 (dual p) a k (T.AppDual s2 (T.App s3 f [T.fromVariable ObjLv a k]))
     where a = mkFreshVar s1 (freeTypeVars f)
     -- R-DSemi
   T.AppDual s1 (T.AppSemi s2 t1 t2) ->

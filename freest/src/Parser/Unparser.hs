@@ -17,7 +17,7 @@ module Parser.Unparser
   )
   where
 
-import Syntax.Base ( Variable, Identifier, solvable )
+import Syntax.Base ( Variable, Identifier, Polarity(..), solvable )
 import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
@@ -114,8 +114,8 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
     T.Quant _ _ p bk m -> (maxRator, "(" ++ quant True p bk m ++ ")")
     T.ForallM _ _ m φs t -> (dotRator, "forall " ++ unwords (map (('#':) . show) φs) ++ " -" ++ show m ++ "-> " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
-    T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
-                                        T.In  -> "Wait")
+    T.End _ _ p -> (maxRator, case p of Pos -> "Close"
+                                        Neg -> "Wait")
     T.Message _ _ m p -> (maxRator, "(" ++ msgMultiplicity m ++ polarity p ++ ")")
     T.Choice _ _ m p is -> 
       (maxRator, msgMultiplicity m ++ view p ++ "{" ++ fields ++ "}")
@@ -160,23 +160,23 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
         r = bracket (fragment (last ts)) RightAssoc appRator
     where
       quant prefix = \cases
-        T.In  K.Top     m -> "forall" ++ if prefix then "#" ++ show m else " "
-        T.Out K.Top     m -> "exists" ++ if prefix then "" else " "
-        p     K.Session m -> polarity p ++ "type "
+        Neg K.Top     m -> "forall" ++ if prefix then "#" ++ show m else " "
+        Pos K.Top     m -> "exists" ++ if prefix then "" else " "
+        p   K.Session m -> polarity p ++ "type "
       quantSep = \cases
-        T.In K.Top m -> " -" ++ show m ++ "-> "
+        Neg  K.Top m -> " -" ++ show m ++ "-> "
         _    _     _ -> ". "
       multArrow m = "-" ++ filter (/= ' ') (unparse m) ++ "->"
       msgMultiplicity = \case
-        K.Lin{}    -> ""
-        K.Un{}     -> "*"
+        K.Lin{} -> ""
+        K.Un{}  -> "*"
       polarity = \case
-        T.In  -> "?"
-        T.Out -> "!"
+        Neg -> "?"
+        Pos -> "!"
       bindings = unwords . map unparse
       view = \case
-        T.In  -> "&"
-        T.Out -> "+"
+        Neg -> "&"
+        Pos -> "+"
 
 -- | Unparse a datatype declaration, e.g. @data Tree a = Leaf | Node (Tree a) a (Tree a)@.
 unparseDataDef :: D.KindedDataDecls -> Identifier -> String

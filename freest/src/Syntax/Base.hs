@@ -8,7 +8,9 @@ represent FreeST's external syntax.
 -}
 
 module Syntax.Base
-  ( Parsed, Scoped, Kinded, Typed 
+  -- Phases
+  ( Parsed, Scoped, Kinded, Typed
+  , void
   -- Span
   , Span (..)
   , nullSpan
@@ -29,7 +31,10 @@ module Syntax.Base
   , mapLevel
   , voidLevel
   , partitionLevels
-  , void
+  -- Polarity
+  , Polarity (..)
+  , Dual (..)
+  -- Congruence
   , Congruence(..)
   )
 where
@@ -43,13 +48,13 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Void ( Void )
 
--- | The different phases of annotated ASTs
+-- * The phases of annotated ASTs. Based on "Trees that grow"
 data Parsed; data Scoped; data Kinded; data Typed
 
 void :: Void
 void = error "Attempt to evaluate void"
 
--- 1 _ Positions in the source code
+-- * Positions in the source code
 
 -- | A position in the source code is a pair of line and column numbers.
 type Pos = (Int, Int)
@@ -128,7 +133,7 @@ instance Show Identifier where
 mkId :: Located a => String -> a -> Identifier
 mkId i l = Identifier (getSpan l) i
 
--- 3 _ Variables
+-- * Variables
 
 -- | Variables are used to represent expression and type variables. Unlike
 -- identifiers, they have an internal representation that depends on their
@@ -196,7 +201,7 @@ data VarLv
 solvable :: VarLv -> Bool
 solvable = (/= ObjLv)
 
--- 4 _ Levels
+-- * Levels
 
 -- | Used to separate the syntax of different computational levels:
 -- expression, types and multiplicity.
@@ -243,6 +248,20 @@ partitionLevels =
               (TypeLevel y) -> \(xs, ys, zs) -> (xs, y : ys, zs) 
               (MultLevel z) -> \(xs, ys, zs) -> (xs, ys, z : zs) 
         ([], [], [])
+
+-- * Duality
+
+class Dual a where
+  dual :: a -> a
+
+-- | Which of two dual roles a construct plays.
+data Polarity = Neg | Pos
+  deriving (Eq, Ord)
+
+instance Dual Polarity where
+  dual = \case Neg -> Pos; Pos -> Neg
+
+-- * Congruence
 
 class Congruence t where
   congruent :: Map.Map Variable Variable -> t -> t -> Bool

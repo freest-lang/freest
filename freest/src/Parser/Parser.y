@@ -293,7 +293,7 @@ TypePrimaryListWS :: { [T.ParsedType] }
 
 KindPrimary :: { K.Kind }
   : ProperKind   { $1 }
-  | '(' Kind ')' { $2 }
+  | '(' Kind ')' { setSpan (spanFromTo $1 $3) $2 }
 
 Kind :: { K.Kind }
   : Kind '->' Kind %prec ARROW { K.Arrow (spanFromTo $1 $3) $1 $3 }
@@ -315,8 +315,8 @@ TypePrimary :: { T.ParsedType }
   | 'Float'  { T.Float (getSpan $1)       }
   | 'Char'   { T.Char  (getSpan $1)       }
   | 'Skip'   { T.Skip  (getSpan $1)       }
-  | 'Close'  { T.End   (getSpan $1) T.Out }
-  | 'Wait'   { T.End   (getSpan $1) T.In  }
+  | 'Close'  { T.End   (getSpan $1) Pos   }
+  | 'Wait'   { T.End   (getSpan $1) Neg   }
   | 'Void' '@' Kind { T.Void (spanFromTo $1 $3) $3 }
   -- Unit, Tuples, Operators
   | '(' ')'        { T.Tuple (spanFromTo $1 $2) [] } -- { T.DName (spanFromTo $1 $2) (mkUnitId (spanFromTo $1 $2)) }
@@ -407,25 +407,25 @@ AtTypeList :: { [T.ParsedType] }
   : '@' TypePrimary            { [$2] }
   | '@' TypePrimary AtTypeList { $2 : $3 }
 
--- Quant :: { (Span, T.Polarity) }
---   : 'forall' { (getSpan $1, T.In ) }
---   | 'exists' { (getSpan $1, T.Out) }
+-- Quant :: { (Span, Polarity) }
+--   : 'forall' { (getSpan $1, Neg ) }
+--   | 'exists' { (getSpan $1, Pos) }
 
 Commas :: { Int }
   : ',' { 1 }
   | ',' Commas { succ $2 }
 
-Polarity :: { (Span, T.Polarity) }
-  : '!'  { (getSpan $1, T.Out) }
-  | '?'  { (getSpan $1, T.In) }
+Polarity :: { (Span, Polarity) }
+  : '!'  { (getSpan $1, Pos) }
+  | '?'  { (getSpan $1, Neg) }
 
--- Polarity2 :: { (Span, T.Polarity) }
---   : '!' '!' {(spanFromTo $1 $2, T.Out) }
---   | '?' '?' {(spanFromTo $1 $2, T.In ) }
+-- Polarity2 :: { (Span, Polarity) }
+--   : '!' '!' {(spanFromTo $1 $2, Pos) }
+--   | '?' '?' {(spanFromTo $1 $2, Neg ) }
 
-View :: { (Span, T.Polarity) }
-  : '+' { (getSpan $1, T.Out) }
-  | '&' { (getSpan $1, T.In) }
+View :: { (Span, Polarity) }
+  : '+' { (getSpan $1, Pos) }
+  | '&' { (getSpan $1, Neg) }
 
 LabelTypeListComma :: { [(Identifier, T.ParsedType)] }
   : Identifier ':' Type ',' LabelTypeListComma { ($1, $3) : $5 }
