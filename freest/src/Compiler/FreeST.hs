@@ -12,6 +12,7 @@ import Interpreter.Value (emptyValueCtx)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL ( ReplState(..), emptyReplState, repl )
 import Compiler.Pipeline ( loadSilent )
+import Compiler.Bug ( handleBug )
 import Interpreter.Exception ( printException )
 
 import Control.Exception ( catch )
@@ -26,11 +27,12 @@ freest = execParser opts >>= runFreeST
 -- | Dispatch on the parsed command line options.
 runFreeST :: RunOpts -> IO ()
 runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip} =
-  repl emptyReplState{filePath = mPath, implicitPrelude = ip}
+  handleBug mPath (repl emptyReplState{filePath = mPath, implicitPrelude = ip})
 runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
 runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip, typecheckOnly = tc} =
+  handleBug (Just programPath) $
   loadSilent ip programPath >>= \case
     Nothing -> exitFailure
     Just (src, _, _, _, _, modl)

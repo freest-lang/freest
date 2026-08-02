@@ -28,6 +28,7 @@ import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Compiler.Pipeline qualified as Pipeline
+import Compiler.Bug ( reportBug )
 import Interpreter.Value ( ValueCtx, emptyValueCtx )
 import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
@@ -56,7 +57,8 @@ import System.Console.Repline
   )
 import System.Exit ( exitSuccess )
 import Control.Monad.Except (runExceptT)
-import Control.Exception (try)
+import Control.Exception (SomeException)
+import Control.Monad.Catch (catch, try)
 
 -- The state of the REPL
 
@@ -114,12 +116,12 @@ repl =
   evalStateT
     (evalRepl
       (pure . (++ " ") . (freeSTiPrompt ++) . \case SingleLine -> ">"; MultiLine -> "|")
-      cmd
-      replOpts
+      (surviving . cmd)
+      (map (fmap (surviving .)) replOpts)
       (Just optPrefix)
       (Just "m")
       (Prefix (wordCompleter byWord) defaultMatcher)
-      ini
+      (surviving ini)
       fin
     )
   where
@@ -151,6 +153,13 @@ repl =
       ]
 
 type Repl a = HaskelineT (StateT ReplState IO) a
+
+-- | Run a command, reporting a compiler bug rather than taking the session down
+-- with it. The state reverts to what it was before the command.
+surviving :: Repl () -> Repl ()
+surviving act = catch act \e -> do
+  path <- gets filePath
+  liftIO (reportBug path (e :: SomeException))
 
 ini :: Repl ()
 ini = do
