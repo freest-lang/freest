@@ -135,6 +135,8 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
+    T.AppQuant _ _ _ _ Pos K.Top _ aks t ->
+      (maxRator, "(exists " ++ List.intercalate ", " (map unparse aks) ++ ", " ++ unparse t ++ ")")
     T.AppQuant _ _ _ _ p bk m aks t -> 
       (dotRator, quant False p bk m ++ bindings aks ++ quantSep p bk m ++ unparse t)
     T.Tuple _ _ _ ts -> 
