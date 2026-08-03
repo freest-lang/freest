@@ -31,7 +31,7 @@ import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
 import System.Environment ( getArgs, getProgName )
-import System.IO ( BufferMode(NoBuffering), hFlush, hGetBuffering, hIsTerminalDevice, hSetBuffering, isEOF, stdin, stdout )
+import System.IO ( BufferMode(NoBuffering), Handle, hFlush, hGetBuffering, hIsTerminalDevice, hPutStr, hSetBuffering, isEOF, stderr, stdin, stdout )
 
 -- | Read a single character with 'stdin' in character-at-a-time mode.
 --
@@ -80,6 +80,11 @@ fstToHsString = \case
   VCons "[]"   []              -> ""
   VCons "(::)" [VChar c, rest] -> c : fstToHsString rest
   v                            -> internalError ("not a string: " ++ show v)
+
+-- | Write a FreeST string on a handle, flushing it so that output written
+-- through different handles keeps its order.
+putStrOn :: Handle -> Value -> Value
+putStrOn h s = VIO $ VCons "()" [] <$ (hPutStr h (fstToHsString s) >> hFlush h)
 
 -- | A FreeST string value as a Haskell 'String', if it is one.
 asString :: Value -> Maybe String
@@ -236,7 +241,10 @@ builtins = Map.fromList
   , ("internalIsEOF",         VBuiltin (const $ VIO $ hsToFstBool <$> isEOF))
   -- getContents makes sense in a lazy setting; FreeST is eager.
   -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
-  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VCons "()" [] <$ (putStr (fstToHsString s) >> hFlush stdout)))
+  -- *** stdout and stderr
+  -- **** Internal output functions
+  , ("internalPutStrOut",     VBuiltin (putStrOn stdout))
+  , ("internalPutStrErr",     VBuiltin (putStrOn stderr))
   -- ** Command line
   , ("getArgs",               VBuiltin (const $ VIO $ hsToFstStrings <$> getArgs))
   , ("getProgName",           VBuiltin (const $ VIO $ hsToFstString <$> getProgName))

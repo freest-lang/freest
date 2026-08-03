@@ -625,25 +625,30 @@ getChar _ = hGetChar_ stdin
 getLine : () -> String
 getLine _ = hGetLine_ stdin
 
--- *** stdout
+-- *** stdout and stderr
 
--- Internal stdout function
-internalPutStrOut : String -> ()
+-- Internal output functions
+internalPutStrOut, internalPutStrErr : String -> ()
 internalPutStrOut = undefined
+internalPutStrErr = undefined
 
-stdout : *?OutStream
-stdout = forkWith (runServer (\_ -> printer) ())
+stdout, stderr : *?OutStream
+(stdout, stderr) = (outStream internalPutStrOut, outStream internalPutStrErr)
   where
     readApply : forall (a : *T) (b : 1S) -> (a -> ()) -> ?a ; b -1-> b
     readApply f c =
       let (x, c) = receive c in f x; c
-    printer : Dual OutStream -> ()
-    printer (&PutStr p) =
-      p |> readApply internalPutStrOut |> printer
-    printer (&PutStrLn p) = 
-      p |> readApply (\s -> internalPutStrOut (s ++ "\n")) |> printer
-    printer (&Stop p) =
+
+    printer : (String -> ()) -> Dual OutStream -> ()
+    printer put (&PutStr p) =
+      p |> readApply put |> printer put
+    printer put (&PutStrLn p) =
+      p |> readApply (\s -> put (s ++ "\n")) |> printer put
+    printer _ (&Stop p) =
       p |> close
+
+    outStream : (String -> ()) -> *?OutStream
+    outStream put = forkWith (runServer (\_ -> printer put) ())
 
 -- | Prints a character to `stdout`.
 putChar : Char -> ()
