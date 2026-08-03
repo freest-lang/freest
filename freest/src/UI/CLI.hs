@@ -57,6 +57,7 @@ data RunOpts = RunOpts
   , implicitPrelude :: Bool
   , interactive :: Bool
   , typecheckOnly :: Bool
+  , progArgs :: [String]
   }
 
 defaultRunOpts :: RunOpts
@@ -65,6 +66,7 @@ defaultRunOpts = RunOpts
   , implicitPrelude = True
   , interactive = False
   , typecheckOnly = False
+  , progArgs = []
   }
 
 -- | The parser for the command line options.
@@ -84,6 +86,9 @@ freestOpts = RunOpts
         ( short 't'
        <> long "typecheck"
        <> help "Type-check the module but do not run it")
+  <*> many (strArgument
+        ( help "Arguments passed to the FreeST program, after a `--' separator"
+       <> metavar "-- ARG..."))
 
 opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper <**> simpleVersioner version)

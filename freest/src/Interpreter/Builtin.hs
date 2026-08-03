@@ -30,6 +30,7 @@ import Interpreter.Value ( Value(..), ChannelEnd )
 import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
+import System.Environment ( getArgs, getProgName )
 import System.IO ( BufferMode(NoBuffering), hFlush, hGetBuffering, hIsTerminalDevice, hSetBuffering, isEOF, stdin, stdout )
 
 -- | Read a single character with 'stdin' in character-at-a-time mode.
@@ -68,6 +69,10 @@ fstToHsBool (VCons "False" []) = False
 -- | Build a FreeST string value from a Haskell 'String'.
 hsToFstString :: String -> Value
 hsToFstString = foldr (\c acc -> VCons "(::)" [VChar c, acc]) (VCons "[]" [])
+
+-- | Convert a list of Haskell 'String's into a FreeST list of strings.
+hsToFstStrings :: [String] -> Value
+hsToFstStrings = foldr (\s acc -> VCons "(::)" [hsToFstString s, acc]) (VCons "[]" [])
 
 -- | Extract a Haskell 'String' from a FreeST string value.
 fstToHsString :: Value -> String
@@ -232,6 +237,9 @@ builtins = Map.fromList
   -- getContents makes sense in a lazy setting; FreeST is eager.
   -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
   , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VCons "()" [] <$ (putStr (fstToHsString s) >> hFlush stdout)))
+  -- ** Command line
+  , ("getArgs",               VBuiltin (const $ VIO $ hsToFstStrings <$> getArgs))
+  , ("getProgName",           VBuiltin (const $ VIO $ hsToFstString <$> getProgName))
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))

@@ -661,3 +661,13 @@ putStrLn = flip hPutStrLn_ stdout
 -- the newline character `\n`.
 print : forall (a : *T) -> a -> ()
 print @a = putStrLn . show
+
+-- ** Command line
+
+-- | The arguments the program was run with, excluding the program name.
+getArgs : () -> [String]
+getArgs = undefined
+
+-- | The name the program was run under.
+getProgName : () -> String
+getProgName = undefined
