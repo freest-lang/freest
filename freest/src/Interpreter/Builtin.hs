@@ -27,6 +27,7 @@ import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
 
 import Interpreter.Exception (Exception(..))
 import Interpreter.Value ( Value(..), ChannelEnd )
+import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
 import System.IO ( BufferMode(NoBuffering), hFlush, hGetBuffering, hIsTerminalDevice, hSetBuffering, isEOF, stdin, stdout )
@@ -73,7 +74,7 @@ fstToHsString :: Value -> String
 fstToHsString = \case
   VCons "[]"   []              -> ""
   VCons "(::)" [VChar c, rest] -> c : fstToHsString rest
-  v                            -> error ("fstToHsString: not a string: " ++ show v)
+  v                            -> internalError ("not a string: " ++ show v)
 
 -- | A FreeST string value as a Haskell 'String', if it is one.
 asString :: Value -> Maybe String

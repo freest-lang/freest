@@ -9,7 +9,8 @@ the tokens output by the lexer.
 -}
 module Parser.Token where 
 
-import Syntax.Base  
+import Syntax.Base
+import Compiler.Bug ( internalError )  
 import Data.List ( intercalate )
 
 data Token
@@ -78,7 +79,7 @@ getText = \case
   TkStringLit _ t -> t
   TkCmp _ t -> t
   -- Keywords
-  t -> error $ "Parser.Token.getText: no text for token `" ++ show t ++ "`"
+  t -> internalError ("no text for token `" ++ show t ++ "`")
 
 instance Located Token where
   getSpan :: Token -> Span

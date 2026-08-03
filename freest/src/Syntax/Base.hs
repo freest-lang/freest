@@ -52,7 +52,7 @@ import Data.Void ( Void )
 data Parsed; data Scoped; data Kinded; data Typed
 
 void :: Void
-void = error "Attempt to evaluate void"
+void = internalError "attempt to evaluate void"
 
 -- * Positions in the source code
 

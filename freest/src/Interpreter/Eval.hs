@@ -145,11 +145,14 @@ collectLetDecls outer = go outer empty
               go (insertVarPat pat b ctx) (insertVarPat pat b acc) ds
           | otherwise -> do
               res <- resolveRHS ctx rhs
-              (e, ctx') <- maybe (internalError "Non-exhaustive guards in value definition") pure res
+              (e, ctx') <- maybe unmatched pure res
               v     <- eval ctx' e
               mb    <- matchPat v pat
-              binds <- maybe (internalError "Pattern matching failed!") pure mb
+              binds <- maybe unmatched pure mb
               go (binds `union` ctx) (binds `union` acc) ds
+              where 
+              unmatched :: IO r
+              unmatched = throwIO (NonExhaustivePatterns (B.getSpan pat)) :: IO r
 
     funClauses = map (first (map paramPat))
     paramPat (B.ExpLevel p) = Just p

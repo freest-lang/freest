@@ -35,6 +35,7 @@ module Syntax.Expression
 where
 
 import Syntax.Base
+import Compiler.Bug ( internalError )
 import Syntax.Kind ( Multiplicity, Kind, isUn )
 import Syntax.Names
 import Syntax.Type.Internal ( Type, XBndKind )
@@ -194,7 +195,7 @@ instance Located (LetDecl x) where
     ValDef p rhs -> spanFromTo p rhs
     FnDef x rhs  -> spanFromTo x (snd $ last rhs)
     TypeSig xs t  -> spanFromTo (head xs) t
-  setSpan = error "cannot set span of a LetDecl"
+  setSpan = internalError "span not settable for a LetDecl"
 
 instance Located (Exp x) where
   getSpan = \case
@@ -248,7 +249,7 @@ instance Located (RHS x) where
         (maybe (getSpan $ snd $ last ges) (getSpan . last) w)
     UnguardedRHS e w ->
       spanFromTo e (maybe (getSpan e) (getSpan . last) w)
-  setSpan = error "cannot set span of a RHS"
+  setSpan = internalError "span not settable for a RHS"
 
 instance Show (XBndKind x) => Show (Pat x) where
   show = \case
