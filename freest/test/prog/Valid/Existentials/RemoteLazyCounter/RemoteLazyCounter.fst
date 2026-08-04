@@ -8,17 +8,19 @@ counterProvider c =
   where
     provide : Provide Int -> ()
     provide (&New  c) = c |> send 0                |> provide
-    provide (&Get  c) = c |> send id |> provide
+    provide (&Get  c) = c |> send @(Int -> Int) id |> provide
     provide (&Inc  c) = c |> send succ             |> provide
     provide (&Done c) = c |> wait
 
 incTwice : Dual CounterProvider -> ()
 incTwice c =
   let (@a, c) = receiveType c
+      (v,   c) = c |> select New  |> receive
       (inc, c) = c |> select Inc  |> receive @(a -> a) @(Dual (Provide a))
-      (new, c) = c |> select New  |> receive
+      v        = inc (inc v)
       (get, c) = c |> select Get  |> receive
+      n        = get v
       ()       = c |> select Done |> close
-  in new |> inc |> inc |> get |> print
+  in print n
 
 _ = forkWith counterProvider |> incTwice
