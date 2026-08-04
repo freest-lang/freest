@@ -1,4 +1,4 @@
-myfork : forall #m -> (() -m-> ()) -> ()
+myfork : forall #m (a : *T) -> (() -m-> a) -> ()
 myfork = fork
 
 main : ()

@@ -34,9 +34,9 @@ _ = let (c, s) = channel @CakeStore in
 -- A shared channel, shared by all clients (and the store)
 type CakeStore = *+{Cake, Disappointment}
 
-cakeStore : CakeStore -> ()
+cakeStore : CakeStore -> CakeStore
 cakeStore  c = c |> select_ Cake
-                 |> select_ Disappointment ; ()
+                 |> select_ Disappointment
 
 cakeLover : String -> Dual CakeStore -> ()
 cakeLover name (*&Cake)           = putStrLn (name ++ " got cake!")

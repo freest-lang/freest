@@ -21,12 +21,12 @@ waitFor n join =
   then ()
   else case join of *&Over -> waitFor (n - 1) join
 
-handleClient : Bool -> Fork -> Dual CakeService -> ()
+handleClient : Bool -> Fork -> Dual CakeService -> Fork
 handleClient gotCake f s =
   -- Whishful :
   -- s |> (if gotCake then select Cake else select Disappointment) |> wait
-  (if gotCake then select Cake s else select Disappointment s) |> wait ; 
-  select_ Over f; ()
+  (if gotCake then select Cake s else select Disappointment s) |> wait ;
+  select_ Over f
 
 runCakeStore : Bool -> Int -> Int -> Dual CakeStore -> (Fork, Join) -> ()
 runCakeStore gotCake k n cakeStore fj =

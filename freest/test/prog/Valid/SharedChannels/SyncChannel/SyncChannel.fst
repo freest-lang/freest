@@ -22,8 +22,8 @@ syncServer limit ch =
     syncServer limit ch
 
 -- receive linear sync channel and wait for sync
-sync : SyncServer -> ()
-sync ch = receive_ ch |> receiveAndWait; ()
+sync : SyncServer -> Int
+sync ch = receive_ ch |> receiveAndWait
 
 client : Int -> SyncServer -> ()
 client id ch = print (- id); sync ch; print id

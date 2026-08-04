@@ -333,8 +333,8 @@ unwords (w :: ws) = w ++ go ws
 
 -- * Concurrency
 
-fork : forall #m -> (() -m-> ()) -> ()
-fork #m = undefined
+fork : forall #m (a : *T) -> (() -m-> a) -> ()
+fork #m @a = undefined
 
 send : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b
 send @a = undefined
@@ -412,7 +412,7 @@ accept @a c =
 --   -- send the string to be printed
 --   c |> send "Hello!" |> wait
 -- ```
-forkWith : forall #m (a : 1C) -> (Dual a -m-> ()) -> a
+forkWith : forall #m (a : 1C) (b : *T) -> (Dual a -m-> b) -> a
 forkWith #m @a f =
   let (x, y) = channel @a in
   fork (\_ -1-> f y);
@@ -439,10 +439,10 @@ forkWith #m @a f =
 -- counterService i (Get c) = c |> send i |> wait ; i
 --
 -- -- | Counter server
--- runCounterServer : dualof SharedCounter -> Diverge
+-- runCounterServer : dualof SharedCounter -> Void @*T
 -- runCounterServer = runServer @Int @Counter counterService 0
 -- ```
-runServer : forall (a : *T) (b : 1C) -> (a -> Dual b -> a) -> a -> *!b -> ()
+runServer : forall (a : *T) (b : 1C) -> (a -> Dual b -> a) -> a -> *!b -> Void @*T
 runServer handle state c =
   runServer handle (handle state (accept c)) c
 
@@ -461,9 +461,9 @@ times n thunk | otherwise = thunk (); times (n - 1) thunk
 -- ```
 -- _ =
 --   -- print "Hello!" 5 times in parallel
---   parallel @() 5 (\_:() -> putStrLn "Hello!")
+--   parallel 5 (\_ -> putStrLn "Hello!")
 -- ```
-parallel : Int -> (() -> ()) -> ()
+parallel : forall (a : *T) -> Int -> (() -> a) -> ()
 parallel n thunk = times n (\_ -> fork thunk)
 
 -- * Fork/Join
@@ -635,7 +635,7 @@ internalPutStrErr = undefined
 stdout, stderr : *?OutStream
 (stdout, stderr) = (outStream internalPutStrOut, outStream internalPutStrErr)
   where
-    readApply : forall (a : *T) (b : 1S) -> (a -> ()) -> ?a ; b -1-> b
+    readApply : forall (a : *T) (b : 1S) (c : *T) -> (a -> c) -> ?a ; b -1-> b
     readApply f c =
       let (x, c) = receive c in f x; c
 

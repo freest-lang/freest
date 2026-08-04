@@ -4,11 +4,11 @@ write c n =
   let c = send n c in
   print n;
   let (r, w) = channel @(!Int; Close) in
-  fork (\(_ : ()) -1-> receiveAndWait w ; ()); 
+  fork (\(_ : ()) -1-> receiveAndWait w); 
   write r (n + 1);
   close c
 
 _ =
   let (r, w) = channel @(!Int; Close) in
-  fork (\(_ : ()) -1-> receiveAndWait w ; ());
+  fork (\(_ : ()) -1-> receiveAndWait w);
   write r 0

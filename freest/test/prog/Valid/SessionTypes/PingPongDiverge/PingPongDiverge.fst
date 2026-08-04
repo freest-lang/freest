@@ -14,4 +14,4 @@ mutual
     ping (n + 1) c
 
 main : Void @*T
-main = forkWith (\(c : Ping) -1-> ping 0 c ; ()) |> pong
+main = forkWith (\(c : Ping) -1-> ping 0 c) |> pong

@@ -1,5 +1,5 @@
 printAList : forall a -> [a] -> *?OutStream -1-> ForkJoin -1-> ()
-printAList xs c d = printL xs (receive_ c |> hPutStr "[") ; join d ; ()
+printAList xs c d = printL xs (receive_ c |> hPutStr "[") ; join d
     where
         printL : forall a -> [a] -> OutStream -1-> ()
         printL []      c = c |> hPutStr "]\n"      |> hCloseOut

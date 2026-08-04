@@ -30,9 +30,9 @@ initQueue =
     (forkWith (runHeadNode internalC),
      forkWith (runTailNode internalS))
 
-enqueue : Int -> Queue -> ()
+enqueue : Int -> Queue -> Tail
 enqueue i queue =
-    send_ i (snd queue); ()
+    send_ i (snd queue)
 
 dequeue : Queue -> Int
 dequeue queue = 
