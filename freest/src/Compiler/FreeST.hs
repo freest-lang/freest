@@ -13,9 +13,10 @@ import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL ( ReplState(..), emptyReplState, repl )
 import Compiler.Pipeline ( loadSilent )
 import Compiler.Bug ( handleBug )
-import Interpreter.Exception ( printException )
+import Interpreter.Exception ( printException, reportThreadFailure )
 
 import Control.Exception ( catch )
+import GHC.Conc ( setUncaughtExceptionHandler )
 import Options.Applicative ( execParser )
 import System.Environment ( withArgs, withProgName )
 import System.Exit ( exitSuccess, exitFailure )
@@ -39,6 +40,8 @@ runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip, typecheckOn
     Just (src, _, _, _, _, modl)
       | tc        -> exitSuccess
       -- the program sees its own arguments and name, not the compiler's
-      | otherwise -> catch (asProgram (evalModule emptyValueCtx modl) >> exitSuccess)
-                           (\e -> printException src e >> exitFailure)
+      | otherwise -> do
+          setUncaughtExceptionHandler (reportThreadFailure (Just programPath) src)
+          catch (asProgram (evalModule emptyValueCtx modl) >> exitSuccess)
+                (\e -> printException src e >> exitFailure)
       where asProgram = withProgName programPath . withArgs args

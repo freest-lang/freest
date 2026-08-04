@@ -32,7 +32,7 @@ import Compiler.Bug ( reportBug )
 import Interpreter.Value ( ValueCtx, emptyValueCtx )
 import Interpreter.Eval ( evalModule )
 import UI.Error ( printErrors, Error, Source )
-import Interpreter.Exception ( printException )
+import Interpreter.Exception ( printException, reportThreadFailure )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
 import Data.List qualified as List
@@ -58,6 +58,7 @@ import System.Console.Repline
 import System.Exit ( exitSuccess )
 import Control.Monad.Except (runExceptT)
 import Control.Exception (SomeException)
+import GHC.Conc (setUncaughtExceptionHandler)
 import Control.Monad.Catch (catch, try)
 
 -- The state of the REPL
@@ -178,6 +179,7 @@ runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
     Just (src, vs, sctx, kctx, tctx, kmodl) -> do
+      liftIO (setUncaughtExceptionHandler (reportThreadFailure Nothing src))
       vctx <- liftIO (try (evalModule emptyValueCtx kmodl)) >>= \case
         Right v -> pure v
         Left e  -> liftIO (printException src e) >> pure emptyValueCtx   -- e.g. main failed at load
