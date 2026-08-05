@@ -20,7 +20,7 @@ module Interpreter.Builtin
 
 import Control.Concurrent ( forkIO )
 import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
-import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, IOException, SomeException, bracket_, catch, fromException, throwIO)
+import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, IOException, SomeException, bracket_, catch, finally, fromException, throwIO)
 import Data.Char ( chr, ord )
 import Data.Functor ( ($>), void )
 import qualified Data.Map as Map
@@ -160,11 +160,15 @@ asUserError act = act `catch` \(e :: IOException) -> throwIO (UserError nullSpan
 
 -- | Open a file and serve it as a session endpoint, so that the handle is
 -- reachable only through the protocol and is closed when the client stops.
+--
+-- TODO: a client that fails before stopping leaves the server parked, and the
+-- backstop below only runs once the collector notices. Cancelling the endpoints
+-- of a failing thread would close the file at the failure instead.
 openStream :: IOMode -> (Handle -> ChannelEnd -> IO ()) -> Value -> Value
 openStream mode serve path = VIO $ do
   h <- asUserError (openFile (fstToHsString path) mode)
   (client, server) <- chan
-  _ <- forkIO (asUserError (serve h server))
+  _ <- forkIO (asUserError (serve h server) `finally` hClose h)
   return (VChan client)
 
 -- TODO: unchecked against Dual InStream/OutStream, unlike the Prelude's own
