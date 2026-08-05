@@ -105,9 +105,9 @@ data Error
   | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.KindedPat)
   | TypeMismatchChoice Span TK.KindedType Identifier E.KindedPat
   | TypeMismatchExists Span TK.KindedType (Either E.KindedPat E.KindedExp) -- TODO: should be (Either E.KindedPat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
-  | TypeMismatchReceiveType Span TK.KindedType
+  | TypeMismatchReceiveType Span TK.KindedType (Maybe TK.KindedType)
   | TypeMismatchSelect Span K.Multiplicity TK.KindedType Identifier E.KindedExp
-  | TypeMismatchSendType Span TK.KindedType
+  | TypeMismatchSendType Span TK.KindedType TK.KindedType (Maybe TK.KindedType)
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.KindedPat)
   | TypeVarOutOfScope Span Variable
   | UnexpectedArg 
@@ -184,9 +184,9 @@ instance Located Error where
     TypeMismatchExists s _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchChoice s _ _ _ -> s
-    TypeMismatchReceiveType s _ -> s
+    TypeMismatchReceiveType s _ _ -> s
     TypeMismatchSelect s _ _ _ _ -> s
-    TypeMismatchSendType s _ -> s
+    TypeMismatchSendType s _ _ _ -> s
     TypeMismatchTuple s _ _ _ -> s
     TypeVarOutOfScope s _ -> s
     UnexpectedArg s _ _ _ -> s
@@ -539,15 +539,20 @@ toMessage src = \case
   TypeMismatchChoice s t i p -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with choice pattern " ++ bt (getFromSpan src i))
-  TypeMismatchReceiveType s t -> makeError src s
+  TypeMismatchReceiveType s t dom -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a `receiveType` expression")
+    ++ mustConsume "receiveType" ("a " ++ bt "?type a. S" ++ " channel") dom
   TypeMismatchSelect s m t i _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with a " ++ bt (selectOp m) ++ " expression")
-  TypeMismatchSendType s t -> makeError src s
+      ++ " with a " ++ bt op ++ " expression")
+    ++ mustConsume op "an internal choice" Nothing
+    where op = selectOp m ++ " " ++ show i
+  TypeMismatchSendType s u t dom -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
-      ++ " with a `sendType` expression")
+      ++ " with a " ++ bt op ++ " expression")
+    ++ mustConsume op ("a " ++ bt "!type a. S" ++ " channel") dom
+    where op = "sendType @" ++ unparseArg u
   TypeMismatchTuple s n t _ -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
       ++ (case n of 0 -> "()"
@@ -601,6 +606,17 @@ toMessage src = \case
     ++ snippet src vp True
     ++ "(Session and variable patterns cannot appear together in the same match)"
   where
+  -- | Explain the shape a bare, unapplied session operation must be ascribed.
+  mustConsume :: String -> String -> Maybe TK.KindedType -> String
+  mustConsume op chan = \case
+    Nothing ->
+      "(A " ++ bt op ++ " expression is a function; its type must be an arrow "
+      ++ "whose domain is " ++ chan ++ ")"
+    Just t ->
+      "(A " ++ bt op ++ " expression consumes " ++ chan ++ "; here it is given "
+      ++ bt (unparse (unRedex t)) ++ ")"
+      ++ maybe "" (("\n  hint: consume it with " ++) . bt) (sessionHint t)
+
   -- | Collapse the type-level β-redexes that 'Validation.Normalisation'
   -- leaves behind when computing 'Dual' of a @!type@/@?type@ quantifier (rule
   -- R-DQuant): @Dual ((λa. T) U)@ instead of @Dual (T[U/a])@. That shape is

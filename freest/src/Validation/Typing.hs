@@ -429,8 +429,8 @@ check tdecls ddecls kctx tctx e t = case e of
       T.AppArrow s' m t1 t2 -> do
         t1i <- Expose.internalChoice tdecls mi e t1 i
         checkEquivTypes tdecls ddecls (Left e)
-          (T.AppArrow s' m t1 t1i)
           (T.AppArrow s' m t1 t2 )
+          (T.AppArrow s' m t1 t1i)
         return (e, tctx)
       _ -> throwE (TypeMismatchSelect s mi t i e)
   E.SendType s u -> do
@@ -439,22 +439,22 @@ check tdecls ddecls kctx tctx e t = case e of
         case normalise tdecls t1 of
           T.AppQuantS _ Pos a _ t1' -> do
             checkEquivTypes tdecls ddecls (Left e)
-              (T.AppArrow s' m t1 (subs a u t1'))
               (T.AppArrow s' m t1 t2)
+              (T.AppArrow s' m t1 (subs a u t1'))
             return (e, tctx)
-          _ -> throwE (TypeMismatchSendType s t)
-      _ -> throwE (TypeMismatchSendType s t)
+          whnf -> throwE (TypeMismatchSendType s u t (Just whnf))
+      _ -> throwE (TypeMismatchSendType s u t Nothing)
   E.ReceiveType s -> do
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
         case normalise tdecls t1 of
           T.AppQuantS s'' Neg a k t1' -> do
             checkEquivTypes tdecls ddecls (Left e)
-              (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1'))
               (T.AppArrow s' m t1 t2)
+              (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1'))
             return (e, tctx)
-          _ -> throwE (TypeMismatchReceiveType s t)
-      _ -> throwE (TypeMismatchReceiveType s t)
+          whnf -> throwE (TypeMismatchReceiveType s t (Just whnf))
+      _ -> throwE (TypeMismatchReceiveType s t Nothing)
 
 
 -- | Checking for declarations. Given kind and type contexts, it validates a

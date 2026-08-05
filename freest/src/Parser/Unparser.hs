@@ -11,6 +11,7 @@ declarations.
 -}
 module Parser.Unparser
   ( Unparse(..)
+  , unparseArg
   , unparseDataDef
   , unparseCons
   , unparseTypeDef
@@ -216,6 +217,11 @@ unparseTypeDef i hasParams t = case (hasParams, t) of
   (True, TK.Abs _ aks body) ->
     "type " ++ show i ++ paramStr aks ++ " = " ++ unparse body
   _ -> "type " ++ show i ++ " = " ++ unparse t
+
+-- | Unparse at the position of an @\@t@ argument, parenthesising when the
+-- argument binds more loosely than application.
+unparseArg :: Unparse t => t -> String
+unparseArg t = bracket (fragment t) RightAssoc appRator
 
 -- | @paramStr [(a₁,k₁), …, (aₙ,kₙ)]@ produces @" a₁ … aₙ"@ (with a leading
 -- space) or @""@ for the empty list.
