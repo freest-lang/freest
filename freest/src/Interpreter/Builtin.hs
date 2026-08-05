@@ -30,7 +30,7 @@ import Interpreter.Value ( Value(..), ChannelEnd )
 import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
-import System.Environment ( getArgs, getProgName )
+import System.Environment ( getArgs, getEnvironment, getProgName, lookupEnv )
 import System.Exit ( ExitCode(..) )
 import System.IO ( BufferMode(NoBuffering), Handle, hFlush, hGetBuffering, hIsTerminalDevice, hPutStr, hSetBuffering, isEOF, stderr, stdin, stdout )
 
@@ -71,9 +71,15 @@ fstToHsBool (VCons "False" []) = False
 hsToFstString :: String -> Value
 hsToFstString = foldr (\c acc -> VCons "(::)" [VChar c, acc]) (VCons "[]" [])
 
--- | Convert a list of Haskell 'String's into a FreeST list of strings.
-hsToFstStrings :: [String] -> Value
-hsToFstStrings = foldr (\s acc -> VCons "(::)" [hsToFstString s, acc]) (VCons "[]" [])
+-- | Build a FreeST list, from a conversion for its elements.
+hsToFstList :: (a -> Value) -> [a] -> Value
+hsToFstList f = foldr (\x acc -> VCons "(::)" [f x, acc]) (VCons "[]" [])
+
+hsToFstMaybe :: Maybe String -> Value
+hsToFstMaybe = maybe (VCons "Nothing" []) (\v -> VCons "Just" [hsToFstString v])
+
+hsToFstPair :: (String, String) -> Value
+hsToFstPair (a, b) = VCons "(,)" [hsToFstString a, hsToFstString b]
 
 -- | An exit code as GHC wants it: 0 alone reports success. A negative code
 -- would signal the process rather than set a status.
@@ -254,8 +260,11 @@ builtins = Map.fromList
   , ("internalPutStrOut",     VBuiltin (putStrOn stdout))
   , ("internalPutStrErr",     VBuiltin (putStrOn stderr))
   -- ** Command line
-  , ("getArgs",               VBuiltin (const $ VIO $ hsToFstStrings <$> getArgs))
+  , ("getArgs",               VBuiltin (const $ VIO $ hsToFstList hsToFstString <$> getArgs))
   , ("getProgName",           VBuiltin (const $ VIO $ hsToFstString <$> getProgName))
+  -- ** Environment
+  , ("lookupEnv",             VBuiltin (\s -> VIO $ hsToFstMaybe <$> lookupEnv (fstToHsString s)))
+  , ("getEnvironment",        VBuiltin (const $ VIO $ hsToFstList hsToFstPair <$> getEnvironment))
   -- ** Exiting
   , ("exitWith",              VBuiltin (\(VInt n) -> VIO $ throwIO $ exitCode n))
 

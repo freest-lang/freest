@@ -677,6 +677,24 @@ getArgs = undefined
 getProgName : () -> String
 getProgName = undefined
 
+-- ** Environment
+
+-- | The value of an environment variable, if it is set.
+lookupEnv : String -> Maybe String
+lookupEnv = undefined
+
+-- | The value of an environment variable, which must be set.
+getEnv : String -> String
+getEnv name = orElse (lookupEnv name)
+  where
+    orElse : Maybe String -> String
+    orElse (Just value) = value
+    orElse Nothing      = error @String ("getEnv: no such environment variable: " ++ name)
+
+-- | The whole environment, as name-value pairs.
+getEnvironment : () -> [(String, String)]
+getEnvironment = undefined
+
 -- ** Exiting
 
 -- | Terminates the program, reporting success for an exit code of 0 and failure
