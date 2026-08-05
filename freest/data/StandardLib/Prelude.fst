@@ -30,15 +30,15 @@ type Maybe : *T -> *T
 data Maybe a = Nothing | Just a
 
 maybe : forall (a : *T) (b : *T) -> b -> (a -> b) -> Maybe a -> b
-maybe @a @b n _ Nothing  = n
-maybe @a @b _ f (Just x) = f x
+maybe n _ Nothing  = n
+maybe _ f (Just x) = f x
 
 type Either : *T -> *T -> *T
 data Either a b = Left a | Right b
 
 either : forall (a : *T) (b : *T) (c : 1T) -> (a -> c) -> (b -> c) -> Either a b -> c
-either @a @b @c f _ (Left x)  =  f x
-either @a @b @c _ g (Right y) =  g y
+either f _ (Left x)  =  f x
+either _ g (Right y) =  g y
 
 ord : Char -> Int
 ord = undefined
@@ -55,19 +55,19 @@ show @a = undefined
 -- ** Tuples
 
 fst : forall (a : 1T) (b : *T) -> (a, b) -> a
-fst @a @b (x,_) = x
+fst (x,_) = x
 
 snd : forall (a : *T) (b : 1T) -> (a, b) -> b
-snd @a @b (_,y) = y
+snd (_,y) = y
 
 swap : forall (a : 1T) (b : 1T) -> (a, b) -> (b, a)
-swap @a @b (x, y) = (y, x)
+swap (x, y) = (y, x)
 
 curry : forall (a : *T) (b : 1T) (c : 1T) -> ((a, b) -> c) -> a -> b -> c
-curry @a @b @c f x y =  f (x, y)
+curry f x y =  f (x, y)
 
 uncurry : forall (a : 1T) (b : 1T) (c : 1T) -> (a -> b -> c) -> ((a, b) -> c)
-uncurry @a @b @c f (x, y) =  f x y
+uncurry f (x, y) =  f x y
 
 -- ** Comparison (only Int and Float, for now)
 (<), (<=), (==), (>=), (>), (/=) : Int -> Int -> Bool
@@ -168,22 +168,22 @@ fromInteger = undefined
 -- ** Miscellaneous functions
 
 id : forall (a : 1T) -> a -> a
-id @a x = x
+id x = x
 
 const : forall (a : *T) (b : *T) -> a -> b -> a
-const @a @b x _ = x
+const x _ = x
 
 (.) : forall #m #n (a : 1T) (b : 1T) (c : 1T) -> (b -m-> c) -> (a -n-> b) -m-> a -m+n-> c
-(.) #m #n @a @b @c f g x = f (g x)
+(.) f g x = f (g x)
 
 flip : forall #m #n #o (a : 1T) (b : m T) (c : 1T) -> (a -n-> b -o-> c) -> b -n-> a -m+n-> c
-flip #m #n # o @a @b @c f x y = f y x
+flip f x y = f y x
 
 ($) : forall #m (a : 1T) (b : 1T) -> (a -m-> b) -> a -m-> b
-($) #m @a @b f = f
+($) f = f
 
 (|>) : forall #m #n (a : m T) (b : 1T) -> a -> (a -n-> b) -m-> b
-(|>) #m #n @a @b x f = f x
+(|>) x f = f x
 
 until : forall (a : *T) -> (a -> Bool) -> (a -> a) -> a -> a
 until @a p f = go
@@ -193,7 +193,7 @@ until @a p f = go
          | otherwise = go (f x)
 
 (;) : forall (a : *T) (b : 1T) -> a -> b -> b
-(;) @a @b _ x = x
+(;) _ x = x
 
 type R : *T -> *T
 type R a = R a -> a
@@ -206,105 +206,105 @@ fix @a f =
 -- * Lists
 
 null : forall a -> [a] -> Bool
-null @a [] = True
-null @a _ = False
+null [] = True
+null _ = False
 
 (++) : forall (a : *T) -> [a] -> [a] -> [a]
-(++) @a []      ys = ys
-(++) @a (x::xs) ys = x :: ((++) @a xs ys)
+(++) []      ys = ys
+(++) (x::xs) ys = x :: ((++) xs ys)
 
 (++') : forall (a : 1T) -> [a]' -> [a]' -1-> [a]'
-(++') @a []'        ys = ys
-(++') @a (x ::' xs) ys = x ::' ((++') @a xs ys)
+(++') []'        ys = ys
+(++') (x ::' xs) ys = x ::' ((++') xs ys)
 
 head : forall (a : *T) -> [a] -> a
-head @a []       = error "head: empty list"
-head @a (x :: _) = x
+head []       = error "head: empty list"
+head (x :: _) = x
 
 last : forall (a : *T) -> [a] -> a
-last @a []        = error "last: empty list"
-last @a (x :: []) = x
-last @a (_ :: xs) = last xs
+last []        = error "last: empty list"
+last (x :: []) = x
+last (_ :: xs) = last xs
 
 tail : forall (a : *T) -> [a] -> [a]
-tail @a []        = error "tail: empty list"
-tail @a (_ :: []) = [] @a
-tail @a (_ :: xs) = xs
+tail []        = error "tail: empty list"
+tail (_ :: []) = []
+tail (_ :: xs) = xs
 
 init : forall (a : *T) -> [a] -> [a]
-init @a []        = error "init: empty list"
-init @a (_ :: []) = [] @a
-init @a (x::xs)   = x :: init xs
+init []        = error "init: empty list"
+init (_ :: []) = []
+init (x::xs)   = x :: init xs
 
 length : forall (a : *T) -> [a] -> Int
-length @a []        = 0
-length @a (_ :: xs) = succ (length xs)
+length []        = 0
+length (_ :: xs) = succ (length xs)
 
 sum : [Int] -> Int
 sum []        = 0
 sum (x :: xs) = x + sum xs
 
 foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
-foldl #m #n @a @b f = go
+foldl #m @a @b f = go
   where
     go : a -> [b] -m-> a
     go accum (x :: xs) = go (f accum x) xs
     go accum _         = accum
 
 foldl' : forall #m #n (a : m T) (b : 1T) -> (a -> b -n-> a) -> a -> [b]' -m-> a
-foldl' #m #n @a @b f = go
+foldl' #m @a @b f = go
   where
     go : a -> [b]' -m-> a
     go accum (x ::' xs) = go (f accum x) xs
     go accum []'        = accum
 
 foldr : forall #m #n (a : *T) (b : m T) -> (a -> b -n-> b) -> b -> [a] -m-> b
-foldr #m #n @a @b f = go
+foldr #m @a @b f = go
   where
     go : b -> [a] -m-> b
     go accum (x :: xs) = f x $ go accum xs
     go accum _         = accum
 
 foldr' : forall #m #n (a : 1T) (b : m T) -> (a -> b -n-> b) -> b -> [a]' -m-> b
-foldr' #m #n @a @b f = go
+foldr' #m @a @b f = go
   where
     go : b -> [a]' -m-> b
     go accum (x ::' xs) = f x $ go accum xs
     go accum []'        = accum
 
 map : forall (a : *T) (b : *T) -> (a -> b) -> [a] -> [b]
-map @a @b _ []        = []
-map @a @b f (x :: xs) = f x :: map f xs
+map _ []        = []
+map f (x :: xs) = f x :: map f xs
 
 map' : forall (a : 1T) (b : 1T) -> (a -> b) -> [a]' -> [b]'
-map' @a @b _ []'        = []'
-map' @a @b f (x ::' xs) = f x ::' map' f xs
+map' _ []'        = []'
+map' f (x ::' xs) = f x ::' map' f xs
 
 mapUL : forall (a : *T) (b : 1T) -> (a -> b) -> [a] -> [b]'
-mapUL @a @b _ []        = []'
-mapUL @a @b f (x :: xs) = f x ::' mapUL f xs
+mapUL _ []        = []'
+mapUL f (x :: xs) = f x ::' mapUL f xs
 
 mapLU : forall (a : 1T) (b : *T) -> (a -> b) -> [a]' -> [b]
-mapLU @a @b _ []'        = []
-mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
+mapLU _ []'        = []
+mapLU f (x ::' xs) = f x :: mapLU f xs
 
 -- | Reverses a list, using an accumulator so it runs in linear time
 reverse : forall (a : *T) -> [a] -> [a]
-reverse @a = go ([] @a)
+reverse @a = go []
   where
     go : [a] -> [a] -> [a]
     go acc []        = acc
     go acc (x :: xs) = go (x :: acc) xs
 
 takeWhile : forall (a : *T) -> (a -> Bool) -> [a] -> [a]
-takeWhile @a _ []                    = []
-takeWhile @a p (x :: xs) | p x       = x :: takeWhile p xs
-                         | otherwise = []
+takeWhile _ []                    = []
+takeWhile p (x :: xs) | p x       = x :: takeWhile p xs
+                      | otherwise = []
 
 dropWhile : forall (a : *T) -> (a -> Bool) -> [a] -> [a]
-dropWhile @a _ []                    = []
-dropWhile @a p (x :: xs) | p x       = dropWhile p xs
-                         | otherwise = x :: xs
+dropWhile _ []                    = []
+dropWhile p (x :: xs) | p x       = dropWhile p xs
+                      | otherwise = x :: xs
 
 span : forall (a : *T) -> (a -> Bool) -> [a] -> ([a], [a])
 span p xs = (takeWhile p xs, dropWhile p xs)
@@ -332,7 +332,7 @@ unwords (w :: ws) = w ++ go ws
 -- * Concurrency
 
 fork : forall #m (a : *T) -> (() -m-> a) -> ()
-fork #m @a = undefined
+fork @a = undefined
 
 send : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b
 send @a = undefined
@@ -349,17 +349,17 @@ close = undefined
 -- | Sends a value on a given channel and then waits for the channel to be
 -- closed. Returns ().
 sendAndWait : forall #m (a : m T) -> a -> !a ; Wait -m-> ()
-sendAndWait #m @a x c = c |> send x |> wait
+sendAndWait x c = c |> send x |> wait
 
 -- | Sends a value on a given channel and then closes the channel.
 -- Returns ().
 sendAndClose : forall #m (a : m T) -> a -> !a ; Close -m-> ()
-sendAndClose #m @a x c = c |> send x |> close
+sendAndClose x c = c |> send x |> close
 
 -- | Receives a value from a channel that continues to `Wait`, closes the
 -- continuation and returns the value.
 receiveAndWait : forall (a : 1T) -> ?a ; Wait -> a 
-receiveAndWait @a c =
+receiveAndWait c =
   let (x, c) = receive c in 
   wait c;
   x
@@ -367,7 +367,7 @@ receiveAndWait @a c =
 -- | As in receiveAndWait only that the type is Wait and the function closes the
 -- channel rather the waiting for the channel to be closed.
 receiveAndClose : forall (a : 1T) -> ?a ; Close -> a 
-receiveAndClose @a c =
+receiveAndClose c =
   let (x, c) = receive c in 
   close c;
   x
@@ -375,7 +375,7 @@ receiveAndClose @a c =
 -- | Sends a value on an unrestricted channel. The unrestricted version of `send`.
 -- Returns the (unrestricted) channel, so further operations can be chained.
 send_ : forall #m (a : m T) -> a -> *!a -m-> *!a
-send_ #m @a = undefined
+send_ @a = undefined
 
 -- | Receives a value from an unrestricted channel. The unrestricted version of `receive`.
 receive_ : forall (a : 1T) -> *?a -> a
@@ -400,7 +400,7 @@ accept @a c =
 --   c |> send "Hello!" |> wait
 -- ```
 forkWith : forall #m (a : 1C) (b : *T) -> (Dual a -m-> b) -> a
-forkWith #m @a f =
+forkWith @a f =
   let (x, y) = channel @a in
   fork (\_ -1-> f y);
   x
@@ -732,7 +732,7 @@ getEnv name = orElse (lookupEnv name)
   where
     orElse : Maybe String -> String
     orElse (Just value) = value
-    orElse Nothing      = error @String ("getEnv: no such environment variable: " ++ name)
+    orElse Nothing      = error ("getEnv: no such environment variable: " ++ name)
 
 -- | The whole environment, as name-value pairs.
 getEnvironment : () -> [(String, String)]
