@@ -435,22 +435,22 @@ check tdecls ddecls kctx tctx e t = case e of
       _ -> throwE (TypeMismatchSelect s mi t i e)
   E.SendType s u -> do
     case normalise tdecls t of
-      T.AppArrow s m t1 t2 -> do
-        case normalise tdecls t2 of
-          T.AppQuantS s Pos a k t2' -> do
+      T.AppArrow s' m t1 t2 -> do
+        case normalise tdecls t1 of
+          T.AppQuantS _ Pos a _ t1' -> do
             checkEquivTypes tdecls ddecls (Left e)
-              (T.AppArrow s m t1 (subs a u t2'))
-              (T.AppArrow s m t1 t2)
+              (T.AppArrow s' m t1 (subs a u t1'))
+              (T.AppArrow s' m t1 t2)
             return (e, tctx)
           _ -> throwE (TypeMismatchSendType s t)
       _ -> throwE (TypeMismatchSendType s t)
   E.ReceiveType s -> do
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        case normalise tdecls t2 of
-          T.AppQuantS s'' Neg a k t2' -> do
+        case normalise tdecls t1 of
+          T.AppQuantS s'' Neg a k t1' -> do
             checkEquivTypes tdecls ddecls (Left e)
-              (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t2'))
+              (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1'))
               (T.AppArrow s' m t1 t2)
             return (e, tctx)
           _ -> throwE (TypeMismatchReceiveType s t)
@@ -1003,13 +1003,13 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                   LTI.match e tdecls t1 t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
-            e@(E.App s f@(E.ReceiveType s') args) t2 ->
+            e@(E.App s f@(E.ReceiveType s') args) t1 ->
               case args of
                 [] -> throwE (CannotSynthesiseReceiveType s)
                 (ExpLevel e : args') -> do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                  (a, k, t2') <- Expose.typeInput tdecls (Right e) u1
-                  let t2 = T.AppExists (spanFromTo f e) [(a, k)] t2
+                  (a, k, u1') <- Expose.typeInput tdecls (Right e) u1
+                  let t2 = T.AppExists (spanFromTo f e) [(a, k)] u1'
                   (_, _, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
                   LTI.match e tdecls t1 t3
                 (arg : _) ->
