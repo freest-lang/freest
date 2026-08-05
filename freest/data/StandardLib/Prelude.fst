@@ -684,6 +684,9 @@ print @a = putStrLn . show
 type FilePath : *T
 type FilePath = String
 
+-- TODO: opening raises on failure; a total variant cannot be typed, `Maybe`
+-- being `*T -> *T` and the streams `1C`. Needs a linear `Maybe`.
+
 -- | Opens a file for reading. The file is closed when the stream is.
 openReadFile : FilePath -> InStream
 openReadFile = undefined
