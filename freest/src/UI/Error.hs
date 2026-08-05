@@ -15,6 +15,7 @@ module UI.Error
   , showErrors -- for testing
   , printErrors
   , bt
+  , prettySpan -- for freesti
   )
 where
 

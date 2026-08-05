@@ -11,7 +11,7 @@ module Compiler.REPL
   , repl
   ) where
 
-import Syntax.Base ( getSpan, Variable, external )
+import Syntax.Base ( getSpan, Variable, external, Located(..), Span(..), Identifier )
 import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as TK
@@ -31,7 +31,7 @@ import Compiler.Pipeline qualified as Pipeline
 import Compiler.Bug ( reportBug )
 import Interpreter.Value ( ValueCtx, emptyValueCtx )
 import Interpreter.Eval ( evalModule )
-import UI.Error ( printErrors, Error, Source )
+import UI.Error ( printErrors, Error, Source, prettySpan )
 import Interpreter.Exception ( printException, reportThreadFailure )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
@@ -276,7 +276,7 @@ handleInfo src = do
       let sp = getSpan v in
       case runValidation (validationState s) (validateExp s (E.Var sp v)) of
         Right t -> do -- bound at the expression level: print its type
-          putLines [src ++ " is an expression variable"]
+          putLines [src ++ " is an expression variable, " ++ definedAt t]
           printAs src t
         Left _  -> case runValidation (validationState s) (validateType s (TU.Var sp v)) of
           Right t -> do -- bound at the type level: print its kind
@@ -287,20 +287,22 @@ handleInfo src = do
       Right i -> -- input is an uppercase name; look it up in the declarations
         case Map.lookup i (D.ddCons (ddecls s)) of
           Just (parent, _) -> do -- it's a data constructor: print its parent and its type
-            putLines [src ++ " is a constructor of datatype " ++ show parent]
+            putLines [src ++ " is a constructor of datatype " ++ show parent
+                      ++ maybe "" ((", " ++) . definedAt) (constructorSpan (ddecls s) parent i)]
             case Map.lookup (Right i) (typeCtx s) of
               Just t  -> printAs src t -- type known: print it
               Nothing -> pure ()       -- type absent from the context: skip
           Nothing
             | Map.member i (D.ddTypes (ddecls s)) -> putLines -- it's a datatype: print kind sig and definition
                 [ src ++ " is a datatype"
+                  ++ maybe "" ((", " ++) . definedAt) (datatypeSpan (ddecls s) i)
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
                            (Map.lookup (Right i) (kindCtx s))
                 , unparseDataDef (ddecls s) i
                 ]
             | otherwise -> case Map.lookup i (tdecls s) of
               Just (hasParams, t) -> putLines -- it's a type name: print kind sig and definition
-                [ src ++ " is a type"
+                [ src ++ " is a type, " ++ definedAt t
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
                            (Map.lookup (Right i) (kindCtx s))
                 , unparseTypeDef i hasParams t
@@ -310,6 +312,26 @@ handleInfo src = do
   where
     notInScope :: Repl ()
     notInScope = putLines [src ++ " is not in scope"]
+
+    -- | @"defined at " ++@ the pretty-printed span of a declaration, for use
+    -- in ':i' sentences such as @"x is a y, " ++ definedAt t@.
+    definedAt :: Located a => a -> String
+    definedAt x = "defined at " ++ prettySpan (getSpan x)
+
+    -- | The span of a single constructor's own declaration, e.g. @True@ in
+    -- @data Bool = True | False@ — recovered from the constructor identifier
+    -- list stored under its parent datatype, which still carries its
+    -- original span (unlike a fresh 'Map.lookup' on the user's input).
+    constructorSpan :: D.KindedDataDecls -> Identifier -> Identifier -> Maybe Identifier
+    constructorSpan ddecls' parent con =
+      List.find (== con) . snd =<< Map.lookup parent (D.ddTypes ddecls')
+
+    -- | The span of a datatype's own declaration, approximated as the span
+    -- from its first to its last constructor.
+    datatypeSpan :: D.KindedDataDecls -> Identifier -> Maybe Span
+    datatypeSpan ddecls' i = case snd <$> Map.lookup i (D.ddTypes ddecls') of
+      Just (c : cs) -> Just (spanFromTo c (last (c : cs)))
+      _             -> Nothing
 
 handleHelp :: String -> Repl () -- freest> :h
 handleHelp args = putLines
