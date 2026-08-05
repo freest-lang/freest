@@ -18,10 +18,11 @@ module Interpreter.Builtin
   , send
   ) where
 
+import Control.Concurrent ( forkIO )
 import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
-import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, SomeException, bracket_, catch, fromException, throwIO)
+import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, IOException, SomeException, bracket_, catch, fromException, throwIO)
 import Data.Char ( chr, ord )
-import Data.Functor ( ($>) )
+import Data.Functor ( ($>), void )
 import qualified Data.Map as Map
 import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
 
@@ -32,7 +33,7 @@ import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
 import System.Environment ( getArgs, getEnvironment, getProgName, lookupEnv )
 import System.Exit ( ExitCode(..) )
-import System.IO ( BufferMode(NoBuffering), Handle, hFlush, hGetBuffering, hIsTerminalDevice, hPutStr, hSetBuffering, isEOF, stderr, stdin, stdout )
+import System.IO ( BufferMode(NoBuffering), Handle, IOMode(..), hClose, hFlush, hGetBuffering, hGetChar, hGetLine, hIsEOF, hIsTerminalDevice, hPutStr, hSetBuffering, isEOF, openFile, stderr, stdin, stdout )
 
 -- | Read a single character with 'stdin' in character-at-a-time mode.
 --
@@ -153,6 +154,39 @@ close (VChan c) = do
   C.writeChan (snd c) (VCons "()" [])
   return (VCons "()" [])
 
+-- | Report a failed file operation as the program's error, not the compiler's.
+asUserError :: IO a -> IO a
+asUserError act = act `catch` \(e :: IOException) -> throwIO (UserError nullSpan (show e))
+
+-- | Open a file and serve it as a session endpoint, so that the handle is
+-- reachable only through the protocol and is closed when the client stops.
+openStream :: IOMode -> (Handle -> ChannelEnd -> IO ()) -> Value -> Value
+openStream mode serve path = VIO $ do
+  h <- asUserError (openFile (fstToHsString path) mode)
+  (client, server) <- chan
+  _ <- forkIO (asUserError (serve h server))
+  return (VChan client)
+
+-- TODO: unchecked against Dual InStream/OutStream, unlike the Prelude's own
+-- servers. Once more resources need one, add an opaque handle type and write
+-- these in FreeST instead.
+readFileServer :: Handle -> ChannelEnd -> IO ()
+readFileServer h c0 = receiveLabel c0 >>= \(label, c) -> case label of
+  "GetChar" -> hGetChar h >>= \x -> send (VChar x) c >>= readFileServer h
+  "GetLine" -> hGetLine h >>= \x -> send (hsToFstString x) c >>= readFileServer h
+  "IsEOF"   -> hIsEOF h >>= \x -> send (hsToFstBool x) c >>= readFileServer h
+  "Stop"    -> hClose h >> void (close (VChan c))
+  _         -> internalError ("readFileServer: unexpected label " ++ label)
+
+writeFileServer :: Handle -> ChannelEnd -> IO ()
+writeFileServer h c0 = receiveLabel c0 >>= \(label, c) -> case label of
+  "PutStr"   -> put c id
+  "PutStrLn" -> put c (++ "\n")
+  "Stop"     -> hClose h >> void (close (VChan c))
+  _          -> internalError ("writeFileServer: unexpected label " ++ label)
+  where
+    put c f = receive c >>= \(v, c') -> hPutStr h (f (fstToHsString v)) >> writeFileServer h c'
+
 builtins :: Map.Map String Value
 builtins = Map.fromList
   [
@@ -259,6 +293,10 @@ builtins = Map.fromList
   -- **** Internal output functions
   , ("internalPutStrOut",     VBuiltin (putStrOn stdout))
   , ("internalPutStrErr",     VBuiltin (putStrOn stderr))
+  -- ** Files
+  , ("openReadFile",          VBuiltin (openStream ReadMode   readFileServer))
+  , ("openWriteFile",         VBuiltin (openStream WriteMode  writeFileServer))
+  , ("openAppendFile",        VBuiltin (openStream AppendMode writeFileServer))
   -- ** Command line
   , ("getArgs",               VBuiltin (const $ VIO $ hsToFstList hsToFstString <$> getArgs))
   , ("getProgName",           VBuiltin (const $ VIO $ hsToFstString <$> getProgName))

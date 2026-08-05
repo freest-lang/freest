@@ -514,6 +514,18 @@ hGetLine = hGenericGet (select GetLine)
 hIsEOF : InStream -> (Bool, InStream)
 hIsEOF = hGenericGet (select IsEOF)
 
+-- | Reads an `InStream` channel endpoint up to EOF, separating lines with the
+-- newline character `\n`.
+hGetContent : InStream -> (String, InStream)
+hGetContent c =
+  let (eof, c) = hIsEOF c in
+  if eof
+  then ("", c)
+  else
+    let (line,    c) = hGetLine c in
+    let (content, c) = hGetContent c in
+    (line ++ "\n" ++ content, c)
+
 -- | Closes an `InStream` channel endpoint.
 hCloseIn : InStream -> ()
 hCloseIn c = c |> select Stop |> wait
@@ -666,6 +678,38 @@ putStrLn = flip hPutStrLn_ stdout
 -- the newline character `\n`.
 print : forall (a : *T) -> a -> ()
 print @a = putStrLn . show
+
+-- ** Files
+
+type FilePath : *T
+type FilePath = String
+
+-- | Opens a file for reading. The file is closed when the stream is.
+openReadFile : FilePath -> InStream
+openReadFile = undefined
+
+-- | Opens a file for writing, discarding its current content.
+openWriteFile : FilePath -> OutStream
+openWriteFile = undefined
+
+-- | Opens a file for writing, after its current content.
+openAppendFile : FilePath -> OutStream
+openAppendFile = undefined
+
+-- | The entire content of a file, separating lines with `\n`.
+readFile : FilePath -> String
+readFile path =
+  let (content, c) = hGetContent (openReadFile path) in
+  hCloseIn c;
+  content
+
+-- | Writes a string to a file, discarding its current content.
+writeFile : FilePath -> String -> ()
+writeFile path content = openWriteFile path |> hPutStr content |> hCloseOut
+
+-- | Writes a string to a file, after its current content.
+appendFile : FilePath -> String -> ()
+appendFile path content = openAppendFile path |> hPutStr content |> hCloseOut
 
 -- ** Command line
 
