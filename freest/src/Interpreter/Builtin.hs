@@ -31,6 +31,7 @@ import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
 import System.Environment ( getArgs, getProgName )
+import System.Exit ( ExitCode(..) )
 import System.IO ( BufferMode(NoBuffering), Handle, hFlush, hGetBuffering, hIsTerminalDevice, hPutStr, hSetBuffering, isEOF, stderr, stdin, stdout )
 
 -- | Read a single character with 'stdin' in character-at-a-time mode.
@@ -73,6 +74,13 @@ hsToFstString = foldr (\c acc -> VCons "(::)" [VChar c, acc]) (VCons "[]" [])
 -- | Convert a list of Haskell 'String's into a FreeST list of strings.
 hsToFstStrings :: [String] -> Value
 hsToFstStrings = foldr (\s acc -> VCons "(::)" [hsToFstString s, acc]) (VCons "[]" [])
+
+-- | An exit code as GHC wants it: 0 alone reports success. A negative code
+-- would signal the process rather than set a status.
+exitCode :: Int -> ExitCode
+exitCode 0 = ExitSuccess
+exitCode n = ExitFailure (if r == 0 then 255 else r)
+  where r = n `mod` 256
 
 -- | Extract a Haskell 'String' from a FreeST string value.
 fstToHsString :: Value -> String
@@ -248,6 +256,8 @@ builtins = Map.fromList
   -- ** Command line
   , ("getArgs",               VBuiltin (const $ VIO $ hsToFstStrings <$> getArgs))
   , ("getProgName",           VBuiltin (const $ VIO $ hsToFstString <$> getProgName))
+  -- ** Exiting
+  , ("exitWith",              VBuiltin (\(VInt n) -> VIO $ throwIO $ exitCode n))
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))

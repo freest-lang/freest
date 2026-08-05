@@ -676,3 +676,14 @@ getArgs = undefined
 -- | The name the program was run under.
 getProgName : () -> String
 getProgName = undefined
+
+-- ** Exiting
+
+-- | Terminates the program, reporting success for an exit code of 0 and failure
+-- for any other. Called from a forked thread, terminates that thread alone.
+exitWith : forall (a : 1T) -> Int -> a
+exitWith @a = undefined
+
+exitSuccess, exitFailure : forall (a : 1T) -> () -> a
+exitSuccess @a _ = exitWith @a 0
+exitFailure @a _ = exitWith @a 1

@@ -13,7 +13,7 @@ module Interpreter.Exception
 
 import Control.Exception qualified as E
 import System.Exit ( ExitCode )
-import System.IO ( BufferMode(BlockBuffering), Handle, hFlush, hPutStrLn, hSetBuffering, stderr )
+import System.IO ( BufferMode(BlockBuffering), hFlush, hPutStrLn, hSetBuffering, stderr )
 
 import Compiler.Bug ( reportBug )
 import Syntax.Base ( Span, Located(..) )
