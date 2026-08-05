@@ -1,14 +1,14 @@
 -- | The FreeST Prelude.
 
--- * Undefined. Useful for builtins, but should also be builtin...
+
+-- * Standard types, classes and related functions
+
+-- | Undefined. Useful for builtins, but must also be builtin...
 undefined : forall (a : *T) -> a
 undefined @a = undefined
 
--- * Error
 error : forall (a : 1T) -> String -> a
 error @a = undefined
-
--- * Standard types, classes and related functions
 
 -- ** Basic datatypes
 
@@ -40,9 +40,6 @@ either : forall (a : *T) (b : *T) (c : 1T) -> (a -> c) -> (b -> c) -> Either a b
 either @a @b @c f _ (Left x)  =  f x
 either @a @b @c _ g (Right y) =  g y
 
-type Ordering : *T
-data Ordering = LT | EQ | GT
-
 ord : Char -> Int
 ord = undefined
 
@@ -54,14 +51,6 @@ type String = [Char]
 
 show : forall (a : *T) -> a -> String
 show @a = undefined
-
-type R : *T -> *T
-type R a = R a -> a
-
-fix : forall (a : *T) -> ((a -> a) -> (a -> a)) -> (a -> a)
-fix @a f =
-  (\(x : R (a -> a)) -> f (\(z : a) -> x x z))
-  (\(x : R (a -> a)) -> f (\(z : a) -> x x z))
 
 -- ** Tuples
 
@@ -206,8 +195,13 @@ until @a p f = go
 (;) : forall (a : *T) (b : 1T) -> a -> b -> b
 (;) @a @b _ x = x
 
-isSpace : Char -> Bool
-isSpace c = let n = ord c in (n == 32) || (9 <= n && n <= 13)
+type R : *T -> *T
+type R a = R a -> a
+
+fix : forall (a : *T) -> ((a -> a) -> (a -> a)) -> (a -> a)
+fix @a f =
+  (\(x : R (a -> a)) -> f (\(z : a) -> x x z))
+  (\(x : R (a -> a)) -> f (\(z : a) -> x x z))
 
 -- * Lists
 
@@ -294,8 +288,7 @@ mapLU : forall (a : 1T) (b : *T) -> (a -> b) -> [a]' -> [b]
 mapLU @a @b _ []'        = []
 mapLU @a @b f (x ::' xs) = f x :: mapLU f xs
 
--- | Reverses a list, using an accumulator so it runs in linear time (as in
--- Haskell's `Data.List.reverse`).
+-- | Reverses a list, using an accumulator so it runs in linear time
 reverse : forall (a : *T) -> [a] -> [a]
 reverse @a = go ([] @a)
   where
@@ -315,6 +308,11 @@ dropWhile @a p (x :: xs) | p x       = dropWhile p xs
 
 span : forall (a : *T) -> (a -> Bool) -> [a] -> ([a], [a])
 span p xs = (takeWhile p xs, dropWhile p xs)
+
+-- ** Strings
+
+isSpace : Char -> Bool
+isSpace c = let n = ord c in (n == 32) || (9 <= n && n <= 13)
 
 words : String -> [String]
 words s =
@@ -349,27 +347,17 @@ close : Close -> ()
 close = undefined
 
 -- | Sends a value on a given channel and then waits for the channel to be
--- | closed. Returns ().
+-- closed. Returns ().
 sendAndWait : forall #m (a : m T) -> a -> !a ; Wait -m-> ()
 sendAndWait #m @a x c = c |> send x |> wait
 
 -- | Sends a value on a given channel and then closes the channel.
--- | Returns ().
+-- Returns ().
 sendAndClose : forall #m (a : m T) -> a -> !a ; Close -m-> ()
 sendAndClose #m @a x c = c |> send x |> close
 
--- | Receives a value from a channel that continues to `Wait`, closes the 
--- | continuation and returns the value.
--- | 
--- | ```
--- | _ =
--- |   -- create channel endpoints
--- |   let (c, s) = channel @(?String ; Wait) () in
--- |   -- fork a thread that prints the received value (and closes the channel)
--- |   fork (\(_ : ()) -1-> c |> receiveAndWait @String |> putStrLn);
--- |   -- send a string through the channel (and close it)
--- |   s |> send "Hello!" |> close
--- | ```
+-- | Receives a value from a channel that continues to `Wait`, closes the
+-- continuation and returns the value.
 receiveAndWait : forall (a : 1T) -> ?a ; Wait -> a 
 receiveAndWait @a c =
   let (x, c) = receive c in 
@@ -377,7 +365,7 @@ receiveAndWait @a c =
   x
 
 -- | As in receiveAndWait only that the type is Wait and the function closes the
--- | channel rather the waiting for the channel to be closed.
+-- channel rather the waiting for the channel to be closed.
 receiveAndClose : forall (a : 1T) -> ?a ; Close -> a 
 receiveAndClose @a c =
   let (x, c) = receive c in 
@@ -404,7 +392,6 @@ accept @a c =
 
 -- | Creates a new child process and a channel through which it can
 -- communicate with its parent process. Returns the channel endpoint.
---  
 -- ```
 -- _ =
 --   -- fork a thread that receives a string and prints
@@ -424,7 +411,6 @@ forkWith #m @a f =
 -- newly accepted session, while continuously updating the state.
 --   
 -- Note: this only works with session types that use session initiation.
--- 
 -- ```
 -- type SharedCounter : *S = *?Counter
 -- type Counter : 1S = +{ Inc: Close
@@ -466,7 +452,7 @@ times n thunk | otherwise = thunk (); times (n - 1) thunk
 parallel : forall (a : *T) -> Int -> (() -> a) -> ()
 parallel n thunk = times n (\_ -> fork thunk)
 
--- * Fork/Join
+-- ** Fork/Join
 
 -- | A simple channel-based fork/join coordination protocol: each child
 -- thread signals completion by selecting the `Join` branch, and the parent
@@ -499,6 +485,8 @@ type InStream = +{ GetChar : ?Char   ; InStream
                  , Stop    : Wait
                  }
 
+-- | Reads a value selected from an `InStream` by a selector (e.g. `select
+-- GetChar`), returning the value and the continuation channel endpoint.
 hGenericGet : forall (a : *T) -> (InStream -> ?a; InStream) -> InStream -> (a, InStream)
 hGenericGet sel inStream = inStream |> sel |> receive
 
@@ -530,6 +518,9 @@ hGetContent c =
 hCloseIn : InStream -> ()
 hCloseIn c = c |> select Stop |> wait
 
+-- | The unrestricted version of an `InStream` getter: receives the `InStream`
+-- channel endpoint (via session initiation), runs the getter, closes the
+-- endpoint with `hCloseIn`, and returns the value.
 hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> *?InStream -> a
 hGenericGet_ get inp = 
   let (x, c) = get $ receive_ inp in
@@ -556,6 +547,8 @@ type OutStream = +{ PutStr   : !String ; OutStream
                   , Stop     : Wait
                   }
 
+-- | Writes a value on an `OutStream` through a selector (e.g. `select
+-- PutStr`), returning the continuation channel endpoint.
 hGenericPut : forall (a : *T) -> (OutStream -> !a; OutStream) -> a -> OutStream -> OutStream
 hGenericPut sel x outStream = outStream |> sel |> send x
 
@@ -580,6 +573,9 @@ hPrint @a = hPutStrLn . show
 hCloseOut : OutStream -> ()
 hCloseOut c = c |> select Stop |> wait
 
+-- | The unrestricted version of an `OutStream` putter: receives the
+-- `OutStream` channel endpoint (via session initiation), runs the putter, and
+-- closes the endpoint with `hCloseOut`.
 hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> *?OutStream -> ()
 hGenericPut_ sendF x outStream = 
   outStream |> receive_  |> sendF x |> hCloseOut
@@ -708,11 +704,11 @@ readFile path =
 
 -- | Writes a string to a file, discarding its current content.
 writeFile : FilePath -> String -> ()
-writeFile path content = openWriteFile path |> hPutStr content |> hCloseOut
+writeFile path content = path |> openWriteFile |> hPutStr content |> hCloseOut
 
 -- | Writes a string to a file, after its current content.
 appendFile : FilePath -> String -> ()
-appendFile path content = openAppendFile path |> hPutStr content |> hCloseOut
+appendFile path content = path |> openAppendFile |> hPutStr content |> hCloseOut
 
 -- ** Command line
 
