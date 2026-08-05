@@ -535,6 +535,10 @@ hGetChar_ = hGenericGet_ hGetChar
 hGetLine_ : *?InStream -> String
 hGetLine_ = hGenericGet_ hGetLine
 
+-- | `hGetContent` on an `*?InStream`
+hGetContent_ : *?InStream -> String
+hGetContent_ = hGenericGet_ hGetContent
+
 -- *** Output Stream
 
 -- | The `OutStream` type describes output streams (such as `stdout`, `stderr`
@@ -629,9 +633,13 @@ stdin = forkWith (runServer (\_ -> reader) ())
 getChar : () -> Char
 getChar _ = hGetChar_ stdin
 
--- | Reads a single line from `stdin`. 
+-- | Reads a single line from `stdin`.
 getLine : () -> String
 getLine _ = hGetLine_ stdin
+
+-- | Reads `stdin` up to EOF, separating lines with the newline character `\n`.
+getContent : () -> String
+getContent _ = hGetContent_ stdin
 
 -- *** stdout and stderr
 
