@@ -112,7 +112,7 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
     T.Char _ _ -> (maxRator, "Char")
     T.Arrow _ _ m -> (maxRator, "(" ++ multArrow m ++ ")")
     T.Quant _ _ p bk m -> (maxRator, "(" ++ quant True p bk m ++ ")")
-    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ unwords (map (('#':) . show) φs) ++ " -" ++ show m ++ "-> " ++ unparse t)
+    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ unwords (map (('#':) . show) φs) ++ " " ++ multArrow m ++ " " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
     T.End _ _ p -> (maxRator, case p of Pos -> "Close"
                                         Neg -> "Wait")
@@ -166,9 +166,11 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
         Pos K.Top     m -> "exists" ++ if prefix then "" else " "
         p   K.Session m -> polarity p ++ "type "
       quantSep = \cases
-        Neg  K.Top m -> " -" ++ show m ++ "-> "
+        Neg  K.Top m -> " " ++ multArrow m ++ " "
         _    _     _ -> ". "
-      multArrow m = "-" ++ filter (/= ' ') (unparse m) ++ "->"
+      multArrow m
+        | K.isUn m  = "->"
+        | otherwise = "-" ++ filter (/= ' ') (unparse m) ++ "->"
       msgMultiplicity = \case
         K.Lin{} -> ""
         K.Un{}  -> "*"
