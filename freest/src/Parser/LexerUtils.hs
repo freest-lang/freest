@@ -117,8 +117,10 @@ blockEndAt b = gets (inpStream . lexerInput) >>= \case
 setBlockKw :: String -> Lexer ()
 setBlockKw kw = modify' $ \st -> st { lexerBlockKw = Just kw }
 
--- | The keyword that opened the block now starting, clearing it so that the
--- next block, opened by the offside rule alone, does not inherit it.
+-- | The keyword that opened the block now starting, if one did: the top-level
+-- block is opened by seeding the start code instead. Clearing it keeps a
+-- keyword whose block never started, an explicit brace following it, from
+-- being picked up by a later block.
 takeBlockKw :: Lexer (Maybe String)
 takeBlockKw = gets lexerBlockKw <* modify' (\st -> st { lexerBlockKw = Nothing })
 
