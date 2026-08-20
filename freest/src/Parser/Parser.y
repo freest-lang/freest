@@ -68,7 +68,7 @@ import Data.List ( sortBy )
   -- Layout
   OPEN    { TkVOpen _ }
   PIPE    { TkVPipe _ }
-  CLOSE   { TkVClose _ }
+  CLOSE   { TkVClose _ _ }
   -- Keywords
   'module' { TkModule _ }
   'where'  { TkWhere _ }

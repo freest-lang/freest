@@ -60,7 +60,9 @@ alexGetByte inp@Input{inpStream = str, inpFile = f} = advance <$> uncons str whe
 newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either [Error]) a }
   deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError [Error])
 
-data Layout = ExplicitLayout | LayoutColumn Int
+-- | A layout block, identified by the position of its first token. The block is
+-- aligned on that position's column.
+data Layout = ExplicitLayout | LayoutColumn Pos
   deriving (Eq, Show, Ord)
 
 data LexerState

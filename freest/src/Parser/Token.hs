@@ -52,7 +52,8 @@ data Token
   | TkCmp Span String
   | TkAmpAmp Span | TkPipePipe Span
   -- Layout punctuation
-  | TkVOpen Span | TkVPipe Span | TkVClose Span
+  -- a virtual close remembers where the block it closes was opened
+  | TkVOpen Span | TkVPipe Span | TkVClose Span (Maybe Pos)
   | TkEOF Span
   -- Types
   | TkIntType Span | TkFloatType Span | TkCharType Span
@@ -161,7 +162,7 @@ instance Located Token where
     -- Layout punctuation
     TkVOpen s -> s
     TkVPipe s -> s
-    TkVClose s -> s
+    TkVClose s _ -> s
     TkEOF s -> s
     -- Types
     TkIntType s -> s
@@ -258,7 +259,7 @@ instance Located Token where
     -- Layout punctuation
     TkVOpen _ -> TkVOpen s
     TkVPipe _ -> TkVPipe s
-    TkVClose _ -> TkVClose s
+    TkVClose _ p -> TkVClose s p
     TkEOF _ -> TkEOF s
     -- Types
     TkIntType _ -> TkIntType s

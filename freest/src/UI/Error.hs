@@ -467,12 +467,18 @@ toMessage src = \case
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (tidyM m)
       _ -> internalError "pattern with non-proper type")
-  ParseError s (_, ss) -> makeError src s
+  ParseError s (tk, ss) -> makeError src s
     "Parse error"
-    ++ case ss of
-      [] -> ""
-      [x] -> "(Expected " ++ x ++ ")"
-      ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
+    -- the offending token is invisible: the offside rule closing a block
+    ++ case tk of
+      TkVClose _ (Just (l, c)) ->
+        "  hint: this closes the block opened at " ++ show l ++ ":" ++ show c
+        ++ ", which you probably did not intend; to stay inside it, indent past column "
+        ++ show c
+      _ -> case ss of
+        [] -> ""
+        [x] -> "(Expected " ++ x ++ ")"
+        ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
   BaseKindMismatch s bk t k -> makeError src s
     ("Expected a " ++ prettyBk bk ++ ", but got " ++
       (case k of

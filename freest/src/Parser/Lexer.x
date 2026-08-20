@@ -196,9 +196,9 @@ doEOF s = do
     Nothing -> do
       popStartCode
       token TkEOF s
-    (Just (LayoutColumn _)) -> do
+    (Just (LayoutColumn p)) -> do
       popLayout
-      token TkVClose s
+      token (\sp -> TkVClose sp (Just p)) s
     -- (Just ExplicitLayout) -> do -- removed from Liao's version
 
 
@@ -232,18 +232,17 @@ openBrace s = do
 startLayout s = do
   popStartCode
 
-  reference <- layout
-  col       <- gets (inpColumn . lexerInput)
-  if Just (LayoutColumn col) <= reference
-    then pushStartCode emptyLayoutSC
-    else pushLayout (LayoutColumn col)
-    
+  Input{inpLine=lin, inpColumn=col} <- gets lexerInput
+  layout >>= \case
+    Just (LayoutColumn (_, col')) | col <= col' -> pushStartCode emptyLayoutSC
+    _                                          -> pushLayout (LayoutColumn (lin, col))
+
   token TkVOpen s
 
 emptyLayout s = do
   popStartCode
   pushStartCode newlineSC
-  token TkVClose s
+  token (\sp -> TkVClose sp Nothing) s
 
 offsideRule s = do
   context <- layout
@@ -252,15 +251,15 @@ offsideRule s = do
   let continue = popStartCode *> scan
 
   case context of
-    Just (LayoutColumn col') -> do
+    Just (LayoutColumn p@(_, col')) -> do
       case col `compare` col' of
         EQ -> do
           popStartCode
-          token TkVPipe s 
+          token TkVPipe s
         GT -> continue
         LT -> do
           popLayout
-          token TkVClose s
+          token (\sp -> TkVClose sp (Just p)) s
     _ -> continue
 
 }
