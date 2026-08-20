@@ -235,21 +235,25 @@ prettyPath fp =
 prettySpan :: Span -> String
 prettySpan s = prettyPath (filepath s) ++ drop (length (filepath s)) (show s)
 
+-- | The offending line under its own number, with carets under the span. A span
+-- that runs past the last line (an error at the end of the file) has no line to
+-- show, so only the position is reported.
 snippet :: Located a => Source -> a -> Bool -> String
 snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
-  unlines ([ spaces (n + 1) ++ prettySpan s | showSpan ] ++
-           [ spaces n ++ sep
-           , rpad n ' ' (show sl) ++ sep ++ l
-           , spaces n ++ sep ++ spaces (sc - 1)
-             ++ if sl == el then carets (ec - sc)
-                else carets (length (strip (drop (sc - 1) l))) ++ "..."
-           ])
+  unlines ([ spaces (n + 1) ++ prettySpan s | showSpan ] ++ maybe [] withCarets line)
   where
     sep = " | "
     n = length (show el)
-    srcf = lookupSrc src fp
-    l | null srcf = []
-      | otherwise = srcf !! (min (length srcf) sl - 1)
+    line = case drop (sl - 1) (lookupSrc src fp) of
+      (l : _) -> Just l
+      []      -> Nothing
+    withCarets l =
+      [ spaces n ++ sep
+      , rpad n ' ' (show sl) ++ sep ++ l
+      , spaces n ++ sep ++ spaces (sc - 1)
+        ++ if sl == el then carets (ec - sc)
+           else carets (length (strip (drop (sc - 1) l))) ++ "..."
+      ]
     spaces x = replicate x ' '
     carets x = replicate x '^'
 
