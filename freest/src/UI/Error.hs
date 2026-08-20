@@ -32,7 +32,6 @@ import Compiler.Bug ( internalError )
 import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
-import Data.Char qualified as Char
 import Debug.Trace ( traceM )
 import System.IO ( stderr, hPutStrLn )
 
@@ -214,10 +213,6 @@ getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
     (l : _) -> take (ec - sc) (drop (sc - 1) l)
     []      -> ""
 
-getLineFromSpan :: Located a => Source -> a -> String
-getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
-  lookupSrc src fp !! (sl - 1)
-
 -- | The source lines of a file, or @[]@ if it is not in the map (e.g. a
 -- synthetic or inferred span), so error rendering degrades instead of crashing.
 lookupSrc :: Source -> FilePath -> [String]
@@ -256,25 +251,6 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
       ]
     spaces x = replicate x ' '
     carets x = replicate x '^'
-
-multiLineSnippet :: Located a => Source -> a -> String
-multiLineSnippet src (getSpan -> Span fp (sl, sc) (el, ec)) =
-  unlines $ (spaces n ++ sep) : zipWith lineCarets [sl..] ls
-  where
-    n = length (show el)
-    sep = " | "
-    ls  = take (el - (sl - 1)) $ drop (sl - 1) $ lookupSrc src fp
-    spaces x = replicate x ' '
-    lineCarets i li =
-      rpad n ' ' (show i) ++ sep ++ li ++ "\n" ++ spaces n ++ sep
-      ++ if | sl == el  -> spaces (sc - 1) ++ carets (ec - sc)
-            | i  == sl  -> spaces (sc - 1) ++ caretsFrom (strip (drop (sc - 1) li))
-            | i  == el  -> ws ++ carets (ec - 1 - length ws)
-            | otherwise -> ws ++ caretsFrom (strip li')
-      where
-        carets x = replicate x '^'
-        caretsFrom = map (const '^')
-        (ws, li') = List.span Char.isSpace li
 
 header :: Located a => String -> a -> String
 header sort (getSpan -> s) = prettySpan s ++ ": " ++ sort ++ ":"
