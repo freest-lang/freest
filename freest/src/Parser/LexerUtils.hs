@@ -108,6 +108,14 @@ popLayout = modify' $ \st ->
            [] -> []
      }
 
+-- | Why the block opened at @p@ ends here. A file that ends in a newline is
+-- offside at the phantom line that follows it, so running out of input, not the
+-- indentation, is what closed the block.
+blockEndAt :: Pos -> Lexer BlockEnd
+blockEndAt p = gets (inpStream . lexerInput) >>= \case
+  [] -> pure (FileEnded p)
+  _  -> pure (Outdented p)
+
 -- | Note that line @l@ continues an item of the block opened at @p@.
 setContinuation :: Int -> Pos -> Lexer ()
 setContinuation l p = modify' $ \st -> st { lexerContinues = Just (l, p) }

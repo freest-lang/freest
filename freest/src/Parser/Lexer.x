@@ -198,7 +198,7 @@ doEOF s = do
       token TkEOF s
     (Just (LayoutColumn p)) -> do
       popLayout
-      token (\sp -> TkVClose sp (Just p)) s
+      token (\sp -> TkVClose sp (Just (FileEnded p))) s
     -- (Just ExplicitLayout) -> do -- removed from Liao's version
 
 
@@ -259,7 +259,8 @@ offsideRule s = do
         GT -> setContinuation lin p *> continue
         LT -> do
           popLayout
-          token (\sp -> TkVClose sp (Just p)) s
+          end <- blockEndAt p
+          token (\sp -> TkVClose sp (Just end)) s
     _ -> continue
 
 }

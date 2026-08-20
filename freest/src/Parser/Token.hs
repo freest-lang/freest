@@ -52,8 +52,8 @@ data Token
   | TkCmp Span String
   | TkAmpAmp Span | TkPipePipe Span
   -- Layout punctuation
-  -- a virtual close remembers where the block it closes was opened
-  | TkVOpen Span | TkVPipe Span | TkVClose Span (Maybe Pos)
+  -- a virtual close remembers how the block it closes came to an end
+  | TkVOpen Span | TkVPipe Span | TkVClose Span (Maybe BlockEnd)
   | TkEOF Span
   -- Types
   | TkIntType Span | TkFloatType Span | TkCharType Span
@@ -64,6 +64,11 @@ data Token
   | TkTopBaseKind Span | TkSessionBaseKind Span | TkChannelBaseKind Span
   deriving (Eq, Show)
 
+-- | How a layout block came to an end, and where the block was opened.
+data BlockEnd
+  = Outdented Pos -- ^ a line is indented less than the block
+  | FileEnded Pos -- ^ the file ended with the block still open
+  deriving (Eq, Show)
 
 -- Identifiers
 getText = \case

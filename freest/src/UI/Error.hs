@@ -471,13 +471,13 @@ toMessage src = \case
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (tidyM m)
       _ -> internalError "pattern with non-proper type")
   ParseError s (tk, ss) continues -> makeError src s ("Parse error" ++ onInput)
-    -- the offending token is invisible: the offside rule closing a block
-    ++ case tk of
-      TkVClose _ (Just (l, c)) ->
-        "  hint: this closes the block opened at " ++ show l ++ ":" ++ show c
-        ++ ", which you probably did not intend; to stay inside it, indent past column "
-        ++ show c
-      _ -> expected ++ continuesHint
+    ++ intercalate "\n" (case tk of
+      -- the offending token is invisible: the offside rule closing a block. The
+      -- expected tokens are the ones that would have continued that block, so
+      -- they mislead rather than help
+      TkVClose _ (Just (Outdented p)) -> [outdentedHint p]
+      TkVClose _ (Just (FileEnded p)) -> expected ++ [fileEndedHint p]
+      _                               -> expected ++ continuesHint)
     where
       -- the layout tokens are invisible, so there is no input to point at
       onInput = case tk of
@@ -487,16 +487,22 @@ toMessage src = \case
         TkEOF{}    -> ""
         _          -> " on input " ++ bt (getFromSpan src s)
       expected = case ss of
-        []  -> ""
-        [x] -> "(Expected " ++ x ++ ")"
-        ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
+        []  -> []
+        [x] -> ["(Expected " ++ x ++ ")"]
+        ss  -> ["(Expected one of: " ++ intercalate ", " ss ++ ")"]
+      outdentedHint (l, c) =
+        "  hint: this closes the block opened at " ++ at l c
+        ++ ", which you probably did not intend; to stay inside it, indent past column "
+        ++ show c
+      fileEndedHint (l, c) =
+        "  hint: the file ends inside the block opened at " ++ at l c
       continuesHint = case continues of
-        Nothing -> ""
-        Just (l, c) -> (if null expected then "" else "\n")
-          ++ "  hint: line " ++ show (fst (startPos s)) ++ " is indented past column "
-          ++ show c ++ ", so it continues an item of the block opened at "
-          ++ show l ++ ":" ++ show c
-          ++ "; if you intend to start a new item, align it with column " ++ show c
+        Nothing -> []
+        Just (l, c) ->
+          [ "  hint: line " ++ show (fst (startPos s)) ++ " is indented past column "
+            ++ show c ++ ", so it continues an item of the block opened at " ++ at l c
+            ++ "; if you intend to start a new item, align it with column " ++ show c ]
+      at l c = show l ++ ":" ++ show c
   BaseKindMismatch s bk t k -> makeError src s
     ("Expected a " ++ prettyBk bk ++ ", but got " ++
       (case k of
