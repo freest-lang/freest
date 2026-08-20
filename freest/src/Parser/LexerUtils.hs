@@ -69,6 +69,10 @@ data LexerState
   = LS { lexerInput      :: {-# UNPACK #-} !AlexInput
        , lexerStartCodes :: {-# UNPACK #-} !(NE.NonEmpty Int)
        , lexerLayout     :: [Layout]
+       -- | The line the offside rule last read as a continuation of the item
+       -- before it, and where that item's block was opened. Recorded because
+       -- the parser may close the block before it reports an error on the line.
+       , lexerContinues  :: Maybe (Int, Pos)
        , counter         :: Int
        }
   deriving (Eq, Show)
@@ -104,13 +108,24 @@ popLayout = modify' $ \st ->
            [] -> []
      }
 
-incCounter :: Lexer Int 
+-- | Note that line @l@ continues an item of the block opened at @p@.
+setContinuation :: Int -> Pos -> Lexer ()
+setContinuation l p = modify' $ \st -> st { lexerContinues = Just (l, p) }
+
+-- | Where the block was opened, if line @l@ merely continues an item of it.
+continuationAt :: Int -> Lexer (Maybe Pos)
+continuationAt l = gets lexerContinues >>= \case
+  Just (l', p) | l == l' -> pure (Just p)
+  _                      -> pure Nothing
+
+incCounter :: Lexer Int
 incCounter = modify' (\st -> st{counter = succ $ counter st}) >> gets counter
 
 initState :: FilePath -> String -> LexerState
 initState f s = LS { lexerInput      = Input 1 1 '\n' s f
                    , lexerStartCodes = 0 NE.:| []
                    , lexerLayout     = []
+                   , lexerContinues  = Nothing
                    , counter         = 0
                    }
 

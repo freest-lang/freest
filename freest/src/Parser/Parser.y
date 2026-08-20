@@ -717,11 +717,15 @@ TypeTestDecl :: { M.ParsedModule -> M.ParsedModule }
 lexer cont = scan >>= cont
 
 parseError :: (Token, [String]) -> Lexer a
-parseError (tk, ss) = throwError [ParseError s (tk, ss)]
+parseError (tk, ss) = do
+  continues <- continuationAt line
+  throwError [ParseError s (tk, ss) continues]
   where
-    s'@Span{startPos, endPos} = (getSpan tk)
-    s | startPos == endPos = s'{endPos = second (+ 1) endPos}
-      | otherwise          = s'
+    s' = getSpan tk
+    line = fst (startPos s')
+    -- a virtual token has no width: widen it so that a caret shows
+    s | startPos s' == endPos s' = s'{endPos = second (+ 1) (endPos s')}
+      | otherwise                = s'
 
 invalidMultiplicityError :: Int -> Token -> Lexer a
 invalidMultiplicityError i tk =

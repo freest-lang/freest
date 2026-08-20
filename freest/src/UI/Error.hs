@@ -94,7 +94,8 @@ data Error
   | MultipleVarDecls Span [Variable]
   | MultVarOutOfScope Span Variable
   | NonLinPat Span E.KindedPat TK.KindedType
-  | ParseError Span (Token, [String])
+  -- the position the offending line continues an item of, when it continues one
+  | ParseError Span (Token, [String]) (Maybe Pos)
   | PartiallyAppliedSelect Span Identifier
   | BaseKindMismatch Span K.BaseKind TK.KindedType K.Kind
   | ProperKindMismatch Span TK.KindedType K.Kind
@@ -174,7 +175,7 @@ instance Located Error where
     MultipleVarDecls s _ ->  s
     MultVarOutOfScope s _ -> s
     NonLinPat s _ _ -> s
-    ParseError s _ -> s
+    ParseError s _ _ -> s
     BaseKindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     RestrictedFunInMutual s _ _ -> s
@@ -209,7 +210,9 @@ type Source = Map.Map FilePath [String]
 
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
-  take (ec - sc) . drop (sc - 1) $ lookupSrc src fp !! (sl - 1)
+  case drop (sl - 1) (lookupSrc src fp) of
+    (l : _) -> take (ec - sc) (drop (sc - 1) l)
+    []      -> ""
 
 getLineFromSpan :: Located a => Source -> a -> String
 getLineFromSpan src (getSpan -> Span fp (sl, _) (_, _)) =
@@ -467,18 +470,33 @@ toMessage src = \case
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (tidyM m)
       _ -> internalError "pattern with non-proper type")
-  ParseError s (tk, ss) -> makeError src s
-    "Parse error"
+  ParseError s (tk, ss) continues -> makeError src s ("Parse error" ++ onInput)
     -- the offending token is invisible: the offside rule closing a block
     ++ case tk of
       TkVClose _ (Just (l, c)) ->
         "  hint: this closes the block opened at " ++ show l ++ ":" ++ show c
         ++ ", which you probably did not intend; to stay inside it, indent past column "
         ++ show c
-      _ -> case ss of
-        [] -> ""
+      _ -> expected ++ continuesHint
+    where
+      -- the layout tokens are invisible, so there is no input to point at
+      onInput = case tk of
+        TkVOpen{}  -> ""
+        TkVPipe{}  -> ""
+        TkVClose{} -> ""
+        TkEOF{}    -> ""
+        _          -> " on input " ++ bt (getFromSpan src s)
+      expected = case ss of
+        []  -> ""
         [x] -> "(Expected " ++ x ++ ")"
         ss  -> "(Expected one of: " ++ intercalate ", " ss ++ ")"
+      continuesHint = case continues of
+        Nothing -> ""
+        Just (l, c) -> (if null expected then "" else "\n")
+          ++ "  hint: line " ++ show (fst (startPos s)) ++ " is indented past column "
+          ++ show c ++ ", so it continues an item of the block opened at "
+          ++ show l ++ ":" ++ show c
+          ++ "; if you intend to start a new item, align it with column " ++ show c
   BaseKindMismatch s bk t k -> makeError src s
     ("Expected a " ++ prettyBk bk ++ ", but got " ++
       (case k of

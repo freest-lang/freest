@@ -246,7 +246,7 @@ emptyLayout s = do
 
 offsideRule s = do
   context <- layout
-  col <- gets (inpColumn . lexerInput)
+  Input{inpLine=lin, inpColumn=col} <- gets lexerInput
 
   let continue = popStartCode *> scan
 
@@ -256,7 +256,7 @@ offsideRule s = do
         EQ -> do
           popStartCode
           token TkVPipe s
-        GT -> continue
+        GT -> setContinuation lin p *> continue
         LT -> do
           popLayout
           token (\sp -> TkVClose sp (Just p)) s
