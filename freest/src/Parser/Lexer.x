@@ -221,6 +221,7 @@ scan = do
       action (take tokl string)
 
 layoutKw t x = do
+  setBlockKw x
   pushStartCode layoutSC
   token t x
 
@@ -233,10 +234,11 @@ startLayout s = do
   popStartCode
 
   Input{inpLine=lin, inpColumn=col} <- gets lexerInput
+  block <- Block <$> takeBlockKw <*> pure (lin, col)
   layout >>= \case
-    Just (LayoutColumn p@(_, col')) | col <= col' ->
-      setLayoutNote lin (EmptyBlock p) *> pushStartCode emptyLayoutSC
-    _ -> pushLayout (LayoutColumn (lin, col))
+    Just (LayoutColumn enclosing) | col <= blockColumn enclosing ->
+      setLayoutNote lin (EmptyBlock block enclosing) *> pushStartCode emptyLayoutSC
+    _ -> pushLayout (LayoutColumn block)
 
   token TkVOpen s
 
@@ -252,8 +254,8 @@ offsideRule s = do
   let continue = popStartCode *> scan
 
   case context of
-    Just (LayoutColumn p@(_, col')) -> do
-      case col `compare` col' of
+    Just (LayoutColumn p) -> do
+      case col `compare` blockColumn p of
         EQ -> do
           popStartCode
           token TkVPipe s

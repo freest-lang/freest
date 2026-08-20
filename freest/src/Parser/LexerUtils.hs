@@ -60,19 +60,17 @@ alexGetByte inp@Input{inpStream = str, inpFile = f} = advance <$> uncons str whe
 newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either [Error]) a }
   deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError [Error])
 
--- | A layout block, identified by the position of its first token. The block is
--- aligned on that position's column.
-data Layout = ExplicitLayout | LayoutColumn Pos
-  deriving (Eq, Show, Ord)
+data Layout = ExplicitLayout | LayoutColumn Block
+  deriving (Eq, Show)
 
 data LexerState
   = LS { lexerInput      :: {-# UNPACK #-} !AlexInput
        , lexerStartCodes :: {-# UNPACK #-} !(NE.NonEmpty Int)
        , lexerLayout     :: [Layout]
-       -- | What the offside rule last made of a line, and which line. Recorded
-       -- because the parser may close the block before it reports an error on
-       -- that line, leaving the layout stack no longer able to say.
+       -- | What the offside rule last made of a line, and which line.
        , lexerNote       :: Maybe (Int, LayoutNote)
+       -- | The keyword that opened the block about to start, if a keyword did.
+       , lexerBlockKw    :: Maybe String
        , counter         :: Int
        }
   deriving (Eq, Show)
@@ -108,13 +106,21 @@ popLayout = modify' $ \st ->
            [] -> []
      }
 
--- | Why the block opened at @p@ ends here. A file that ends in a newline is
--- offside at the phantom line that follows it, so running out of input, not the
--- indentation, is what closed the block.
-blockEndAt :: Pos -> Lexer BlockEnd
-blockEndAt p = gets (inpStream . lexerInput) >>= \case
-  [] -> pure (FileEnded p)
-  _  -> pure (Outdented p)
+-- | Why block @b@ ends here. A file that ends in a newline is offside at the
+-- phantom line that follows it, so running out of input, not the indentation,
+-- is what closed the block.
+blockEndAt :: Block -> Lexer BlockEnd
+blockEndAt b = gets (inpStream . lexerInput) >>= \case
+  [] -> pure (FileEnded b)
+  _  -> pure (Outdented b)
+
+setBlockKw :: String -> Lexer ()
+setBlockKw kw = modify' $ \st -> st { lexerBlockKw = Just kw }
+
+-- | The keyword that opened the block now starting, clearing it so that the
+-- next block, opened by the offside rule alone, does not inherit it.
+takeBlockKw :: Lexer (Maybe String)
+takeBlockKw = gets lexerBlockKw <* modify' (\st -> st { lexerBlockKw = Nothing })
 
 -- | Record what the offside rule made of line @l@.
 setLayoutNote :: Int -> LayoutNote -> Lexer ()
@@ -134,6 +140,7 @@ initState f s = LS { lexerInput      = Input 1 1 '\n' s f
                    , lexerStartCodes = 0 NE.:| []
                    , lexerLayout     = []
                    , lexerNote       = Nothing
+                   , lexerBlockKw    = Nothing
                    , counter         = 0
                    }
 

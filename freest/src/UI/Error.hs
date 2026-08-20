@@ -253,6 +253,17 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
     spaces x = replicate x ' '
     carets x = replicate x '^'
 
+-- | How a layout block is referred to in a parse error.
+nameBlock :: Block -> String
+nameBlock (Block Nothing _)   = "the top-level block"
+nameBlock (Block (Just kw) _) = "the " ++ bt kw ++ " block"
+
+-- | The same as `nameBlock`, placed at the first token the block is aligned on.
+-- A block left empty never got one, so it is only ever named.
+describeBlock :: Block -> String
+describeBlock b@(Block _ (l, c)) =
+  nameBlock b ++ " starting at " ++ show l ++ ":" ++ show c
+
 header :: Located a => String -> a -> String
 header sort (getSpan -> s) = prettySpan s ++ ": " ++ sort ++ ":"
 
@@ -471,24 +482,24 @@ toMessage src = \case
         []  -> []
         [x] -> ["(Expected " ++ x ++ ")"]
         ss  -> ["(Expected one of: " ++ intercalate ", " ss ++ ")"]
-      outdentedHint (l, c) =
-        "  hint: this closes the block opened at " ++ at l c
+      outdentedHint b =
+        "  hint: this closes " ++ describeBlock b
         ++ ", which you probably did not intend; to stay inside it, indent past column "
-        ++ show c
-      fileEndedHint (l, c) =
-        "  hint: the file ends inside the block opened at " ++ at l c
+        ++ show (blockColumn b)
+      fileEndedHint b =
+        "  hint: the file ends inside " ++ describeBlock b
       noteHint = case note of
         Nothing -> []
-        Just (Continues (l, c)) ->
+        Just (Continues b) ->
           [ "  hint: line " ++ show line ++ " is indented past column "
-            ++ show c ++ ", so it continues an item of the block opened at " ++ at l c
-            ++ "; if you intend to start a new item, align it with column " ++ show c ]
-        Just (EmptyBlock (_, c)) ->
-          [ "  hint: line " ++ show line ++ " is not indented past column "
-            ++ show c ++ ", so the block opened just before it is empty; indent line "
-            ++ show line ++ " past column " ++ show c ++ " to put something in it" ]
+            ++ show (blockColumn b) ++ ", so it continues an item of " ++ describeBlock b
+            ++ "; if you intend to start a new item, align it with column "
+            ++ show (blockColumn b) ]
+        Just (EmptyBlock b enclosing) ->
+          [ "  hint: " ++ nameBlock b ++ " is empty, line " ++ show line
+            ++ " not being indented past column " ++ show (blockColumn enclosing)
+            ++ "; indent it further to put something in the block" ]
       line = fst (startPos s)
-      at l c = show l ++ ":" ++ show c
   BaseKindMismatch s bk t k -> makeError src s
     ("Expected a " ++ prettyBk bk ++ ", but got " ++
       (case k of

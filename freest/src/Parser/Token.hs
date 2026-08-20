@@ -64,19 +64,28 @@ data Token
   | TkTopBaseKind Span | TkSessionBaseKind Span | TkChannelBaseKind Span
   deriving (Eq, Show)
 
--- | How a layout block came to an end, and where the block was opened.
+-- | A layout block: the keyword that opened it, absent for the top-level block,
+-- and the position of its first token, on whose column the block is aligned.
+data Block = Block (Maybe String) Pos
+  deriving (Eq, Show)
+
+blockColumn :: Block -> Int
+blockColumn (Block _ p) = snd p
+
+-- | How a layout block came to an end.
 data BlockEnd
-  = Outdented Pos -- ^ a line is indented less than the block
-  | FileEnded Pos -- ^ the file ended with the block still open
+  = Outdented Block -- ^ a line is indented less than the block
+  | FileEnded Block -- ^ the file ended with the block still open
   deriving (Eq, Show)
 
 -- | What the offside rule made of a line, when a parse error on that line is
--- better explained by its indentation than by the token it stopped at. Both
--- carry the position where the enclosing block was opened.
+-- better explained by its indentation than by the token it stopped at.
 data LayoutNote
-  = Continues Pos  -- ^ indented past the block, so it continues the item before it
-  | EmptyBlock Pos -- ^ not indented past the block, so the block a layout
-                   -- keyword just opened got no items at all
+  = Continues Block
+    -- ^ indented past this block, so it continues the item before it
+  | EmptyBlock Block Block
+    -- ^ the first block was opened and got no items, the line not being
+    -- indented past the second, which encloses it
   deriving (Eq, Show)
 
 -- Identifiers
