@@ -70,6 +70,15 @@ data BlockEnd
   | FileEnded Pos -- ^ the file ended with the block still open
   deriving (Eq, Show)
 
+-- | What the offside rule made of a line, when a parse error on that line is
+-- better explained by its indentation than by the token it stopped at. Both
+-- carry the position where the enclosing block was opened.
+data LayoutNote
+  = Continues Pos  -- ^ indented past the block, so it continues the item before it
+  | EmptyBlock Pos -- ^ not indented past the block, so the block a layout
+                   -- keyword just opened got no items at all
+  deriving (Eq, Show)
+
 -- Identifiers
 getText = \case
   -- Identifiers

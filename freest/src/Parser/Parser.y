@@ -718,8 +718,8 @@ lexer cont = scan >>= cont
 
 parseError :: (Token, [String]) -> Lexer a
 parseError (tk, ss) = do
-  continues <- continuationAt line
-  throwError [ParseError s (tk, ss) continues]
+  note <- layoutNoteAt line
+  throwError [ParseError s (tk, ss) note]
   where
     s' = getSpan tk
     line = fst (startPos s')

@@ -69,10 +69,10 @@ data LexerState
   = LS { lexerInput      :: {-# UNPACK #-} !AlexInput
        , lexerStartCodes :: {-# UNPACK #-} !(NE.NonEmpty Int)
        , lexerLayout     :: [Layout]
-       -- | The line the offside rule last read as a continuation of the item
-       -- before it, and where that item's block was opened. Recorded because
-       -- the parser may close the block before it reports an error on the line.
-       , lexerContinues  :: Maybe (Int, Pos)
+       -- | What the offside rule last made of a line, and which line. Recorded
+       -- because the parser may close the block before it reports an error on
+       -- that line, leaving the layout stack no longer able to say.
+       , lexerNote       :: Maybe (Int, LayoutNote)
        , counter         :: Int
        }
   deriving (Eq, Show)
@@ -116,14 +116,14 @@ blockEndAt p = gets (inpStream . lexerInput) >>= \case
   [] -> pure (FileEnded p)
   _  -> pure (Outdented p)
 
--- | Note that line @l@ continues an item of the block opened at @p@.
-setContinuation :: Int -> Pos -> Lexer ()
-setContinuation l p = modify' $ \st -> st { lexerContinues = Just (l, p) }
+-- | Record what the offside rule made of line @l@.
+setLayoutNote :: Int -> LayoutNote -> Lexer ()
+setLayoutNote l n = modify' $ \st -> st { lexerNote = Just (l, n) }
 
--- | Where the block was opened, if line @l@ merely continues an item of it.
-continuationAt :: Int -> Lexer (Maybe Pos)
-continuationAt l = gets lexerContinues >>= \case
-  Just (l', p) | l == l' -> pure (Just p)
+-- | What the offside rule made of line @l@, if anything worth reporting.
+layoutNoteAt :: Int -> Lexer (Maybe LayoutNote)
+layoutNoteAt l = gets lexerNote >>= \case
+  Just (l', n) | l == l' -> pure (Just n)
   _                      -> pure Nothing
 
 incCounter :: Lexer Int
@@ -133,7 +133,7 @@ initState :: FilePath -> String -> LexerState
 initState f s = LS { lexerInput      = Input 1 1 '\n' s f
                    , lexerStartCodes = 0 NE.:| []
                    , lexerLayout     = []
-                   , lexerContinues  = Nothing
+                   , lexerNote       = Nothing
                    , counter         = 0
                    }
 

@@ -234,8 +234,9 @@ startLayout s = do
 
   Input{inpLine=lin, inpColumn=col} <- gets lexerInput
   layout >>= \case
-    Just (LayoutColumn (_, col')) | col <= col' -> pushStartCode emptyLayoutSC
-    _                                          -> pushLayout (LayoutColumn (lin, col))
+    Just (LayoutColumn p@(_, col')) | col <= col' ->
+      setLayoutNote lin (EmptyBlock p) *> pushStartCode emptyLayoutSC
+    _ -> pushLayout (LayoutColumn (lin, col))
 
   token TkVOpen s
 
@@ -256,7 +257,7 @@ offsideRule s = do
         EQ -> do
           popStartCode
           token TkVPipe s
-        GT -> setContinuation lin p *> continue
+        GT -> setLayoutNote lin (Continues p) *> continue
         LT -> do
           popLayout
           end <- blockEndAt p

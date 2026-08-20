@@ -93,8 +93,9 @@ data Error
   | MultipleVarDecls Span [Variable]
   | MultVarOutOfScope Span Variable
   | NonLinPat Span E.KindedPat TK.KindedType
-  -- the position the offending line continues an item of, when it continues one
-  | ParseError Span (Token, [String]) (Maybe Pos)
+  -- what the offside rule made of the offending line, when that explains more
+  -- than the token the parser stopped at
+  | ParseError Span (Token, [String]) (Maybe LayoutNote)
   | PartiallyAppliedSelect Span Identifier
   | BaseKindMismatch Span K.BaseKind TK.KindedType K.Kind
   | ProperKindMismatch Span TK.KindedType K.Kind
@@ -450,14 +451,14 @@ toMessage src = \case
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (tidyM m)
       _ -> internalError "pattern with non-proper type")
-  ParseError s (tk, ss) continues -> makeError src s ("Parse error" ++ onInput)
+  ParseError s (tk, ss) note -> makeError src s ("Parse error" ++ onInput)
     ++ intercalate "\n" (case tk of
       -- the offending token is invisible: the offside rule closing a block. The
       -- expected tokens are the ones that would have continued that block, so
       -- they mislead rather than help
       TkVClose _ (Just (Outdented p)) -> [outdentedHint p]
       TkVClose _ (Just (FileEnded p)) -> expected ++ [fileEndedHint p]
-      _                               -> expected ++ continuesHint)
+      _                               -> expected ++ noteHint)
     where
       -- the layout tokens are invisible, so there is no input to point at
       onInput = case tk of
@@ -476,12 +477,17 @@ toMessage src = \case
         ++ show c
       fileEndedHint (l, c) =
         "  hint: the file ends inside the block opened at " ++ at l c
-      continuesHint = case continues of
+      noteHint = case note of
         Nothing -> []
-        Just (l, c) ->
-          [ "  hint: line " ++ show (fst (startPos s)) ++ " is indented past column "
+        Just (Continues (l, c)) ->
+          [ "  hint: line " ++ show line ++ " is indented past column "
             ++ show c ++ ", so it continues an item of the block opened at " ++ at l c
             ++ "; if you intend to start a new item, align it with column " ++ show c ]
+        Just (EmptyBlock (_, c)) ->
+          [ "  hint: line " ++ show line ++ " is not indented past column "
+            ++ show c ++ ", so the block opened just before it is empty; indent line "
+            ++ show line ++ " past column " ++ show c ++ " to put something in it" ]
+      line = fst (startPos s)
       at l c = show l ++ ":" ++ show c
   BaseKindMismatch s bk t k -> makeError src s
     ("Expected a " ++ prettyBk bk ++ ", but got " ++
