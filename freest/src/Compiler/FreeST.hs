@@ -13,7 +13,6 @@ import Control.Exception (catch)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.State
-import GHC.IO.FD (stderr)
 import Interpreter.Eval (evalModule)
 import Interpreter.Exception (printException)
 import Interpreter.Value (emptyValueCtx)
@@ -22,6 +21,7 @@ import LSP.Handler (handlers)
 import Language.LSP.Server
 import Options.Applicative (execParser)
 import System.Exit (exitFailure, exitSuccess)
+import System.IO (hPutStrLn, stderr)
 import UI.CLI (RunOpts (..), noModuleLoaded, opts, version)
 
 -- | The entry point of the FreeST compiler. Parses the command line options
@@ -32,7 +32,7 @@ freest = execParser opts >>= runFreeST
 -- | Dispatch on the parsed command line options.
 runFreeST :: RunOpts -> IO ()
 runFreeST RunOpts {languageServer = True} =
-  putStrLn "FreeST LSP server connected."
+  hPutStrLn stderr "FreeST LSP server connected."
     >> newMVar Nothing
     >>= \state ->
       void $
