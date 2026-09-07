@@ -1048,20 +1048,27 @@ kindPat tdecls kctx mt = \case
 -- metavariable that the solver can only default. It is best-effort: where the
 -- parameters stop following the type, the residual type is dropped and the rest
 -- is kinded as if unguided, leaving any real mismatch for the type checker.
+-- The last component is the value parameters decomposed into their bound
+-- leaves, for the usage-based multiplicity inference in 'kindExpAgainst'.
 kindAbsParams :: D.KindedTypeDecls
+              -> D.KindedDataDecls
               -> KindCtx
               -> Maybe TK.KindedType
               -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
               -> Validation ( KindCtx
                             , [Level (E.KindedPat, Maybe TK.KindedType) (Variable, E.BndKind) Variable]
-                            , Maybe TK.KindedType )
-kindAbsParams tdecls = \kctx mt pars -> foldM step (kctx, [], normalise tdecls <$> mt) pars
+                            , Maybe TK.KindedType
+                            , ([(Variable, TK.KindedType)], [TK.KindedType]) )
+kindAbsParams tdecls ddecls = \kctx mt pars ->
+  foldM step (kctx, [], normalise tdecls <$> mt, mempty) pars
   where
-    step (kctxi, parsi, mti) = \case
+    step (kctxi, parsi, mti, tracked) = \case
       ExpLevel (p, t) -> do
-        (kctxi', p') <- kindPat tdecls kctxi (mti >>= arrowDom) p
+        let dom = mti >>= arrowDom
+        (kctxi', p') <- kindPat tdecls kctxi dom p
         t' <- traverse (synth kctxi') t
-        return (kctxi', parsi ++ [ExpLevel (p', t')], peel arrowRest mti)
+        return ( kctxi', parsi ++ [ExpLevel (p', t')], peel arrowRest mti
+               , tracked <> maybe mempty (decomposePat tdecls ddecls p') (maybe dom Just t') )
       TypeLevel (a, mk) -> do
         bk <- case (mk, mti) of
           (Just ki, Just (TK.AppForall _ _ ((_, k) : _) _)) ->
@@ -1074,9 +1081,10 @@ kindAbsParams tdecls = \kctx mt pars -> foldM step (kctx, [], normalise tdecls <
         let k' = E.bndKind bk
         return ( Map.insert (Left a) k' kctxi
                , parsi ++ [TypeLevel (a, bk)]
-               , peel (forallRest a k') mti )
+               , peel (forallRest a k') mti
+               , tracked )
       MultLevel φ ->
-        return (kctxi, parsi ++ [MultLevel φ], peel (forallMRest φ) mti)
+        return (kctxi, parsi ++ [MultLevel φ], peel (forallMRest φ) mti, tracked)
 
     peel f = fmap (normalise tdecls) . (>>= f)
 
@@ -1142,8 +1150,13 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
           TypeLevel ty -> TypeLevel <$> synth kctx ty
           MultLevel φ  -> pure $ MultLevel φ
   E.Abs s pars m e -> do
-    (kctx', pars', mt') <- kindAbsParams tdecls kctx mt pars
+    (kctx', pars', mt', (pvars, pforced)) <- kindAbsParams tdecls ddecls kctx mt pars
     e' <- kindExpAgainst tdecls ddecls kctx' tctxds mt' e
+    let (comps, forced) = trackComponents tdecls ddecls pvars (E.UnguardedRHS e' Nothing)
+    forM_ comps \(x, pt) -> case usesExp x e' of
+      One -> pure ()
+      _   -> forceUnrestricted pt
+    mapM_ forceUnrestricted (pforced ++ forced)
     pure $ E.Abs s pars' m e'
   E.Pack s' ts e -> 
     E.Pack s' <$> mapM (synth kctx) ts
