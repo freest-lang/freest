@@ -181,8 +181,7 @@ synth tdecls ddecls kctx tctx = \case
           tctxi'' <- typeCtxDifference tdecls kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
           return (e'', T.AppArrow (spanFromTo pi e') m ti ti', tctxi'')
-        TypeLevel (ai, mki) : ps' -> do
-          let ki = maybe (K.lt (getSpan ai)) id mki
+        TypeLevel (ai, E.bndKind -> ki) : ps' -> do
           (e'', ti', tctxi') <- synthAbs (Map.insert (Left ai) ki kctxi) tctxi ps'
           checkEquivTypeCtxsFun m tctxi' tctxi (getSpan e)
           let ti'' = case ti' of
@@ -361,7 +360,8 @@ check tdecls ddecls kctx tctx e t = case e of
     (h', t', tctx') <- synth tdecls ddecls kctx tctx h
     checkApp tdecls ddecls kctx e s h' t' tctx' args t
   E.Abs s pars m e' -> do
-    checkFun tdecls ddecls kctx tctx (Right e) pars (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
+    checkFun tdecls ddecls kctx tctx (Right e) (map (mapLevel id (second E.writtenKind) id) pars)
+      (Just m) (E.UnguardedRHS e' Nothing) t >>= \case
       (E.UnguardedRHS e'' Nothing, tctx') -> return (E.Abs s pars m e'', tctx')
       _ -> internalError "elaborated abstraction cannot be guarded"
   E.SectionL s e' op ->
@@ -728,7 +728,7 @@ checkPat tdecls ddecls kctx p t = case p of
           u' -> throwE (TypeMismatchExists (spanFromTo a p) u
             (Left $ E.PackPat (spanFromTo a p) aks p))
         ((a, k) : aks) ((b, k') : bks) -> do
-          Kinding.checkK (T.fromVariable ObjLv a k') k
+          Kinding.checkK (T.fromVariable ObjLv a k') (E.bndKind k)
           checkPackPat (Map.insert (Left a) k' kctx) (subs b (T.fromVariable ObjLv a k') u) aks bks
   E.WildPat  s _    -> do
     when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
@@ -789,7 +789,7 @@ checkPat tdecls ddecls kctx p t = case p of
   -- ?type a. p
   E.TypeInPat s (a, k) p' -> do
     (b, k', t') <- Expose.typeInput tdecls (Left p) t
-    Kinding.checkK (T.fromVariable ObjLv a k') k
+    Kinding.checkK (T.fromVariable ObjLv a k') (E.bndKind k)
     checkPat tdecls ddecls (Map.insert (Left a) k' kctx) p' (subs b (T.fromVariable ObjLv a k') t')
   -- (&C p) and (*&C p)
   E.ChoicePat s m i p' -> do

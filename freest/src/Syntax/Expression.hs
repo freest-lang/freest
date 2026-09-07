@@ -27,6 +27,11 @@ module Syntax.Expression
        , Nil
        , Cons
        )
+  , BndKind(..)
+  , XBndKind
+  , bndKind
+  , writtenKind
+  , mapBndKind
   , allVarsPat
   , freeVarsDecls
   , freeVarsRHS
@@ -38,7 +43,8 @@ import Syntax.Base
 import Compiler.Bug ( internalError )
 import Syntax.Kind ( Multiplicity, Kind, isUn )
 import Syntax.Names
-import Syntax.Type.Internal ( Type, XBndKind )
+import Syntax.Type.Internal ( Type )
+import qualified Syntax.Type.Internal as T
 
 import Data.List ( intercalate )
 import qualified Data.Set as Set
@@ -46,16 +52,31 @@ import qualified Syntax.Base as B
 import Data.IntMap (alter)
 import qualified GHC.Generics as Set
 
-type ParsedLetDecl = LetDecl Parsed
-type ScopedLetDecl = LetDecl Scoped
-type KindedLetDecl = LetDecl Kinded
-type ParsedRHS = RHS Parsed
-type ScopedRHS = RHS Scoped
-type KindedRHS = RHS Kinded
+-- | A resolved binder kind, together with whether it was written.
+data BndKind = Written Kind | Inferred Kind
 
-type ParsedPat = Pat Parsed
-type ScopedPat = Pat Scoped
-type KindedPat = Pat Kinded
+bndKind :: BndKind -> Kind
+bndKind = \case Written k -> k; Inferred k -> k
+
+writtenKind :: BndKind -> Maybe Kind
+writtenKind = \case Written k -> Just k; Inferred _ -> Nothing
+
+mapBndKind :: (Kind -> Kind) -> BndKind -> BndKind
+mapBndKind f = \case Written k -> Written (f k); Inferred k -> Inferred (f k)
+
+instance Show BndKind where
+  show = show . bndKind
+
+-- | The origin is provenance, not identity.
+instance Eq BndKind where
+  k1 == k2 = bndKind k1 == bndKind k2
+
+-- | The kind slot of a type variable bound by an expression.
+type family XBndKind x
+type instance XBndKind Parsed = Maybe Kind
+type instance XBndKind Scoped = Maybe Kind
+type instance XBndKind Kinded = BndKind
+type instance XBndKind Typed  = BndKind
 
 data Pat x
   = IntPat Span Int
@@ -71,6 +92,10 @@ data Pat x
   | ChoicePat Span Multiplicity Identifier (Pat x)
   | TypeInPat Span (Variable, XBndKind x) (Pat x)
   | AsPat Span Variable (Pat x)
+
+type ParsedPat = Pat Parsed
+type ScopedPat = Pat Scoped
+type KindedPat = Pat Kinded
 
 instance Eq (XBndKind x) => Eq (Pat x) where
   IntPat _ i1 == IntPat _ i2 = i1 == i2
@@ -112,13 +137,17 @@ data LetDecl x
   | TypeSig [Variable] (Type x)
   | Mutual [LetDecl x {- FnDef only -}]
 
+type ParsedLetDecl = LetDecl Parsed
+type ScopedLetDecl = LetDecl Scoped
+type KindedLetDecl = LetDecl Kinded
+
 data RHS x
   = GuardedRHS [(Exp x, Exp x)] (Maybe [LetDecl x]) -- TODO: just [LetDecl x]?
   | UnguardedRHS (Exp x) (Maybe [LetDecl x])
 
-type ParsedExp = Exp Parsed
-type ScopedExp = Exp Scoped
-type KindedExp = Exp Kinded
+type ParsedRHS = RHS Parsed
+type ScopedRHS = RHS Scoped
+type KindedRHS = RHS Kinded
 
 data Exp x
   = Int    Span Int
@@ -128,7 +157,7 @@ data Exp x
   | DCons  Span Identifier
   | Var    Span Variable
   | App    Span (Exp x) [Level (Exp x) (Type x) Multiplicity]
-  | Abs    Span [Level (Pat x, Maybe (Type x)) (Variable, Maybe Kind) Variable] Multiplicity (Exp x)
+  | Abs    Span [Level (Pat x, Maybe (Type x)) (Variable, XBndKind x) Variable] Multiplicity (Exp x)
   | Pack   Span [Type x] (Exp x)
   | Asc    Span (Exp x) (Type x)
   | Let    Span [LetDecl x] (Exp x)
@@ -141,6 +170,10 @@ data Exp x
   | ReceiveType Span
   | SectionL Span (Exp x) (Either Variable Identifier)
   | SectionR Span Variable (Either Variable Identifier) (Exp x)
+
+type ParsedExp = Exp Parsed
+type ScopedExp = Exp Scoped
+type KindedExp = Exp Kinded
 
 pattern Tuple :: Span -> [Exp x] -> Exp x
 pattern Tuple s es <- (\case e@(App s (DCons _ (isTupleId -> True)) args) -> e
@@ -268,7 +301,7 @@ instance Show (XBndKind x) => Show (Pat x) where
     AsPat _ x p     -> show x++"@"++show p
     where star m = if isUn m then "*" else ""
 
-instance Show (XBndKind x) => Show (LetDecl x) where
+instance (Show (T.XBndKind x), Show (XBndKind x)) => Show (LetDecl x) where
   show = \case
     ValDef p rhs   -> show p++show rhs
     FnDef x psrhss ->
@@ -280,19 +313,19 @@ instance Show (XBndKind x) => Show (LetDecl x) where
     TypeSig xs t    -> intercalate ", " (map show xs) ++" : "++show t
     Mutual ds -> "mutual ⦃\n"++intercalate "⨾\n" (map show ds)++"\n⦄"
 
-instance Show (XBndKind x) => Show (RHS x) where
+instance (Show (T.XBndKind x), Show (XBndKind x)) => Show (RHS x) where
   show = \case
     GuardedRHS ges w ->
       concatMap (\(g,e) -> " | "++show g++" = "++show e) ges++showWhere w
     UnguardedRHS e w ->
       " = "++show e++showWhere w
 
-showWhere :: Show (XBndKind x) => Maybe [LetDecl x] -> String
+showWhere :: (Show (T.XBndKind x), Show (XBndKind x)) => Maybe [LetDecl x] -> String
 showWhere = \case
   Nothing -> ""
   Just ds -> " where ⦃ "++intercalate " ⨾ " (map show ds)++" ⦄"
 
-instance Show (XBndKind x) => Show (Exp x) where
+instance (Show (T.XBndKind x), Show (XBndKind x)) => Show (Exp x) where
   show = \case
     Int _ i        -> show i
     Float _ d      -> show d
@@ -309,8 +342,7 @@ instance Show (XBndKind x) => Show (Exp x) where
                       where showParam = \case
                               ExpLevel  (p,Just t)  -> "("++show p++":"++show t++")"
                               ExpLevel  (p,Nothing) -> show p
-                              TypeLevel (a,Just k)  -> "@("++show a++":"++show k++")"
-                              TypeLevel (a,Nothing) -> "@"++show a
+                              TypeLevel (a,k)       -> "@("++show a++":"++show k++")"
                               MultLevel φ     -> "#("++show φ++")"
     Pack _ ts e    -> "(" ++ intercalate ", " (map (('@' :) . show) ts) ++ ", " ++ show e ++ ")"
     Asc _ e t      -> "(" ++ show e ++ " : " ++ show t ++ ")"

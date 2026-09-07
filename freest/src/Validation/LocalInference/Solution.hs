@@ -104,11 +104,11 @@ resolveModule sol m = m
 
 -- | Apply the solution to the kind annotations on a pattern's type-variable
 -- binders ('PackPat' / 'TypeInPat'), recursively. These carry 'UnifLv' kind
--- vars when the binder kind was omitted (see 'Kinding.resolveBndKind').
+-- vars when the binder kind was omitted (see 'Kinding.resolveExpBndKind').
 resolvePat :: KindSolution -> E.Pat Kinded -> E.Pat Kinded
 resolvePat sol = \case
-  E.PackPat s aks p   -> E.PackPat s (map (second (resolveKind sol)) aks) (resolvePat sol p)
-  E.TypeInPat s ak p  -> E.TypeInPat s (second (resolveKind sol) ak) (resolvePat sol p)
+  E.PackPat s aks p   -> E.PackPat s (map (second (E.mapBndKind (resolveKind sol))) aks) (resolvePat sol p)
+  E.TypeInPat s ak p  -> E.TypeInPat s (second (E.mapBndKind (resolveKind sol)) ak) (resolvePat sol p)
   E.DConsPat s i ps   -> E.DConsPat s i (map (resolvePat sol) ps)
   E.InPat s m p1 p2   -> E.InPat s m (resolvePat sol p1) (resolvePat sol p2)
   E.ChoicePat s m i p -> E.ChoicePat s m i (resolvePat sol p)
@@ -132,7 +132,7 @@ resolveRHS sol = \case
 resolveExp :: KindSolution -> E.KindedExp -> E.KindedExp
 resolveExp sol = \case
   E.App s e args  -> E.App s (resolveExp sol e) (map (mapLevel (resolveExp sol) (resolveType sol) id) args)
-  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (resolvePat sol) (fmap (resolveType sol))) (second (fmap (resolveKind sol))) id) ps) m (resolveExp sol e)
+  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (resolvePat sol) (fmap (resolveType sol))) (second (E.mapBndKind (resolveKind sol))) id) ps) m (resolveExp sol e)
   E.Pack s ts e   -> E.Pack s (map (resolveType sol) ts) (resolveExp sol e)
   E.Asc s e t     -> E.Asc s (resolveExp sol e) (resolveType sol t)
   E.Let s lds e   -> E.Let s (map (resolveLetDecl sol) lds) (resolveExp sol e)

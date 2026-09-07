@@ -83,6 +83,12 @@ resolveBndKind :: (Variable, Maybe Kind) -> Validation (Variable, Kind)
 resolveBndKind (a, Just k)  = pure (a, k)
 resolveBndKind (a, Nothing) = (a,) <$> freshUnifKind a
 
+-- | 'resolveBndKind' for a binder introduced by an expression, which keeps the
+-- origin: only a written kind may narrow the type the binder is checked against.
+resolveExpBndKind :: (Variable, Maybe Kind) -> Validation (Variable, E.BndKind)
+resolveExpBndKind (a, Just k)  = pure (a, E.Written k)
+resolveExpBndKind (a, Nothing) = (a,) . E.Inferred <$> freshUnifKind a
+
 -- | Resolve a quantifier's (possibly omitted) binder kind. An output-polarity
 -- quantifier (∃ and its session twin @!type@, both polarity 'Out') defaults an
 -- omitted binder to *unrestricted* — the multiplicity is fixed to 'Un', its
@@ -955,9 +961,9 @@ kindPat tdecls kctx = \case
   E.WildPat  s x -> pure (kctx, E.WildPat  s x)
   E.VarPat   s x -> pure (kctx, E.VarPat   s x)
   E.PackPat s aks p -> do
-    aks' <- mapM resolveBndKind aks
+    aks' <- mapM resolveExpBndKind aks
     second (E.PackPat s aks')
-      <$> kindPat tdecls (Map.fromList (first Left <$> aks') `Map.union` kctx) p
+      <$> kindPat tdecls (Map.fromList (bimap Left E.bndKind <$> aks') `Map.union` kctx) p
   E.NilPat   s   -> pure (kctx, E.NilPat   s  )
   E.ConsPat s p1 p2 -> do
     (kctx' , p1') <- kindPat tdecls kctx p1
@@ -985,9 +991,9 @@ kindPat tdecls kctx = \case
     second (E.ChoicePat s m i) 
     <$> kindPat tdecls kctx p
   E.TypeInPat s ak p -> do
-    ak'@(a, k) <- resolveBndKind ak
+    ak'@(a, k) <- resolveExpBndKind ak
     second (E.TypeInPat s ak')
-      <$> kindPat tdecls (Map.insert (Left a) k kctx) p
+      <$> kindPat tdecls (Map.insert (Left a) (E.bndKind k) kctx) p
   E.AsPat s x p -> 
     second (E.AsPat s x) 
     <$> kindPat tdecls kctx p
@@ -1015,10 +1021,10 @@ kindExp tdecls ddecls kctx = \case
           (kctxi', p') <- kindPat tdecls kctxi p
           t' <- traverse (synth kctxi') t
           return (kctxi', parsi ++ [ExpLevel (p', t')])
-        TypeLevel (a, mk) -> do
-          k <- maybe (freshUnifKind a) pure mk
-          let kctxi' = Map.insert (Left a) k kctxi
-          return (kctxi', parsi ++ [TypeLevel (a, mk)])
+        TypeLevel amk -> do
+          (a, bk) <- resolveExpBndKind amk
+          let kctxi' = Map.insert (Left a) (E.bndKind bk) kctxi
+          return (kctxi', parsi ++ [TypeLevel (a, bk)])
         MultLevel φ -> do
           return (kctxi, parsi ++ [MultLevel φ]))
       (kctx, []) pars
