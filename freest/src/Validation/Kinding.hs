@@ -682,9 +682,10 @@ kindLetDecl :: D.KindedTypeDecls
             -> Validation (KindCtx, TypeCtx, [E.LetDecl Kinded])
 kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
   E.ValDef p rhs -> do
-    rhs' <- kindRHS tdecls ddecls kctx rhs
+    rhs' <- kindRHS tdecls ddecls kctx (valDefSig p) rhs
     (kctx', p') <- kindPat tdecls kctx p
     return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
+    where valDefSig = \case E.VarPat _ x -> tctxds Map.!? x; _ -> Nothing
   E.FnDef x psrhss -> do
     case tctxds Map.!? x of
       Just t -> do
@@ -878,10 +879,10 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
             -> TK.KindedType
             -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
     kindFun' i tracked capUn kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
-      ([], _) -> do
+      ([], t') -> do
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
-        rhs' <- kindRHS tdecls ddecls kctx rhs
+        rhs' <- kindRHS tdecls ddecls kctx (Just t') rhs
         let (comps, forced) = trackComponents tdecls ddecls tracked rhs'
         forM_ comps \(x, pt) ->
           case (if x `elem` capUn then scaleBy (Un (getSpan x)) else id) (usesRHS x rhs') of
@@ -934,22 +935,26 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
           TypeLevel (a, mk) -> maybe (getSpan a) (spanFromTo a) mk
           MultLevel φ -> getSpan φ
 
+-- | The type a right-hand side is checked against, when known, guides the
+-- kinding of a body that is an abstraction. Guards are booleans and take no guidance.
 kindRHS :: D.KindedTypeDecls
         -> D.KindedDataDecls
-        -> KindCtx -> E.RHS Scoped -> Validation (E.RHS Kinded)
-kindRHS tdecls ddecls kctx = \case
+        -> KindCtx -> Maybe TK.KindedType -> E.RHS Scoped -> Validation (E.RHS Kinded)
+kindRHS tdecls ddecls kctx mt = \case
   E.GuardedRHS es mlds -> do
     (kctx', mlds') <- case mlds of
       Just lds -> second Just <$> kindLetDecls tdecls ddecls kctx lds
       Nothing -> pure (kctx, Nothing)
-    es' <- mapM (bitraverse (kindExp tdecls ddecls kctx') (kindExp tdecls ddecls kctx')) es
+    es' <- mapM (bitraverse (kindExp tdecls ddecls kctx') (body kctx')) es
     return $ E.GuardedRHS es' mlds'
   E.UnguardedRHS e mlds -> do
     (kctx', mlds') <- case mlds of
       Just lds -> second Just <$> kindLetDecls tdecls ddecls kctx lds
       Nothing -> pure (kctx, Nothing)
-    e' <- kindExp tdecls ddecls kctx' e
+    e' <- body kctx' e
     return $ E.UnguardedRHS e' mlds'
+  where
+    body kctx' = kindExpAgainst tdecls ddecls kctx' mt
 
 kindPat :: D.KindedTypeDecls 
         -> KindCtx -> E.ScopedPat -> Validation (KindCtx, E.KindedPat)
@@ -998,10 +1003,67 @@ kindPat tdecls kctx = \case
     second (E.AsPat s x) 
     <$> kindPat tdecls kctx p
 
+-- | Walk an abstraction's parameters, optionally guided by the type the
+-- abstraction will be checked against. Guidance supplies the kind of an omitted
+-- @\\\@a@ binder from the quantifier it faces, instead of an unconstrained
+-- metavariable that the solver can only default. It is best-effort: where the
+-- parameters stop following the type, the residual type is dropped and the rest
+-- is kinded as if unguided, leaving any real mismatch for the type checker.
+kindAbsParams :: D.KindedTypeDecls
+              -> KindCtx
+              -> Maybe TK.KindedType
+              -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
+              -> Validation ( KindCtx
+                            , [Level (E.KindedPat, Maybe TK.KindedType) (Variable, E.BndKind) Variable]
+                            , Maybe TK.KindedType )
+kindAbsParams tdecls = \kctx mt pars -> foldM step (kctx, [], normalise tdecls <$> mt) pars
+  where
+    step (kctxi, parsi, mti) = \case
+      ExpLevel (p, t) -> do
+        (kctxi', p') <- kindPat tdecls kctxi p
+        t' <- traverse (synth kctxi') t
+        return (kctxi', parsi ++ [ExpLevel (p', t')], peel arrowRest mti)
+      TypeLevel (a, mk) -> do
+        bk <- case (mk, mti) of
+          (Just ki, Just (TK.AppForall _ _ ((_, k) : _) _)) ->
+            E.Written ki <$ checkK (TK.fromVariable ObjLv a ki) k
+          (Nothing, Just (TK.AppForall _ _ ((_, k) : _) _)) -> do
+            k' <- freshUnifKind a
+            addKindConstraint (Origin (getSpan a)) k' k
+            pure (E.Inferred k')
+          _ -> snd <$> resolveExpBndKind (a, mk)
+        let k' = E.bndKind bk
+        return ( Map.insert (Left a) k' kctxi
+               , parsi ++ [TypeLevel (a, bk)]
+               , peel (forallRest a k') mti )
+      MultLevel φ ->
+        return (kctxi, parsi ++ [MultLevel φ], peel (forallMRest φ) mti)
+
+    peel f = fmap (normalise tdecls) . (>>= f)
+
+    arrowRest = \case TK.AppArrow _ _ _ v -> Just v; _ -> Nothing
+    forallRest a k = \case
+      TK.AppForall s' m ((b, _) : aks) u ->
+        Just (TK.AppForall s' m aks (subs b (TK.fromVariable ObjLv a k) u))
+      _ -> Nothing
+    forallMRest φ = \case
+      TK.ForallM s' m (φ' : φs) u ->
+        Just ((if null φs then id else TK.ForallM s' m φs)
+                (subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u))
+      _ -> Nothing
+
 kindExp :: D.KindedTypeDecls
         -> D.KindedDataDecls
         -> KindCtx -> E.ScopedExp -> Validation E.KindedExp
-kindExp tdecls ddecls kctx = \case
+kindExp tdecls ddecls kctx = kindExpAgainst tdecls ddecls kctx Nothing
+
+-- | 'kindExp' carrying the type the expression is checked against, where one is
+-- known. Only an abstraction consumes it; the positions that take the whole
+-- expression's type pass it on.
+kindExpAgainst :: D.KindedTypeDecls
+               -> D.KindedDataDecls
+               -> KindCtx -> Maybe TK.KindedType -> E.ScopedExp -> Validation E.KindedExp
+kindExpAgainst tdecls ddecls kctx mt = \case
   E.Int   s i -> pure $ E.Int   s i
   E.Float s d -> pure $ E.Float s d
   E.Char  s c -> pure $ E.Char  s c
@@ -1016,41 +1078,31 @@ kindExp tdecls ddecls kctx = \case
       MultLevel m -> pure $ MultLevel m
     return $ E.App s e' args'
   E.Abs s pars m e -> do
-    (kctx', pars') <- foldM (\(kctxi, parsi) -> \case
-        ExpLevel  (p, t) -> do
-          (kctxi', p') <- kindPat tdecls kctxi p
-          t' <- traverse (synth kctxi') t
-          return (kctxi', parsi ++ [ExpLevel (p', t')])
-        TypeLevel amk -> do
-          (a, bk) <- resolveExpBndKind amk
-          let kctxi' = Map.insert (Left a) (E.bndKind bk) kctxi
-          return (kctxi', parsi ++ [TypeLevel (a, bk)])
-        MultLevel φ -> do
-          return (kctxi, parsi ++ [MultLevel φ]))
-      (kctx, []) pars
-    e' <- kindExp tdecls ddecls kctx' e
+    (kctx', pars', mt') <- kindAbsParams tdecls kctx mt pars
+    e' <- kindExpAgainst tdecls ddecls kctx' mt' e
     pure $ E.Abs s pars' m e'
   E.Pack s' ts e -> 
     E.Pack s' <$> mapM (synth kctx) ts
               <*> kindExp tdecls ddecls kctx e
-  E.Asc s e t -> 
-    E.Asc s <$> kindExp tdecls ddecls kctx e 
-            <*> synth kctx t
+  E.Asc s e t -> do
+    t' <- synth kctx t
+    e' <- kindExpAgainst tdecls ddecls kctx (Just t') e
+    pure $ E.Asc s e' t'
   E.Let s lds e -> do
     (kctx', lds') <- kindLetDecls tdecls ddecls kctx lds
-    e' <- kindExp tdecls ddecls kctx' e
+    e' <- kindExpAgainst tdecls ddecls kctx' mt e
     return (E.Let s lds' e')
   E.Case s e prhss -> do
     e' <- kindExp tdecls ddecls kctx e
     prhss' <- forM prhss \(pi, rhsi) -> do
       (kctxi, pi') <- kindPat tdecls kctx pi
-      rhsi' <- kindRHS tdecls ddecls kctxi rhsi
+      rhsi' <- kindRHS tdecls ddecls kctxi mt rhsi
       return (pi', rhsi')
     return $ E.Case s e' prhss'
   E.If s e1 e2 e3 ->
     E.If s <$> kindExp tdecls ddecls kctx e1
-           <*> kindExp tdecls ddecls kctx e2
-           <*> kindExp tdecls ddecls kctx e3
+           <*> kindExpAgainst tdecls ddecls kctx mt e2
+           <*> kindExpAgainst tdecls ddecls kctx mt e3
   E.List s es -> E.List s <$> mapM (kindExp tdecls ddecls kctx) es
   E.Channel s t -> E.Channel s <$> synth kctx t
   E.Select s m i -> pure $ E.Select s m i
