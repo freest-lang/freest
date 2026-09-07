@@ -374,7 +374,7 @@ toMessage src = \case
     ++ case pe of
          Left _  -> "(It matches " ++ msg ++ ")"
                  ++ maybe "" (("\n  hint: this type is matched by " ++) . bt) (patternHint whnf)
-         Right _ -> maybe "" (("  hint: consume it with " ++) . bt) (sessionHint whnf)
+         Right _ -> maybe "" (("  hint: consume this channel with " ++) . bt) (sessionHint whnf)
   GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(This expression cannot be applied to further arguments: it has type " ++ bt (unparse t)
@@ -405,7 +405,7 @@ toMessage src = \case
     makeError src s
       ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse (unRedex t)) ++ " is not consumed")
     ++ case sessionHint whnf of
-         Just op -> "  hint: consume it with " ++ bt op ++ "\n"
+         Just op -> "  hint: consume this channel with " ++ bt op ++ "\n"
          Nothing -> ""
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
       ++ ((case m' of
@@ -642,7 +642,7 @@ toMessage src = \case
     Just t ->
       "(A " ++ bt op ++ " expression consumes " ++ chan ++ "; here it is given "
       ++ bt (unparse (unRedex t)) ++ ")"
-      ++ maybe "" (("\n  hint: consume it with " ++) . bt) (sessionHint t)
+      ++ maybe "" (("\n  hint: consume this channel with " ++) . bt) (sessionHint t)
 
   -- | Collapse the type-level β-redexes that 'Validation.Normalisation'
   -- leaves behind when computing 'Dual' of a @!type@/@?type@ quantifier (rule
