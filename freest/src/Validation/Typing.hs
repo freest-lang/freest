@@ -522,7 +522,7 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
 -- | Check the baseKinding half of subkinding for an instantiated type
 -- argument against the quantified variable's kind, once the substitution is
 -- final. The error is located at @sp@, the application that forced the
--- instantiation: an /inferred/ type argument is stitched from the callee's
+-- instantiation: an /inferred/ type argument is stitched from the function's
 -- signature and so carries that (unrelated) span, whereas the requirement is
 -- imposed here, at the call site.
 checkInstBaseKind :: Span -> T.KindedType -> K.Kind -> Validation ()

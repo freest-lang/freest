@@ -1098,11 +1098,35 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
   E.Var   s a -> pure $ E.Var   s a
   E.App s e args -> do
     e' <- kindExp tdecls ddecls kctx tctxds e
-    args' <- forM args \case
-      ExpLevel  e -> ExpLevel  <$> kindExp tdecls ddecls kctx tctxds e
-      TypeLevel t -> TypeLevel <$> synth kctx t
-      MultLevel m -> pure $ MultLevel m
+    args' <- kindArgs (functionType e) args
     return $ E.App s e' args'
+    where
+      functionType = \case
+        E.Var _ v -> normalise tdecls <$> tctxds Map.!? v
+        _         -> Nothing
+      kindArgs _ [] = pure []
+      kindArgs mt' (arg : rest) = case (arg, mt') of
+        (ExpLevel a, Just (TK.AppArrow _ _ u v)) -> do
+          a' <- kindExpAgainst tdecls ddecls kctx tctxds (Just u) a
+          (ExpLevel a' :) <$> kindArgs (Just (normalise tdecls v)) rest
+        (TypeLevel ty, Just (TK.AppForall s' m ((b, _) : bks) u)) -> do
+          ty' <- synth kctx ty
+          (TypeLevel ty' :) <$> kindArgs
+            (Just . normalise tdecls
+               $ (if null bks then id else TK.AppForall s' m bks) (subs b ty' u))
+            rest
+        (MultLevel φ, Just (TK.ForallM s' m (φ' : φs) u)) ->
+          (MultLevel φ :) <$> kindArgs
+            (Just . normalise tdecls
+               $ (if null φs then id else TK.ForallM s' m φs)
+                   (subsMultType ObjLv φ' φ u))
+            rest
+        -- an implicit instantiation, or a shape the signature does not follow:
+        -- kinding cannot say what the remaining arguments face
+        _ -> forM (arg : rest) \case
+          ExpLevel a   -> ExpLevel  <$> kindExp tdecls ddecls kctx tctxds a
+          TypeLevel ty -> TypeLevel <$> synth kctx ty
+          MultLevel φ  -> pure $ MultLevel φ
   E.Abs s pars m e -> do
     (kctx', pars', mt') <- kindAbsParams tdecls kctx mt pars
     e' <- kindExpAgainst tdecls ddecls kctx' tctxds mt' e
