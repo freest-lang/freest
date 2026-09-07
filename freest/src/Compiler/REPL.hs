@@ -444,7 +444,7 @@ validateTypes = mapM . validateType
 validateExp :: ReplState -> E.ParsedExp -> Validation TK.KindedType
 validateExp s =
   Scoping.scopeExp (scopingCtx s)
-  >=> Kinding.kindExp (tdecls s) (ddecls s) (kindCtx s)
+  >=> Kinding.kindExp (tdecls s) (ddecls s) (kindCtx s) Map.empty
   >=> Typing.synth (tdecls s) (ddecls s) (kindCtx s) (typeCtx s)
   >=> pure . \(_, t, _) -> t
 
