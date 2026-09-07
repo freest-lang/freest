@@ -834,6 +834,14 @@ decomposePat tdecls ddecls = go
       , TK.AppDName _ _ dty' args <- normalise tdecls t
       , dty == dty', length args == length aks, length ps == length fields
       = mconcat (zipWith go ps (map (subsAll (map fst aks) args) fields))
+    go (E.ChoicePat _ m i p) t
+      | Just (Just t')   <- Expose.externalChoice' tdecls m t i = go p t'
+    go (E.InPat _ m p1 p2) t
+      | Just (u, v)      <- Expose.message' tdecls Neg m t
+                                        = go p1 u <> go p2 v
+    go (E.TypeInPat _ (a, k) p) t
+      | Just (b, _, t')  <- Expose.typeMsg' tdecls Neg t
+                                        = go p (subs b (TK.fromVariable ObjLv a (E.bndKind k)) t')
     go _                 _              = ([], [])
 
 destructuresRHS :: E.RHS Kinded -> [(E.KindedPat, Variable)]
@@ -1014,16 +1022,22 @@ kindPat tdecls kctx mt = \case
     return (kctx', E.DConsPat s i ps')
   E.WaitPat s       -> pure (kctx, E.WaitPat s)
   E.InPat s m p1 p2 -> do
-    (kctx', p1') <- kindPat tdecls kctx Nothing p1
-    (kctx'', p2') <- kindPat tdecls kctx Nothing p2
+    let mpay = Expose.message' tdecls Neg m =<< mt
+    (kctx', p1') <- kindPat tdecls kctx (fst <$> mpay) p1
+    (kctx'', p2') <- kindPat tdecls kctx (snd <$> mpay) p2
     return (kctx'', E.InPat s m p1' p2')
   E.ChoicePat s m i p -> 
     second (E.ChoicePat s m i) 
-    <$> kindPat tdecls kctx Nothing p
+    <$> kindPat tdecls kctx (branch =<< mt) p
+    where branch t = maybe Nothing id (Expose.externalChoice' tdecls m t i)
   E.TypeInPat s ak p -> do
-    ak'@(a, k) <- resolveExpBndKind ak
+    let mb = Expose.typeMsg' tdecls Neg =<< mt
+    ak'@(a, k) <- case (snd ak, mb) of
+      (Nothing, Just (_, k', _)) -> pure (fst ak, E.Inferred k')
+      _                          -> resolveExpBndKind ak
+    let mu = (\(b, _, t') -> subs b (TK.fromVariable ObjLv a (E.bndKind k)) t') <$> mb
     second (E.TypeInPat s ak')
-      <$> kindPat tdecls (Map.insert (Left a) (E.bndKind k) kctx) Nothing p
+      <$> kindPat tdecls (Map.insert (Left a) (E.bndKind k) kctx) mu p
   E.AsPat s x p -> 
     second (E.AsPat s x) 
     <$> kindPat tdecls kctx Nothing p
