@@ -61,8 +61,7 @@ spec = do
 -- fusion work is for. Shrink this list; do not grow it.
 knownGaps :: [FilePath]
 knownGaps =
-  [ "ReversedFunApp.fst", "FunctionDemandInferKind.fst"
-  , "TypeLambdaInferChannel.fst", "RenderingService.fst" ]
+  [ "ReversedFunApp.fst", "RenderingService.fst" ]
 
 gapMessage :: [Error] -> String
 gapMessage errs =

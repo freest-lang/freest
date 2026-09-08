@@ -1172,8 +1172,9 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
         (ExpLevel a, Just (TK.AppArrow _ _ u v)) -> do
           a' <- kindExpAgainst tdecls ddecls kctx tctxds (Just u) a
           (ExpLevel a' :) <$> kindArgs (Just (normalise tdecls v)) rest
-        (TypeLevel ty, Just (TK.AppForall s' m ((b, _) : bks) u)) -> do
+        (TypeLevel ty, Just (TK.AppForall s' m ((b, k) : bks) u)) -> do
           ty' <- synth kctx ty
+          checkK ty' k
           (TypeLevel ty' :) <$> kindArgs
             (Just . normalise tdecls
                $ (if null bks then id else TK.AppForall s' m bks) (subs b ty' u))
@@ -1222,7 +1223,7 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
            <*> kindExpAgainst tdecls ddecls kctx tctxds mt e2
            <*> kindExpAgainst tdecls ddecls kctx tctxds mt e3
   E.List s es -> E.List s <$> mapM (kindExp tdecls ddecls kctx tctxds) es
-  E.Channel s t -> E.Channel s <$> synth kctx t
+  E.Channel s t -> (\(_, _, t') -> E.Channel s t') <$> checkOperand kctx Channel t
   E.Select s m i -> pure $ E.Select s m i
   E.SendType s t -> E.SendType s <$> synth kctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
