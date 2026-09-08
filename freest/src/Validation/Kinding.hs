@@ -819,9 +819,13 @@ usesLetDecls x lds = foldr (addU . go) Zero lds
 -- forcing the type's kind, avoids a 'normalise'-rebuilt session node whose eager
 -- smart constructor assumes proper-kinded operands.
 forceUnrestricted :: TK.KindedType -> Validation ()
-forceUnrestricted = \case
-  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s (Un s) Top)
-  TK.Tuple _ ts                     -> mapM_ forceUnrestricted ts
+forceUnrestricted t = boundMultBy (Un (getSpan t)) t
+
+-- | Bound an inferred type's multiplicity by a given one.
+boundMultBy :: Multiplicity -> TK.KindedType -> Validation ()
+boundMultBy m = \case
+  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
+  TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
   _                                 -> pure ()
 
 -- | Extend a tracked (variable, type) set through a @let@ or @case@ that
@@ -912,14 +916,19 @@ kindFun :: Located e
         -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
 kindFun tdecls ddecls e = kindFun' 0 [] []
   where
-    -- A value parameter captured under an 'Un' binder bound *after* it is used
-    -- unrestrictedly: that closure may run many times, duplicating the capture.
-    -- Mirrors 'usesExp's 'scaleBy' for lambdas, which the parameter arrows escape.
-    capUnder :: Multiplicity -> [(Variable, TK.KindedType)] -> [Variable] -> [Variable]
-    capUnder m tracked cap = if isUn m then map fst tracked ++ cap else cap
+    -- A value parameter captured by a closure bound *after* it, together with
+    -- that closure's multiplicity: the closure may run as many times as its
+    -- multiplicity allows, duplicating the capture. Mirrors 'usesExp's 'scaleBy'
+    -- for lambdas, which the parameter arrows escape. A linear closure runs
+    -- once and constrains nothing.
+    capUnder :: Multiplicity -> [(Variable, TK.KindedType)]
+             -> [(Variable, Multiplicity)] -> [(Variable, Multiplicity)]
+    capUnder m tracked cap
+      | isLin m   = cap
+      | otherwise = map ((, m) . fst) tracked ++ cap
     kindFun' :: Int
             -> [(Variable, TK.KindedType)]  -- value parameters and their types, for usage inference
-            -> [Variable]                   -- those captured under an unrestricted later binder
+            -> [(Variable, Multiplicity)]   -- those captured by a later closure, and its multiplicity
             -> KindCtx
             -> TypeCtx
             -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
@@ -932,8 +941,11 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
         -- duplicated forces its type's multiplicity to unrestricted
         rhs' <- kindRHS tdecls ddecls kctx (paramCtx tracked tctxds) (Just t') rhs
         let (comps, forced) = trackComponents tdecls ddecls tracked rhs'
-        forM_ comps \(x, pt) ->
-          case (if x `elem` capUn then scaleBy (Un (getSpan x)) else id) (usesRHS x rhs') of
+        forM_ comps \(x, pt) -> do
+          let cap = lookup x capUn
+          forM_ cap (`boundMultBy` pt)
+          case (if maybe False isUn cap
+                  then scaleBy (Un (getSpan x)) else id) (usesRHS x rhs') of
             One -> pure ()
             _   -> forceUnrestricted pt
         mapM_ forceUnrestricted forced
@@ -1007,7 +1019,7 @@ kindRHS tdecls ddecls kctx tctxds mt = \case
 -- | The type a pattern is matched against, when known, binds an unpacked
 -- abstract type at the existential's own binder kind. Without it the binder can
 -- only get a placeholder, which the solver defaults to the top.
-kindPat :: D.KindedTypeDecls 
+kindPat :: D.KindedTypeDecls
         -> KindCtx -> Maybe TK.KindedType -> E.ScopedPat -> Validation (KindCtx, E.KindedPat)
 kindPat tdecls kctx mt = \case
   E.IntPat   s i -> pure (kctx, E.IntPat   s i)
@@ -1055,8 +1067,8 @@ kindPat tdecls kctx mt = \case
     (kctx', p1') <- kindPat tdecls kctx (fst <$> mpay) p1
     (kctx'', p2') <- kindPat tdecls kctx (snd <$> mpay) p2
     return (kctx'', E.InPat s m p1' p2')
-  E.ChoicePat s m i p -> 
-    second (E.ChoicePat s m i) 
+  E.ChoicePat s m i p ->
+    second (E.ChoicePat s m i)
     <$> kindPat tdecls kctx (branch =<< mt) p
     where branch t = maybe Nothing id (Expose.externalChoice' tdecls m t i)
   E.TypeInPat s ak p -> do
@@ -1067,8 +1079,8 @@ kindPat tdecls kctx mt = \case
     let mu = (\(b, _, t') -> subs b (TK.fromVariable ObjLv a (E.bndKind k)) t') <$> mb
     second (E.TypeInPat s ak')
       <$> kindPat tdecls (Map.insert (Left a) (E.bndKind k) kctx) mu p
-  E.AsPat s x p -> 
-    second (E.AsPat s x) 
+  E.AsPat s x p ->
+    second (E.AsPat s x)
     <$> kindPat tdecls kctx Nothing p
 
 -- | Walk an abstraction's parameters, optionally guided by the type the
@@ -1187,7 +1199,7 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
       _   -> forceUnrestricted pt
     mapM_ forceUnrestricted (pforced ++ forced)
     pure $ E.Abs s pars' m e'
-  E.Pack s' ts e -> 
+  E.Pack s' ts e ->
     E.Pack s' <$> mapM (synth kctx) ts
               <*> kindExp tdecls ddecls kctx tctxds e
   E.Asc s e t -> do
@@ -1260,7 +1272,7 @@ solveKindConstraints = do
 --     * a list of errors, if any was encountered;
 --     * the given module, otherwise.
 runKindModule :: M.ScopedModule -> Either [Error] (KindCtx, M.KindedModule)
-runKindModule modl = runValidation emptyValidationState do 
+runKindModule modl = runValidation emptyValidationState do
   (ctx, modl') <- kindModule Map.empty modl
   checkNoHOTRec (M.typeDecls modl')
   return (ctx, modl')
