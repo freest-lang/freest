@@ -7,6 +7,8 @@ This module implements FreeST's bidirectional type checking algorithm.
 -}
 module Validation.Typing
   ( TypeCtx
+  , Binding(..)
+  , PatCtx
   , emptyTypeCtx
   , synth
   , synthRHS
@@ -56,23 +58,70 @@ import Data.Maybe (isJust, fromJust)
 import Data.Set qualified as Set
 
 
--- The type context. It keeps track of the variables and constructors in scope
--- and their types.
-type TypeCtx = Map.Map (Either Variable Identifier) T.KindedType
+-- | A binding in the type context: a variable's type, and where the expression
+-- under way has consumed it, most recent occurrence first.
+--
+-- Counting replaces deleting. The two carry the same information — a binding was
+-- consumed iff it is absent, under the old discipline — but deletion decides
+-- linearity at the moment of use, which is only possible once the kind is
+-- ground. Recording the uses instead leaves the decision to whoever reads them,
+-- which is now three named places — 'consumed', 'newlyConsumed', and the tests
+-- in 'lookupType' and 'typeCtxDifference'. Those are what a deferred solve has
+-- to turn into obligations; the deleting discipline left nothing to turn.
+data Binding = Binding { bndType :: !T.KindedType, bndUses :: [Span] }
+  deriving Show
+
+-- The type context. It keeps track of the variables and constructors in scope,
+-- their types, and how often each has been used.
+type TypeCtx = Map.Map (Either Variable Identifier) Binding
 
 emptyTypeCtx :: TypeCtx
 emptyTypeCtx = Map.empty
 
--- | Looks up the type of a variable or identifier in a type context,
--- returning its type and the updated type context. If the type is strictly
--- linear, then the variable or identifier will not be present in the updated 
--- type context. If the variable or identifier is not present in the type 
--- context, an error is thrown.
+-- | The bindings a pattern or a declaration group introduces, before they enter
+-- a context and start being used.
+type PatCtx = Map.Map (Either Variable Identifier) T.KindedType
+
+-- | A context of unused bindings, for a scope just entered.
+freshCtx :: PatCtx -> TypeCtx
+freshCtx = Map.map (`Binding` [])
+
+-- | The /linear/ bindings a scope has consumed. Only these are worth comparing:
+-- an unrestricted binding may be used any number of times, including none, which
+-- is why the deleting discipline removed nothing for one.
+consumed :: TypeCtx -> PatCtx
+consumed =
+  Map.map bndType . Map.filter \(Binding t us) ->
+    not (null us) && Kinding.isRestricted t
+
+-- | The linear bindings the second context consumed and the first had not — the
+-- successor of @tctxBefore \\ tctxAfter@ under the deleting discipline.
+newlyConsumed :: TypeCtx -> TypeCtx -> [(Either Variable Identifier, T.KindedType)]
+newlyConsumed before after =
+  [ (xi, bndType b)
+  | (xi, b) <- Map.assocs after
+  , Kinding.isRestricted (bndType b)
+  , length (bndUses b) > maybe 0 (length . bndUses) (before Map.!? xi) ]
+
+-- | Looks up the type of a variable or identifier in a type context, returning
+-- its type and the context with that binding's use count raised. Consuming a
+-- linear binding a second time is an error, as is looking up one that is not in
+-- the context at all.
 lookupType :: KindCtx -> TypeCtx -> Either Variable Identifier 
            -> Validation (T.KindedType, TypeCtx)
-lookupType kctx tctx xi = case tctx Map.!? xi of
-  Just t -> do
-    return (t, if Kinding.isRestricted t then Map.delete xi tctx else tctx)
+lookupType kctx tctx xi = case Map.lookupIndex xi tctx of
+  Just ix -> do
+    -- the stored key is the binder, and carries its span; @xi@ is this
+    -- occurrence, so the error can point at the offending use and still show
+    -- where the binding came from
+    let (bound, Binding t us) = Map.elemAt ix tctx
+    case us of
+      prev : _ | Kinding.isRestricted t ->
+        throwE (LinConsumedTwice (getSpan xi) bound t prev)
+      _ -> pure ()
+    -- 'Map.adjust', not 'Map.insert': inserting would replace the key, and with
+    -- it the binder's span that the error above reports
+    return (t, Map.adjust (\b -> b{bndUses = getSpan xi : bndUses b}) xi tctx)
   Nothing -> case xi of
     Left  x -> throwE (VarOutOfScope (getSpan x) x)
     Right i -> throwE (ConsOutOfScope (getSpan i) i)
@@ -81,17 +130,18 @@ lookupType kctx tctx xi = case tctx Map.!? xi of
 -- said context, even if the type of the variable is linear. Use with caution.
 lookupFunType :: TypeCtx -> Variable -> Validation T.KindedType
 lookupFunType tctx x = case tctx Map.!? Left x of
-  Just t -> return t
+  Just b  -> return (bndType b)
   Nothing -> throwE (LacksTypeSig (getSpan x) x)
 
 -- | The context difference operation. Removes the variables in the second type 
 -- context from the first type context, throwing an error for any strictly
 -- linear variable it encounters. To be used at the end of a scope.
-typeCtxDifference :: D.KindedTypeDecls -> KindCtx -> TypeCtx -> TypeCtx -> Validation TypeCtx
+typeCtxDifference :: D.KindedTypeDecls -> KindCtx -> TypeCtx
+                  -> Map.Map (Either Variable Identifier) a -> Validation TypeCtx
 typeCtxDifference tdecls kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
-      Just t  -> do
-        when (Kinding.isRestricted t) do
+      Just (Binding t us) -> do
+        when (null us && Kinding.isRestricted t) do
           throwE (LinVarAtEndOfScope (getSpan x) x t (normalise tdecls t))
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
@@ -177,7 +227,7 @@ synth tdecls ddecls kctx tctx = \case
         ExpLevel (pi, Just ti) : ps' -> do
           Kinding.checkProperK ti
           (kctxi', tctxp) <- checkPat tdecls ddecls kctxi pi ti
-          (e'', ti', tctxi') <- synthAbs kctxi' (Map.union tctxp tctxi) ps'
+          (e'', ti', tctxi') <- synthAbs kctxi' (Map.union (freshCtx tctxp) tctxi) ps'
           tctxi'' <- typeCtxDifference tdecls kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (getSpan e)
           return (e'', T.AppArrow (spanFromTo pi e') m ti ti', tctxi'')
@@ -222,11 +272,11 @@ synth tdecls ddecls kctx tctx = \case
     -- TODO: detect redundant and incomplete patterns
     (e'', t, tctx') <- synth tdecls ddecls kctx tctx e'
     (kctxp1, tctxp1) <- checkPat tdecls ddecls kctx p1 t
-    (rhs1', t1, tctxrhs1) <- synthRHS tdecls ddecls kctxp1 (tctxp1 `Map.union` tctx') (Right e') rhs1
+    (rhs1', t1, tctxrhs1) <- synthRHS tdecls ddecls kctxp1 (freshCtx tctxp1 `Map.union` tctx') (Right e') rhs1
     tctx1 <- typeCtxDifference tdecls kctxp1 tctxrhs1 tctxp1
     (unzip -> (cs'', tctxis)) <- forM cs' \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi t
-      (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctxpi (tctxpi `Map.union` tctx') (Right e') rhsi t1
+      (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctxpi (freshCtx tctxpi `Map.union` tctx') (Right e') rhsi t1
       ((pi, rhsi') ,) <$> typeCtxDifference tdecls kctxpi tctxrhsi tctxpi
     checkEquivTypeCtxsCase (Right e) (tctx1 : tctxis)
     return (E.Case s e'' ((p1, rhs1') : cs''), t1, tctx1)
@@ -405,7 +455,7 @@ check tdecls ddecls kctx tctx e t = case e of
     (unzip -> (psrhss', tctxs)) <- forM psrhss \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi u
       let kctx' = kctxpi `Map.union` kctx
-      (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctx' (tctxpi `Map.union` tctx') (Right e) rhsi t
+      (rhsi', tctxrhsi) <- checkRHS tdecls ddecls kctx' (freshCtx tctxpi `Map.union` tctx') (Right e) rhsi t
       ((pi, rhsi'),) <$> typeCtxDifference tdecls kctx' tctxrhsi tctxpi
     checkEquivTypeCtxsCase (Right e) tctxs
     return (E.Case s e'' psrhss', head tctxs)
@@ -464,7 +514,7 @@ check tdecls ddecls kctx tctx e t = case e of
 -- containing only the bindings introduced by the declarations, and the
 -- type context given initially, updated with the new bindings.
 checkDecls :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> [E.LetDecl Kinded]
-           -> Validation ([E.LetDecl Kinded], TypeCtx, KindCtx, TypeCtx)
+           -> Validation ([E.LetDecl Kinded], PatCtx, KindCtx, TypeCtx)
 checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
   where
     checkDecl (ds, tctxds, kctxi, tctxi) = \case
@@ -474,28 +524,28 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
         return ( List.snoc ds d
                , tctxsig `Map.union` tctxds
                , kctxi
-               , tctxsig `Map.union` tctxi
+               , freshCtx tctxsig `Map.union` tctxi
                )
       E.ValDef p@(E.VarPat _ x) rhs -- TODO: generalize for all pats, using something like patType :: Pat -> Maybe Type
-        | Just u <- tctxi Map.!? Left x -> do
+        | Just (bndType -> u) <- tctxi Map.!? Left x -> do
             (rhs', tctx'') <- checkRHS tdecls ddecls kctxi tctxi (Left (Right p)) rhs u
             let tctxp = Map.singleton (Left x) u
             return ( List.snoc ds (E.ValDef p rhs')
                    , tctxp `Map.union` tctxds
                    , kctxi
-                   , tctxp `Map.union` tctx''
+                   , freshCtx tctxp `Map.union` tctx''
                    )
       E.ValDef p rhs -> do
         (rhs', trhs, tctx'') <- synthRHS tdecls ddecls kctxi tctxi (Left (Right p)) rhs
         (kctxp, tctxp) <- checkPat tdecls ddecls kctxi p trhs
         forM_ (Map.assocs tctxp) \case
-          (Left x, t) -> forM_ (tctxi Map.!? Left x) \u ->
-            checkEquivTypes tdecls ddecls (Left (E.Var (getSpan x) x)) u t
+          (Left x, t) -> forM_ (tctxi Map.!? Left x) \b ->
+            checkEquivTypes tdecls ddecls (Left (E.Var (getSpan x) x)) (bndType b) t
           _ -> return ()
         return ( List.snoc ds (E.ValDef p rhs')
                , tctxp `Map.union` tctxds
                , kctxp `Map.union` kctxi
-               , tctxp `Map.union` tctx''
+               , freshCtx tctxp `Map.union` tctx''
                )
       E.FnDef f psrhss -> do
         t <- lookupFunType tctxi f
@@ -653,7 +703,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Nothing -> return ()
           (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
           let kctxi' = Map.union kctxp kctxi
-          (rhs', tctxi') <- checkFun' (i + 1) kctxi' (Map.union tctxp tctxi) ps'' v
+          (rhs', tctxi') <- checkFun' (i + 1) kctxi' (Map.union (freshCtx tctxp) tctxi) ps'' v
           tctxi'' <- typeCtxDifference tdecls kctxi' tctxi' tctxp
           checkEquivTypeCtxsFun m tctxi'' tctxi (spanFromTo pi rhs)
           return (rhs', tctxi'')
@@ -694,7 +744,7 @@ checkPat :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> E.KindedPat
          -> T.KindedType
-         -> Validation (KindCtx, TypeCtx) -- ????
+         -> Validation (KindCtx, PatCtx) -- ????
 checkPat tdecls ddecls kctx p t = case p of
   -- 0
   E.IntPat    s _   -> do
@@ -856,8 +906,8 @@ checkEquivTypeCtxsCase
 checkEquivTypeCtxsCase fpe = \case
   [ ]   -> return ()
   [_]   -> return ()
-  tctxs@(tctx1 : tctxs') -> do
-    forM_ (Map.assocs (Map.unions tctxs `Map.difference` intersections tctx1 tctxs'))
+  (map consumed -> cs@(c1 : cs')) -> do
+    forM_ (Map.assocs (Map.unions cs `Map.difference` intersections c1 cs'))
       \(xi, t) -> throwE (LinNotConsumedEvenly (getSpan xi) xi t fpe)
   where
     intersections = foldlStrict Map.intersection
@@ -875,8 +925,7 @@ checkEquivTypeCtxsFun
   -> Span
   -> Validation ()
 checkEquivTypeCtxsFun m tctx1 tctx2 s = do
-  let tctxδ = Map.assocs (tctx2 `Map.difference` tctx1) 
-  forM_ tctxδ \(xa, t) ->
+  forM_ (newlyConsumed tctx2 tctx1) \(xa, t) ->
     case T.kindOf t of
       K.Proper _ m' _ -> unless (m' K.<: m) do
         throwE (LinConsumedInUnFun (getSpan xa) xa t s m)
@@ -887,8 +936,7 @@ checkEquivTypeCtxsGuard
   -> TypeCtx
   -> Validation ()
 checkEquivTypeCtxsGuard tctx1 tctx2 = do
-  let tctxδ = Map.assocs (tctx2 `Map.difference` tctx1) 
-  forM_ tctxδ \(xa, t) ->
+  forM_ (newlyConsumed tctx2 tctx1) \(xa, t) ->
     case T.kindOf t of
       K.Proper _ m _ -> unless (K.isUn m) do
         throwE (LinConsumedInGuard (getSpan xa) xa t)
@@ -1072,14 +1120,16 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
 
 typeModule :: KindCtx -> TypeCtx -> M.KindedModule -> Validation (M.KindedModule, KindCtx, TypeCtx)
 typeModule kctx tctx modl = do
-  tctx' <- flip Map.union tctx <$> buildDConsCtx
+  tctx' <- flip Map.union tctx . freshCtx <$> buildDConsCtx
   (ds, tctxds, kctx', tctx'') <- checkDecls tdecls ddecls kctx tctx' (M.definitions modl)
-  _ <- typeCtxDifference tdecls kctx' tctxds tctx''
+  -- each of the module's own bindings, against the counts it ended with: a
+  -- linear declaration left unconsumed is the error, as before
+  _ <- typeCtxDifference tdecls kctx' tctx'' tctxds
   return (modl{M.definitions=ds}, kctx', tctx'')
   where
     tdecls = M.typeDecls modl
     ddecls = M.dataDecls modl
-    buildDConsCtx :: Validation TypeCtx
+    buildDConsCtx :: Validation PatCtx
     buildDConsCtx = do
       let cds = Map.assocs $ D.ddCons ddecls
       Map.fromList <$> mapM buildDConsType cds

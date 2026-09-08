@@ -86,6 +86,9 @@ data Error
     (Either (Either Variable E.KindedPat) E.KindedExp)
   | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType TK.KindedType
     -- ^ The type as written, then its weak head normal form (used for hints).
+  | LinConsumedTwice Span (Either Variable Identifier) TK.KindedType Span
+    -- ^ The span of the offending use, the binding it consumes again, and where
+    -- that binding was consumed already.
   | MultipleConsDecls Span [Identifier]
   | MultipleFieldDecls Span [Identifier]
   | MultipleKindSigs Span [Identifier]
@@ -166,6 +169,7 @@ instance Located Error where
     MalformedInclude s -> s
     LinNotConsumedEvenly s _ _ _ -> s
     LinVarAtEndOfScope s _ _ _ -> s
+    LinConsumedTwice s _ _ _ -> s
     LinConsumedInGuard s _ _ -> s
     LinConsumedInUnFun s _ _ _ _ -> s
     MultipleConsDecls s _ -> s
@@ -407,6 +411,18 @@ toMessage src = \case
     ++ case sessionHint whnf of
          Just op -> "  hint: consume it with " ++ bt op ++ "\n"
          Nothing -> ""
+  LinConsumedTwice s xi t prev -> errorHeader s ++ "\n"
+      ++ ((case m' of
+        K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
+        _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (tidyM m') ++ " and ")
+      ++ "type " ++ bt (unparse t) ++ ", bound at\n"
+      ++ snippet src xi True
+      ++ " has already been consumed at\n"
+      ++ snippet src prev True)
+    where
+      m' = case TK.kindOf t of
+        K.Proper _ m _ -> m
+        _ -> internalError "non-proper type for expression variable"
   LinConsumedInGuard s xi t -> errorHeader s ++ "\n"
       ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "

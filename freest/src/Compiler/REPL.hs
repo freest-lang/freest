@@ -290,7 +290,7 @@ handleInfo src = do
             putLines [src ++ " is a constructor of datatype " ++ show parent
                       ++ maybe "" ((", " ++) . definedAt) (constructorSpan (ddecls s) parent i)]
             case Map.lookup (Right i) (typeCtx s) of
-              Just t  -> printAs src t -- type known: print it
+              Just b  -> printAs src (Typing.bndType b) -- type known: print it
               Nothing -> pure ()       -- type absent from the context: skip
           Nothing
             | Map.member i (D.ddTypes (ddecls s)) -> putLines -- it's a datatype: print kind sig and definition
