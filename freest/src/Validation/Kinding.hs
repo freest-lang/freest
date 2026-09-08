@@ -666,6 +666,12 @@ kindModule ctx mod = do
             Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
           (Un (getSpan i), Map.empty) cis
 
+-- | The parameters bound by a definition or a lambda, in scope for its body
+-- alongside the signatures. They shadow: a parameter named as an outer
+-- definition is the parameter.
+paramCtx :: [(Variable, TK.KindedType)] -> TypeCtx -> TypeCtx
+paramCtx ps tctxds = Map.fromList ps `Map.union` tctxds
+
 -- | Bound a definition's omitted binder kinds by those of the name it is
 -- defined as: @f = g@ can be no more general than @g@. A constraint, not a
 -- check, so the solver lowers the binder rather than defaulting it to the top
@@ -924,7 +930,7 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
       ([], t') -> do
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
-        rhs' <- kindRHS tdecls ddecls kctx tctxds (Just t') rhs
+        rhs' <- kindRHS tdecls ddecls kctx (paramCtx tracked tctxds) (Just t') rhs
         let (comps, forced) = trackComponents tdecls ddecls tracked rhs'
         forM_ comps \(x, pt) ->
           case (if x `elem` capUn then scaleBy (Un (getSpan x)) else id) (usesRHS x rhs') of
@@ -1174,7 +1180,7 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
           MultLevel φ  -> pure $ MultLevel φ
   E.Abs s pars m e -> do
     (kctx', pars', mt', (pvars, pforced)) <- kindAbsParams tdecls ddecls kctx mt pars
-    e' <- kindExpAgainst tdecls ddecls kctx' tctxds mt' e
+    e' <- kindExpAgainst tdecls ddecls kctx' (paramCtx pvars tctxds) mt' e
     let (comps, forced) = trackComponents tdecls ddecls pvars (E.UnguardedRHS e' Nothing)
     forM_ comps \(x, pt) -> case usesExp x e' of
       One -> pure ()
