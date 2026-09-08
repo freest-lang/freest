@@ -666,6 +666,31 @@ kindModule ctx mod = do
             Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
           (Un (getSpan i), Map.empty) cis
 
+-- | Bound a definition's omitted binder kinds by those of the name it is
+-- defined as: @f = g@ can be no more general than @g@. A constraint, not a
+-- check, so the solver lowers the binder rather than defaulting it to the top
+-- and failing later. Only a ground kind bounds: the quantifiers bind distinct
+-- variables, so relating kinds that mention them equates their @#m@s.
+boundBinderKinds :: D.KindedTypeDecls -> TK.KindedType -> TK.KindedType -> Validation ()
+boundBinderKinds tdecls = go
+  where
+    go t u = case (normalise tdecls t, normalise tdecls u) of
+      (TK.AppForall _ _ aks t', TK.AppForall _ _ bks u')
+        | length aks == length bks -> do
+            sequence_ [ addKindConstraint (Origin (getSpan a)) k k'
+                      | ((a, k), (_, k')) <- zip aks bks
+                      , hasSolvableVar k, ground k' ]
+            go t' u'
+      (TK.ForallM _ _ φs t', TK.ForallM _ _ φs' u')
+        | length φs == length φs' -> go t' u'
+      _ -> pure ()
+
+    ground = \case
+      Proper _ (Sup _ atoms) bk -> null atoms && groundBK bk
+      Proper _ Lin{}         bk -> groundBK bk
+      _                         -> False
+    groundBK = \case VarBK{} -> False; _ -> True
+
 -- | The enclosing signatures stay in scope for a nested @let@ or @where@ block;
 -- a local signature shadows an outer one of the same name.
 kindLetDecls :: D.KindedTypeDecls
@@ -685,18 +710,16 @@ kindLetDecl :: D.KindedTypeDecls
             -> Validation (KindCtx, TypeCtx, [E.LetDecl Kinded])
 kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
   E.ValDef p rhs -> do
-    let mt = valDefType p rhs
+    -- the signature so that @f = \… -> e@ kinds as the clause form @f … = e@;
+    -- the right-hand side's because a bare signed variable is the only one
+    -- kinding can type with no term context, and an unpacking pattern needs it
+    let msig = case p of E.VarPat _ x -> tctxds Map.!? x; _ -> Nothing
+        mrhs = case rhs of E.UnguardedRHS (E.Var _ v) _ -> tctxds Map.!? v; _ -> Nothing
+        mt   = maybe mrhs Just msig
+    sequence_ (boundBinderKinds tdecls <$> msig <*> mrhs)
     rhs' <- kindRHS tdecls ddecls kctx tctxds mt rhs
     (kctx', p') <- kindPat tdecls kctx mt p
     return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
-    where
-      -- a signed @f = \… -> e@ must kind as the clause form @f … = e@, which
-      -- 'kindFun' already walks against the signature
-      valDefType (E.VarPat _ x) _ = tctxds Map.!? x
-      -- a bare signed variable is the one right-hand side kinding can type with
-      -- no term context, and an unpacking pattern needs its type
-      valDefType _ (E.UnguardedRHS (E.Var _ v) _) = tctxds Map.!? v
-      valDefType _ _ = Nothing
   E.FnDef x psrhss -> do
     case tctxds Map.!? x of
       Just t -> do
