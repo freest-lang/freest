@@ -52,7 +52,7 @@ import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resol
 import Validation.LocalInference.Substitution ( Substitution(..) )
 
 import Control.Monad.Identity ( Identity(..) )
-import Control.Monad.Extra ( unlessM, (&&^) )
+import Control.Monad.Extra ( unlessM, (&&^), zipWithM_ )
 import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, gets, modify )
 import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
 import Data.Bifunctor ( first, second, bimap )
@@ -90,18 +90,20 @@ resolveExpBndKind (a, Just k)  = pure (a, E.Written k)
 resolveExpBndKind (a, Nothing) = (a,) . E.Inferred <$> freshUnifKind a
 
 -- | Resolve a quantifier's (possibly omitted) binder kind. An output-polarity
--- quantifier (∃ and its session twin @!type@, both polarity 'Out') defaults an
--- omitted binder to *unrestricted* — the multiplicity is fixed to 'Un', its
--- baseKind still inferred from the body. Rationale: an 'Out' binder is covariant,
--- so the most-usable default is the subkind '*T' (the abstract type is freely
--- usable by the consumer — the party that unpacks it, or the @?type@ receiver at
--- the dual endpoint), dual to an 'In' binder's most-general '1T'; and there is no
--- local usage to tighten from, since that consumer is remote. A linear binder is
--- the annotated case @exists (a:1T)@ / @!type (a:1T)@. Input-polarity quantifiers
--- (∀ and @?type@) keep the most-general default ('resolveBndKind').
+-- quantifier (∃ and its session twin @!type@, both polarity 'Out') gets its
+-- components as variables rather than a whole-kind one, so that a body which is
+-- exactly the binder does not reach a smart constructor expecting a 'Proper'.
+-- Both are inferred: the witness packed at it bounds the multiplicity from
+-- below and the unpacked value's usage from above, and a program that supplies
+-- neither defaults as usual. Input-polarity quantifiers (∀ and @?type@) keep a
+-- whole-kind variable ('resolveBndKind').
 resolveQuantBinder :: Polarity -> BaseKind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
-resolveQuantBinder Pos _ (a, Nothing) =
-  (a,) . Proper (getSpan a) (Un (getSpan a)) . VarBK UnifLv <$> freshUnifBaseKindVar (getSpan a)
+resolveQuantBinder Pos _ (a, Nothing) = do
+  m  <- freshUnifMult (getSpan a)
+  forM_ (multVarOf m) addUnDefault
+  bk <- VarBK UnifLv <$> freshUnifBaseKindVar (getSpan a)
+  pure (a, Proper (getSpan a) m bk)
+  where multVarOf = \case Sup _ [(_, φ)] -> Just φ; _ -> Nothing
 resolveQuantBinder _ _ ak = resolveBndKind ak
 
 -- | A fresh unification kind variable (see 'resolveBndKind').
@@ -1200,9 +1202,15 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
       _   -> forceUnrestricted pt
     mapM_ forceUnrestricted (pforced ++ forced)
     pure $ E.Abs s pars' m e'
-  E.Pack s' ts e ->
-    E.Pack s' <$> mapM (synth kctx) ts
-              <*> kindExp tdecls ddecls kctx tctxds e
+  E.Pack s' ts e -> do
+    ts' <- mapM (synth kctx) ts
+    zipWithM_ checkK ts' (existsKinds mt)
+    E.Pack s' ts' <$> kindExp tdecls ddecls kctx tctxds e
+    where
+      existsKinds = \case
+        Just (normalise tdecls -> TK.AppExists _ aks u) ->
+          map snd aks ++ existsKinds (Just u)
+        _ -> []
   E.Asc s e t -> do
     t' <- synth kctx t
     e' <- kindExpAgainst tdecls ddecls kctx tctxds (Just t') e
@@ -1243,7 +1251,7 @@ kindType ctx t = do
 -- solution, via the kind unifier and the multiplicity and baseKind solvers.
 solveKindConstraints :: Validation KindSolution
 solveKindConstraints = do
-  (binds, cs, meqs, pcs0, condmults) <- takeKindState
+  (binds, cs, meqs, pcs0, condmults, undefs) <- takeKindState
   KindUnifier ksub mcs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
@@ -1251,7 +1259,7 @@ solveKindConstraints = do
   let condEqs = [ MultEquation φ o (if resolveBK psub bk == Channel then m1 else join m1 m2) o
                 | (o, bk, φ, m1, m2) <- condmults ]
   msub <- solveMultConstraints (mcs ++ map toMultEq meqs ++ condEqs) >>= either (throwE . multErr) (pure . multsOf)
-  return (KindSolution ksub psub msub)
+  return (KindSolution ksub psub msub undefs)
   where
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o

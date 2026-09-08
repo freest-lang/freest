@@ -1,8 +1,9 @@
-{- An omitted functional-existential binder defaults to unrestricted (*T), dual
-   to a forall binder's most-general 1T: the existential is covariant in the
-   binder kind, so *T is the most-usable default and lets the unpacked abstract
-   value be used more than once without an annotation. (A *linear* existential
-   is the annotated case `exists (a:1T)`.) -}
+{- An omitted functional-existential binder is inferred; nothing here forces it
+   below unrestricted (*T), which is where an out-polarity binder settles when
+   unconstrained — it is covariant, so *T is the most usable choice for whoever
+   unpacks it, dual to a forall binder's most-general 1T. Here the unpacked
+   value is used twice, which needs *T anyway. A binder a witness forces linear
+   is `ExistsLinearWitness`. -}
 type Counter = (exists a, (a, a -> Int, a -> a))
 
 counterADT : Counter
