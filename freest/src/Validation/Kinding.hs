@@ -674,30 +674,30 @@ kindModule ctx mod = do
 paramCtx :: [(Variable, TK.KindedType)] -> TypeCtx -> TypeCtx
 paramCtx ps tctxds = Map.fromList ps `Map.union` tctxds
 
--- | Bound a definition's omitted binder kinds by those of the name it is
--- defined as: @f = g@ can be no more general than @g@. A constraint, not a
--- check, so the solver lowers the binder rather than defaulting it to the top
--- and failing later. Only a ground kind bounds: the quantifiers bind distinct
--- variables, so relating kinds that mention them equates their @#m@s.
+-- | Fix a definition's omitted binder kinds to those of the name it is defined
+-- as: @f = g@ is accepted only if the two types are equivalent, and a binder kind
+-- is part of type identity, so an omitted one /is/ @g@'s rather than merely
+-- bounded by it. An omitted binder is a whole-kind variable, so this is a
+-- binding, not a subkinding constraint: the direction that lowers the binder
+-- loses @g@'s own @#m@, which the multiplicity solver reads as a rigid constant
+-- it may drop. Only a kind with no metavariable fixes one, and @g@'s multiplicity
+-- binders are renamed to the aligned ones of @f@ first, so a binder kind naming
+-- a @#m@ speaks of the definition's own quantifier rather than equating two.
 boundBinderKinds :: D.KindedTypeDecls -> TK.KindedType -> TK.KindedType -> Validation ()
 boundBinderKinds tdecls = go
   where
     go t u = case (normalise tdecls t, normalise tdecls u) of
       (TK.AppForall _ _ aks t', TK.AppForall _ _ bks u')
         | length aks == length bks -> do
-            sequence_ [ addKindConstraint (Origin (getSpan a)) k k'
-                      | ((a, k), (_, k')) <- zip aks bks
-                      , hasSolvableVar k, ground k' ]
+            sequence_ [ addKindBinding τ k'
+                      | ((_, Var _ lv τ), (_, k')) <- zip aks bks
+                      , solvable lv, not (hasSolvableVar k') ]
             go t' u'
       (TK.ForallM _ _ φs t', TK.ForallM _ _ φs' u')
-        | length φs == length φs' -> go t' u'
+        | length φs == length φs' -> go t' (foldr rename u' (zip φs' φs))
       _ -> pure ()
 
-    ground = \case
-      Proper _ (Sup _ atoms) bk -> null atoms && groundBK bk
-      Proper _ Lin{}         bk -> groundBK bk
-      _                         -> False
-    groundBK = \case VarBK{} -> False; _ -> True
+    rename (φ', φ) = subsMultType ObjLv φ' (VarM (getSpan φ') ObjLv φ)
 
 -- | The enclosing signatures stay in scope for a nested @let@ or @where@ block;
 -- a local signature shadows an outer one of the same name.

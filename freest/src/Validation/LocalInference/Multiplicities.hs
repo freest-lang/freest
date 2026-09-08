@@ -55,6 +55,7 @@ data SolverState = SolverState !(Map.Map Variable Multiplicity) !Int
 -- | Solves the equations, returning he first most general unifier
 -- found in breadth-first search. On failure, returns the first
 -- equation with no solution (with the accumulated substitution applied).
+-- The search is /not/ complete — see the note on `unifySup`.
 -- Any fresh variables introduced by the solver have a distinct negative
 -- internal ID, assuming there are no such IDs in the constraints. 
 -- This is done to avoid doing the solving inside `Validation`. 
@@ -107,6 +108,33 @@ solve eqs = do
   -- only source of non-unitarity; the region construction itself is
   -- deterministic. The absorbing top `Lin` is not handled here but by the
   -- `Lin = Sup` case (`collapseSide`).
+  --
+  -- INCOMPLETE, deliberately recorded. Only a constant occurring on *one* side
+  -- is ever offered to a variable, so no returned unifier gives a variable a
+  -- constant occurring on *both*. The witness is `φ ⊔ m = m` with φ solvable and
+  -- m rigid: only1 = {φ}, BS = ∅, so φ gets neither a region nor an absorbed
+  -- constant and the sole answer is `φ ↦ *`, losing the equally valid and
+  -- incomparable `φ ↦ m`. Every omitted unifier only ever *raises* a variable,
+  -- so the bias is systematically towards `*`, the least element — which for a
+  -- multiplicity read as a bound is the least general choice. Not unsoundness:
+  -- every answer returned does satisfy the equations.
+  --
+  -- It already bites, because `φ ⊔ m = m` is how `kindSubConstraints` encodes
+  -- `φ <: m`: a kind constraint whose upper bound names a `#m` lands on `*`.
+  -- With `foo : forall #m #n a -> a -> (a -> ()) -m+n-> ()`, bounding the
+  -- omitted binder by its capturing closure infers `a : *T` where the written
+  -- `a : m T` is accepted, so `foo @(Int -1-> Int)` is rejected only in the
+  -- inferred version. `Validation.Kinding.boundBinderKinds` sidesteps this by
+  -- binding an omitted binder outright rather than constraining it.
+  --
+  -- The fix is not to complete this function. Subkinding does not need ACUI at
+  -- all: `<:` is `⊆` on atom sets, so the paper's descent (Fig. 14 — seed φ to
+  -- the top `1`, then meet with each upper bound) answers `1 ⊓ m = m` directly,
+  -- and successive bounds intersect. ACUI is needed only for genuine equations
+  -- over `m+n`. Routing the subkinding half through the `φ ⊔ m = m` encoding is
+  -- what loses the answer; splitting it back out would need `Meet Multiplicity`
+  -- (atom-set intersection, with `Lin` the absorbing top) and a decision on the
+  -- lower bounds arrow contravariance produces, which the paper only checks.
   unifySup :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
   unifySup m1 m2 (SolverState sub n0) = do
     let s     = getSpan m1
@@ -198,6 +226,7 @@ defaultUnbound eqs sub@(Θ ivtms) =
 -- | Solves the equations, returning he first most general unifier
 -- found in breadth-first search. On failure, returns the first
 -- equation with no solution (with the accumulated substitution applied).
+-- The search is /not/ complete — see the note on `unifySup`.
 -- Note that the unifier might include free choices, which include fresh variables not 
 -- found in the constraints. To default these to `Un`, use `solveMultConstraintsDUDF`.
 solveMultConstraints :: MultConstraints -> Validation (Either MultEquation Substitution)
