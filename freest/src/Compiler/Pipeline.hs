@@ -8,7 +8,8 @@ with or without the implicit Prelude. On success returns the scoped
 module; on failure prints the errors and returns 'Nothing'.
 -}
 module Compiler.Pipeline
-  ( validateModule
+  ( LoadState
+  , validateModule
   , loadPrelude
   , loadModule
   , loadPreludeAndModule
