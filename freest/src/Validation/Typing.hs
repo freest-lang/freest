@@ -338,7 +338,8 @@ check tdecls ddecls kctx tctx e t = case e of
       [] -> throwE (CannotSynthesiseSendType s')
       (ExpLevel e' : args') -> do
         (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
-        (a, _, v') <- Expose.typeOutput tdecls e' v
+        (a, k, v') <- Expose.typeOutput tdecls e' v
+        Kinding.checkK u k
         (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a u v') args'
         checkEquivTypes tdecls ddecls (Left e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
