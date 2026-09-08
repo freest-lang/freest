@@ -49,12 +49,14 @@ import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyK
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveModule )
-import Validation.LocalInference.Substitution ( Substitution(..) )
+import Validation.LocalInference.Substitution
+  ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
+import Validation.LocalInference.Types qualified as LTI
 
 import Control.Monad.Identity ( Identity(..) )
 import Control.Monad.Extra ( unlessM, (&&^), zipWithM_ )
-import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, gets, modify )
-import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
+import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, get, put, gets, modify )
+import Control.Monad.Trans.Except ( throwE, catchE, runExceptT, ExceptT (ExceptT) )
 import Data.Bifunctor ( first, second, bimap )
 import Data.Bitraversable (bitraverse) -- bimapM 
 import Data.Foldable.Extra ( allM )
@@ -720,13 +722,20 @@ kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
   E.ValDef p rhs -> do
     -- the signature so that @f = \… -> e@ kinds as the clause form @f … = e@;
     -- the right-hand side's because a bare signed variable is the only one
-    -- kinding can type with no term context, and an unpacking pattern needs it
+    -- kinding can type before kinding it, and an unpacking pattern needs it
     let msig = case p of E.VarPat _ x -> tctxds Map.!? x; _ -> Nothing
-        mrhs = case rhs of E.UnguardedRHS (E.Var _ v) _ -> tctxds Map.!? v; _ -> Nothing
-        mt   = maybe mrhs Just msig
-    sequence_ (boundBinderKinds tdecls <$> msig <*> mrhs)
+        mvar = case rhs of E.UnguardedRHS (E.Var _ v) _ -> tctxds Map.!? v; _ -> Nothing
+        mt   = maybe mvar Just msig
+    -- only a bare signed variable fixes the binder kinds; a synthesised type
+    -- carries instantiation variables, which are not this definition's binders
+    sequence_ (boundBinderKinds tdecls <$> msig <*> mvar)
     rhs' <- kindRHS tdecls ddecls kctx tctxds mt rhs
-    (kctx', p') <- kindPat tdecls kctx mt p
+    -- once the right-hand side is kinded its type may be within reach even when
+    -- it is not a bare variable, and the pattern is what needs it: an unpacked
+    -- binder takes the existential's own kind rather than a fresh placeholder
+    mrhs <- case rhs' of E.UnguardedRHS e _ -> synthExpType tdecls tctxds e
+                         _                  -> pure Nothing
+    (kctx', p') <- kindPat tdecls kctx (maybe mrhs Just mt) p
     return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
   E.FnDef x psrhss -> do
     case tctxds Map.!? x of
@@ -830,24 +839,112 @@ boundMultBy m = \case
   TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
   _                                 -> pure ()
 
--- | Extend a tracked (variable, type) set through a @let@ or @case@ that
--- destructures a tracked variable, so a duplicated or discarded /component/ of a
--- tracked parameter is itself tracked. Variable, tuple, and constructor patterns
--- over a variable scrutinee are followed — a constructor's binders take its field
--- types instantiated at the scrutinee's type arguments (mirroring 'checkPat').
--- Other patterns and scrutinees are left to the type checker.
-trackComponents :: D.KindedTypeDecls -> D.KindedDataDecls
-                -> [(Variable, TK.KindedType)] -> E.RHS Kinded
-                -> ([(Variable, TK.KindedType)], [TK.KindedType])
-trackComponents tdecls ddecls tracked rhs = (acc, forced)
+-- | Run a computation for its result alone: an error is not reported, and the
+-- constraints it gathered are rolled back. Guidance is best-effort, so failing
+-- to learn something must not fail the program.
+tentatively :: Validation a -> Validation (Maybe a)
+tentatively m = do
+  st <- get
+  (Just <$> m) `catchE` \_ -> put st >> pure Nothing
+
+-- | Best-effort: the type of an expression kinding can determine on its own — a
+-- signed variable, or an application of one, with an implicit instantiation
+-- resolved by matching each argument's type against the domain it faces. It is
+-- 'Nothing' for most of the language, and that is the point: this exists to give
+-- the usage rules a scrutinee type, not to type-check. The multiplicity
+-- constraints the match yields are dropped; only the substitution is wanted, and
+-- emitting instantiation constraints from a best-effort walk would let a guess
+-- reach the solver. A leftover instantiation variable means the match learned
+-- nothing about that position, so the answer is 'Nothing' rather than a type
+-- that would mislead the caller.
+synthExpType :: D.KindedTypeDecls -> TypeCtx -> E.KindedExp
+             -> Validation (Maybe TK.KindedType)
+synthExpType tdecls tctxds e = grounded <$> go e
   where
-    ds     = destructuresRHS rhs
-    acc    = fixpoint tracked
-    forced = [ ft | (pat, v) <- ds, Just t <- [lookup v acc], ft <- snd (decomposePat tdecls ddecls pat t) ]
-    fixpoint a =
-      let new = [ b | (pat, v) <- ds, Just t <- [lookup v a]
-                    , b <- fst (decomposePat tdecls ddecls pat t), fst b `notElem` map fst a ]
-      in if null new then a else fixpoint (a ++ new)
+    grounded mt = mt >>= \t -> if Set.null (LTI.fiv t) then Just t else Nothing
+
+    go = \case
+      E.Var _ x -> pure (tctxds Map.!? x)
+      -- the two heads with no type of their own: what they yield is read off the
+      -- channel they are applied to (as 'Typing.synth' does, via 'Expose')
+      E.App s (E.ReceiveType _) (ExpLevel e : rest) -> go e >>= \case
+        Just u | Just (a, k, u') <- Expose.typeMsg' tdecls Neg (normalise tdecls u)
+               -> apply emptySubs (TK.AppExists s [(a, k)] u') rest
+        _      -> pure Nothing
+      E.App _ (E.SendType _ ty) (ExpLevel e : rest) -> go e >>= \case
+        Just u | Just (a, _, u') <- Expose.typeMsg' tdecls Pos (normalise tdecls u)
+               -> apply emptySubs (subs a ty u') rest
+        _      -> pure Nothing
+      E.App _ f args -> go f >>= maybe (pure Nothing) (\t -> apply emptySubs t args)
+      _              -> pure Nothing
+
+    apply θ t args = case (normalise tdecls (applySubs θ t), args) of
+      (u, []) -> pure (Just u)
+      (TK.AppArrow _ _ u v, ExpLevel e : rest) -> do
+        θ' <- go e >>= \case
+          Just ut -> maybe θ (<> θ) <$> tentatively (snd <$> LTI.match e tdecls u ut)
+          Nothing -> pure θ
+        apply θ' v rest
+      (TK.AppForall s m ((b, _) : bks) u, TypeLevel ty : rest) ->
+        apply θ (peelT s m bks (subs b ty u)) rest
+      (TK.ForallM s m (φ : φs) u, MultLevel φ' : rest) ->
+        apply θ (peelM s m φs (subsMultType ObjLv φ φ' u)) rest
+      (TK.AppForall s m ((b, k) : bks) u, args') | not (isArrow k), not (null args') -> do
+        iv <- freshInstVarT (getSpan b) =<< properShape k
+        apply θ (peelT s m bks (subs b iv u)) args'
+      (TK.ForallM s m (φ : φs) u, args') | not (null args') -> do
+        miv <- freshInstVarM (getSpan φ)
+        apply θ (peelM s m φs (subsMultType ObjLv φ miv u)) args'
+      _ -> pure Nothing
+
+    peelT s m bks = if null bks then id else TK.AppForall s m bks
+    peelM s m φs  = if null φs  then id else TK.ForallM s m φs
+
+    -- an omitted binder kind is still a whole-kind variable here, and 'LTI.match'
+    -- refuses a type whose kind is not proper. Give the instantiation variable a
+    -- proper shape of its own rather than committing the binder to one: the
+    -- variables are fresh, nothing this walk gathers reaches the solver, and if
+    -- the binder turns out to be higher-kinded the match simply fails and the
+    -- caller is left where it was.
+    properShape = \case
+      Var s _ _ -> Proper s <$> freshUnifMult s <*> (VarBK UnifLv <$> freshUnifBaseKindVar s)
+      k         -> pure k
+
+    isArrow = \case Arrow{} -> True; _ -> False
+
+-- | Extend a tracked (variable, type) set through a @let@ or @case@ that
+-- destructures a scrutinee whose type is known, so a duplicated or discarded
+-- /component/ of a tracked parameter is itself tracked. Variable, tuple, and
+-- constructor patterns are followed — a constructor's binders take its field
+-- types instantiated at the scrutinee's type arguments (mirroring 'checkPat').
+-- A tracked variable's type comes from the accumulator, since it may itself be a
+-- component discovered on an earlier round; any other scrutinee is typed by
+-- 'synthExpType', which is what carries the payload of a @receive@ into the
+-- usage rules. Other patterns are left to the type checker.
+trackComponents :: D.KindedTypeDecls -> D.KindedDataDecls -> TypeCtx
+                -> [(Variable, TK.KindedType)] -> E.RHS Kinded
+                -> Validation ([(Variable, TK.KindedType, E.RHS Kinded)], [TK.KindedType])
+trackComponents tdecls ddecls tctxds tracked rhs = do
+  (acc, typed) <- fixpoint [(x, t, rhs) | (x, t) <- tracked]
+  return ( acc
+         , [ ft | (pat, _, Just t) <- typed
+                , ft <- snd (decomposePat tdecls ddecls pat t) ] )
+  where
+    ds = destructuresRHS rhs
+
+    -- a round retypes every scrutinee under the components found so far, so a
+    -- channel rebound by one @let@ carries into the next one's @receive@
+    fixpoint a = do
+      typed <- forM ds \(pat, e, scope) -> (pat, scope,) <$> scrutType a e
+      let new = [ (x, t, scope) | (pat, scope, Just u) <- typed
+                                , (x, t) <- fst (decomposePat tdecls ddecls pat u)
+                                , x `notElem` [y | (y, _, _) <- a] ]
+      if null new then return (a, typed) else fixpoint (a ++ new)
+
+    scrutType a = \case
+      E.Var _ v | Just t <- lookup v known -> pure (Just t)
+      e                                    -> synthExpType tdecls (paramCtx known tctxds) e
+      where known = [(x, u) | (x, u, _) <- a]
 
 -- | Decompose a pattern against its type into the (variable, type) leaves it
 -- binds, plus the types an as-pattern forces unrestricted. Variable, wildcard,
@@ -869,6 +966,14 @@ decomposePat tdecls ddecls = go
       , TK.AppDName _ _ dty' args <- normalise tdecls t
       , dty == dty', length args == length aks, length ps == length fields
       = mconcat (zipWith go ps (map (subsAll (map fst aks) args) fields))
+    go (E.PackPat _ aks p) t = peel aks t
+      where
+        peel [] u = go p u
+        peel ((a, bk) : aks') u = case normalise tdecls u of
+          TK.AppExists s' ((b, k') : bks) v ->
+            peel aks' ((if null bks then id else TK.AppExists s' bks)
+                        (subs b (TK.fromVariable ObjLv a (E.bndKind bk)) v))
+          _ -> ([], [])
     go (E.ChoicePat _ m i p) t
       | Just (Just t')   <- Expose.externalChoice' tdecls m t i = go p t'
     go (E.InPat _ m p1 p2) t
@@ -879,31 +984,39 @@ decomposePat tdecls ddecls = go
                                         = go p (subs b (TK.fromVariable ObjLv a (E.bndKind k)) t')
     go _                 _              = ([], [])
 
-destructuresRHS :: E.RHS Kinded -> [(E.KindedPat, Variable)]
-destructuresRHS = \case
+-- | Every destructuring in an expression, as the pattern, the scrutinee it
+-- matches, and the /scope/ over which the pattern's variables are visible. The
+-- scope matters: a variable bound in one @case@ branch or by one @let@ is not in
+-- scope over the whole right-hand side, and counting its uses there reads it as
+-- used in one branch and not the others — branch-inconsistent, hence
+-- unrestricted — when it is used exactly once where it exists.
+destructuresRHS :: E.RHS Kinded -> [(E.KindedPat, E.KindedExp, E.RHS Kinded)]
+destructuresRHS rhs = case rhs of
   E.UnguardedRHS e w -> destructuresExp e ++ inWhere w
   E.GuardedRHS ges w -> concatMap (\(g, b) -> destructuresExp g ++ destructuresExp b) ges ++ inWhere w
-  where inWhere = maybe [] (concatMap destructuresLet)
+  where inWhere = maybe [] (concatMap (destructuresLet rhs))
 
-destructuresExp :: E.KindedExp -> [(E.KindedPat, Variable)]
+destructuresExp :: E.KindedExp -> [(E.KindedPat, E.KindedExp, E.RHS Kinded)]
 destructuresExp = \case
-  E.Let _ lds e   -> concatMap destructuresLet lds ++ destructuresExp e
+  E.Let s lds e   -> concat [destructuresLet (below i) ld | (i, ld) <- zip [1 ..] lds]
+                       ++ destructuresExp e
+    where below i = E.UnguardedRHS (E.Let s (drop i lds) e) Nothing
   E.App _ e args  -> destructuresExp e ++ concatMap (\case ExpLevel a -> destructuresExp a; _ -> []) args
   E.Abs _ _ _ e   -> destructuresExp e
   E.Pack _ _ e    -> destructuresExp e
   E.Asc _ e _     -> destructuresExp e
-  E.Case _ e brs  -> (case e of E.Var _ v -> [(p, v) | (p, _) <- brs]; _ -> [])
+  E.Case _ e brs  -> [(p, e, r) | (p, r) <- brs]
                        ++ destructuresExp e ++ concatMap (destructuresRHS . snd) brs
   E.If _ e1 e2 e3 -> destructuresExp e1 ++ destructuresExp e2 ++ destructuresExp e3
   E.List _ es     -> concatMap destructuresExp es
   _               -> []
 
-destructuresLet :: E.LetDecl Kinded -> [(E.KindedPat, Variable)]
-destructuresLet = \case
-  E.ValDef pat rhs -> (case rhs of E.UnguardedRHS (E.Var _ v) _ -> [(pat, v)]; _ -> [])
+destructuresLet :: E.RHS Kinded -> E.LetDecl Kinded -> [(E.KindedPat, E.KindedExp, E.RHS Kinded)]
+destructuresLet scope = \case
+  E.ValDef pat rhs -> (case rhs of E.UnguardedRHS e _ -> [(pat, e, scope)]; _ -> [])
                         ++ destructuresRHS rhs
   E.FnDef _ cls    -> concatMap (destructuresRHS . snd) cls
-  E.Mutual lds     -> concatMap destructuresLet lds
+  E.Mutual lds     -> concatMap (destructuresLet scope) lds
   E.TypeSig{}      -> []
 
 kindFun :: Located e
@@ -942,12 +1055,12 @@ kindFun tdecls ddecls e = kindFun' 0 [] []
         -- usage-based multiplicity inference: a parameter that is discarded or
         -- duplicated forces its type's multiplicity to unrestricted
         rhs' <- kindRHS tdecls ddecls kctx (paramCtx tracked tctxds) (Just t') rhs
-        let (comps, forced) = trackComponents tdecls ddecls tracked rhs'
-        forM_ comps \(x, pt) -> do
+        (comps, forced) <- trackComponents tdecls ddecls (paramCtx tracked tctxds) tracked rhs'
+        forM_ comps \(x, pt, scope) -> do
           let cap = lookup x capUn
           forM_ cap (`boundMultBy` pt)
           case (if maybe False isUn cap
-                  then scaleBy (Un (getSpan x)) else id) (usesRHS x rhs') of
+                  then scaleBy (Un (getSpan x)) else id) (usesRHS x scope) of
             One -> pure ()
             _   -> forceUnrestricted pt
         mapM_ forceUnrestricted forced
@@ -1196,8 +1309,9 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
   E.Abs s pars m e -> do
     (kctx', pars', mt', (pvars, pforced)) <- kindAbsParams tdecls ddecls kctx mt pars
     e' <- kindExpAgainst tdecls ddecls kctx' (paramCtx pvars tctxds) mt' e
-    let (comps, forced) = trackComponents tdecls ddecls pvars (E.UnguardedRHS e' Nothing)
-    forM_ comps \(x, pt) -> case usesExp x e' of
+    (comps, forced) <- trackComponents tdecls ddecls (paramCtx pvars tctxds) pvars
+                         (E.UnguardedRHS e' Nothing)
+    forM_ comps \(x, pt, scope) -> case usesRHS x scope of
       One -> pure ()
       _   -> forceUnrestricted pt
     mapM_ forceUnrestricted (pforced ++ forced)
