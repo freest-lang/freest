@@ -28,7 +28,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
-import Validation.LocalInference.Solution ( KindSolution, resolveMult, resolveType )
+import Validation.LocalInference.Solution ( KindSolution, resolveKind, resolveMult, resolveType )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -150,6 +150,7 @@ addUnDefault φ = modify \s -> s{unDefaults = Set.insert φ (unDefaults s)}
 -- substitution when they were not.
 data Ground = Ground
   { groundType :: TK.KindedType -> TK.KindedType
+  , groundKind :: K.Kind -> K.Kind
   , groundMult :: K.Multiplicity -> K.Multiplicity
   }
 
@@ -167,7 +168,7 @@ type Obligation = Ground -> Validation ()
 -- recorded and discharged by 'dischargeObligations'.
 checkWhenSolved :: Obligation -> Validation ()
 checkWhenSolved chk = gets staging >>= \case
-  SolveDuringKinding -> chk (Ground id id)
+  SolveDuringKinding -> chk (Ground id id id)
   SolveAfterTyping   -> modify \s -> s{obligations = chk : obligations s}
 
 -- | Record the solution kinding computed, for the deferred checks to read.
@@ -184,7 +185,7 @@ dischargeObligations = gets obligations >>= \case
     Nothing  -> internalError "kind obligations recorded before the solve"
     Just sol -> do
       modify \s -> s{obligations = []}
-      mapM_ ($ Ground (resolveType sol) (resolveMult sol)) (reverse obs)
+      mapM_ ($ Ground (resolveType sol) (resolveKind sol) (resolveMult sol)) (reverse obs)
 
 -- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
 addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()

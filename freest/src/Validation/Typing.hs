@@ -579,7 +579,8 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
 -- signature and so carries that (unrelated) span, whereas the requirement is
 -- imposed here, at the call site.
 checkInstBaseKind :: Span -> T.KindedType -> K.Kind -> Validation ()
-checkInstBaseKind sp t = go (T.kindOf t)
+checkInstBaseKind sp t k = checkWhenSolved \g ->
+  go (T.kindOf (groundType g t)) (groundKind g k)
   where
     go (K.Proper _ m bk1) (K.Proper s _ bk2)
       | not (bk1 K.<: bk2) = throwE (BaseKindMismatch sp bk2 t (K.Proper s m bk1))
