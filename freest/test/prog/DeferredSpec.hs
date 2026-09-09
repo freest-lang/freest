@@ -4,7 +4,7 @@ every valid program with the solution computed but not applied
 ('SolveAfterTyping') and records which ones survive.
 
 Nothing here is a mode to ship. It is the measurement §5 of the fusion notes ran
-once by hand, kept live. Most of the corpus survives it — 194 of the 272 programs
+once by hand, kept live. Most of the corpus survives it — 201 of the 272 programs
 that compile at all — so the list runs the other way from "ErasedSpec"'s:
 'carried' names the programs the deferred solve already carries, and a program
 leaving it is a regression. Grow it; the staging can be flipped by default when
@@ -102,20 +102,22 @@ carried =
   , "IO/Print.fst", "IO/PutChar.fst", "IO/PutStrLn.fst", "IO/PutString.fst"
   , "IO/StdErr.fst", "IO/YourNameIs.fst", "IO/getContent.fst"
   , "Include/BasicInclude.fst", "Include/Diamond.fst"
-  , "Inference/ClosureDupInferUn.fst", "Inference/CounterInferKind.fst"
-  , "Inference/FlipFlop.fst", "Inference/ForallCapture.fst"
-  , "Inference/HigherKindedParam.fst", "Inference/HigherKindedSynonym.fst"
-  , "Inference/InferredContinuation.fst", "Inference/InferredDataKinds.fst"
+  , "Inference/AsPatInferUn.fst", "Inference/ClosureDupInferUn.fst"
+  , "Inference/CounterInferKind.fst", "Inference/FlipFlop.fst"
+  , "Inference/ForallCapture.fst", "Inference/HigherKindedParam.fst"
+  , "Inference/HigherKindedSynonym.fst", "Inference/InferredContinuation.fst"
+  , "Inference/InferredDataKinds.fst", "Inference/InferredDeclKinds.fst"
   , "Inference/InferredKinds.fst", "Inference/InferredReceive.fst"
   , "Inference/InferredUsageKinds.fst", "Inference/LinClosureCapture.fst"
   , "Inference/LinFnDefCapture.fst", "Inference/ListPolyInferKind.fst"
   , "Inference/MutualDataKinds.fst", "Inference/NegativePats.fst"
   , "Inference/ParamComponentInferUn.fst", "Inference/PolyDataParamKind.fst"
-  , "Inference/QuantifierBareVarBody.fst", "Inference/SharedChannelSemi.fst"
+  , "Inference/QuantifierBareVarBody.fst", "Inference/ReceiveDiscard.fst"
+  , "Inference/SendTypeDefaultUn.fst", "Inference/SharedChannelSemi.fst"
   , "Inference/TypeInPatInferKind.fst", "Inference/TypeLambdaInferKind.fst"
-  , "Sections/LeftSection.fst", "Sections/PolyMultSection.fst"
-  , "Sections/PolySectionCheck.fst", "Sections/RightSection.fst"
-  , "SessionTypes/ArithExprServerRegular.fst"
+  , "Inference/WildcardDiscardInferUn.fst", "Sections/LeftSection.fst"
+  , "Sections/PolyMultSection.fst", "Sections/PolySectionCheck.fst"
+  , "Sections/RightSection.fst", "SessionTypes/ArithExprServerRegular.fst"
   , "SessionTypes/ArithExprServerRegular1.fst", "SessionTypes/BoolServer.fst"
   , "SessionTypes/BoolServer1.fst", "SessionTypes/BoolServer2.fst"
   , "SessionTypes/BoolServer3.fst", "SessionTypes/BoolServerRecursive.fst"
@@ -148,17 +150,18 @@ carried =
   , "SharedChannels/FtpServer.fst", "SharedChannels/Semaphore.fst"
   , "SharedChannels/SharedBag.fst", "SharedChannels/SharedMathServer.fst"
   , "SharedChannels/SharedQueue.fst", "SharedChannels/SyncChannel.fst"
-  , "SystemF/SystemFBins.fst", "SystemF/SystemFTrees.fst"
-  , "SystemF/SystemFWarmUps.fst", "Tutorial/Colour.fst", "Tutorial/Copy.fst"
-  , "Tutorial/CopyFun.fst", "Tutorial/CopyFunStarredArrow.fst"
-  , "Tutorial/Discard.fst", "Tutorial/DiscardFun.fst"
-  , "Tutorial/InfiniteParameters.fst", "Tutorial/IntBinTree.fst"
-  , "Tutorial/IntLinType.fst", "Tutorial/LinIntData.fst"
-  , "Tutorial/MainEndsLast.fst", "Tutorial/MultipleArgs.fst"
-  , "Tutorial/MutualRecFun.fst", "Tutorial/PartialAppliedLinFun.fst"
-  , "Tutorial/PartialAppliedUnLinFun.fst", "Tutorial/RemoteAdder.fst"
-  , "Tutorial/SendClose.fst", "Tutorial/TrafficLight.fst"
-  , "Tutorial/UntilNegative.fst", "Tutorial/Void.fst" ]
+  , "SystemF/SystemFBins.fst", "SystemF/SystemFPairs.fst"
+  , "SystemF/SystemFTrees.fst", "SystemF/SystemFWarmUps.fst"
+  , "Tutorial/Colour.fst", "Tutorial/Copy.fst", "Tutorial/CopyFun.fst"
+  , "Tutorial/CopyFunStarredArrow.fst", "Tutorial/Discard.fst"
+  , "Tutorial/DiscardFun.fst", "Tutorial/InfiniteParameters.fst"
+  , "Tutorial/IntBinTree.fst", "Tutorial/IntLinType.fst"
+  , "Tutorial/LinIntData.fst", "Tutorial/MainEndsLast.fst"
+  , "Tutorial/MultipleArgs.fst", "Tutorial/MutualRecFun.fst"
+  , "Tutorial/PartialAppliedLinFun.fst", "Tutorial/PartialAppliedUnLinFun.fst"
+  , "Tutorial/RemoteAdder.fst", "Tutorial/SendClose.fst", "Tutorial/Shape.fst"
+  , "Tutorial/TrafficLight.fst", "Tutorial/UntilNegative.fst"
+  , "Tutorial/Void.fst" ]
 
 -- | Under the deferred staging a check that reads an unsolved kind does not
 -- always fail politely: 'Compiler.Bug.internalError' and the irrefutable

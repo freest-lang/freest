@@ -91,14 +91,14 @@ freshCtx = Map.map (`Binding` [])
 -- is why the deleting discipline removed nothing for one.
 consumed :: Ground -> TypeCtx -> PatCtx
 consumed g =
-  Map.map bndType . Map.filter \(Binding t us) ->
+  Map.map (groundType g . bndType) . Map.filter \(Binding t us) ->
     not (null us) && Kinding.isRestricted (groundType g t)
 
 -- | The linear bindings the second context consumed and the first had not — the
 -- successor of @tctxBefore \\ tctxAfter@ under the deleting discipline.
 newlyConsumed :: Ground -> TypeCtx -> TypeCtx -> [(Either Variable Identifier, T.KindedType)]
 newlyConsumed g before after =
-  [ (xi, bndType b)
+  [ (xi, groundType g (bndType b))
   | (xi, b) <- Map.assocs after
   , Kinding.isRestricted (groundType g (bndType b))
   , length (bndUses b) > maybe 0 (length . bndUses) (before Map.!? xi) ]
@@ -118,7 +118,7 @@ lookupType kctx tctx xi = case Map.lookupIndex xi tctx of
     case us of
       prev : _ -> checkWhenSolved \g ->
         when (Kinding.isRestricted (groundType g t)) do
-          throwE (LinConsumedTwice (getSpan xi) bound t prev)
+          throwE (LinConsumedTwice (getSpan xi) bound (groundType g t) prev)
       _ -> pure ()
     -- 'Map.adjust', not 'Map.insert': inserting would replace the key, and with
     -- it the binder's span that the error above reports
@@ -143,8 +143,9 @@ typeCtxDifference tdecls kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just (Binding t us) -> do
         when (null us) $ checkWhenSolved \g ->
-          when (Kinding.isRestricted (groundType g t)) do
-            throwE (LinVarAtEndOfScope (getSpan x) x t (normalise tdecls t))
+          let t' = groundType g t in
+          when (Kinding.isRestricted t') do
+            throwE (LinVarAtEndOfScope (getSpan x) x t' (normalise tdecls t'))
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
@@ -565,8 +566,9 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
         let (sigs, fndefs) =
               List.partition (\case E.TypeSig{} -> True; _ -> False) ds'
         forM_ sigs \case
-          E.TypeSig xs t | Kinding.isRestricted t ->
-            forM_ xs \x -> throwE (RestrictedFunInMutual (getSpan x) x t)
+          E.TypeSig xs t -> checkWhenSolved \g ->
+            when (Kinding.isRestricted (groundType g t)) $
+              forM_ xs \x -> throwE (RestrictedFunInMutual (getSpan x) x (groundType g t))
           _ -> return ()
         (ds'', tctxds', kctxi', tctx') <- checkDecls tdecls ddecls kctxi tctxi (sigs ++ fndefs)
         return (List.snoc ds (E.Mutual ds''), Map.union tctxds' tctxds, kctxi', tctx')
@@ -785,7 +787,8 @@ checkPat tdecls ddecls kctx p t = case p of
           Kinding.checkK (T.fromVariable ObjLv a k') (E.bndKind k)
           checkPackPat (Map.insert (Left a) k' kctx) (subs b (T.fromVariable ObjLv a k') u) aks bks
   E.WildPat  s _    -> do
-    when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
+    checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
+      (throwE (NonLinPat s p (groundType g t)))
     return (kctx, Map.empty)
   -- []
   E.NilPat s        ->
@@ -851,7 +854,8 @@ checkPat tdecls ddecls kctx p t = case p of
     checkPat tdecls ddecls kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
-    when (Kinding.isRestricted t) (throwE (NonLinPat s p t))
+    checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
+      (throwE (NonLinPat s p (groundType g t)))
     second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
@@ -931,9 +935,9 @@ checkEquivTypeCtxsFun
   -> Validation ()
 checkEquivTypeCtxsFun m tctx1 tctx2 s = checkWhenSolved \g ->
   forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
-    case T.kindOf (groundType g t) of
+    case T.kindOf t of
       K.Proper _ m' _ -> unless (m' K.<: groundMult g m) do
-        throwE (LinConsumedInUnFun (getSpan xa) xa t s m)
+        throwE (LinConsumedInUnFun (getSpan xa) xa t s (groundMult g m))
       _ -> internalError "non-proper type in type context"
 
 checkEquivTypeCtxsGuard
@@ -942,7 +946,7 @@ checkEquivTypeCtxsGuard
   -> Validation ()
 checkEquivTypeCtxsGuard tctx1 tctx2 = checkWhenSolved \g ->
   forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
-    case T.kindOf (groundType g t) of
+    case T.kindOf t of
       K.Proper _ m _ -> unless (K.isUn m) do
         throwE (LinConsumedInGuard (getSpan xa) xa t)
       _ -> internalError "non-proper type in type context"
