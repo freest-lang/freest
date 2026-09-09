@@ -48,7 +48,7 @@ import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveModule )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveModule, resolveShapeModule )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 import Validation.LocalInference.Types qualified as LTI
@@ -531,11 +531,11 @@ kindModule ctx mod = do
                  , M.definitions  = lds
                  }
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
-  -- under 'SolveAfterTyping' the solution is computed (so an unsatisfiable
-  -- constraint is still reported here) but not applied, leaving typing to face
-  -- the unsolved kinds a fused pass would hand it
+  -- under 'SolveAfterTyping' only the shape half of the solution is applied, so
+  -- that typing faces the unsolved components a fused pass would hand it while
+  -- still being able to dispatch on whether a kind is proper or an arrow
   defer <- gets ((== SolveAfterTyping) . staging)
-  return (ctxOut, if defer then mod' else resolveModule sol mod')
+  return (ctxOut, (if defer then resolveShapeModule else resolveModule) sol mod')
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 
