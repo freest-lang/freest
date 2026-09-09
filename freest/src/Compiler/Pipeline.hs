@@ -22,7 +22,7 @@ import Syntax.Declarations qualified as D
 import Parser.Parser ( runParseModule )
 import Compiler.Include ( resolveIncludes, IncludeError(..) )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
-import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation )
+import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation, dischargeObligations )
 import Validation.HOTRecursion ( checkNoHOTRec )
 import Validation.SessionPattern ( checkNoVarsInSessionPatterns )
 import Validation.Kinding ( kindModule, KindCtx, emptyKindCtx )
@@ -52,6 +52,8 @@ validateModule sctx kctx tctx tdecls ddecls modl = do
   (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec (M.typeDecls kmodl)
   (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls kmodl)
+  -- empty unless typing ran on unsolved kinds; see 'checkWhenSolved'
+  dischargeObligations
   checkNoVarsInSessionPatterns (M.definitions kmodl')
   pure (sctx', kctx'', tctx', kmodl')
   where

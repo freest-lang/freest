@@ -6,6 +6,7 @@
 module Validation.LocalInference.Solution
   ( KindSolution(..)
   , resolveKind
+  , resolveMult
   , resolveType
   , resolveModule
   ) where

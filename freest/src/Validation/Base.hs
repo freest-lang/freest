@@ -11,6 +11,11 @@ module Validation.Base
   , addBaseKindConstraint
   , addCondSeqMult
   , takeKindState
+  , Ground(..)
+  , Obligation
+  , checkWhenSolved
+  , setKindSolution
+  , dischargeObligations
   , addUnDefault
   , unfold
   , Staging(..)
@@ -23,6 +28,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
+import Validation.LocalInference.Solution ( KindSolution, resolveMult, resolveType )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -75,6 +81,12 @@ data ValidationState
     -- | Whether kinding applies its solution to the module it returns. See
     -- 'Staging'; everything but the deferred-solve harness leaves this alone.
     , staging :: Staging
+    -- | Kind-reading checks recorded to run after the solve, most recent first.
+    -- Empty under 'SolveDuringKinding', where every such check runs eagerly.
+    , obligations :: [Obligation]
+    -- | The solution kinding computed, kept for 'dischargeObligations'.
+    -- 'Nothing' until kinding has run.
+    , kindSolution :: Maybe KindSolution
     }
 
 -- | The empty validation state. No errors or declarations.
@@ -89,6 +101,8 @@ emptyValidationState = ValidationState
   , condSeqMults = []
   , unDefaults = Set.empty
   , staging = SolveDuringKinding
+  , obligations = []
+  , kindSolution = Nothing
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
@@ -130,6 +144,47 @@ addBaseKindConstraint c =
 -- | Record a multiplicity variable that defaults to @*@ (see 'unDefaults').
 addUnDefault :: Variable -> Validation ()
 addUnDefault φ = modify \s -> s{unDefaults = Set.insert φ (unDefaults s)}
+
+-- | How a deferred check grounds the kinds it captured: identity when they were
+-- already solved at the point the check was recorded, the kind solution's
+-- substitution when they were not.
+data Ground = Ground
+  { groundType :: TK.KindedType -> TK.KindedType
+  , groundMult :: K.Multiplicity -> K.Multiplicity
+  }
+
+-- | A check that reads kinds and only reports: it feeds nothing back into the
+-- types being built, so it may be recorded now and run once kinds are ground.
+-- The 'Ground' it is handed at discharge is what makes the kinds it captured
+-- readable.
+type Obligation = Ground -> Validation ()
+
+-- | Run a kind-reading check, now or after the solve.
+--
+-- Under 'SolveDuringKinding' typing only ever sees ground kinds, so the check
+-- runs immediately, against itself, and reports in source order. Under
+-- 'SolveAfterTyping' the kinds it would read are still variables, so it is
+-- recorded and discharged by 'dischargeObligations'.
+checkWhenSolved :: Obligation -> Validation ()
+checkWhenSolved chk = gets staging >>= \case
+  SolveDuringKinding -> chk (Ground id id)
+  SolveAfterTyping   -> modify \s -> s{obligations = chk : obligations s}
+
+-- | Record the solution kinding computed, for the deferred checks to read.
+setKindSolution :: KindSolution -> Validation ()
+setKindSolution sol = modify \s -> s{kindSolution = Just sol}
+
+-- | Run every recorded check against the kind solution, in the order recorded,
+-- and clear the queue. A no-op under 'SolveDuringKinding', where the queue is
+-- always empty.
+dischargeObligations :: Validation ()
+dischargeObligations = gets obligations >>= \case
+  []  -> return ()
+  obs -> gets kindSolution >>= \case
+    Nothing  -> internalError "kind obligations recorded before the solve"
+    Just sol -> do
+      modify \s -> s{obligations = []}
+      mapM_ ($ Ground (resolveType sol) (resolveMult sol)) (reverse obs)
 
 -- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
 addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()

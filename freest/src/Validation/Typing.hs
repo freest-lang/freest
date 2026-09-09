@@ -89,18 +89,18 @@ freshCtx = Map.map (`Binding` [])
 -- | The /linear/ bindings a scope has consumed. Only these are worth comparing:
 -- an unrestricted binding may be used any number of times, including none, which
 -- is why the deleting discipline removed nothing for one.
-consumed :: TypeCtx -> PatCtx
-consumed =
+consumed :: Ground -> TypeCtx -> PatCtx
+consumed g =
   Map.map bndType . Map.filter \(Binding t us) ->
-    not (null us) && Kinding.isRestricted t
+    not (null us) && Kinding.isRestricted (groundType g t)
 
 -- | The linear bindings the second context consumed and the first had not — the
 -- successor of @tctxBefore \\ tctxAfter@ under the deleting discipline.
-newlyConsumed :: TypeCtx -> TypeCtx -> [(Either Variable Identifier, T.KindedType)]
-newlyConsumed before after =
+newlyConsumed :: Ground -> TypeCtx -> TypeCtx -> [(Either Variable Identifier, T.KindedType)]
+newlyConsumed g before after =
   [ (xi, bndType b)
   | (xi, b) <- Map.assocs after
-  , Kinding.isRestricted (bndType b)
+  , Kinding.isRestricted (groundType g (bndType b))
   , length (bndUses b) > maybe 0 (length . bndUses) (before Map.!? xi) ]
 
 -- | Looks up the type of a variable or identifier in a type context, returning
@@ -116,8 +116,9 @@ lookupType kctx tctx xi = case Map.lookupIndex xi tctx of
     -- where the binding came from
     let (bound, Binding t us) = Map.elemAt ix tctx
     case us of
-      prev : _ | Kinding.isRestricted t ->
-        throwE (LinConsumedTwice (getSpan xi) bound t prev)
+      prev : _ -> checkWhenSolved \g ->
+        when (Kinding.isRestricted (groundType g t)) do
+          throwE (LinConsumedTwice (getSpan xi) bound t prev)
       _ -> pure ()
     -- 'Map.adjust', not 'Map.insert': inserting would replace the key, and with
     -- it the binder's span that the error above reports
@@ -141,8 +142,9 @@ typeCtxDifference :: D.KindedTypeDecls -> KindCtx -> TypeCtx
 typeCtxDifference tdecls kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just (Binding t us) -> do
-        when (null us && Kinding.isRestricted t) do
-          throwE (LinVarAtEndOfScope (getSpan x) x t (normalise tdecls t))
+        when (null us) $ checkWhenSolved \g ->
+          when (Kinding.isRestricted (groundType g t)) do
+            throwE (LinVarAtEndOfScope (getSpan x) x t (normalise tdecls t))
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
@@ -904,11 +906,13 @@ checkEquivTypeCtxsCase
   -> [TypeCtx]
   -> Validation ()
 checkEquivTypeCtxsCase fpe = \case
-  [ ]   -> return ()
-  [_]   -> return ()
-  (map consumed -> cs@(c1 : cs')) -> do
-    forM_ (Map.assocs (Map.unions cs `Map.difference` intersections c1 cs'))
-      \(xi, t) -> throwE (LinNotConsumedEvenly (getSpan xi) xi t fpe)
+  [ ]    -> return ()
+  [_]    -> return ()
+  tctxs  -> checkWhenSolved \g -> case map (consumed g) tctxs of
+    cs@(c1 : cs') ->
+      forM_ (Map.assocs (Map.unions cs `Map.difference` intersections c1 cs'))
+        \(xi, t) -> throwE (LinNotConsumedEvenly (getSpan xi) xi t fpe)
+    [] -> return ()
   where
     intersections = foldlStrict Map.intersection
     foldlStrict f = go
@@ -924,23 +928,23 @@ checkEquivTypeCtxsFun
   -> TypeCtx
   -> Span
   -> Validation ()
-checkEquivTypeCtxsFun m tctx1 tctx2 s = do
-  forM_ (newlyConsumed tctx2 tctx1) \(xa, t) ->
-    case T.kindOf t of
-      K.Proper _ m' _ -> unless (m' K.<: m) do
+checkEquivTypeCtxsFun m tctx1 tctx2 s = checkWhenSolved \g ->
+  forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
+    case T.kindOf (groundType g t) of
+      K.Proper _ m' _ -> unless (m' K.<: groundMult g m) do
         throwE (LinConsumedInUnFun (getSpan xa) xa t s m)
-      _ -> internalError "non-proper type in type context" -- TODO: what about kind variables?
+      _ -> internalError "non-proper type in type context"
 
 checkEquivTypeCtxsGuard
   :: TypeCtx
   -> TypeCtx
   -> Validation ()
-checkEquivTypeCtxsGuard tctx1 tctx2 = do
-  forM_ (newlyConsumed tctx2 tctx1) \(xa, t) ->
-    case T.kindOf t of
+checkEquivTypeCtxsGuard tctx1 tctx2 = checkWhenSolved \g ->
+  forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
+    case T.kindOf (groundType g t) of
       K.Proper _ m _ -> unless (K.isUn m) do
         throwE (LinConsumedInGuard (getSpan xa) xa t)
-      _ -> internalError "non-proper type in type context" -- TODO: what about kind variables?
+      _ -> internalError "non-proper type in type context"
 
 -- | Argument-driven instantiation: opens the head's quantifiers as the arguments
 -- consume them, leaving any quantifiers in the result.

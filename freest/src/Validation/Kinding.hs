@@ -523,6 +523,7 @@ kindModule ctx mod = do
   let ddecls = D.DataDecls dcdecls kdtdecls
   (_, lds) <- kindLetDecls tdecls ddecls ctx' Map.empty (M.definitions mod)
   sol <- solveKindConstraints
+  setKindSolution sol
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
       mod' = mod { M.typeDecls   = tdecls
                  , M.dataDecls    = D.DataDecls dcdecls kdtdecls
