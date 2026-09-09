@@ -360,8 +360,16 @@ checkBaseKindK t bk = do
 -- constraint is gathered and solved later; otherwise it is checked eagerly.
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k
-  | hasSolvableVar k' || hasSolvableVar k =
+  | hasSolvableVar k' || hasSolvableVar k = do
       addKindConstraint (Origin (getSpan t)) k' k
+      -- a constraint gathered after the solve informs nothing, so verify it
+      -- against the solution as well. Where the kinds are still variable the
+      -- verification skips, which is every call made before the solve: those
+      -- are the ones the constraint above is for.
+      checkWhenSolved \g -> do
+        let (k1, k2) = (groundKind g k', groundKind g k)
+        unless (hasSolvableVar k1 || hasSolvableVar k2 || k1 <: k2) $
+          throwE (KindMismatch (getSpan t) k2 (groundType g t))
   | otherwise = unless (k' <: k) $ throwE (KindMismatch (getSpan t) k t)
 
 -- | Does a kind mention a solvable (inference) variable?

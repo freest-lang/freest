@@ -1,17 +1,15 @@
 {- |
-The fused pass has to typecheck with multiplicities it has not yet solved, so
-this runs every valid program under 'SolveAfterTyping' and records which ones
-survive. Shape and baseKinds are settled before typing either way: those are
-determined by the types alone (the paper infers them in §4, over types), whereas
-multiplicities are what usage decides (§5, over expressions), and they are all
-that a fused pass must carry unsolved.
+'SolveAfterTyping' is now the default, so what this spec measures has inverted:
+it ran to grow the deferred staging up to the eager one, and it now guards that
+the two still agree, running each program under both. 'carried' names the
+programs the deferred staging carries — all 272 that compile — and a program
+leaving it is a regression. It should be retired when 'Staging' goes and the
+eager path with it.
 
-It is the measurement §5 of the fusion notes ran once by hand, kept live. It now
-holds the whole corpus — all 272 programs that compile at all — which is the gate
-step 5 was waiting on: the staging can be flipped by default, and once it is,
-this spec runs the same configuration twice and should be retired. Until then
-'carried' names the programs the deferred solve carries, and a program leaving it
-is a regression.
+What is deferred is multiplicities. Shape and baseKinds are settled before
+typing: those are determined by the types alone (the paper infers them in §4,
+over types), whereas multiplicities are what usage decides (§5, over
+expressions), and they are all that a fused pass must carry unsolved.
 -}
 module DeferredSpec (spec) where
 

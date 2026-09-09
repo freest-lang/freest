@@ -100,7 +100,7 @@ emptyValidationState = ValidationState
   , baseKindConstraints = []
   , condSeqMults = []
   , unDefaults = Set.empty
-  , staging = SolveDuringKinding
+  , staging = SolveAfterTyping
   , obligations = []
   , kindSolution = Nothing
   }
