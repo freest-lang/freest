@@ -152,6 +152,10 @@ data Ground = Ground
   { groundType :: TK.KindedType -> TK.KindedType
   , groundKind :: K.Kind -> K.Kind
   , groundMult :: K.Multiplicity -> K.Multiplicity
+  -- | For a check that unfolds type declarations, as type equivalence does.
+  -- A field rather than a @Map.map@ at the use site so the eager path, where
+  -- this is 'id', does not rebuild the map on every check.
+  , groundDecls :: D.KindedTypeDecls -> D.KindedTypeDecls
   }
 
 -- | A check that reads kinds and only reports: it feeds nothing back into the
@@ -168,7 +172,7 @@ type Obligation = Ground -> Validation ()
 -- recorded and discharged by 'dischargeObligations'.
 checkWhenSolved :: Obligation -> Validation ()
 checkWhenSolved chk = gets staging >>= \case
-  SolveDuringKinding -> chk (Ground id id id)
+  SolveDuringKinding -> chk (Ground id id id id)
   SolveAfterTyping   -> modify \s -> s{obligations = chk : obligations s}
 
 -- | Record the solution kinding computed, for the deferred checks to read.
@@ -185,7 +189,9 @@ dischargeObligations = gets obligations >>= \case
     Nothing  -> internalError "kind obligations recorded before the solve"
     Just sol -> do
       modify \s -> s{obligations = []}
-      mapM_ ($ Ground (resolveType sol) (resolveKind sol) (resolveMult sol)) (reverse obs)
+      let g = Ground (resolveType sol) (resolveKind sol) (resolveMult sol)
+                     (Map.map (second (resolveType sol)))
+      mapM_ ($ g) (reverse obs)
 
 -- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
 addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()

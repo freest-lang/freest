@@ -899,9 +899,10 @@ checkEquivTypes :: D.KindedTypeDecls -> D.KindedDataDecls
                 -> T.KindedType
                 -> T.KindedType
                 -> Validation ()
-checkEquivTypes tdecls ddecls eop t1 t2 =
-  unless (equivalent tdecls t1 t2) $
-    throwE (TypeMismatch (getSpan eop) t1 t2 eop)
+checkEquivTypes tdecls ddecls eop t1 t2 = checkWhenSolved \g ->
+  let (u1, u2) = (groundType g t1, groundType g t2) in
+  unless (equivalent (groundDecls g tdecls) u1 u2) $
+    throwE (TypeMismatch (getSpan eop) u1 u2 eop)
 
 -- | Type context equivalence. Checks if two type contexts contain the same
 -- variables and constructors, throwing an error if they do not. An expression

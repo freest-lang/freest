@@ -6,11 +6,12 @@ determined by the types alone (the paper infers them in §4, over types), wherea
 multiplicities are what usage decides (§5, over expressions), and they are all
 that a fused pass must carry unsolved.
 
-It is the measurement §5 of the fusion notes ran once by hand, kept live. Nearly
-all of the corpus survives it — 269 of the 272 programs that compile at all — so
-the list runs the other way from "ErasedSpec"'s: 'carried' names the programs the
-deferred solve already carries, and a program leaving it is a regression. Grow
-it; the staging can be flipped by default when it holds everything.
+It is the measurement §5 of the fusion notes ran once by hand, kept live. It now
+holds the whole corpus — all 272 programs that compile at all — which is the gate
+step 5 was waiting on: the staging can be flipped by default, and once it is,
+this spec runs the same configuration twice and should be retired. Until then
+'carried' names the programs the deferred solve carries, and a program leaving it
+is a regression.
 -}
 module DeferredSpec (spec) where
 
@@ -141,7 +142,8 @@ carried =
   , "SessionTypes/BoolServer1.fst", "SessionTypes/BoolServer2.fst"
   , "SessionTypes/BoolServer3.fst", "SessionTypes/BoolServerRecursive.fst"
   , "SessionTypes/ChainOfChannelOps.fst", "SessionTypes/CloseSkipEnd.fst"
-  , "SessionTypes/ConjunctionCase.fst", "SessionTypes/ConjunctionLambda.fst"
+  , "SessionTypes/CondSeqMultEquiv.fst", "SessionTypes/ConjunctionCase.fst"
+  , "SessionTypes/ConjunctionLambda.fst"
   , "SessionTypes/ConjunctionPattern.fst", "SessionTypes/CrissCross.fst"
   , "SessionTypes/Deadlock.fst", "SessionTypes/DualMessage.fst"
   , "SessionTypes/DupConsChan.fst", "SessionTypes/DyckWords.fst"
@@ -153,7 +155,8 @@ carried =
   , "SessionTypes/NDual.fst", "SessionTypes/NDualRec.fst"
   , "SessionTypes/NTreeSend.fst", "SessionTypes/NegativePats.fst"
   , "SessionTypes/PartialFork.fst", "SessionTypes/PartialReceive.fst"
-  , "SessionTypes/PartialSend.fst", "SessionTypes/PartiallyAppliedSelect.fst"
+  , "SessionTypes/PartialSend.fst", "SessionTypes/PartialSendReceiveType.fst"
+  , "SessionTypes/PartiallyAppliedSelect.fst"
   , "SessionTypes/PingPongDiverge.fst", "SessionTypes/Pipeline.fst"
   , "SessionTypes/PolyInstatiatedWithUnnormed.fst", "SessionTypes/RecChan.fst"
   , "SessionTypes/RegularTreeStream.fst"
@@ -196,9 +199,10 @@ carried =
   , "Tutorial/MultipleArgs.fst", "Tutorial/MutualRecFun.fst"
   , "Tutorial/ParallelPredEval.fst", "Tutorial/PartialAppliedLinFun.fst"
   , "Tutorial/PartialAppliedUnLinFun.fst", "Tutorial/PolyRemoteFold.fst"
-  , "Tutorial/RemoteAdder.fst", "Tutorial/SendClose.fst", "Tutorial/Shape.fst"
-  , "Tutorial/TokenRing.fst", "Tutorial/TrafficLight.fst"
-  , "Tutorial/UntilNegative.fst", "Tutorial/Void.fst" ]
+  , "Tutorial/RemoteAdder.fst", "Tutorial/RenderingService.fst"
+  , "Tutorial/SendClose.fst", "Tutorial/Shape.fst", "Tutorial/TokenRing.fst"
+  , "Tutorial/TrafficLight.fst", "Tutorial/UntilNegative.fst"
+  , "Tutorial/Void.fst" ]
 
 -- | Under the deferred staging a check that reads an unsolved kind does not
 -- always fail politely: 'Compiler.Bug.internalError' and the irrefutable
