@@ -11,8 +11,9 @@ sender ch = ch
 countReceived : Dual GStream -> Int
 countReceived (&Done Wait) = 0
 countReceived (&More (?type a . ?_ ; ch)) = 1 + countReceived ch
--- countReceived (&More (?type Int . ?i ; ch)) = i + countReceived ch
--- countReceived (&More (?type Bool . ?b ; ch)) = (if b then 1 else 0) + countReceived ch
+--countReceived (&More (?type Int . ?i ; ch)) = i + countReceived ch
+--countReceived (&More (?type Bool . ?b ; ch)) = (if b then 1 else 0) + countReceived ch
+--countReceived (&More (?type Char . ?c ; ch)) = ord c + countReceived 
 
 main = ()
 main =
