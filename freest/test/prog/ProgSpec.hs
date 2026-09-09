@@ -20,10 +20,11 @@ import Test.Hspec (hspec)
 import qualified ValidSpec
 import qualified InvalidSpec
 import qualified ErasedSpec
+import qualified DeferredSpec
 
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     ("--run-one" : file : _) -> ValidSpec.runOne file        -- child: run one program
-    _                        -> hspec (ValidSpec.spec >> InvalidSpec.spec >> ErasedSpec.spec)
+    _                        -> hspec (ValidSpec.spec >> InvalidSpec.spec >> ErasedSpec.spec >> DeferredSpec.spec)

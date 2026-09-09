@@ -530,7 +530,11 @@ kindModule ctx mod = do
                  , M.definitions  = lds
                  }
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
-  return (ctxOut, resolveModule sol mod')
+  -- under 'SolveAfterTyping' the solution is computed (so an unsatisfiable
+  -- constraint is still reported here) but not applied, leaving typing to face
+  -- the unsolved kinds a fused pass would hand it
+  defer <- gets ((== SolveAfterTyping) . staging)
+  return (ctxOut, if defer then mod' else resolveModule sol mod')
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 

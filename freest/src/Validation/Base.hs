@@ -13,6 +13,7 @@ module Validation.Base
   , takeKindState
   , addUnDefault
   , unfold
+  , Staging(..)
   )
 where
 
@@ -35,6 +36,16 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
+
+-- | When the kind solution is applied to the module.
+--
+-- 'SolveDuringKinding' is today's pipeline: kinding solves and zonks, so typing
+-- only ever sees ground kinds. 'SolveAfterTyping' is where the fused pass has to
+-- get to, and every check that demands a ground kind fails under it — which is
+-- what makes it a measurement (see @test\/prog\/DeferredSpec.hs@) rather than a
+-- mode anyone should run.
+data Staging = SolveDuringKinding | SolveAfterTyping
+  deriving Eq
 
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
@@ -61,6 +72,9 @@ data ValidationState
     -- nothing constrains them: an output-polarity binder is covariant, so the
     -- most usable choice for its remote consumer is unrestricted.
     , unDefaults :: Set.Set Variable
+    -- | Whether kinding applies its solution to the module it returns. See
+    -- 'Staging'; everything but the deferred-solve harness leaves this alone.
+    , staging :: Staging
     }
 
 -- | The empty validation state. No errors or declarations.
@@ -74,6 +88,7 @@ emptyValidationState = ValidationState
   , baseKindConstraints = []
   , condSeqMults = []
   , unDefaults = Set.empty
+  , staging = SolveDuringKinding
   }
 
 -- | The validation monad. Combines exceptions of type 'Error' with state of 
