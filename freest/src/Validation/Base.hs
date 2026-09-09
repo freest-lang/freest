@@ -10,6 +10,8 @@ module Validation.Base
   , addMultEquation
   , addBaseKindConstraint
   , addCondSeqMult
+  , KindState
+  , peekKindState
   , takeKindState
   , Ground(..)
   , Obligation
@@ -172,18 +174,25 @@ addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.
 addCondSeqMult o bk φ m1 m2 =
   modify \s -> s{condSeqMults = (o, bk, φ, m1, m2) : condSeqMults s}
 
--- | Read and clear all accumulated kinding constraints and bindings.
-takeKindState :: Validation
+-- | Everything the kind solver reads: the bindings and each sort of constraint.
+type KindState =
   ( Map.Map Variable K.Kind
   , [(Origin, K.Kind, K.Kind)]
   , [(Origin, K.Multiplicity, K.Multiplicity)]
   , [BaseKindConstraint]
   , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
   , Set.Set Variable )
-takeKindState = do
-  s <- gets id
-  modify \st -> st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = [], unDefaults = Set.empty}
-  return (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, unDefaults s)
+
+-- | Read the accumulated kinding constraints and bindings, leaving them in
+-- place, for a solution that is not the last word on them.
+peekKindState :: Validation KindState
+peekKindState = gets \s ->
+  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, unDefaults s)
+
+-- | Read and clear all accumulated kinding constraints and bindings.
+takeKindState :: Validation KindState
+takeKindState = peekKindState <* modify \st ->
+  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = [], unDefaults = Set.empty}
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

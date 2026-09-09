@@ -23,6 +23,7 @@ module Validation.Kinding
   , KindCtx
   , emptyKindCtx
   , kindModule
+  , solveKindConstraints
   , kindExp
   , kindLetDecls -- freesti
   , runKindModule
@@ -360,16 +361,8 @@ checkBaseKindK t bk = do
 -- constraint is gathered and solved later; otherwise it is checked eagerly.
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k
-  | hasSolvableVar k' || hasSolvableVar k = do
+  | hasSolvableVar k' || hasSolvableVar k =
       addKindConstraint (Origin (getSpan t)) k' k
-      -- a constraint gathered after the solve informs nothing, so verify it
-      -- against the solution as well. Where the kinds are still variable the
-      -- verification skips, which is every call made before the solve: those
-      -- are the ones the constraint above is for.
-      checkWhenSolved \g -> do
-        let (k1, k2) = (groundKind g k', groundKind g k)
-        unless (hasSolvableVar k1 || hasSolvableVar k2 || k1 <: k2) $
-          throwE (KindMismatch (getSpan t) k2 (groundType g t))
   | otherwise = unless (k' <: k) $ throwE (KindMismatch (getSpan t) k t)
 
 -- | Does a kind mention a solvable (inference) variable?
@@ -530,7 +523,7 @@ kindModule ctx mod = do
       _                   -> pure ()
   let ddecls = D.DataDecls dcdecls kdtdecls
   (_, lds) <- kindLetDecls tdecls ddecls ctx' Map.empty (M.definitions mod)
-  sol <- solveKindConstraints
+  sol <- provisionalKindSolution
   setKindSolution sol
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
       mod' = mod { M.typeDecls   = tdecls
@@ -1375,8 +1368,17 @@ kindType ctx t = do
 -- | Solve the subkinding constraints gathered during kinding into a single kind
 -- solution, via the kind unifier and the multiplicity and baseKind solvers.
 solveKindConstraints :: Validation KindSolution
-solveKindConstraints = do
-  (binds, cs, meqs, pcs0, condmults, undefs) <- takeKindState
+solveKindConstraints = takeKindState >>= solveFrom
+
+-- | The solution over the constraints gathered so far, leaving them in place.
+-- 'kindModule' needs one before typing runs, to settle the shapes and baseKinds
+-- typing dispatches on; typing may add constraints of its own, so the store is
+-- solved again once it is done ('Compiler.Pipeline').
+provisionalKindSolution :: Validation KindSolution
+provisionalKindSolution = peekKindState >>= solveFrom
+
+solveFrom :: KindState -> Validation KindSolution
+solveFrom (binds, cs, meqs, pcs0, condmults, undefs) = do
   KindUnifier ksub mcs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities

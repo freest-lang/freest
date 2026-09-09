@@ -22,17 +22,17 @@ import Syntax.Declarations qualified as D
 import Parser.Parser ( runParseModule )
 import Compiler.Include ( resolveIncludes, IncludeError(..) )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
-import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation, dischargeObligations )
+import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation, dischargeObligations, setKindSolution )
 import Validation.LocalInference.Solution ( resolveModule )
 import Validation.HOTRecursion ( checkNoHOTRec )
 import Validation.SessionPattern ( checkNoVarsInSessionPatterns )
-import Validation.Kinding ( kindModule, KindCtx, emptyKindCtx )
+import Validation.Kinding ( kindModule, solveKindConstraints, KindCtx, emptyKindCtx )
 import Validation.Typing ( typeModule, TypeCtx, emptyTypeCtx )
 import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, failedToLoadModule, notASourceFile )
 import UI.Error ( printErrors, Source )
 import Paths_freest ( getDataFileName )
 
-import Control.Monad.State ( get, gets )
+import Control.Monad.State ( get )
 import Data.Map qualified as Map
 import System.IO ( stderr, hPutStrLn )
 
@@ -53,11 +53,15 @@ validateModule sctx kctx tctx tdecls ddecls modl = do
   (kctx', kmodl) <- kindModule kctx smodl
   checkNoHOTRec (M.typeDecls kmodl)
   (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls kmodl)
-  -- empty unless typing ran on unsolved kinds; see 'checkWhenSolved'
+  -- kinding's solution was provisional: typing may have added constraints of its
+  -- own, so the store is solved once more, and this answer is the one the
+  -- obligations are checked against
+  sol <- solveKindConstraints
+  setKindSolution sol
   dischargeObligations
   -- typing runs on kinds whose multiplicities are unsolved; nothing downstream
   -- of validation should have to
-  kmodl'' <- (\sol -> maybe kmodl' (`resolveModule` kmodl') sol) <$> gets kindSolution
+  let kmodl'' = resolveModule sol kmodl'
   checkNoVarsInSessionPatterns (M.definitions kmodl'')
   pure (sctx', kctx'', tctx', kmodl'')
   where
