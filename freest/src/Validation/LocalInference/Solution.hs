@@ -9,7 +9,7 @@ module Validation.LocalInference.Solution
   , resolveMult
   , resolveType
   , resolveModule
-  , resolveShapeModule
+  , resolveNonMultModule
   ) where
 
 import Syntax.Base
@@ -96,43 +96,47 @@ resolveType sol = \case
     kinds = map (second (resolveKind sol))
 
 -- | The pair of resolvers a zonk walks a module with. Two exist: the full
--- solution, and the shape-only one that settles the proper\/arrow skeleton and
--- leaves the multiplicity and baseKind leaves to the component solvers.
+-- solution, and the one that settles everything but multiplicities.
 data Zonk = Zonk
   { zKind :: Kind -> Kind
   , zType :: TK.KindedType -> TK.KindedType
   }
 
--- | Settle a kind's shape, leaving its leaves alone. An unconstrained whole-kind
--- variable becomes proper over leaves named after it, the same device
--- 'Kinding.resolveQuantBinder' uses: nothing binds those leaves, so the
--- component solvers default them exactly as they would the variable itself.
-resolveShape :: KindSolution -> Kind -> Kind
-resolveShape sol = go Set.empty
+-- | Settle a kind's shape and its baseKind, leaving only the multiplicity to the
+-- component solver. Multiplicities are what a usage-driven pass must not decide
+-- early; baseKinds are structurally determined by the type, so nothing is gained
+-- by carrying them and much is lost -- 'meet' and 'join' on a baseKind variable
+-- are partial, and the @;@ smart constructor takes their meet.
+--
+-- An unconstrained whole-kind variable becomes proper over a multiplicity named
+-- after it, the same device 'Kinding.resolveQuantBinder' uses: nothing binds it,
+-- so the multiplicity solver defaults it exactly as it would the variable.
+resolveNonMult :: KindSolution -> Kind -> Kind
+resolveNonMult sol = go Set.empty
   where
     go seen = \case
-      k@Proper{}    -> k
+      Proper s m bk -> Proper s m (resolveBaseKind sol bk)
       Arrow s k1 k2 -> Arrow s (go seen k1) (go seen k2)
       k@(Var s lv ψ)
         | not (solvable lv)                      -> k
         | ψ `Set.member` seen                    -> k
         | Just k' <- Map.lookup ψ (kindVars sol) -> go (Set.insert ψ seen) k'
-        | otherwise                              -> Proper s (Sup s [(lv, ψ)]) (VarBK lv ψ)
+        | otherwise                              -> Proper s (Sup s [(lv, ψ)]) (resolveBaseKind sol (VarBK lv ψ))
 
--- | 'resolveShape' over every kind annotation in a type, rewritten in place.
+-- | 'resolveNonMult' over every kind annotation in a type, rewritten in place.
 -- Unlike 'resolveType' this must not rebuild through the kinded smart
--- constructors: theirs are derived kinds, computed by meeting and joining
--- leaves that are still variables at this point.
-shapeType :: KindSolution -> TK.KindedType -> TK.KindedType
-shapeType sol = go
+-- constructors: theirs are derived kinds, and the multiplicities they join are
+-- still variables at this point.
+resolveNonMultType :: KindSolution -> TK.KindedType -> TK.KindedType
+resolveNonMultType sol = go
   where
-    k = resolveShape sol
+    k = resolveNonMult sol
     go = \case
       TI.Int s x             -> TI.Int s (k x)
       TI.Float s x           -> TI.Float s (k x)
       TI.Char s x            -> TI.Char s (k x)
       TI.Arrow s x m         -> TI.Arrow s (k x) m
-      TI.Quant s x p bk m    -> TI.Quant s (k x) p bk m
+      TI.Quant s x p bk m    -> TI.Quant s (k x) p (resolveBaseKind sol bk) m
       TI.ForallM s x m φs t  -> TI.ForallM s (k x) m φs (go t)
       TI.Void s x k'         -> TI.Void s (k x) (k k')
       TI.Skip s x            -> TI.Skip s (k x)
@@ -151,11 +155,12 @@ shapeType sol = go
 resolveModule :: KindSolution -> M.KindedModule -> M.KindedModule
 resolveModule sol = zonkModule (Zonk (resolveKind sol) (resolveType sol))
 
--- | Apply only the shape half, for the staging that leaves the components to be
--- solved after typing: what typing dispatches on structurally -- whether a kind
--- is proper or an arrow -- is settled, what it only reads is not.
-resolveShapeModule :: KindSolution -> M.KindedModule -> M.KindedModule
-resolveShapeModule sol = zonkModule (Zonk (resolveShape sol) (shapeType sol))
+-- | Apply everything but the multiplicities, for the staging that leaves those
+-- to be solved after typing: what typing dispatches on -- a kind's shape and its
+-- baseKind -- is settled, and what a usage-driven pass must not decide early is
+-- not.
+resolveNonMultModule :: KindSolution -> M.KindedModule -> M.KindedModule
+resolveNonMultModule sol = zonkModule (Zonk (resolveNonMult sol) (resolveNonMultType sol))
 
 -- | Walk every kind annotation in a kinded module — type declarations, kind
 -- signatures, datatypes, and definitions — with the given resolvers.
