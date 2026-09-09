@@ -53,12 +53,11 @@ import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKi
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveNonMultModule )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
-import Validation.LocalInference.Types qualified as LTI
 
 import Control.Monad.Identity ( Identity(..) )
 import Control.Monad.Extra ( unlessM, (&&^), zipWithM_ )
-import Control.Monad.State ( MonadState, foldM, unless, void, forM, forM_, when, runState, StateT (runStateT), evalState, get, put, gets, modify )
-import Control.Monad.Trans.Except ( throwE, catchE, runExceptT, ExceptT (ExceptT) )
+import Control.Monad.State ( MonadState, foldM, unless, forM, forM_, when, runState, StateT (runStateT), gets, modify )
+import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
 import Data.Bifunctor ( first, second, bimap )
 import Data.Bitraversable (bitraverse) -- bimapM 
 import Data.Foldable.Extra ( allM )
@@ -735,12 +734,7 @@ kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
     -- carries instantiation variables, which are not this definition's binders
     sequence_ (boundBinderKinds tdecls <$> msig <*> mvar)
     rhs' <- kindRHS tdecls ddecls kctx tctxds mt rhs
-    -- once the right-hand side is kinded its type may be within reach even when
-    -- it is not a bare variable, and the pattern is what needs it: an unpacked
-    -- binder takes the existential's own kind rather than a fresh placeholder
-    mrhs <- case rhs' of E.UnguardedRHS e _ -> synthExpType tdecls tctxds e
-                         _                  -> pure Nothing
-    (kctx', p') <- kindPat tdecls kctx (maybe mrhs Just mt) p
+    (kctx', p') <- kindPat tdecls kctx mt p
     return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
   E.FnDef x psrhss -> do
     case tctxds Map.!? x of
@@ -772,79 +766,6 @@ boundMultBy m = \case
   TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
   TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
   _                                 -> pure ()
-
--- | Run a computation for its result alone: an error is not reported, and the
--- constraints it gathered are rolled back. Guidance is best-effort, so failing
--- to learn something must not fail the program.
-tentatively :: Validation a -> Validation (Maybe a)
-tentatively m = do
-  st <- get
-  (Just <$> m) `catchE` \_ -> put st >> pure Nothing
-
--- | Best-effort: the type of an expression kinding can determine on its own — a
--- signed variable, or an application of one, with an implicit instantiation
--- resolved by matching each argument's type against the domain it faces. It is
--- 'Nothing' for most of the language, and that is the point: this exists to give
--- the usage rules a scrutinee type, not to type-check. The multiplicity
--- constraints the match yields are dropped; only the substitution is wanted, and
--- emitting instantiation constraints from a best-effort walk would let a guess
--- reach the solver. A leftover instantiation variable means the match learned
--- nothing about that position, so the answer is 'Nothing' rather than a type
--- that would mislead the caller.
-synthExpType :: D.KindedTypeDecls -> TypeCtx -> E.KindedExp
-             -> Validation (Maybe TK.KindedType)
-synthExpType tdecls tctxds e = grounded <$> go e
-  where
-    grounded mt = mt >>= \t -> if Set.null (LTI.fiv t) then Just t else Nothing
-
-    go = \case
-      E.Var _ x -> pure (tctxds Map.!? x)
-      -- the two heads with no type of their own: what they yield is read off the
-      -- channel they are applied to (as 'Typing.synth' does, via 'Expose')
-      E.App s (E.ReceiveType _) (ExpLevel e : rest) -> go e >>= \case
-        Just u | Just (a, k, u') <- Expose.typeMsg' tdecls Neg (normalise tdecls u)
-               -> apply emptySubs (TK.AppExists s [(a, k)] u') rest
-        _      -> pure Nothing
-      E.App _ (E.SendType _ ty) (ExpLevel e : rest) -> go e >>= \case
-        Just u | Just (a, _, u') <- Expose.typeMsg' tdecls Pos (normalise tdecls u)
-               -> apply emptySubs (subs a ty u') rest
-        _      -> pure Nothing
-      E.App _ f args -> go f >>= maybe (pure Nothing) (\t -> apply emptySubs t args)
-      _              -> pure Nothing
-
-    apply θ t args = case (normalise tdecls (applySubs θ t), args) of
-      (u, []) -> pure (Just u)
-      (TK.AppArrow _ _ u v, ExpLevel e : rest) -> do
-        θ' <- go e >>= \case
-          Just ut -> maybe θ (<> θ) <$> tentatively (snd <$> LTI.match e tdecls u ut)
-          Nothing -> pure θ
-        apply θ' v rest
-      (TK.AppForall s m ((b, _) : bks) u, TypeLevel ty : rest) ->
-        apply θ (peelT s m bks (subs b ty u)) rest
-      (TK.ForallM s m (φ : φs) u, MultLevel φ' : rest) ->
-        apply θ (peelM s m φs (subsMultType ObjLv φ φ' u)) rest
-      (TK.AppForall s m ((b, k) : bks) u, args') | not (isArrow k), not (null args') -> do
-        iv <- freshInstVarT (getSpan b) =<< properShape k
-        apply θ (peelT s m bks (subs b iv u)) args'
-      (TK.ForallM s m (φ : φs) u, args') | not (null args') -> do
-        miv <- freshInstVarM (getSpan φ)
-        apply θ (peelM s m φs (subsMultType ObjLv φ miv u)) args'
-      _ -> pure Nothing
-
-    peelT s m bks = if null bks then id else TK.AppForall s m bks
-    peelM s m φs  = if null φs  then id else TK.ForallM s m φs
-
-    -- an omitted binder kind is still a whole-kind variable here, and 'LTI.match'
-    -- refuses a type whose kind is not proper. Give the instantiation variable a
-    -- proper shape of its own rather than committing the binder to one: the
-    -- variables are fresh, nothing this walk gathers reaches the solver, and if
-    -- the binder turns out to be higher-kinded the match simply fails and the
-    -- caller is left where it was.
-    properShape = \case
-      Var s _ _ -> Proper s <$> freshUnifMult s <*> (VarBK UnifLv <$> freshUnifBaseKindVar s)
-      k         -> pure k
-
-    isArrow = \case Arrow{} -> True; _ -> False
 
 -- | Decompose a pattern against its type into the (variable, type) leaves it
 -- binds, plus the types an as-pattern forces unrestricted. Variable, wildcard,
