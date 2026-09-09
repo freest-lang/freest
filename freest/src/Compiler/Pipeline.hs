@@ -22,7 +22,8 @@ import Syntax.Declarations qualified as D
 import Parser.Parser ( runParseModule )
 import Compiler.Include ( resolveIncludes, IncludeError(..) )
 import Parser.Scoping ( scopeModule', emptyScopingCtx, ScopingCtx )
-import Validation.Base ( Validation, ValidationState, emptyValidationState, runValidation, dischargeObligations )
+import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation, dischargeObligations )
+import Validation.LocalInference.Solution ( resolveModule )
 import Validation.HOTRecursion ( checkNoHOTRec )
 import Validation.SessionPattern ( checkNoVarsInSessionPatterns )
 import Validation.Kinding ( kindModule, KindCtx, emptyKindCtx )
@@ -31,7 +32,7 @@ import UI.CLI ( preludePath, moduleLoaded, noModuleLoaded, preludeNotLoaded, fai
 import UI.Error ( printErrors, Source )
 import Paths_freest ( getDataFileName )
 
-import Control.Monad.State ( get )
+import Control.Monad.State ( get, gets )
 import Data.Map qualified as Map
 import System.IO ( stderr, hPutStrLn )
 
@@ -54,8 +55,11 @@ validateModule sctx kctx tctx tdecls ddecls modl = do
   (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls kmodl)
   -- empty unless typing ran on unsolved kinds; see 'checkWhenSolved'
   dischargeObligations
-  checkNoVarsInSessionPatterns (M.definitions kmodl')
-  pure (sctx', kctx'', tctx', kmodl')
+  -- typing runs on kinds whose multiplicities are unsolved; nothing downstream
+  -- of validation should have to
+  kmodl'' <- (\sol -> maybe kmodl' (`resolveModule` kmodl') sol) <$> gets kindSolution
+  checkNoVarsInSessionPatterns (M.definitions kmodl'')
+  pure (sctx', kctx'', tctx', kmodl'')
   where
   inheritDecls m = m
     { M.typeDecls = M.typeDecls m `Map.union` tdecls
