@@ -48,7 +48,7 @@ import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveModule, resolveNonMultModule )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveNonMultModule )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 import Validation.LocalInference.Types qualified as LTI
@@ -539,11 +539,9 @@ kindModule ctx mod = do
                  , M.definitions  = lds
                  }
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
-  -- under 'SolveAfterTyping' everything but the multiplicities is applied, so
-  -- that typing faces the unsolved multiplicities a fused pass would hand it
-  -- without also facing kinds it cannot dispatch on
-  defer <- gets ((== SolveAfterTyping) . staging)
-  return (ctxOut, (if defer then resolveNonMultModule else resolveModule) sol mod')
+  -- everything but the multiplicities: typing must face those unsolved, but not
+  -- kinds it cannot dispatch on. 'Compiler.Pipeline' applies the rest at the end
+  return (ctxOut, resolveNonMultModule sol mod')
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 

@@ -155,10 +155,10 @@ resolveNonMultType sol = go
 resolveModule :: KindSolution -> M.KindedModule -> M.KindedModule
 resolveModule sol = zonkModule (Zonk (resolveKind sol) (resolveType sol))
 
--- | Apply everything but the multiplicities, for the staging that leaves those
--- to be solved after typing: what typing dispatches on -- a kind's shape and its
--- baseKind -- is settled, and what a usage-driven pass must not decide early is
--- not.
+-- | Apply everything but the multiplicities, which typing runs on unsolved:
+-- what typing dispatches on -- a kind's shape and its baseKind -- is settled,
+-- and what a usage-driven pass must not decide early is not.
+-- 'Compiler.Pipeline' applies the rest once typing is done.
 resolveNonMultModule :: KindSolution -> M.KindedModule -> M.KindedModule
 resolveNonMultModule sol = zonkModule (Zonk (resolveNonMult sol) (resolveNonMultType sol))
 

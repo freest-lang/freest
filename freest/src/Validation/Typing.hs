@@ -66,8 +66,9 @@ import Data.Set qualified as Set
 -- linearity at the moment of use, which is only possible once the kind is
 -- ground. Recording the uses instead leaves the decision to whoever reads them,
 -- which is now three named places — 'consumed', 'newlyConsumed', and the tests
--- in 'lookupType' and 'typeCtxDifference'. Those are what a deferred solve has
--- to turn into obligations; the deleting discipline left nothing to turn.
+-- in 'lookupType' and 'typeCtxDifference'. All three are obligations
+-- ('Validation.Base.checkWhenSolved'); the deleting discipline left nothing to
+-- turn into one.
 data Binding = Binding { bndType :: !T.KindedType, bndUses :: [Span] }
   deriving Show
 

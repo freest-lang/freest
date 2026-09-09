@@ -18,7 +18,6 @@ module Validation.Base
   , dischargeObligations
   , addUnDefault
   , unfold
-  , Staging(..)
   )
 where
 
@@ -42,16 +41,6 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
-
--- | When the kind solution is applied to the module.
---
--- 'SolveDuringKinding' is today's pipeline: kinding solves and zonks, so typing
--- only ever sees ground kinds. 'SolveAfterTyping' is where the fused pass has to
--- get to, and every check that demands a ground kind fails under it — which is
--- what makes it a measurement (see @test\/prog\/DeferredSpec.hs@) rather than a
--- mode anyone should run.
-data Staging = SolveDuringKinding | SolveAfterTyping
-  deriving Eq
 
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
@@ -78,11 +67,7 @@ data ValidationState
     -- nothing constrains them: an output-polarity binder is covariant, so the
     -- most usable choice for its remote consumer is unrestricted.
     , unDefaults :: Set.Set Variable
-    -- | Whether kinding applies its solution to the module it returns. See
-    -- 'Staging'; everything but the deferred-solve harness leaves this alone.
-    , staging :: Staging
     -- | Kind-reading checks recorded to run after the solve, most recent first.
-    -- Empty under 'SolveDuringKinding', where every such check runs eagerly.
     , obligations :: [Obligation]
     -- | The solution kinding computed, kept for 'dischargeObligations'.
     -- 'Nothing' until kinding has run.
@@ -100,7 +85,6 @@ emptyValidationState = ValidationState
   , baseKindConstraints = []
   , condSeqMults = []
   , unDefaults = Set.empty
-  , staging = SolveAfterTyping
   , obligations = []
   , kindSolution = Nothing
   }
@@ -145,16 +129,13 @@ addBaseKindConstraint c =
 addUnDefault :: Variable -> Validation ()
 addUnDefault φ = modify \s -> s{unDefaults = Set.insert φ (unDefaults s)}
 
--- | How a deferred check grounds the kinds it captured: identity when they were
--- already solved at the point the check was recorded, the kind solution's
--- substitution when they were not.
+-- | How a deferred check grounds the kinds it captured: the kind solution's
+-- substitution, at each of the sorts a check may need to read.
 data Ground = Ground
   { groundType :: TK.KindedType -> TK.KindedType
   , groundKind :: K.Kind -> K.Kind
   , groundMult :: K.Multiplicity -> K.Multiplicity
   -- | For a check that unfolds type declarations, as type equivalence does.
-  -- A field rather than a @Map.map@ at the use site so the eager path, where
-  -- this is 'id', does not rebuild the map on every check.
   , groundDecls :: D.KindedTypeDecls -> D.KindedTypeDecls
   }
 
@@ -164,24 +145,17 @@ data Ground = Ground
 -- readable.
 type Obligation = Ground -> Validation ()
 
--- | Run a kind-reading check, now or after the solve.
---
--- Under 'SolveDuringKinding' typing only ever sees ground kinds, so the check
--- runs immediately, against itself, and reports in source order. Under
--- 'SolveAfterTyping' the kinds it would read are still variables, so it is
--- recorded and discharged by 'dischargeObligations'.
+-- | Record a kind-reading check to run once the solve is in, when the kinds it
+-- would read are still variables. 'dischargeObligations' runs it.
 checkWhenSolved :: Obligation -> Validation ()
-checkWhenSolved chk = gets staging >>= \case
-  SolveDuringKinding -> chk (Ground id id id id)
-  SolveAfterTyping   -> modify \s -> s{obligations = chk : obligations s}
+checkWhenSolved chk = modify \s -> s{obligations = chk : obligations s}
 
 -- | Record the solution kinding computed, for the deferred checks to read.
 setKindSolution :: KindSolution -> Validation ()
 setKindSolution sol = modify \s -> s{kindSolution = Just sol}
 
 -- | Run every recorded check against the kind solution, in the order recorded,
--- and clear the queue. A no-op under 'SolveDuringKinding', where the queue is
--- always empty.
+-- and clear the queue.
 dischargeObligations :: Validation ()
 dischargeObligations = gets obligations >>= \case
   []  -> return ()
