@@ -104,6 +104,21 @@ newlyConsumed g before after =
   , Kinding.isRestricted (groundType g (bndType b))
   , length (bndUses b) > maybe 0 (length . bndUses) (before Map.!? xi) ]
 
+-- | The bindings a scope used at all, without 'consumed's linearity filter — the
+-- constraint counterpart, as 'newlyUsed' is to 'newlyConsumed'.
+used :: TypeCtx -> PatCtx
+used = Map.map bndType . Map.filter (not . null . bndUses)
+
+-- | The bindings the second context used and the first had not, without
+-- 'newlyConsumed's linearity filter. Emitting a bound reads no kind, so unlike
+-- the checks it can run in place; 'Kinding.boundMultBy' is a no-op on anything
+-- but an inferred multiplicity.
+newlyUsed :: TypeCtx -> TypeCtx -> [T.KindedType]
+newlyUsed before after =
+  [ bndType b
+  | (xi, b) <- Map.assocs after
+  , length (bndUses b) > maybe 0 (length . bndUses) (before Map.!? xi) ]
+
 -- | Looks up the type of a variable or identifier in a type context, returning
 -- its type and the context with that binding's use count raised. Consuming a
 -- linear binding a second time is an error, as is looking up one that is not in
@@ -117,9 +132,11 @@ lookupType kctx tctx xi = case Map.lookupIndex xi tctx of
     -- where the binding came from
     let (bound, Binding t us) = Map.elemAt ix tctx
     case us of
-      prev : _ -> checkWhenSolved \g ->
-        when (Kinding.isRestricted (groundType g t)) do
-          throwE (LinConsumedTwice (getSpan xi) bound (groundType g t) prev)
+      prev : _ -> do
+        Kinding.boundMultBy (K.Un (getSpan xi)) t   -- Merge
+        checkWhenSolved \g ->
+          when (Kinding.isRestricted (groundType g t)) do
+            throwE (LinConsumedTwice (getSpan xi) bound (groundType g t) prev)
       _ -> pure ()
     -- 'Map.adjust', not 'Map.insert': inserting would replace the key, and with
     -- it the binder's span that the error above reports
@@ -143,10 +160,12 @@ typeCtxDifference :: D.KindedTypeDecls -> KindCtx -> TypeCtx
 typeCtxDifference tdecls kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just (Binding t us) -> do
-        when (null us) $ checkWhenSolved \g ->
-          let t' = groundType g t in
-          when (Kinding.isRestricted t') do
-            throwE (LinVarAtEndOfScope (getSpan x) x t' (normalise tdecls t'))
+        when (null us) do
+          Kinding.boundMultBy (K.Un (getSpan x)) t  -- Weaken
+          checkWhenSolved \g ->
+            let t' = groundType g t in
+            when (Kinding.isRestricted t') do
+              throwE (LinVarAtEndOfScope (getSpan x) x t' (normalise tdecls t'))
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
@@ -788,6 +807,8 @@ checkPat tdecls ddecls kctx p t = case p of
           Kinding.checkK (T.fromVariable ObjLv a k') (E.bndKind k)
           checkPackPat (Map.insert (Left a) k' kctx) (subs b (T.fromVariable ObjLv a k') u) aks bks
   E.WildPat  s _    -> do
+    -- the pattern binds nothing, so this discard reaches no context: force here
+    Kinding.boundMultBy (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
       (throwE (NonLinPat s p (groundType g t)))
     return (kctx, Map.empty)
@@ -855,6 +876,8 @@ checkPat tdecls ddecls kctx p t = case p of
     checkPat tdecls ddecls kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
+    -- bound twice over, as @x@ and by @p'@
+    Kinding.boundMultBy (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
       (throwE (NonLinPat s p (groundType g t)))
     second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
@@ -915,11 +938,18 @@ checkEquivTypeCtxsCase
 checkEquivTypeCtxsCase fpe = \case
   [ ]    -> return ()
   [_]    -> return ()
-  tctxs  -> checkWhenSolved \g -> case map (consumed g) tctxs of
-    cs@(c1 : cs') ->
-      forM_ (Map.assocs (Map.unions cs `Map.difference` intersections c1 cs'))
-        \(xi, t) -> throwE (LinNotConsumedEvenly (getSpan xi) xi t fpe)
-    [] -> return ()
+  tctxs  -> do
+    -- Branch: used in some branches but not all, so it cannot be linear
+    case map used tctxs of
+      us@(u1 : us') ->
+        forM_ (Map.elems (Map.unions us `Map.difference` intersections u1 us'))
+          \t -> Kinding.boundMultBy (K.Un (getSpan t)) t
+      [] -> return ()
+    checkWhenSolved \g -> case map (consumed g) tctxs of
+      cs@(c1 : cs') ->
+        forM_ (Map.assocs (Map.unions cs `Map.difference` intersections c1 cs'))
+          \(xi, t) -> throwE (LinNotConsumedEvenly (getSpan xi) xi t fpe)
+      [] -> return ()
   where
     intersections = foldlStrict Map.intersection
     foldlStrict f = go
@@ -935,12 +965,14 @@ checkEquivTypeCtxsFun
   -> TypeCtx
   -> Span
   -> Validation ()
-checkEquivTypeCtxsFun m tctx1 tctx2 s = checkWhenSolved \g ->
-  forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
-    case T.kindOf t of
-      K.Proper _ m' _ -> unless (m' K.<: groundMult g m) do
-        throwE (LinConsumedInUnFun (getSpan xa) xa t s (groundMult g m))
-      _ -> internalError "non-proper type in type context"
+checkEquivTypeCtxsFun m tctx1 tctx2 s = do
+  mapM_ (Kinding.boundMultBy m) (newlyUsed tctx2 tctx1)   -- capture under a closure
+  checkWhenSolved \g ->
+    forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
+      case T.kindOf t of
+        K.Proper _ m' _ -> unless (m' K.<: groundMult g m) do
+          throwE (LinConsumedInUnFun (getSpan xa) xa t s (groundMult g m))
+        _ -> internalError "non-proper type in type context"
 
 checkEquivTypeCtxsGuard
   :: TypeCtx
