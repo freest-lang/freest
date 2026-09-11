@@ -3,7 +3,12 @@
 module Validation.LocalInference.Multiplicities
   ( MultConstraints
   , MultEquation(..)
+  , MultSub(..)
+  , MultSubConstraints
   , multEq
+  , applyMultSubst
+  , solveMultSubs
+  , unsatisfiedMultSub
   , kindEqConstraints
   , kindSubConstraints
   , solveMultConstraints
@@ -12,7 +17,7 @@ module Validation.LocalInference.Multiplicities
   ) where
 
 import Syntax.Base
-import Syntax.Kind (Multiplicity(..), pattern Un)
+import Syntax.Kind (Multiplicity(..), pattern Un, pattern VarM)
 import Syntax.Kind qualified as K
 import Syntax.Provenance (Origin(..))
 import Validation.Base (Validation, incCounter)
@@ -20,6 +25,7 @@ import Validation.LocalInference.Substitution (Substitution(..), emptySubs, subs
 
 import Control.Monad (guard)
 import Data.List (foldl')
+import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -48,6 +54,74 @@ kindSubConstraints = \cases
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
                                           ++ kindSubConstraints k12 k22
   _ _ -> []
+
+data MultSub = MultSub Multiplicity Multiplicity Origin
+
+type MultSubConstraints = [MultSub]
+
+applyMultSubst :: Map.Map Variable Multiplicity -> Multiplicity -> Multiplicity
+applyMultSubst σ = go Set.empty
+  where
+    go _    m@Lin{}       = m
+    go seen (Sup s atoms) = foldl' K.join (Un s) (map (expand seen s) atoms)
+    expand seen s a@(lv, φ)
+      | solvable lv, not (Set.member φ seen), Just m <- Map.lookup φ σ =
+          go (Set.insert φ seen) m
+      | otherwise = Sup s [a]
+
+-- | The paper's Fig. 14: each variable starts at the top and is met with its
+-- rigid upper bounds. It only computes; 'unsatisfiedMultSub' checks.
+solveMultSubs :: Set Variable -> MultSubConstraints -> Map.Map Variable Multiplicity
+solveMultSubs undefs cs = raiseLowerBounds (aliasMutual (fixpoint Map.empty))
+  where
+    fixpoint σ = let σ' = foldl' step σ cs in if σ' == σ then σ else fixpoint σ'
+
+    step σ (MultSub l r _)
+      | rigid r', not (isTop r') = foldl' (meetWith r') σ (solvables l)
+      | otherwise                = σ
+      where r' = applyMultSubst σ r
+
+    meetWith r' σ φ =
+      Map.insert φ (K.meet (Map.findWithDefault (Lin (getSpan r')) φ σ) r') σ
+
+    -- a mutual pair is an equality descent never sees; unaliased, the two default apart
+    aliasMutual σ = foldl' alias σ
+      [ (φ, ψ) | MultSub l r _ <- cs
+               , VarM _ lv1 φ <- [applyMultSubst σ l], solvable lv1
+               , VarM _ lv2 ψ <- [applyMultSubst σ r], solvable lv2
+               , φ /= ψ, any (opposite φ ψ) cs ]
+    opposite φ ψ (MultSub l r _) = isAtom ψ l && isAtom φ r
+    isAtom φ = \case Sup _ [(lv, φ')] -> solvable lv && φ == φ'; _ -> False
+    alias σ (φ, ψ)
+      | Map.member φ σ        = bindTo ψ φ σ
+      | Map.member ψ σ        = bindTo φ ψ σ
+      | φ `Set.member` undefs = bindTo ψ φ σ
+      | otherwise             = bindTo φ ψ σ
+    bindTo v rep' σ
+      | Map.member v σ = σ
+      | root == v      = σ
+      | otherwise      = Map.insert v (VarM (getSpan rep') UnifLv root) σ
+      where root = rootOf σ rep'
+    rootOf σ φ = case Map.lookup φ σ of
+      Just (VarM _ lv ψ) | solvable lv -> rootOf σ ψ
+      _                                -> φ
+
+    -- the top satisfies a lower bound; only a *-defaulting variable can break one
+    raiseLowerBounds σ = foldl' raise σ
+      [ (φ, l') | MultSub l r _ <- cs
+                , VarM _ lv φ <- [applyMultSubst σ r]
+                , solvable lv, φ `Set.member` undefs, not (Map.member φ σ)
+                , let l' = applyMultSubst σ l, rigid l' ]
+    raise σ (φ, m) =
+      Map.insert φ (K.join (Map.findWithDefault (Un (getSpan m)) φ σ) m) σ
+
+    rigid     = null . solvables
+    solvables = \case Lin{} -> []; Sup _ as -> [φ | (lv, φ) <- as, solvable lv]
+    isTop     = \case Lin{} -> True; _ -> False
+
+unsatisfiedMultSub :: (Multiplicity -> Multiplicity) -> MultSubConstraints -> Maybe MultSub
+unsatisfiedMultSub resolve =
+  List.find \(MultSub l r _) -> not (resolve l K.<: resolve r)
 
 -- The substitution accumulated so far and the next negative internal ID.
 data SolverState = SolverState !(Map.Map Variable Multiplicity) !Int
@@ -119,22 +193,8 @@ solve eqs = do
   -- multiplicity read as a bound is the least general choice. Not unsoundness:
   -- every answer returned does satisfy the equations.
   --
-  -- It already bites, because `φ ⊔ m = m` is how `kindSubConstraints` encodes
-  -- `φ <: m`: a kind constraint whose upper bound names a `#m` lands on `*`.
-  -- With `foo : forall #m #n a -> a -> (a -> ()) -m+n-> ()`, bounding the
-  -- omitted binder by its capturing closure infers `a : *T` where the written
-  -- `a : m T` is accepted, so `foo @(Int -1-> Int)` is rejected only in the
-  -- inferred version. `Validation.Kinding.boundBinderKinds` sidesteps this by
-  -- binding an omitted binder outright rather than constraining it.
-  --
-  -- The fix is not to complete this function. Subkinding does not need ACUI at
-  -- all: `<:` is `⊆` on atom sets, so the paper's descent (Fig. 14 — seed φ to
-  -- the top `1`, then meet with each upper bound) answers `1 ⊓ m = m` directly,
-  -- and successive bounds intersect. ACUI is needed only for genuine equations
-  -- over `m+n`. Routing the subkinding half through the `φ ⊔ m = m` encoding is
-  -- what loses the answer; splitting it back out would need `Meet Multiplicity`
-  -- (atom-set intersection, with `Lin` the absorbing top) and a decision on the
-  -- lower bounds arrow contravariance produces, which the paper only checks.
+  -- Kind inference no longer sends bounds here (see 'solveMultSubs'); local
+  -- inference's 'kindSubConstraints' still does, and still lands on `*`.
   unifySup :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
   unifySup m1 m2 (SolverState sub n0) = do
     let s     = getSpan m1
@@ -233,14 +293,17 @@ solveMultConstraints :: MultConstraints -> Validation (Either MultEquation Subst
 solveMultConstraints eqs = case solve eqs of
   Left eq         -> return (Left eq)
   Right (Θ ivtms) -> do
-    let freshes = Set.unions [either (const Set.empty) freshIn it | (_, it) <- ivtms]
+    let freshes = Set.unions [Set.fromList [φ | isFresh φ] `Set.union`
+                                either (const Set.empty) freshIn it | (φ, it) <- ivtms]
     ren <- Map.fromList <$> for (Set.toList freshes) 
       \v -> (v,) . (\i -> v {external = "ṃ" ++ show i, internal = i}) <$> incCounter     
-    return (Right (Θ [(φ, fmap (rename ren) it) | (φ, it) <- ivtms]))
+    return (Right (Θ [(Map.findWithDefault φ φ ren, fmap (rename ren) it) | (φ, it) <- ivtms]))
   where
+    -- the kind unifier mints from the same negative range, and 'Variable' equality is by id
+    isFresh φ = internal φ < -1
     freshIn = \case
       Lin{}      -> Set.empty
-      Sup _ lvφs -> Set.fromList [φ | (_, φ) <- lvφs, internal φ < -1]
+      Sup _ lvφs -> Set.fromList [φ | (_, φ) <- lvφs, isFresh φ]
     rename r = \case
       m@Lin{}    -> m
       Sup sp lvφs -> Sup sp [(lv, Map.findWithDefault φ φ r) | (lv, φ) <- lvφs]

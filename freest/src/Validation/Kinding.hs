@@ -48,9 +48,11 @@ import Validation.Normalisation
 import Validation.Substitution ( subs, subsAll, subsMultType )
 import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
-import Validation.LocalInference.Multiplicities ( MultEquation(..), solveMultConstraints )
+import Validation.LocalInference.Multiplicities
+  ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs, unsatisfiedMultSub
+  , solveMultConstraints )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveType, resolveNonMultModule )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveNonMultModule )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
@@ -1131,14 +1133,22 @@ provisionalKindSolution = peekKindState >>= solveFrom
 
 solveFrom :: KindState -> Validation KindSolution
 solveFrom (binds, cs, meqs, pcs0, condmults, undefs) = do
-  KindUnifier ksub mcs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
+  KindUnifier ksub msubs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
   psub <- either (throwE . preErr) pure (solveBaseKindConstraints (pcs ++ pcs0))
   let condEqs = [ MultEquation φ o (if resolveBK psub bk == Channel then m1 else join m1 m2) o
                 | (o, bk, φ, m1, m2) <- condmults ]
-  msub <- solveMultConstraints (mcs ++ map toMultEq meqs ++ condEqs) >>= either (throwE . multErr) (pure . multsOf)
-  return (KindSolution ksub psub msub undefs)
+  -- equations first: descent only lowers against a bound they have made rigid
+  θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
+         >>= either (throwE . multErr) (pure . multsOf)
+  let σ   = solveMultSubs undefs
+              [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
+      sol = KindSolution ksub psub (Map.union θ σ) undefs
+      resolve = resolveMult sol
+  forM_ (unsatisfiedMultSub resolve msubs) \(MultSub m1 m2 o) ->
+    throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) o (resolve m2) o)
+  return sol
   where
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o

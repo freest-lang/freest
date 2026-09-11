@@ -80,6 +80,7 @@ library:
     - Validation.Expose
     - Validation.LocalInference.Kinds
     - Validation.LocalInference.BaseKinds
+    - Validation.LocalInference.Multiplicities
     - Validation.LocalInference.Solution
     - Validation.HOTRecursion
     - Validation.Kinding

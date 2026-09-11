@@ -100,6 +100,12 @@ instance Join Multiplicity where
     m             Lin{}         -> Lin (getSpan m)
     (Sup s lvφs1) (Sup _ lvφs2) -> Sup s (lvφs1 `List.union` lvφs2)
 
+instance Meet Multiplicity where
+  meet = \cases
+    Lin{}         m             -> m
+    m             Lin{}         -> m
+    (Sup s lvφs1) (Sup _ lvφs2) -> Sup s (lvφs1 `List.intersect` lvφs2)
+
 instance Show Multiplicity where
   show = \case 
     Lin{}      -> "1"

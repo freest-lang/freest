@@ -16,7 +16,7 @@ spec = describe "Kind unifier (K1 <: K2)" $ do
     case unifyKindSub o (kv 1) (proper lin Top) of
       Right u -> do
         fmap isProper (Map.lookup (var 1) (kindSubst u)) `shouldBe` Just True
-        length (multConstraints u)    `shouldBe` 1
+        length (multSubConstraints u) `shouldBe` 1
         length (baseKindConstraints u) `shouldBe` 1
       Left _ -> expectationFailure "expected success"
 

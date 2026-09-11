@@ -14,9 +14,8 @@ module Validation.LocalInference.Kinds
 
 import Syntax.Base
 import Syntax.Kind (Kind(..), Multiplicity(..), BaseKind(..), pattern VarM)
-import Syntax.Kind qualified as K
 import Syntax.Provenance (Origin)
-import Validation.LocalInference.Multiplicities (MultConstraints, MultEquation, multEq)
+import Validation.LocalInference.Multiplicities (MultSub(..), MultSubConstraints)
 import Validation.LocalInference.BaseKinds (BaseKindConstraints, BaseKindConstraint(..))
 
 import Control.Monad.State (StateT, runStateT, gets, modify, when)
@@ -27,7 +26,7 @@ import Data.Map.Strict qualified as Map
 -- leaf constraints to hand to the multiplicity and baseKind solvers.
 data KindUnifier = KindUnifier
   { kindSubst          :: Map.Map Variable Kind
-  , multConstraints    :: MultConstraints
+  , multSubConstraints :: MultSubConstraints
   , baseKindConstraints :: BaseKindConstraints
   }
 
@@ -42,7 +41,7 @@ data UnifyError
 data Acc = Acc
   { counter :: !Int
   , kSub    :: Map.Map Variable Kind
-  , mCs     :: MultConstraints
+  , mCs     :: MultSubConstraints
   , pCs     :: BaseKindConstraints
   }
 
@@ -78,7 +77,7 @@ go o pol k1 k2 = do
     (Arrow _ d1 c1, Arrow _ d2 c2) ->  -- contravariant / covariant
       go o (dual pol) d2 d1 >> go o pol c1 c2
     (Proper _ m1 p1, Proper _ m2 p2) -> do
-      emitMult (multEq (K.join m1 m2) m2)  -- m1 <: m2, as the ACUI encoding
+      emitSub  (MultSub m1 m2 o)
       emitPre  (SubBaseKind o p1 p2)
     _ -> mismatch k1' k2'
   where
@@ -136,8 +135,8 @@ occursCheck o a k = do
   occ <- occurs a k
   when occ do lift (Left (Occurs o a k))
 
-emitMult :: MultEquation -> U ()
-emitMult c = modify \acc -> acc { mCs = c : mCs acc }
+emitSub :: MultSub -> U ()
+emitSub c = modify \acc -> acc { mCs = c : mCs acc }
 
 emitPre :: BaseKindConstraint -> U ()
 emitPre c = modify \acc -> acc { pCs = c : pCs acc }
