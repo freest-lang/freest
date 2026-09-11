@@ -82,6 +82,7 @@ library:
     - Validation.LocalInference.BaseKinds
     - Validation.LocalInference.Multiplicities
     - Validation.LocalInference.Solution
+    - Validation.LocalInference.Substitution
     - Validation.HOTRecursion
     - Validation.Kinding
     - Validation.Normalisation

@@ -123,53 +123,50 @@ unsatisfiedMultSub :: (Multiplicity -> Multiplicity) -> MultSubConstraints -> Ma
 unsatisfiedMultSub resolve =
   List.find \(MultSub l r _) -> not (resolve l K.<: resolve r)
 
--- The substitution accumulated so far and the next negative internal ID.
-data SolverState = SolverState !(Map.Map Variable Multiplicity) !Int
+-- The substitution accumulated so far.
+newtype SolverState = SolverState (Map.Map Variable Multiplicity)
 
 -- | Solves the equations, returning he first most general unifier
 -- found in breadth-first search. On failure, returns the first
 -- equation with no solution (with the accumulated substitution applied).
 -- The search is /not/ complete — see the note on `unifySup`.
--- Any fresh variables introduced by the solver have a distinct negative
--- internal ID, assuming there are no such IDs in the constraints. 
--- This is done to avoid doing the solving inside `Validation`. 
--- `solveMultConstraints`.
-solve :: MultConstraints -> Either MultEquation Substitution
-solve eqs = do
-  SolverState sub _ <- bfs eqs [SolverState Map.empty (-2)]
-  let resolved = Map.map (apply sub) sub
-  return $ Map.foldrWithKey (\φ m -> (subsMult φ m <>)) emptySubs resolved
+-- Note that the unifier might include free choices, which include fresh variables not 
+-- found in the constraints. To default these to `Un`, use `solveMultConstraintsDUDF`.
+solveMultConstraints :: MultConstraints -> Validation (Either MultEquation Substitution)
+solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
   where
-  bfs :: MultConstraints -> [SolverState] -> Either MultEquation SolverState
-  bfs = \cases
-    []                (st : _) -> Right st
-    []                []       -> internalError "multiplicity unification: no states"
-    (mc@(MultEquation l ol r or') : mcs) sts -> case next of
-      [] -> Left case substituted of (eq', _) : _ -> eq'; [] -> mc
-      _  -> bfs mcs next
-      where
-        substituted = [(MultEquation (apply sub l) ol (apply sub r) or', st)
-                      | st@(SolverState sub _) <- sts]
-        next        = [st' | (MultEquation l' _ r' _, st) <- substituted
-                           , st'          <- solveOne l' r' st]
+  finish (SolverState sub) =
+    Map.foldrWithKey (\φ m -> (subsMult φ m <>)) emptySubs (Map.map (apply sub) sub)
 
-  solveOne :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
+  bfs :: MultConstraints -> [SolverState] -> Validation (Either MultEquation SolverState)
+  bfs = \cases
+    []                (st : _) -> pure (Right st)
+    []                []       -> internalError "multiplicity unification: no states"
+    (mc@(MultEquation l ol r or') : mcs) sts -> do
+      let substituted = [(MultEquation (apply sub l) ol (apply sub r) or', st)
+                        | st@(SolverState sub) <- sts]
+      next <- concat <$> sequence [solveOne l' r' st | (MultEquation l' _ r' _, st) <- substituted]
+      case next of
+        [] -> pure (Left case substituted of (eq', _) : _ -> eq'; [] -> mc)
+        _  -> bfs mcs next
+
+  solveOne :: Multiplicity -> Multiplicity -> SolverState -> Validation [SolverState]
   solveOne = \cases
-    Lin{}    Lin{}    st -> [st]
-    Lin{}    m@Sup{}  st -> collapseSide m st
-    m@Sup{}  Lin{}    st -> collapseSide m st
+    Lin{}    Lin{}    st -> pure [st]
+    Lin{}    m@Sup{}  st -> pure (collapseSide m st)
+    m@Sup{}  Lin{}    st -> pure (collapseSide m st)
     m1@Sup{} m2@Sup{} st
-      | atoms m1 == atoms m2 -> [st]
-      | otherwise                -> unifySup m1 m2 st
+      | atoms m1 == atoms m2 -> pure [st]
+      | otherwise            -> unifySup m1 m2 st
 
   atoms = \case
     Lin{}      -> Set.empty
     Sup _ lvφs -> Set.fromList lvφs
 
-  collapseSide m (SolverState sub n) = do
+  collapseSide m (SolverState sub) = do
     (lv, φ) <- Set.toList (atoms m)
     guard (solvable lv)
-    return $ SolverState (Map.insert φ (Lin (getSpan m)) sub) n
+    return $ SolverState (Map.insert φ (Lin (getSpan m)) sub)
 
   -- Most general unifier(s) of `⊔A = ⊔B` modulo ACUI (associativity,
   -- commutativity, idempotence, unit), with the `ObjLv` atoms as constants.
@@ -195,8 +192,8 @@ solve eqs = do
   --
   -- Kind inference no longer sends bounds here (see 'solveMultSubs'); local
   -- inference's 'kindSubConstraints' still does, and still lands on `*`.
-  unifySup :: Multiplicity -> Multiplicity -> SolverState -> [SolverState]
-  unifySup m1 m2 (SolverState sub n0) = do
+  unifySup :: Multiplicity -> Multiplicity -> SolverState -> Validation [SolverState]
+  unifySup m1 m2 (SolverState sub) = do
     let s     = getSpan m1
         as1   = atoms m1
         as2   = atoms m2
@@ -206,22 +203,23 @@ solve eqs = do
         bsS   = [φ | (lv, φ) <- Set.toList as2, solvable lv]   -- solvable vars of B
         oL    = [φ | (ObjLv, φ) <- Set.toList only1]           -- only-A constants
         oR    = [φ | (ObjLv, φ) <- Set.toList only2]           -- only-B constants
-    guard (null oL || not (null bsS))   -- an only-A constant needs an absorber on the right
-    guard (null oR || not (null asS))   -- an only-B constant needs an absorber on the left
-    assignL <- assignTo oL bsS
-    assignR <- assignTo oR asS
-    let absorbed = Map.unionWith Set.union assignL assignR
-        pairs    = [(x, y) | x <- asS, y <- bsS]
-        (zf, n1) = allocFresh s n0 pairs
-        asSet    = Set.fromList asS
-        bsSet    = Set.fromList bsS
-        bind acc v =
-          let row = [(InstLv, zf Map.! (v, y)) | Set.member v asSet, y <- bsS]
-              col = [(InstLv, zf Map.! (x, v)) | Set.member v bsSet, x <- asS]
-              rig = [(ObjLv, r) | r <- Set.toList (Map.findWithDefault Set.empty v absorbed)]
-          in Map.insert v (Sup s (row ++ col ++ rig)) acc
-        toBind = Set.toList (Set.union asSet bsSet)
-    return (SolverState (foldl' bind sub toBind) n1)
+        pairs = [(x, y) | x <- asS, y <- bsS]
+    zf <- Map.fromList <$> for pairs \p -> (p,) . (\i -> Variable s ("ṃ" ++ show i) i) <$> incCounter
+    pure do
+      guard (null oL || not (null bsS))   -- an only-A constant needs an absorber on the right
+      guard (null oR || not (null asS))   -- an only-B constant needs an absorber on the left
+      assignL <- assignTo oL bsS
+      assignR <- assignTo oR asS
+      let absorbed = Map.unionWith Set.union assignL assignR
+          asSet    = Set.fromList asS
+          bsSet    = Set.fromList bsS
+          bind acc v =
+            let row = [(InstLv, zf Map.! (v, y)) | Set.member v asSet, y <- bsS]
+                col = [(InstLv, zf Map.! (x, v)) | Set.member v bsSet, x <- asS]
+                rig = [(ObjLv, r) | r <- Set.toList (Map.findWithDefault Set.empty v absorbed)]
+            in Map.insert v (Sup s (row ++ col ++ rig)) acc
+          toBind = Set.toList (Set.union asSet bsSet)
+      return (SolverState (foldl' bind sub toBind))
 
   apply :: Map.Map Variable Multiplicity -> Multiplicity -> Multiplicity
   apply sub = go Set.empty
@@ -241,15 +239,6 @@ solve eqs = do
       rest <- assignTo cs absorbers
       return (Map.insertWith Set.union u (Set.singleton c) rest)
 
-  allocFresh :: Span -> Int -> [(Variable, Variable)]
-             -> (Map.Map (Variable, Variable) Variable, Int)
-  allocFresh s = go Map.empty
-    where
-      go acc n = \case 
-        []     -> (acc, n)
-        (p:ps) -> go (Map.insert p iv acc) (n - 1) ps
-          where iv = Variable s ("ṃ" ++ show (- n)) n
-
 -- | Like `solveMultConstraints`, but defaults any free choice in the original
 -- constraints to `Un`.
 solveMultConstraintsDU :: MultConstraints -> Validation (Either MultEquation Substitution)
@@ -259,15 +248,16 @@ solveMultConstraintsDU eqs = fmap (defaultUnbound eqs) <$> solveMultConstraints 
 -- by the solver to `Un`.
 solveMultConstraintsDUDF :: MultConstraints -> Validation (Either MultEquation Substitution)
 solveMultConstraintsDUDF eqs =
-  pure (defaultFresh . defaultUnbound eqs <$> solve eqs)
+  fmap (defaultFresh eqs . defaultUnbound eqs) <$> solveMultConstraints eqs
 
 -- | Defaults any free choice introduced by the solver to `Un`.
-defaultFresh :: Substitution -> Substitution
-defaultFresh (Θ ivtms) = Θ [(φ, fmap strip it) | (φ, it) <- ivtms]
+defaultFresh :: MultConstraints -> Substitution -> Substitution
+defaultFresh eqs (Θ ivtms) = Θ [(φ, fmap strip it) | (φ, it) <- ivtms]
   where
+    input = Set.fromList [φ | MultEquation l _ r _ <- eqs, Sup _ lvφs <- [l, r], (_, φ) <- lvφs]
     strip = \case
       m@Lin{}     -> m
-      Sup sp lvφs -> Sup sp [lvφ | lvφ@(_, φ) <- lvφs, internal φ >= -1]
+      Sup sp lvφs -> Sup sp [lvφ | lvφ@(_, φ) <- lvφs, φ `Set.member` input]
 
 -- | Substitute `Un` for every instantiation variable that occurs in the
 -- constraints but is not bound by the substitution, i.e.,
@@ -282,28 +272,3 @@ defaultUnbound eqs sub@(Θ ivtms) =
                 ]
       free  = Set.toList (Set.difference ivE bound)
   in foldr (\φ -> (subsMult φ (Un (getSpan φ)) <>)) sub free
-
--- | Solves the equations, returning he first most general unifier
--- found in breadth-first search. On failure, returns the first
--- equation with no solution (with the accumulated substitution applied).
--- The search is /not/ complete — see the note on `unifySup`.
--- Note that the unifier might include free choices, which include fresh variables not 
--- found in the constraints. To default these to `Un`, use `solveMultConstraintsDUDF`.
-solveMultConstraints :: MultConstraints -> Validation (Either MultEquation Substitution)
-solveMultConstraints eqs = case solve eqs of
-  Left eq         -> return (Left eq)
-  Right (Θ ivtms) -> do
-    let freshes = Set.unions [Set.fromList [φ | isFresh φ] `Set.union`
-                                either (const Set.empty) freshIn it | (φ, it) <- ivtms]
-    ren <- Map.fromList <$> for (Set.toList freshes) 
-      \v -> (v,) . (\i -> v {external = "ṃ" ++ show i, internal = i}) <$> incCounter     
-    return (Right (Θ [(Map.findWithDefault φ φ ren, fmap (rename ren) it) | (φ, it) <- ivtms]))
-  where
-    -- the kind unifier mints from the same negative range, and 'Variable' equality is by id
-    isFresh φ = internal φ < -1
-    freshIn = \case
-      Lin{}      -> Set.empty
-      Sup _ lvφs -> Set.fromList [φ | (_, φ) <- lvφs, isFresh φ]
-    rename r = \case
-      m@Lin{}    -> m
-      Sup sp lvφs -> Sup sp [(lv, Map.findWithDefault φ φ r) | (lv, φ) <- lvφs]
