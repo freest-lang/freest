@@ -171,19 +171,19 @@ solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
   -- Most general unifier(s) of `⊔A = ⊔B` modulo ACUI (associativity,
   -- commutativity, idempotence, unit), with the `ObjLv` atoms as constants.
   -- Let AS, BS be the solvable variables of each side (a common variable is in
-  -- both). A fresh region variable z(x,y) stands for the content shared by
+  -- both). A fresh overlap variable z(x,y) stands for the content shared by
   -- x∈AS and y∈BS; each variable is bound to the join of its row/column of
-  -- regions, so ⊔A = ⊔(all z) = ⊔B by construction. A constant occurring on one
+  -- overlaps, so ⊔A = ⊔(all z) = ⊔B by construction. A constant occurring on one
   -- side only must be absorbed by some solvable variable on the other side —
   -- each absorption choice is a separate unifier (`assignTo`), and that is the
-  -- only source of non-unitarity; the region construction itself is
+  -- only source of non-unitarity; the overlap construction itself is
   -- deterministic. The absorbing top `Lin` is not handled here but by the
   -- `Lin = Sup` case (`collapseSide`).
   --
   -- INCOMPLETE, deliberately recorded. Only a constant occurring on *one* side
   -- is ever offered to a variable, so no returned unifier gives a variable a
   -- constant occurring on *both*. The witness is `φ ⊔ m = m` with φ solvable and
-  -- m rigid: only1 = {φ}, BS = ∅, so φ gets neither a region nor an absorbed
+  -- m rigid: only1 = {φ}, BS = ∅, so φ gets neither an overlap nor an absorbed
   -- constant and the sole answer is `φ ↦ *`, losing the equally valid and
   -- incomparable `φ ↦ m`. Every omitted unifier only ever *raises* a variable,
   -- so the bias is systematically towards `*`, the least element — which for a
