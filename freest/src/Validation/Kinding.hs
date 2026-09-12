@@ -765,6 +765,9 @@ boundMultBy :: Multiplicity -> TK.KindedType -> Validation ()
 boundMultBy m = \case
   TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
   TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
+  TK.AppArrow s m' _ _ | hasSolvableVar (Proper s m' Top)
+                                    -> addKindConstraint (Origin s) (Proper s m' Top) (Proper s m Top)
+  TK.TName s k _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
   _                                 -> pure ()
 
 -- | Decompose a pattern against its type into the (variable, type) leaves it
