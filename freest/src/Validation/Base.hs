@@ -18,13 +18,11 @@ module Validation.Base
   , checkWhenSolved
   , setKindSolution
   , dischargeObligations
-  , addUnDefault
   , unfold
   )
 where
 
 import Syntax.Base
-import Data.Set qualified as Set
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
@@ -65,10 +63,6 @@ data ValidationState
     -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
     -- baseKind υ₁ is still a variable; discharged once baseKinds are solved.
     , condSeqMults :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-    -- | Multiplicity variables that default to @*@ rather than the top when
-    -- nothing constrains them: an output-polarity binder is covariant, so the
-    -- most usable choice for its remote consumer is unrestricted.
-    , unDefaults :: Set.Set Variable
     -- | Kind-reading checks recorded to run after the solve, most recent first.
     , obligations :: [Obligation]
     -- | The solution kinding computed, kept for 'dischargeObligations'.
@@ -86,7 +80,6 @@ emptyValidationState = ValidationState
   , multEquations = []
   , baseKindConstraints = []
   , condSeqMults = []
-  , unDefaults = Set.empty
   , obligations = []
   , kindSolution = Nothing
   }
@@ -126,10 +119,6 @@ addMultEquation o m1 m2 =
 addBaseKindConstraint :: BaseKindConstraint -> Validation ()
 addBaseKindConstraint c =
   modify \s -> s{baseKindConstraints = c : baseKindConstraints s}
-
--- | Record a multiplicity variable that defaults to @*@ (see 'unDefaults').
-addUnDefault :: Variable -> Validation ()
-addUnDefault φ = modify \s -> s{unDefaults = Set.insert φ (unDefaults s)}
 
 -- | How a deferred check grounds the kinds it captured: the kind solution's
 -- substitution, at each of the sorts a check may need to read.
@@ -180,19 +169,18 @@ type KindState =
   , [(Origin, K.Kind, K.Kind)]
   , [(Origin, K.Multiplicity, K.Multiplicity)]
   , [BaseKindConstraint]
-  , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-  , Set.Set Variable )
+  , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)] )
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in
 -- place, for a solution that is not the last word on them.
 peekKindState :: Validation KindState
 peekKindState = gets \s ->
-  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, unDefaults s)
+  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s)
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
 takeKindState = peekKindState <* modify \st ->
-  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = [], unDefaults = Set.empty}
+  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = []}
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

@@ -523,9 +523,11 @@ check tdecls ddecls kctx tctx e t = case e of
       T.AppArrow s' m t1 t2 -> do
         case normalise tdecls t1 of
           T.AppQuantS s'' Neg a k t1' -> do
-            checkEquivTypes tdecls ddecls (Left e)
-              (T.AppArrow s' m t1 t2)
-              (T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1'))
+            let actual = T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1')
+            (mcsR, _) <- LTI.match e tdecls (T.AppArrow s' m t1 t2) actual
+                           `catchE` \_ -> pure ([], mempty)
+            _ <- routeMultConstraints s mcsR
+            checkEquivTypes tdecls ddecls (Left e) (T.AppArrow s' m t1 t2) actual
             return (e, tctx)
           whnf -> throwE (TypeMismatchReceiveType s t (Just whnf))
       _ -> throwE (TypeMismatchReceiveType s t Nothing)

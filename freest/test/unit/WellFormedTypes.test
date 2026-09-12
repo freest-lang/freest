@@ -84,9 +84,12 @@ case forall (a : *T) ->  a -> a -> a : *T
 
 case forall (a : *T) ->  (a -> a) -> a -> a : *T
 
-case (exists (a : *T), (a, a -> Int, a -> a)) : *T
+-- Declared 1T, not *T: standalone types have no consumer, so nothing justifies
+-- the unrestricted binder once inference stops defaulting to it. The written
+-- *T still satisfies 1T, so the annotated cases below check as before.
+case (exists (a : *T), (a, a -> Int, a -> a)) : 1T
 
-case (exists (a : *T), (a, a -> Bool, a -> a, a -> a)) : *T
+case (exists (a : *T), (a, a -> Bool, a -> a, a -> a)) : 1T
 where
   type Bool : *T
   data Bool = True | False

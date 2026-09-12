@@ -71,8 +71,8 @@ applyMultSubst σ = go Set.empty
 
 -- | The paper's Fig. 14: each variable starts at the top and is met with its
 -- rigid upper bounds. It only computes; 'unsatisfiedMultSub' checks.
-solveMultSubs :: Set Variable -> MultSubConstraints -> Map.Map Variable Multiplicity
-solveMultSubs undefs cs = raiseLowerBounds (aliasMutual (fixpoint Map.empty))
+solveMultSubs :: MultSubConstraints -> Map.Map Variable Multiplicity
+solveMultSubs cs = aliasMutual (fixpoint Map.empty)
   where
     fixpoint σ = let σ' = foldl' step σ cs in if σ' == σ then σ else fixpoint σ'
 
@@ -93,10 +93,9 @@ solveMultSubs undefs cs = raiseLowerBounds (aliasMutual (fixpoint Map.empty))
     opposite φ ψ (MultSub l r _) = isAtom ψ l && isAtom φ r
     isAtom φ = \case Sup _ [(lv, φ')] -> solvable lv && φ == φ'; _ -> False
     alias σ (φ, ψ)
-      | Map.member φ σ        = bindTo ψ φ σ
-      | Map.member ψ σ        = bindTo φ ψ σ
-      | φ `Set.member` undefs = bindTo ψ φ σ
-      | otherwise             = bindTo φ ψ σ
+      | Map.member φ σ = bindTo ψ φ σ
+      | Map.member ψ σ = bindTo φ ψ σ
+      | otherwise      = bindTo φ ψ σ
     bindTo v rep' σ
       | Map.member v σ = σ
       | root == v      = σ
@@ -105,15 +104,6 @@ solveMultSubs undefs cs = raiseLowerBounds (aliasMutual (fixpoint Map.empty))
     rootOf σ φ = case Map.lookup φ σ of
       Just (VarM _ lv ψ) | solvable lv -> rootOf σ ψ
       _                                -> φ
-
-    -- the top satisfies a lower bound; only a *-defaulting variable can break one
-    raiseLowerBounds σ = foldl' raise σ
-      [ (φ, l') | MultSub l r _ <- cs
-                , VarM _ lv φ <- [applyMultSubst σ r]
-                , solvable lv, φ `Set.member` undefs, not (Map.member φ σ)
-                , let l' = applyMultSubst σ l, rigid l' ]
-    raise σ (φ, m) =
-      Map.insert φ (K.join (Map.findWithDefault (Un (getSpan m)) φ σ) m) σ
 
     rigid     = null . solvables
     solvables = \case Lin{} -> []; Sup _ as -> [φ | (lv, φ) <- as, solvable lv]

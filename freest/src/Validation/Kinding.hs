@@ -105,10 +105,8 @@ resolveExpBndKind (a, Nothing) = (a,) . E.Inferred <$> freshUnifKind a
 resolveQuantBinder :: Polarity -> BaseKind -> (Variable, Maybe Kind) -> Validation (Variable, Kind)
 resolveQuantBinder Pos _ (a, Nothing) = do
   m  <- freshUnifMult (getSpan a)
-  forM_ (multVarOf m) addUnDefault
   bk <- VarBK UnifLv <$> freshUnifBaseKindVar (getSpan a)
   pure (a, Proper (getSpan a) m bk)
-  where multVarOf = \case Sup _ [(_, φ)] -> Just φ; _ -> Nothing
 resolveQuantBinder _ _ ak = resolveBndKind ak
 
 -- | A fresh unification kind variable (see 'resolveBndKind').
@@ -1132,7 +1130,7 @@ provisionalKindSolution :: Validation KindSolution
 provisionalKindSolution = peekKindState >>= solveFrom
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom (binds, cs, meqs, pcs0, condmults, undefs) = do
+solveFrom (binds, cs, meqs, pcs0, condmults) = do
   KindUnifier ksub msubs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
@@ -1142,9 +1140,9 @@ solveFrom (binds, cs, meqs, pcs0, condmults, undefs) = do
   -- equations first: descent only lowers against a bound they have made rigid
   θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
          >>= either (throwE . multErr) (pure . multsOf)
-  let σ   = solveMultSubs undefs
+  let σ   = solveMultSubs
               [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
-      sol = KindSolution ksub psub (Map.union θ σ) undefs
+      sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
   forM_ (unsatisfiedMultSub resolve msubs) \(MultSub m1 m2 o) ->
     throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) o (resolve m2) o)

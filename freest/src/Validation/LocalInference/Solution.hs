@@ -32,7 +32,6 @@ data KindSolution = KindSolution
   { kindVars :: Map.Map Variable Kind          -- ^ whole-kind variables (@K.Var@)
   , baseKinds :: Map.Map Variable BaseKind        -- ^ baseKind variables (@VarBK@)
   , mults    :: Map.Map Variable Multiplicity   -- ^ multiplicity variables
-  , unDefaults :: Set.Set Variable               -- ^ those defaulting to @*@, not the top
   }
 
 -- | Apply the solution to a kind, resolving whole-kind variables to a fixpoint
@@ -68,11 +67,8 @@ resolveMult sol = go Set.empty
           | not (solvable lv)     = Right (lv, φ)                    -- rigid: keep
           | φ `Set.member` seen   = Left (Lin s)                     -- cycle → top
           | Just m <- Map.lookup φ (mults sol) = Left (go (Set.insert φ seen) m)  -- solved: recurse
-          | otherwise             = Left (unconstrained s φ)         -- see 'unDefaults'
+          | otherwise             = Left (Lin s)                     -- unconstrained → top
     in foldr K.join (Sup s keep) subst
-   unconstrained s φ
-     | φ `Set.member` unDefaults sol = K.Un s
-     | otherwise                     = Lin s
 
 -- | Apply the solution to every kind annotation in a type, reconstructing each
 -- node through the kinded smart constructors so derived kinds are recomputed
