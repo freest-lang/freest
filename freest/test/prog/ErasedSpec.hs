@@ -60,8 +60,7 @@ spec = do
 -- warranted by a @channel \@a@ elsewhere — the cross-boundary inference the
 -- fusion work is for. Shrink this list; do not grow it.
 knownGaps :: [FilePath]
-knownGaps =
-  [ "RenderingService.fst" ]
+knownGaps = []
 
 gapMessage :: [Error] -> String
 gapMessage errs =

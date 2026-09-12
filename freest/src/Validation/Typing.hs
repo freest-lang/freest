@@ -624,7 +624,8 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
         _             -> instantiateResult
   (args', mcs, kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
   (mcs', θ') <- LTI.match e tdecls t t''
-  θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
+  localMcs <- routeMultConstraints s (mcs ++ mcs')
+  θ <- LMI.solveMultConstraints localMcs >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ''   -> return (θ'' <> θ')
   forM_ kivs \(k, w) -> checkInstBaseKind s (LI.applySubs θ w) k
@@ -647,7 +648,8 @@ checkArgsQL :: Int
                           , TypeCtx)
 checkArgsQL i s tdecls ddecls kctx tctx t args = do
   (args', mcs, kivs, us, t') <- instantiate s i tdecls ddecls kctx tctx t args
-  θ <- LMI.solveMultConstraints mcs >>= \case
+  localMcs <- routeMultConstraints s mcs
+  θ <- LMI.solveMultConstraints localMcs >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ     -> return θ
   forM_ kivs \(k, t) -> checkInstBaseKind s (LI.applySubs θ t) k
@@ -927,6 +929,28 @@ checkEquivTypes tdecls ddecls eop t1 t2 = checkWhenSolved \g ->
   let (u1, u2) = (groundType g t1, groundType g t2) in
   unless (equivalent (groundDecls g tdecls) u1 u2) $
     throwE (TypeMismatch (getSpan eop) u1 u2 eop)
+
+-- | Hand each constraint to the solver that can still see it. One over
+-- instantiation variables builds this application's substitution; one naming a
+-- kind-inference variable goes to the global solve, since 'LI.applySubs' would
+-- drop the local answer. It travels as a pair of opposite bounds: the descent
+-- solver settles those without minting the overlap variables an equation would.
+routeMultConstraints :: Span -> LMI.MultConstraints -> Validation LMI.MultConstraints
+routeMultConstraints s mcs = do
+  let (global, local) = List.partition mentionsUnif mcs
+  forM_ global \(LMI.MultEquation m1 o1 m2 _) ->
+    unless (sameMult m1 m2) do
+      addKindConstraint o1 (K.Proper s m1 K.Top) (K.Proper s m2 K.Top)
+      addKindConstraint o1 (K.Proper s m2 K.Top) (K.Proper s m1 K.Top)
+  pure local
+  where
+    mentionsUnif (LMI.MultEquation m1 _ m2 _) = any isUnif (atoms m1 ++ atoms m2)
+    isUnif (lv, _) = lv == UnifLv
+    atoms = \case { K.Sup _ as -> as; _ -> [] }
+    sameMult = \cases
+      K.Lin{}      K.Lin{}      -> True
+      (K.Sup _ as) (K.Sup _ bs) -> Set.fromList as == Set.fromList bs
+      _            _            -> False
 
 -- | Type context equivalence. Checks if two type contexts contain the same
 -- variables and constructors, throwing an error if they do not. An expression

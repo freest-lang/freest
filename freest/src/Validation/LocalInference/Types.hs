@@ -46,7 +46,7 @@ match e tdecls = match' e tdecls Set.empty Set.empty
     let fiv12 = fiv t1 `Set.union` fiv t2
     case (t1, t2) of
       -- M-FIV
-      _ | Set.null fiv12 -> return ([], emptySubs)
+      _ | Set.null fiv12 && not (openKinds t1 || openKinds t2) -> return ([], emptySubs)
       -- M-Inst
       (T.Var s k InstLv iv, t2) ->
         return (kindSubConstraints (T.kindOf t2) k, subsType iv t2)
@@ -161,6 +161,27 @@ match e tdecls = match' e tdecls Set.empty Set.empty
 
   foldMatch e tdecls bindings visited (mcs, θ) t1s t2s =
     (<> (mcs, θ)) . fold <$> zipWithM (match' e tdecls bindings visited) t1s t2s
+
+-- | 'fiv' for the other level of open variable: a binder kind inference has not
+-- settled yet. Matching must not stop at a pair that still carries one.
+openKinds :: T.KindedType -> Bool
+openKinds = \case
+  T.Var _ k _ _         -> openK k
+  T.Arrow _ m           -> openM m
+  T.AppForall _ m aks t -> openM m || any (openK . snd) aks || openKinds t
+  T.AppExists _ aks t   -> any (openK . snd) aks || openKinds t
+  T.ForallM _ m _ t     -> openM m || openKinds t
+  T.Abs _ aks t         -> any (openK . snd) aks || openKinds t
+  T.App _ t ts          -> openKinds t || any openKinds ts
+  _                     -> False
+  where
+    openK = \case
+      K.Proper _ m bk -> openM m || (case bk of { K.VarBK lv _ -> lv /= ObjLv; _ -> False })
+      K.Arrow _ a b   -> openK a || openK b
+      K.Var _ lv _    -> lv /= ObjLv
+    openM = \case
+      K.Sup _ as -> any ((/= ObjLv) . fst) as
+      _          -> False
 
 -- | The free instantiation variables in a type.
 fiv :: T.KindedType -> Set.Set (Either Variable Variable)
