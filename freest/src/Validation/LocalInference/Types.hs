@@ -10,15 +10,16 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, incCounter)
+import Validation.Base (Validation, incCounter, addKindConstraint)
+import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Multiplicities
-  (MultConstraints, multEq, kindEqConstraints, kindSubConstraints)
+  (MultConstraints, MultEquation(..), multEq, kindEqConstraints, kindSubConstraints)
 import Validation.LocalInference.Substitution
   (Substitution, emptySubs, subsMult, subsType)
 import Validation.Normalisation 
   (tNameRedex, isWhnf, reduce, normalise)
 
-import Control.Monad (zipWithM, unless)
+import Control.Monad (zipWithM, unless, forM_)
 import Control.Monad.Extra (whileM)
 import Control.Monad.Trans.Except (throwE)
 import Data.Foldable (fold)
@@ -123,9 +124,17 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       -- M-Quant
       (T.AppQuant s1 p1 bk1 m1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 bk2 m2 ((a2, k2) : aks2) t2')
         | p1 == p2 && bk1 == bk2
-        -> first (mcs ++) <$> match' e tdecls (Set.insert (a1, a2) bindings) visited
-            (T.AppQuant s1 p1 bk1 m1 aks1 t1') (T.AppQuant s2 p2 bk2 m2 aks2 t2')
-        where mcs = kindEqConstraints k1 k2 ++ [multEq m1 m2 | p1 == Neg && bk1 == K.Top]
+        -> do
+            -- paired binder kinds must agree, and only kind inference still sees a
+            -- binder variable: give it the multiplicity relation as two opposite
+            -- bounds, over a common baseKind so no baseKind is constrained
+            forM_ eqs \(MultEquation em1 eo em2 _) -> do
+              addKindConstraint eo (K.Proper (getSpan e) em1 K.Top) (K.Proper (getSpan e) em2 K.Top)
+              addKindConstraint eo (K.Proper (getSpan e) em2 K.Top) (K.Proper (getSpan e) em1 K.Top)
+            first (mcs ++) <$> match' e tdecls (Set.insert (a1, a2) bindings) visited
+              (T.AppQuant s1 p1 bk1 m1 aks1 t1') (T.AppQuant s2 p2 bk2 m2 aks2 t2')
+        where eqs = kindEqConstraints k1 k2
+              mcs = eqs ++ [multEq m1 m2 | p1 == Neg && bk1 == K.Top]
       -- M-Var
       (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
