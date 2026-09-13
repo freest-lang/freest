@@ -566,6 +566,7 @@ scopeType ctx = \case
   T.Float s -> pure $ T.Float s
   T.Char s -> pure $ T.Char s
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity ctx m
+  T.Quant s Neg K.Top m -> T.Quant s Neg K.Top <$> scopeMultiplicity ctx m
   T.Quant s p bk m -> pure $ T.Quant s p bk m
   T.ForallM s m φs t -> do
     φs' <- mapM freshInternal φs
