@@ -94,5 +94,5 @@ opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper <**> simpleVersioner version)
      ( fullDesc
      <> progDesc version
-     <> header "Nothing here yet!"
+    --  <> header "Nothing here yet!" -- Inserts text above "Usage", usually something like "FreeST compiler, version 0.1.0", but we are already doing that with version.
      )
