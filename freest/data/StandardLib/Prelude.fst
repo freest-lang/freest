@@ -334,7 +334,7 @@ unwords (w :: ws) = w ++ go ws
 fork : forall #m (a : *T) -> (() -m-> a) -> ()
 fork @a = undefined
 
-send : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b
+send : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b -- TODO: prenex
 send @a = undefined
 
 receive : forall (a : 1T) (b : 1S) -> ?a;b -> (a, b)

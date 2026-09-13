@@ -6,19 +6,13 @@ compose :
   -m+n-> c
 compose #m #n @a @b @c f g x = f (g x)
 
-send' : forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b -- TODO: move to Prelude
-send' = undefined @(forall #m (a : m T) -> a -> forall (b : 1S) -> !a;b -m-> b)
-
 sendAndClose : forall #m (a : m T) -> a -> !a ; Close -m-> () -- TODO: move to Prelude
-sendAndClose #m @a = compose (compose close) (\(x : a) -> send' x @Close)
+sendAndClose #m @a = (close .) . send -- errors when making parameters implicit, applying @Close to send, etc...
 
-main : Int
+main : ()
 main =
-  let plusTwo = compose succ succ
-      -- succAfter = (.) succ
+  let plusTwo = succ . succ
       (o, i) = channel @(!Int; Close) 
-      sendPlusTwo = compose (\(x : Int) -1-> close (send x o)) plusTwo 
-      sendAfter = (.) (\(x : Int) -1-> close (send x o)) -- plusTwo
-  in sendPlusTwo 0; print (receiveAndWait i)
-     -- (succAfter (succAfter (id @Int))) 0; ()
--- <bucket: other>
+      sendPlusTwo = close . (flip send o) . plusTwo
+  in sendPlusTwo 0;
+     print (receiveAndWait i)
