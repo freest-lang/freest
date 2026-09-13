@@ -309,6 +309,12 @@ dropWhile p (x :: xs) | p x       = dropWhile p xs
 span : forall (a : *T) -> (a -> Bool) -> [a] -> ([a], [a])
 span p xs = (takeWhile p xs, dropWhile p xs)
 
+-- | Join a list of lists with a separator, e.g. @intercalate ", " ["a","b"] == "a, b"@.
+intercalate : forall (a : *T) -> [a] -> [[a]] -> [a]
+intercalate _   []        = []
+intercalate _   [x]       = x
+intercalate sep (x :: xs) = x ++ sep ++ intercalate sep xs
+
 -- ** Strings
 
 isSpace : Char -> Bool
