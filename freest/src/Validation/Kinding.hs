@@ -767,6 +767,8 @@ boundMultBy m = \case
   TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
   TK.AppArrow s m' _ _ | hasSolvableVar (Proper s m' Top)
                                     -> addKindConstraint (Origin s) (Proper s m' Top) (Proper s m Top)
+  TK.ForallM s m' _ _ | hasSolvableVar (Proper s m' Top)
+                                    -> addKindConstraint (Origin s) (Proper s m' Top) (Proper s m Top)
   TK.TName s k _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
   _                                 -> pure ()
 
