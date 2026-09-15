@@ -1,0 +1,4 @@
+<pending>
+
+Accepted today (prints 3). Retire once call sites check against per-call copies
+of the solved binder kind (handoff-2026-09-15 §4, route 2).
