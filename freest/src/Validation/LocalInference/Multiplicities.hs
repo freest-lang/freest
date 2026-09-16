@@ -9,11 +9,9 @@ module Validation.LocalInference.Multiplicities
   , applyMultSubst
   , solveMultSubs
   , kindEqConstraints
-  , kindSubConstraints
-  , inferredMult
+  , rigid
+  , solvables
   , solveMultConstraints
-  , solveMultConstraintsDU
-  , solveMultConstraintsDUDF
   ) where
 
 import Syntax.Base
@@ -49,18 +47,12 @@ kindEqConstraints = \cases
   _ _ -> []
 
 -- | Leaves naming a kind inference variable are left to the global solve.
-kindSubConstraints :: K.Kind -> K.Kind -> MultConstraints
-kindSubConstraints = \cases
-  (K.Proper _ m1 bk1) (K.Proper _ m2 bk2)
-    | bk1 K.<: bk2, not (inferredMult m1 || inferredMult m2) -> [multEq (K.join m1 m2) m2]
-  (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
-                                          ++ kindSubConstraints k12 k22
-  _ _ -> []
+-- | A multiplicity with no variable left to solve.
+rigid :: Multiplicity -> Bool
+rigid = null . solvables
 
-inferredMult :: Multiplicity -> Bool
-inferredMult = \case
-  Sup _ as -> any ((== UnifLv) . fst) as
-  Lin{}    -> False
+solvables :: Multiplicity -> [Variable]
+solvables = \case Lin{} -> []; Sup _ as -> [φ | (lv, φ) <- as, solvable lv]
 
 data MultSub = MultSub Multiplicity Multiplicity Origin
 
@@ -112,8 +104,6 @@ solveMultSubs cs = aliasMutual (fixpoint Map.empty)
       Just (VarM _ lv ψ) | solvable lv -> rootOf σ ψ
       _                                -> φ
 
-    rigid     = null . solvables
-    solvables = \case Lin{} -> []; Sup _ as -> [φ | (lv, φ) <- as, solvable lv]
     isTop     = \case Lin{} -> True; _ -> False
 
 -- The substitution accumulated so far.
@@ -123,8 +113,6 @@ newtype SolverState = SolverState (Map.Map Variable Multiplicity)
 -- found in breadth-first search. On failure, returns the first
 -- equation with no solution (with the accumulated substitution applied).
 -- The search is /not/ complete — see the note on `unifySup`.
--- Note that the unifier might include free choices, which include fresh variables not 
--- found in the constraints. To default these to `Un`, use `solveMultConstraintsDUDF`.
 solveMultConstraints :: MultConstraints -> Validation (Either MultEquation Substitution)
 solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
   where
@@ -182,9 +170,6 @@ solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
   -- so the bias is systematically towards `*`, the least element — which for a
   -- multiplicity read as a bound is the least general choice. Not unsoundness:
   -- every answer returned does satisfy the equations.
-  --
-  -- Kind inference no longer sends bounds here (see 'solveMultSubs'); local
-  -- inference's 'kindSubConstraints' still does, and still lands on `*`.
   unifySup :: Multiplicity -> Multiplicity -> SolverState -> Validation [SolverState]
   unifySup m1 m2 (SolverState sub) = do
     let s     = getSpan m1
@@ -231,37 +216,3 @@ solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
       u    <- absorbers
       rest <- assignTo cs absorbers
       return (Map.insertWith Set.union u (Set.singleton c) rest)
-
--- | Like `solveMultConstraints`, but defaults any free choice in the original
--- constraints to `Un`.
-solveMultConstraintsDU :: MultConstraints -> Validation (Either MultEquation Substitution)
-solveMultConstraintsDU eqs = fmap (defaultUnbound eqs) <$> solveMultConstraints eqs
-
--- | Like `solveMultConstraintsDU`, but additionally defaults any free choice introduced
--- by the solver to `Un`.
-solveMultConstraintsDUDF :: MultConstraints -> Validation (Either MultEquation Substitution)
-solveMultConstraintsDUDF eqs =
-  fmap (defaultFresh eqs . defaultUnbound eqs) <$> solveMultConstraints eqs
-
--- | Defaults any free choice introduced by the solver to `Un`.
-defaultFresh :: MultConstraints -> Substitution -> Substitution
-defaultFresh eqs (Θ ivtms) = Θ [(φ, fmap strip it) | (φ, it) <- ivtms]
-  where
-    input = Set.fromList [φ | MultEquation l _ r _ <- eqs, Sup _ lvφs <- [l, r], (_, φ) <- lvφs]
-    strip = \case
-      m@Lin{}     -> m
-      Sup sp lvφs -> Sup sp [lvφ | lvφ@(_, φ) <- lvφs, φ `Set.member` input]
-
--- | Substitute `Un` for every instantiation variable that occurs in the
--- constraints but is not bound by the substitution, i.e.,
--- σ ∪ { α ↦ 0 | α ∈ iv(E) ∖ dom(σ) }
-defaultUnbound :: MultConstraints -> Substitution -> Substitution
-defaultUnbound eqs sub@(Θ ivtms) =
-  let bound = Set.fromList [φ | (φ, _) <- ivtms]
-      ivE   = Set.fromList
-                [ φ | MultEquation l _ r _ <- eqs
-                    , Sup _ lvφs <- [l, r]
-                    , (InstLv, φ) <- lvφs
-                ]
-      free  = Set.toList (Set.difference ivE bound)
-  in foldr (\φ -> (subsMult φ (Un (getSpan φ)) <>)) sub free

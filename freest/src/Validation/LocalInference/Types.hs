@@ -13,7 +13,7 @@ import UI.Error qualified as Error
 import Validation.Base (Validation, incCounter, addKindConstraint)
 import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Multiplicities
-  (MultConstraints, MultEquation(..), multEq, kindEqConstraints, kindSubConstraints)
+  (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
 import Validation.LocalInference.Substitution
   (Substitution, emptySubs, subsMult, subsType)
 import Validation.Normalisation 
@@ -49,10 +49,8 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       -- M-FIV
       _ | Set.null fiv12 && not (openKinds t1 || openKinds t2) -> return ([], emptySubs)
       -- M-Inst
-      (T.Var s k InstLv iv, t2) ->
-        return (kindSubConstraints (T.kindOf t2) k, subsType iv t2)
-      (t1, T.Var s k InstLv iv) ->
-        return (kindSubConstraints (T.kindOf t1) k, subsType iv t1)
+      (T.Var _ _ InstLv iv, t2) -> return ([], subsType iv t2)
+      (t1, T.Var _ _ InstLv iv) -> return ([], subsType iv t1)
       -- M-DualInst
       (T.AppDual _ t1'@(T.Var _ _ InstLv iv), t2) ->
         match' e tdecls bindings visited t1' (T.AppDual (getSpan t2) t2)

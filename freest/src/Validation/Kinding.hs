@@ -50,7 +50,7 @@ import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities
   ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs
-  , solveMultConstraints )
+  , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveNonMultModule )
 import Validation.LocalInference.Substitution
@@ -1176,7 +1176,6 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
     throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) (cause o m1) (resolve m2) (cause o why2))
   return sol
   where
-    solvables = \case Sup _ as -> [φ | (lv, φ) <- as, solvable lv]; Lin{} -> []
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o
     multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]

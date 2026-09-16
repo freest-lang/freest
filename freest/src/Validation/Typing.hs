@@ -612,8 +612,7 @@ checkInstBaseKind sp t k = checkWhenSolved \g ->
     go _ (K.Var _ _ _) = internalError "unhandled kind variable"
     go _ _ = return ()
 
--- | 'checkInstBaseKind', plus the multiplicity bounds naming kind inference
--- variables, which the local solve leaves out.
+-- | 'checkInstBaseKind', plus the call's multiplicity bounds for the global solve.
 checkInstKind :: Span -> LI.Substitution -> K.Kind -> [(Variable, K.Multiplicity)] -> T.KindedType -> Validation ()
 checkInstKind sp θ k ms w = do
   checkInstBaseKind sp t k
@@ -621,7 +620,7 @@ checkInstKind sp θ k ms w = do
   where
     t = LI.applySubs θ w
     go = \cases
-      (K.Proper _ m1 _) (K.Proper _ m2 _) | LMI.inferredMult m1 || LMI.inferredMult m2 ->
+      (K.Proper _ m1 _) (K.Proper _ m2 _) ->
         addCallBound (Origin sp) m1 m2 (map (second (LI.applySubsMult θ)) ms)
       (K.Arrow _ _ k12) (K.Arrow _ _ k22) -> go k12 k22
       _ _ -> return ()
@@ -638,26 +637,17 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
         T.ForallM{}   -> instantiate
         _             -> instantiateResult
   (args', mcs, kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
-  (mcs', θ') <- LTI.match e tdecls t t''
-  θ <- solveApp s θ' (mcs ++ mcs')
+  (mcs', θ) <- LTI.match e tdecls t t''
+  forwardMults s θ (mcs ++ mcs')
   forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
   checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
 
--- | Solve an application's multiplicity equations over the variables it owns,
--- passing those naming a global variable on to the global solve.
-solveApp :: Span -> LI.Substitution -> LMI.MultConstraints -> Validation LI.Substitution
-solveApp s θ' mcs = do
-  let (global, local) = List.partition names mcs
-  θ <- LMI.solveMultConstraints local >>= \case
-    Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
-    Right θ'' -> return (θ'' <> θ')
-  forM_ global \(LMI.MultEquation l _ r _) ->
-    addMultEquation (Origin s) (LI.applySubsMult θ l) (LI.applySubsMult θ r)
-  return θ
-  where
-    names (LMI.MultEquation l _ r _) = LMI.inferredMult l || LMI.inferredMult r
+-- | Pass an application's multiplicity equations to the global solve.
+forwardMults :: Span -> LI.Substitution -> LMI.MultConstraints -> Validation ()
+forwardMults s θ = mapM_ \(LMI.MultEquation l _ r _) ->
+  addMultEquation (Origin s) (LI.applySubsMult θ l) (LI.applySubsMult θ r)
 
 -- | Check function arguments while inferring type and multiplicity applications
 -- using the Quick Look method.
@@ -674,10 +664,10 @@ checkArgsQL :: Int
                           , TypeCtx)
 checkArgsQL i s tdecls ddecls kctx tctx t args = do
   (args', mcs, kivs, us, t') <- instantiate s i tdecls ddecls kctx tctx t args
-  θ <- solveApp s mempty mcs
-  forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
-  (args'', tctx') <- checkValArgs tdecls ddecls kctx θ tctx args' us
-  return (args'', LI.applySubs θ t', tctx')
+  forwardMults s mempty mcs
+  forM_ kivs \(k, ms, w) -> checkInstKind s mempty k ms w
+  (args'', tctx') <- checkValArgs tdecls ddecls kctx mempty tctx args' us
+  return (args'', t', tctx')
 
 -- | Check value arguments agains a list of types, applying a substitution to
 -- the types. The substitution is also used to substitute variables in non-value
@@ -729,12 +719,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
             Just ki -> do Kinding.checkK (T.fromVariable ObjLv ai ki) k
                           return ki
             Nothing -> return k
-          case mm of
-            Just m' -> unless (m' == m) do
-              throwE (ArrowMultMismatch (spanFromTo ai fe) fe i
-                       m (Origin (getSpan m))
-                       m' (Origin (getSpan m')))
-            Nothing -> return ()
+          forM_ mm (matchArrowMult (spanFromTo ai fe) i m)
           (rhs', tctxi') <- checkFun' (i + 1) (Map.insert (Left ai) ki kctxi) tctxi ps''
             (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv ai ki) u)
           checkEquivTypeCtxsFun m tctxi' tctxi (spanFromTo ai rhs)
@@ -745,12 +730,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
               Kinding.checkProperK ti
               checkEquivTypes tdecls ddecls (Right pi) ti u
             Nothing -> return ()
-          case mm of
-            Just m' -> unless (m' == m) do
-              throwE (ArrowMultMismatch (spanFromTo pi fe) fe i
-                       m (Origin (getSpan m))
-                       m' (Origin (getSpan m')))
-            Nothing -> return ()
+          forM_ mm (matchArrowMult (spanFromTo pi fe) i m)
           (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
           let kctxi' = Map.union kctxp kctxi
           (rhs', tctxi') <- checkFun' (i + 1) kctxi' (Map.union (freshCtx tctxp) tctxi) ps'' v
@@ -758,12 +738,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
           checkEquivTypeCtxsFun m tctxi'' tctxi (spanFromTo pi rhs)
           return (rhs', tctxi'')
         (MultLevel φi : ps'', T.ForallM s' m (φ : φs) u) -> do
-          case mm of
-            Just m' -> unless (m' == m) do
-              throwE (ArrowMultMismatch (spanFromTo φi fe) fe i
-                       m (Origin (getSpan m))
-                       m' (Origin (getSpan m')))
-            Nothing -> return ()
+          forM_ mm (matchArrowMult (spanFromTo φi fe) i m)
           (rhs', tctxi') <- checkFun' (i + 1) kctxi tctxi ps''
             ((if null φs then id else T.ForallM s' m φs) $ 
               subsMultType ObjLv φ (K.VarM (getSpan φi) ObjLv φi) u)       
@@ -783,6 +758,10 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
       ExpLevel (p, mt) -> maybe (getSpan p) (spanFromTo p) mt
       TypeLevel (a, mk) -> maybe (getSpan a) (spanFromTo a) mk
       MultLevel φ -> getSpan φ
+    matchArrowMult sp i m m'
+      | not (LMI.rigid m && LMI.rigid m') = addMultEquation (Origin (getSpan m')) m m'
+      | otherwise = unless (m' == m) do
+          throwE (ArrowMultMismatch sp fe i m (Origin (getSpan m)) m' (Origin (getSpan m')))
     fpe = case fe of
       Left f -> Left (Left f)
       Right e -> Right e
@@ -813,7 +792,7 @@ checkPat tdecls ddecls kctx p t = case p of
     checkEquivTypes tdecls ddecls (Right p) t (T.List s (T.Char s))
     pure (kctx, Map.empty)
   -- x
-  E.VarPat    s x   -> (kctx,) . Map.singleton (Left x) <$> escape x t
+  E.VarPat    s x   -> (kctx, Map.singleton (Left x) t) <$ checkNoOpenTypeArg x t
   -- (@t1, ..., @tn, p)
   E.PackPat s aks p ->
     case normalise tdecls t of
@@ -905,18 +884,14 @@ checkPat tdecls ddecls kctx p t = case p of
     Kinding.boundMultBy (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
       (throwE (NonLinPat s p (groundType g t)))
-    t' <- escape x t
-    second (Map.insert (Left x) t') <$> checkPat tdecls ddecls kctx p' t
+    checkNoOpenTypeArg x t
+    second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
 
--- | A type reaching a binder leaves the application that built it: its open
--- multiplicities pass to the global solve, and an open type argument is an error.
-escape :: Variable -> T.KindedType -> Validation T.KindedType
-escape x t = case [iv | Left iv <- ivs] of
-  iv : _ -> throwE (CannotInferTypeArgAtBinding (getSpan x) x (getSpan iv))
-  []     -> pure (foldr promote t [iv | Right iv <- ivs])
-  where
-    ivs = Set.toList (LTI.fiv t)
-    promote iv = subsMultType InstLv iv (K.VarM (getSpan iv) UnifLv iv)
+-- | A type reaching a binder may not leave a type argument open: types have no
+-- global store, so each use would instantiate it anew.
+checkNoOpenTypeArg :: Variable -> T.KindedType -> Validation ()
+checkNoOpenTypeArg x t = forM_ (take 1 [iv | Left iv <- Set.toList (LTI.fiv t)]) \iv ->
+  throwE (CannotInferTypeArgAtBinding (getSpan x) x (getSpan iv))
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
 -- pattern/expression where the RHS occurs in, for error messages), this 
@@ -1054,9 +1029,8 @@ instantiateWith :: Bool
 instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
   (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] [] args
   let kivs' = [(k, ms, LI.applySubs θ t) | (k, ms, t) <- kivs]
-      mcs'  = flip concatMap kivs' \(k, _, t) -> LMI.kindSubConstraints (T.kindOf t) k
   return ( map (mapLevel id (LI.applySubs θ) (LI.applySubsMult θ)) args'
-         , mcs ++ mcs'
+         , mcs
          , kivs'
          , us
          , t2 )
@@ -1154,9 +1128,9 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               (_, _, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
-            e (T.Var _ k InstLv iv) -> do
+            e (T.Var _ _ InstLv iv) -> do
               (_, t2, _) <- synth tdecls ddecls kctx tctx e
-              return (LMI.kindSubConstraints (T.kindOf t2) k, LI.subsType iv t2)
+              return ([], LI.subsType iv t2)
             -- EXPERIMENTAL (SEE ORIGINAL BELOW)
             -- Try to synthesise the lambda (works when its parameters are
             -- annotated), recovering full instantiation constraints. If it
