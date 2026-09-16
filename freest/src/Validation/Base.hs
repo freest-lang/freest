@@ -11,6 +11,7 @@ module Validation.Base
   , addBaseKindConstraint
   , addCondSeqMult
   , addCallBound
+  , addMultParam
   , KindState
   , peekKindState
   , takeKindState
@@ -64,9 +65,11 @@ data ValidationState
     -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
     -- baseKind υ₁ is still a variable; discharged once baseKinds are solved.
     , condSeqMults :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-    -- | Bounds @(o, m1, m2)@ meaning @m1 <: m2@, where @m2@ is a binder kind
-    -- inference owns and @o@ a call instantiating it.
-    , callBounds :: [(Origin, K.Multiplicity, K.Multiplicity)]
+    -- | Bounds @(o, m1, m2, ms)@ meaning @m1 <: m2@, from a call @o@ that
+    -- instantiates @m2@'s solution by @ms@.
+    , callBounds :: [(Origin, K.Multiplicity, K.Multiplicity, [(Variable, K.Multiplicity)])]
+    -- | A function's #m parameter and the signature binder it stands for.
+    , multParams :: Map.Map Variable Variable
     -- | Kind-reading checks recorded to run after the solve, most recent first.
     , obligations :: [Obligation]
     -- | The solution kinding computed, kept for 'dischargeObligations'.
@@ -85,6 +88,7 @@ emptyValidationState = ValidationState
   , baseKindConstraints = []
   , condSeqMults = []
   , callBounds = []
+  , multParams = Map.empty
   , obligations = []
   , kindSolution = Nothing
   }
@@ -169,9 +173,13 @@ addCondSeqMult o bk φ m1 m2 =
   modify \s -> s{condSeqMults = (o, bk, φ, m1, m2) : condSeqMults s}
 
 -- | Record a call-site bound (see 'callBounds').
-addCallBound :: Origin -> K.Multiplicity -> K.Multiplicity -> Validation ()
-addCallBound o m1 m2 =
-  modify \s -> s{callBounds = (o, m1, m2) : callBounds s}
+addCallBound :: Origin -> K.Multiplicity -> K.Multiplicity -> [(Variable, K.Multiplicity)] -> Validation ()
+addCallBound o m1 m2 ms =
+  modify \s -> s{callBounds = (o, m1, m2, ms) : callBounds s}
+
+-- | Record a function's #m parameter (see 'multParams').
+addMultParam :: Variable -> Variable -> Validation ()
+addMultParam φ φ' = modify \s -> s{multParams = Map.insert φ φ' (multParams s)}
 
 -- | Everything the kind solver reads: the bindings and each sort of constraint.
 type KindState =
@@ -180,13 +188,14 @@ type KindState =
   , [(Origin, K.Multiplicity, K.Multiplicity)]
   , [BaseKindConstraint]
   , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-  , [(Origin, K.Multiplicity, K.Multiplicity)] )
+  , [(Origin, K.Multiplicity, K.Multiplicity, [(Variable, K.Multiplicity)])]
+  , Map.Map Variable Variable )
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in
 -- place, for a solution that is not the last word on them.
 peekKindState :: Validation KindState
 peekKindState = gets \s ->
-  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, callBounds s)
+  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, callBounds s, multParams s)
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState

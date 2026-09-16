@@ -45,7 +45,7 @@ import Compiler.Bug ( internalError )
 import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
-import Validation.Substitution ( subs, subsAll, subsMultType )
+import Validation.Substitution ( subs, subsAll, subsMultType, subsMultMult )
 import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities
@@ -852,7 +852,8 @@ kindFun tdecls ddecls e = kindFun' 0 []
         -- the parameter pattern's bound leaves, so the body kinds with their types
         let (pvars, _) = decomposePat tdecls ddecls p' tp'
         first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) (pvars ++ tracked) kctxi' tctxds ps' rhs v
-      (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) ->
+      (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) -> do
+        addMultParam φ φ'
         first (MultLevel φ :) <$> kindFun' (i + 1) tracked kctx tctxds ps' rhs
           ((if null φs then id else TK.ForallM s' m φs) $
             subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u)
@@ -867,6 +868,7 @@ kindFun tdecls ddecls e = kindFun' 0 []
           rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv a' k) u)
       (pi : ps', TK.ForallM s' m (φ' : φs) u) -> do
         φ'' <- freshInternal φ'
+        addMultParam φ'' φ'
         first (MultLevel φ'' :) <$> kindFun' (i + 1) tracked kctx tctxds (pi : ps') rhs
           ((if null φs then id else TK.ForallM s' m φs) $
             subsMultType ObjLv φ' (VarM (getSpan φ'') ObjLv φ'') u)
@@ -1051,6 +1053,10 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
       functionType = \case
         E.Var _ v -> normalise tdecls <$> tctxds Map.!? v
         _         -> Nothing
+      neutralMults co = \case
+        Proper s _ bk -> Proper s (if co then Un s else Lin s) bk
+        Arrow s k1 k2 -> Arrow s (neutralMults (not co) k1) (neutralMults co k2)
+        k             -> k
       kindArgs _ [] = pure []
       kindArgs mt' (arg : rest) = case (arg, mt') of
         (ExpLevel a, Just (TK.AppArrow _ _ u v)) -> do
@@ -1058,7 +1064,7 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
           (ExpLevel a' :) <$> kindArgs (Just (normalise tdecls v)) rest
         (TypeLevel ty, Just (TK.AppForall s' m ((b, k) : bks) u)) -> do
           ty' <- synth kctx ty
-          checkK ty' k
+          checkSubkindOf ty' (if hasSolvableVar k then neutralMults True (TK.kindOf ty') else TK.kindOf ty') k
           (TypeLevel ty' :) <$> kindArgs
             (Just . normalise tdecls
                $ (if null bks then id else TK.AppForall s' m bks) (subs b ty' u))
@@ -1137,7 +1143,7 @@ provisionalKindSolution :: Validation KindSolution
 provisionalKindSolution = peekKindState >>= solveFrom
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom (binds, cs, meqs, pcs0, condmults, calls) = do
+solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
   KindUnifier ksub msubs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
@@ -1147,15 +1153,18 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls) = do
   -- equations first: descent only lowers against a bound they have made rigid
   θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
          >>= either (throwE . multErr) (pure . multsOf)
-  let subs' ms = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- ms]
-      σ₀  = solveMultSubs (subs' msubs)
-      callSubs = [MultSub m1 m2 o | (o, m1, m2) <- calls]
-      -- a kind naming the signature's own #m is unreadable at a call that does not substitute it
-      owned σ' (MultSub _ r _) = null [() | Sup _ as <- [σ' r], (ObjLv, _) <- as]
-      σ   = solveMultSubs (subs' (msubs ++ filter (owned (applyMultSubst σ₀ . applyMultSubst θ)) callSubs))
+  let bodySubs = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
+      callSubs σ' = [ MultSub (applyMultSubst θ m1) (instantiate ms (applyMultSubst σ' (applyMultSubst θ m2))) o
+                    | (o, m1, m2, ms) <- calls ]
+      instantiate ms m = foldr (\(φ, m') -> subsMultMult ObjLv φ m') (asSignature m) ms
+      asSignature = \case
+        Sup s as -> Sup s [(lv, if lv == ObjLv then Map.findWithDefault φ φ params else φ) | (lv, φ) <- as]
+        m        -> m
+      σ   = fixpoint (solveMultSubs bodySubs)
+      fixpoint σ' = let σ'' = solveMultSubs (bodySubs ++ callSubs σ') in if σ'' == σ' then σ' else fixpoint σ''
       sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
-  forM_ (unsatisfiedMultSub resolve (msubs ++ filter (owned resolve) callSubs)) \(MultSub m1 m2 o) ->
+  forM_ (unsatisfiedMultSub resolve (msubs ++ callSubs σ)) \(MultSub m1 m2 o) ->
     throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) o (resolve m2) o)
   return sol
   where

@@ -49,16 +49,14 @@ kindEqConstraints = \cases
                                           ++ kindEqConstraints k12 k22
   _ _ -> []
 
--- | A leaf whose binder side is an inferred binder kind is left out: that kind
--- belongs to the signature, and the call is bounded by it in the global solve.
+-- | Leaves naming a kind inference variable are left to the global solve.
 kindSubConstraints :: K.Kind -> K.Kind -> MultConstraints
-kindSubConstraints = go True
-  where
-    go co = \cases
-      (K.Proper _ m1 bk1) (K.Proper _ m2 bk2)
-        | bk1 K.<: bk2, not (inferredMult (if co then m2 else m1)) -> [multEq (K.join m1 m2) m2]
-      (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> go (not co) k21 k11 ++ go co k12 k22
-      _ _ -> []
+kindSubConstraints = \cases
+  (K.Proper _ m1 bk1) (K.Proper _ m2 bk2)
+    | bk1 K.<: bk2, not (inferredMult m1 || inferredMult m2) -> [multEq (K.join m1 m2) m2]
+  (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> kindSubConstraints k21 k11
+                                          ++ kindSubConstraints k12 k22
+  _ _ -> []
 
 inferredMult :: Multiplicity -> Bool
 inferredMult = \case

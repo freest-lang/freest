@@ -612,15 +612,17 @@ checkInstBaseKind sp t k = checkWhenSolved \g ->
     go _ (K.Var _ _ _) = internalError "unhandled kind variable"
     go _ _ = return ()
 
--- | 'checkInstBaseKind', plus the call's bound on a binder kind inference owns,
--- which the local solve leaves out.
-checkInstKind :: Span -> T.KindedType -> K.Kind -> Validation ()
-checkInstKind sp t k = do
+-- | 'checkInstBaseKind', plus the multiplicity bounds naming kind inference
+-- variables, which the local solve leaves out.
+checkInstKind :: Span -> LI.Substitution -> K.Kind -> [(Variable, K.Multiplicity)] -> T.KindedType -> Validation ()
+checkInstKind sp θ k ms w = do
   checkInstBaseKind sp t k
   go (T.kindOf t) k
   where
+    t = LI.applySubs θ w
     go = \cases
-      (K.Proper _ m1 _) (K.Proper _ m2 _) | LMI.inferredMult m2 -> addCallBound (Origin sp) m1 m2
+      (K.Proper _ m1 _) (K.Proper _ m2 _) | LMI.inferredMult m1 || LMI.inferredMult m2 ->
+        addCallBound (Origin sp) m1 m2 (map (second (LI.applySubsMult θ)) ms)
       (K.Arrow _ _ k12) (K.Arrow _ _ k22) -> go k12 k22
       _ _ -> return ()
 
@@ -640,7 +642,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
   θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ''   -> return (θ'' <> θ')
-  forM_ kivs \(k, w) -> checkInstKind s (LI.applySubs θ w) k
+  forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
   checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
@@ -663,7 +665,7 @@ checkArgsQL i s tdecls ddecls kctx tctx t args = do
   θ <- LMI.solveMultConstraints mcs >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ     -> return θ
-  forM_ kivs \(k, t) -> checkInstKind s (LI.applySubs θ t) k
+  forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
   (args'', tctx') <- checkValArgs tdecls ddecls kctx θ tctx args' us
   return (args'', LI.applySubs θ t', tctx')
 
@@ -998,6 +1000,9 @@ checkEquivTypeCtxsGuard tctx1 tctx2 = checkWhenSolved \g ->
         throwE (LinConsumedInGuard (getSpan xa) xa t)
       _ -> internalError "non-proper type in type context"
 
+-- | A binder's kind, the #m instantiations in scope of it, and the type it is instantiated at.
+type InstKind = (K.Kind, [(Variable, K.Multiplicity)], T.KindedType)
+
 -- | Argument-driven instantiation: opens the head's quantifiers as the arguments
 -- consume them, leaving any quantifiers in the result.
 -- 'instantiateResult' additionally instantiates the leading quantifiers the
@@ -1011,7 +1016,7 @@ instantiate, instantiateResult
             -> TypeCtx
             -> T.KindedType
             -> [Level E.KindedExp T.KindedType K.Multiplicity]
-            -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], [T.KindedType], T.KindedType)
+            -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [InstKind], [T.KindedType], T.KindedType)
 instantiate       = instantiateWith False
 instantiateResult = instantiateWith True
 
@@ -1024,11 +1029,11 @@ instantiateWith :: Bool
             -> TypeCtx
             -> T.KindedType
             -> [Level E.KindedExp T.KindedType K.Multiplicity]
-            -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], [T.KindedType], T.KindedType)
+            -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [InstKind], [T.KindedType], T.KindedType)
 instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
-  (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] args
-  let kivs' = map (second (LI.applySubs θ)) kivs
-      mcs'  = flip concatMap kivs' \(k, t) -> LMI.kindSubConstraints (T.kindOf t) k
+  (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] [] args
+  let kivs' = [(k, ms, LI.applySubs θ t) | (k, ms, t) <- kivs]
+      mcs'  = flip concatMap kivs' \(k, _, t) -> LMI.kindSubConstraints (T.kindOf t) k
   return ( map (mapLevel id (LI.applySubs θ) (LI.applySubsMult θ)) args'
          , mcs ++ mcs'
          , kivs'
@@ -1037,13 +1042,14 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
   where
     instantiate' :: Int
                  -> T.KindedType
-                 -> [(K.Kind, T.KindedType)]
+                 -> [(Variable, K.Multiplicity)]
+                 -> [InstKind]
                  -> [Level E.KindedExp T.KindedType K.Multiplicity]
-                 -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [(K.Kind, T.KindedType)], LI.Substitution, [T.KindedType], T.KindedType)
-    instantiate' i t kivs args = case (normalise tdecls t, args) of
+                 -> Validation ([Level E.KindedExp T.KindedType K.Multiplicity], LMI.MultConstraints, [InstKind], LI.Substitution, [T.KindedType], T.KindedType)
+    instantiate' i t ms kivs args = case (normalise tdecls t, args) of
       -- I-AllType
       (T.AppForall s m ((a, k) : aks) t1, TypeLevel t2 : args') -> do
-        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ((k, t2) : kivs) args'
+        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ms ((k, ms, t2) : kivs) args'
         return (TypeLevel t2 : args'', eqs, kivs, θ, us, u)
       -- I-AllOther (also opens a trailing quantifier when instResult and args is [])
       (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
@@ -1051,17 +1057,17 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         unless (K.isProper k) do
           throwE (CannotInferHigherKindedTypeApp useSpan k)
         tiv <- LI.freshInstVarT sp k
-        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ((k, tiv) : kivs) args
+        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ms ((k, ms, tiv) : kivs) args
         return (TypeLevel tiv : args'', eqs, kivs, θ, us, u)
       -- I-AllMMult
       (T.ForallM s m (φ : φs) t1, MultLevel m' : args') -> do
-        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ m' ((if null φs then id else T.ForallM s m φs) t1)) kivs args'
+        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ m' ((if null φs then id else T.ForallM s m φs) t1)) ((φ, m') : ms) kivs args'
         return (MultLevel m' : args'', eqs, kivs, θ, us, u)
       -- I-AllMOther (also opens a trailing quantifier when instResult and args is [])
       (T.ForallM s m (φ : φs) t1, args) | not (null args) || instResult -> do
         let sp = case args of { [] -> s; (arg : rest) -> foldl spanFromTo (getSpan arg) rest }
         miv <- LI.freshInstVarM sp
-        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ miv ((if null φs then id else T.ForallM s m φs) t1)) kivs args
+        (args'', eqs, kivs, θ, us, u) <- instantiate' (succ i) (subsMultType ObjLv φ miv ((if null φs then id else T.ForallM s m φs) t1)) ((φ, miv) : ms) kivs args
         return (MultLevel miv : args'', eqs, kivs, θ, us, u)
       -- I-Result
       (t', []) -> return ([], [], kivs, mempty, [], t)
@@ -1070,12 +1076,12 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         t <- T.AppArrow s <$> LI.freshInstVarM s 
                           <*> LI.freshInstVarT s (K.lt s)
                           <*> LI.freshInstVarT s (K.lt s)
-        (args'', eqs, kivs', θ, us, u) <- instantiate' (succ i) t kivs (ExpLevel e : args')
+        (args'', eqs, kivs', θ, us, u) <- instantiate' (succ i) t ms kivs (ExpLevel e : args')
         return (args'', eqs, kivs', LI.subsType iv t <> θ, us, u)
       -- I-Arg
       inst@(T.AppArrow s p t1 t2, ExpLevel e : args') -> do
         (mcs1, θ1) <- quickLook e t1
-        (args'', mcs2, kivs', θ2, us, t₃) <- instantiate' (succ i) (LI.applySubs θ1 t2) kivs args'
+        (args'', mcs2, kivs', θ2, us, t₃) <- instantiate' (succ i) (LI.applySubs θ1 t2) ms kivs args'
         let θ = θ2 <> θ1
         return (ExpLevel e : args'', mcs1 ++ mcs2, kivs', θ, LI.applySubs θ t1 : us, t₃)
         where
