@@ -1,7 +1,7 @@
 module MultSubSolverSpec (spec) where
 
 import Syntax.Base
-import Syntax.Kind (Multiplicity(..), pattern Un)
+import Syntax.Kind (Multiplicity(..), pattern Un, (<:))
 import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Multiplicities
 
@@ -37,4 +37,4 @@ spec = describe "Multiplicity subkinding solver (Fig. 14 descent)" $ do
           resolve m = case applyMultSubst σ m of
             Sup s as | any (solvable . fst) as -> Lin s
             m'                                 -> m'
-      in maybe False (const True) (unsatisfiedMultSub resolve cs)
+      in any (\(MultSub l u _) -> not (resolve l <: resolve u)) cs

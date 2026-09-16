@@ -1,0 +1,2 @@
+ChanTypeConfusionCase.fst:8:6–8:7: error:
+Could not infer the type of `r`

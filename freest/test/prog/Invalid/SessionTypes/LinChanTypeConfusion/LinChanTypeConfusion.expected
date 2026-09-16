@@ -1,0 +1,2 @@
+LinChanTypeConfusion.fst:8:8–8:9: error:
+Could not infer the type of `c`

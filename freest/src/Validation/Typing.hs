@@ -653,8 +653,8 @@ solveApp s θ' mcs = do
   θ <- LMI.solveMultConstraints local >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ'' -> return (θ'' <> θ')
-  forM_ global \(LMI.MultEquation l ol r _) ->
-    addMultEquation ol (LI.applySubsMult θ l) (LI.applySubsMult θ r)
+  forM_ global \(LMI.MultEquation l _ r _) ->
+    addMultEquation (Origin s) (LI.applySubsMult θ l) (LI.applySubsMult θ r)
   return θ
   where
     names (LMI.MultEquation l _ r _) = LMI.inferredMult l || LMI.inferredMult r

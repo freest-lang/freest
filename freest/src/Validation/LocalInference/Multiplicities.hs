@@ -8,7 +8,6 @@ module Validation.LocalInference.Multiplicities
   , multEq
   , applyMultSubst
   , solveMultSubs
-  , unsatisfiedMultSub
   , kindEqConstraints
   , kindSubConstraints
   , inferredMult
@@ -78,7 +77,7 @@ applyMultSubst σ = go Set.empty
       | otherwise = Sup s [a]
 
 -- | The paper's Fig. 14: each variable starts at the top and is met with its
--- rigid upper bounds. It only computes; 'unsatisfiedMultSub' checks.
+-- rigid upper bounds. It only computes; the caller checks.
 solveMultSubs :: MultSubConstraints -> Map.Map Variable Multiplicity
 solveMultSubs cs = aliasMutual (fixpoint Map.empty)
   where
@@ -116,10 +115,6 @@ solveMultSubs cs = aliasMutual (fixpoint Map.empty)
     rigid     = null . solvables
     solvables = \case Lin{} -> []; Sup _ as -> [φ | (lv, φ) <- as, solvable lv]
     isTop     = \case Lin{} -> True; _ -> False
-
-unsatisfiedMultSub :: (Multiplicity -> Multiplicity) -> MultSubConstraints -> Maybe MultSub
-unsatisfiedMultSub resolve =
-  List.find \(MultSub l r _) -> not (resolve l K.<: resolve r)
 
 -- The substitution accumulated so far.
 newtype SolverState = SolverState (Map.Map Variable Multiplicity)

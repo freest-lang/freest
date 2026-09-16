@@ -49,7 +49,7 @@ import Validation.Substitution ( subs, subsAll, subsMultType, subsMultMult )
 import Syntax.Provenance ( Origin(..) )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities
-  ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs, unsatisfiedMultSub
+  ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs
   , solveMultConstraints )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveNonMultModule )
@@ -763,16 +763,17 @@ kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
 -- proper-kinded operands.
 boundMultBy :: Multiplicity -> TK.KindedType -> Validation ()
 boundMultBy m = \case
-  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
+  TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint o k (Proper s m Top)
   TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
   TK.AppArrow s m' _ _ | hasSolvableVar (Proper s m' Top)
-                                    -> addKindConstraint (Origin s) (Proper s m' Top) (Proper s m Top)
+                                    -> addKindConstraint o (Proper s m' Top) (Proper s m Top)
   TK.ForallM s m' _ _ | hasSolvableVar (Proper s m' Top)
-                                    -> addKindConstraint (Origin s) (Proper s m' Top) (Proper s m Top)
+                                    -> addKindConstraint o (Proper s m' Top) (Proper s m Top)
   TK.AppForall s m' _ _ | hasSolvableVar (Proper s m' Top)
-                                    -> addKindConstraint (Origin s) (Proper s m' Top) (Proper s m Top)
-  TK.TName s k _ | hasSolvableVar k -> addKindConstraint (Origin s) k (Proper s m Top)
+                                    -> addKindConstraint o (Proper s m' Top) (Proper s m Top)
+  TK.TName s k _ | hasSolvableVar k -> addKindConstraint o k (Proper s m Top)
   _                                 -> pure ()
+  where o = Origin (getSpan m)
 
 -- | Decompose a pattern against its type into the (variable, type) leaves it
 -- binds, plus the types an as-pattern forces unrestricted. Variable, wildcard,
@@ -1164,10 +1165,18 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       fixpoint σ' = let σ'' = solveMultSubs (bodySubs ++ callSubs σ') in if σ'' == σ' then σ' else fixpoint σ''
       sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
-  forM_ (unsatisfiedMultSub resolve (msubs ++ callSubs σ)) \(MultSub m1 m2 o) ->
-    throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) o (resolve m2) o)
+      bounds = [(m1, m2, m2, o) | MultSub m1 m2 o <- msubs]
+            ++ [(m1, m2', m2, o) | ((o, m1, m2, _), MultSub _ m2' _) <- zip calls (callSubs σ)]
+      cause o m = head $
+        [ o' | φ <- solvables m, MultSub l r o' <- msubs ++ callSubs σ, φ `elem` solvables l, resolve r == resolve m ]
+        ++ [ o' | φ <- solvables m, MultEquation a o' b _ <- map toMultEq meqs ++ condEqs
+                , (x, y) <- [(a, b), (b, a)], φ `elem` solvables x, resolve y == resolve m ]
+        ++ [o]
+  forM_ (List.find (\(l, r, _, _) -> not (resolve l <: resolve r)) bounds) \(m1, m2, why2, o) ->
+    throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) (cause o m1) (resolve m2) (cause o why2))
   return sol
   where
+    solvables = \case Sup _ as -> [φ | (lv, φ) <- as, solvable lv]; Lin{} -> []
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o
     multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]

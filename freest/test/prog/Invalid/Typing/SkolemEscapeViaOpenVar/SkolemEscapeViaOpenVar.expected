@@ -1,0 +1,2 @@
+SkolemEscapeViaOpenVar.fst:13:8–13:9: error:
+Could not infer the type of `r`
