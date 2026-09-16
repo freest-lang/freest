@@ -1,5 +1,5 @@
 -- The body duplicates x, so a's inferred kind must be unrestricted; the call's
--- check against it is solved locally and forgotten, duplicating a linear value.
+-- check against it must not be solved locally and forgotten.
 dup : forall a -> a -> (a, a)
 dup x = (x, x)
 

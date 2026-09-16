@@ -10,6 +10,7 @@ module Validation.Base
   , addMultEquation
   , addBaseKindConstraint
   , addCondSeqMult
+  , addCallBound
   , KindState
   , peekKindState
   , takeKindState
@@ -63,6 +64,9 @@ data ValidationState
     -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
     -- baseKind υ₁ is still a variable; discharged once baseKinds are solved.
     , condSeqMults :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
+    -- | Bounds @(o, m1, m2)@ meaning @m1 <: m2@, where @m2@ is a binder kind
+    -- inference owns and @o@ a call instantiating it.
+    , callBounds :: [(Origin, K.Multiplicity, K.Multiplicity)]
     -- | Kind-reading checks recorded to run after the solve, most recent first.
     , obligations :: [Obligation]
     -- | The solution kinding computed, kept for 'dischargeObligations'.
@@ -80,6 +84,7 @@ emptyValidationState = ValidationState
   , multEquations = []
   , baseKindConstraints = []
   , condSeqMults = []
+  , callBounds = []
   , obligations = []
   , kindSolution = Nothing
   }
@@ -163,24 +168,30 @@ addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.
 addCondSeqMult o bk φ m1 m2 =
   modify \s -> s{condSeqMults = (o, bk, φ, m1, m2) : condSeqMults s}
 
+-- | Record a call-site bound (see 'callBounds').
+addCallBound :: Origin -> K.Multiplicity -> K.Multiplicity -> Validation ()
+addCallBound o m1 m2 =
+  modify \s -> s{callBounds = (o, m1, m2) : callBounds s}
+
 -- | Everything the kind solver reads: the bindings and each sort of constraint.
 type KindState =
   ( Map.Map Variable K.Kind
   , [(Origin, K.Kind, K.Kind)]
   , [(Origin, K.Multiplicity, K.Multiplicity)]
   , [BaseKindConstraint]
-  , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)] )
+  , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
+  , [(Origin, K.Multiplicity, K.Multiplicity)] )
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in
 -- place, for a solution that is not the last word on them.
 peekKindState :: Validation KindState
 peekKindState = gets \s ->
-  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s)
+  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, callBounds s)
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
 takeKindState = peekKindState <* modify \st ->
-  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = []}
+  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = [], callBounds = []}
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

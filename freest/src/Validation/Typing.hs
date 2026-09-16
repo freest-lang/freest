@@ -612,6 +612,18 @@ checkInstBaseKind sp t k = checkWhenSolved \g ->
     go _ (K.Var _ _ _) = internalError "unhandled kind variable"
     go _ _ = return ()
 
+-- | 'checkInstBaseKind', plus the call's bound on a binder kind inference owns,
+-- which the local solve leaves out.
+checkInstKind :: Span -> T.KindedType -> K.Kind -> Validation ()
+checkInstKind sp t k = do
+  checkInstBaseKind sp t k
+  go (T.kindOf t) k
+  where
+    go = \cases
+      (K.Proper _ m1 _) (K.Proper _ m2 _) | LMI.inferredMult m2 -> addCallBound (Origin sp) m1 m2
+      (K.Arrow _ _ k12) (K.Arrow _ _ k22) -> go k12 k22
+      _ _ -> return ()
+
 -- | Check a (synthesised) head applied to a possibly empty
 -- argument list against the expected type.
 checkApp :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> E.KindedExp -> Span
@@ -628,7 +640,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
   θ <- LMI.solveMultConstraints (mcs ++ mcs') >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ''   -> return (θ'' <> θ')
-  forM_ kivs \(k, w) -> checkInstBaseKind s (LI.applySubs θ w) k
+  forM_ kivs \(k, w) -> checkInstKind s (LI.applySubs θ w) k
   checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
@@ -651,7 +663,7 @@ checkArgsQL i s tdecls ddecls kctx tctx t args = do
   θ <- LMI.solveMultConstraints mcs >>= \case
     Left (LMI.MultEquation l ol r or') -> throwE (CannotSatisfyMultConstraint s l ol r or')
     Right θ     -> return θ
-  forM_ kivs \(k, t) -> checkInstBaseKind s (LI.applySubs θ t) k
+  forM_ kivs \(k, t) -> checkInstKind s (LI.applySubs θ t) k
   (args'', tctx') <- checkValArgs tdecls ddecls kctx θ tctx args' us
   return (args'', LI.applySubs θ t', tctx')
 

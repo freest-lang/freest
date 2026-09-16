@@ -1137,7 +1137,7 @@ provisionalKindSolution :: Validation KindSolution
 provisionalKindSolution = peekKindState >>= solveFrom
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom (binds, cs, meqs, pcs0, condmults) = do
+solveFrom (binds, cs, meqs, pcs0, condmults, calls) = do
   KindUnifier ksub msubs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
@@ -1147,11 +1147,15 @@ solveFrom (binds, cs, meqs, pcs0, condmults) = do
   -- equations first: descent only lowers against a bound they have made rigid
   θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
          >>= either (throwE . multErr) (pure . multsOf)
-  let σ   = solveMultSubs
-              [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
+  let subs' ms = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- ms]
+      σ₀  = solveMultSubs (subs' msubs)
+      callSubs = [MultSub m1 m2 o | (o, m1, m2) <- calls]
+      -- a kind naming the signature's own #m is unreadable at a call that does not substitute it
+      owned σ' (MultSub _ r _) = null [() | Sup _ as <- [σ' r], (ObjLv, _) <- as]
+      σ   = solveMultSubs (subs' (msubs ++ filter (owned (applyMultSubst σ₀ . applyMultSubst θ)) callSubs))
       sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
-  forM_ (unsatisfiedMultSub resolve msubs) \(MultSub m1 m2 o) ->
+  forM_ (unsatisfiedMultSub resolve (msubs ++ filter (owned resolve) callSubs)) \(MultSub m1 m2 o) ->
     throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) o (resolve m2) o)
   return sol
   where
