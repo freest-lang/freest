@@ -621,7 +621,7 @@ checkInstKind sp θ k ms w = do
     t = LI.applySubs θ w
     go = \cases
       (K.Proper _ m1 _) (K.Proper _ m2 _) ->
-        addCallBound (Origin sp) m1 m2 (map (second (LI.applySubsMult θ)) ms)
+        addCallBound (Origin sp) m1 m2 ms
       (K.Arrow _ _ k12) (K.Arrow _ _ k22) -> go k12 k22
       _ _ -> return ()
 
@@ -638,16 +638,15 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
         _             -> instantiateResult
   (args', mcs, kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
   (mcs', θ) <- LTI.match e tdecls t t''
-  forwardMults s θ (mcs ++ mcs')
+  forwardMults s (mcs ++ mcs')
   forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
   checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
 
 -- | Pass an application's multiplicity equations to the global solve.
-forwardMults :: Span -> LI.Substitution -> LMI.MultConstraints -> Validation ()
-forwardMults s θ = mapM_ \(LMI.MultEquation l _ r _) ->
-  addMultEquation (Origin s) (LI.applySubsMult θ l) (LI.applySubsMult θ r)
+forwardMults :: Span -> LMI.MultConstraints -> Validation ()
+forwardMults s = mapM_ \(LMI.MultEquation l _ r _) -> addMultEquation (Origin s) l r
 
 -- | Check function arguments while inferring type and multiplicity applications
 -- using the Quick Look method.
@@ -664,7 +663,7 @@ checkArgsQL :: Int
                           , TypeCtx)
 checkArgsQL i s tdecls ddecls kctx tctx t args = do
   (args', mcs, kivs, us, t') <- instantiate s i tdecls ddecls kctx tctx t args
-  forwardMults s mempty mcs
+  forwardMults s mcs
   forM_ kivs \(k, ms, w) -> checkInstKind s mempty k ms w
   (args'', tctx') <- checkValArgs tdecls ddecls kctx mempty tctx args' us
   return (args'', t', tctx')
@@ -687,7 +686,7 @@ checkValArgs tdecls ddecls kctx θ tctxi = \cases
   (TypeLevel ti : argsi) usi ->
     first (TypeLevel (LI.applySubs θ ti) :) <$> checkValArgs tdecls ddecls kctx θ tctxi argsi usi
   (MultLevel m : argsi) usi ->
-    first (MultLevel (LI.applySubsMult θ m) :) <$> checkValArgs tdecls ddecls kctx θ tctxi argsi usi
+    first (MultLevel m :) <$> checkValArgs tdecls ddecls kctx θ tctxi argsi usi
   args us -> internalError ("instantiation argument/type mismatch: " ++ show args ++ "/" ++ show us)
 
 -- | Check for functions. Simultaneously walks down a list of parameters and 
@@ -890,7 +889,7 @@ checkPat tdecls ddecls kctx p t = case p of
 -- | A type reaching a binder may not leave a type argument open: types have no
 -- global store, so each use would instantiate it anew.
 checkNoOpenTypeArg :: Variable -> T.KindedType -> Validation ()
-checkNoOpenTypeArg x t = forM_ (take 1 [iv | Left iv <- Set.toList (LTI.fiv t)]) \iv ->
+checkNoOpenTypeArg x t = forM_ (Set.lookupMin (LTI.fiv t)) \iv ->
   throwE (CannotInferTypeArgAtBinding (getSpan x) x (getSpan iv))
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
@@ -1029,7 +1028,7 @@ instantiateWith :: Bool
 instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
   (args', mcs, kivs, θ, us, t2) <- instantiate' i t1 [] [] args
   let kivs' = [(k, ms, LI.applySubs θ t) | (k, ms, t) <- kivs]
-  return ( map (mapLevel id (LI.applySubs θ) (LI.applySubsMult θ)) args'
+  return ( map (mapLevel id (LI.applySubs θ) id) args'
          , mcs
          , kivs'
          , us

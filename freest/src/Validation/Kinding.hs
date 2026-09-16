@@ -1153,7 +1153,7 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
                 | (o, bk, φ, m1, m2) <- condmults ]
   -- equations first: descent only lowers against a bound they have made rigid
   θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
-         >>= either (throwE . multErr) (pure . multsOf)
+         >>= either (throwE . multErr) pure
   let bodySubs = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
       callSubs σ' = [ MultSub (applyMultSubst θ m1) (instantiate ms (applyMultSubst σ' (applyMultSubst θ m2))) o
                     | (o, m1, m2, ms) <- calls ]
@@ -1178,7 +1178,6 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
   where
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
     toMultEq (o, m1, m2) = MultEquation m1 o m2 o
-    multsOf (Θ xs) = Map.fromList [(v, m) | (v, Right m) <- xs]
     unifyErr = \case
       Mismatch o k1 k2 -> CannotSatisfyKindConstraint o k1 k2
       Occurs o v k     -> InfiniteKind o v k

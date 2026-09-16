@@ -5,8 +5,8 @@ import Syntax.Kind (Multiplicity(..))
 import Syntax.Provenance (Origin(..))
 import Validation.Base (emptyValidationState, runValidation)
 import Validation.LocalInference.Multiplicities
-import Validation.LocalInference.Substitution (Substitution(..))
 
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Test.Hspec
 
@@ -22,7 +22,7 @@ spec = describe "Multiplicity equation solver (ACUI)" $ do
                    `Set.difference` atomsUnder θ [y, b] `shouldNotBe` Set.empty
       Nothing -> expectationFailure "expected a solution"
   it "keeps a variable the kind unifier minted bound under its own id" $
-    fmap (\(Θ binds) -> any (same x . fst) binds) (solved [eq [x, y] [a, b]]) `shouldBe` Just True
+    fmap (any (same x) . Map.keys) (solved [eq [x, y] [a, b]]) `shouldBe` Just True
   where
     o = Origin nullSpan
     x = Variable nullSpan "φ-2" (-2)
@@ -39,9 +39,9 @@ spec = describe "Multiplicity equation solver (ACUI)" $ do
       Right (Right θ) -> Just θ
       _               -> Nothing
 
-    atomsUnder (Θ binds) = Set.unions . map (go [])
+    atomsUnder σ = Set.unions . map (go [])
       where
-        go seen v = case [m | (v', Right m) <- binds, same v' v] of
+        go seen v = case [m | (v', m) <- Map.toList σ, same v' v] of
           Sup _ as : _ | not (any (same v) seen) -> Set.unions [go (v : seen) v' | (_, v') <- as]
           Lin{} : _                              -> Set.singleton (named top)
           _                                      -> Set.singleton (named v)

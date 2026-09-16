@@ -6,12 +6,11 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as T
 import Validation.Base
-import Validation.Substitution (subsMultType, subsMultMult)
 import Compiler.Bug (internalError)
 
--- | Instantiation-level substitution. Instantiation variables may occur as
--- types or as multiplicities.
-newtype Substitution = Θ [(Variable, Either T.KindedType K.Multiplicity)]
+-- | Instantiation-level substitution of types; multiplicities are left to the
+-- global solve.
+newtype Substitution = Θ [(Variable, T.KindedType)]
   deriving Show
 
 -- | Composition for substitutions.
@@ -26,30 +25,19 @@ instance Monoid Substitution where
 emptySubs :: Substitution
 emptySubs = Θ []
 
--- | Make a multiplicity substitution.
-subsMult :: Variable -> K.Multiplicity -> Substitution
-subsMult iv m = Θ [(iv, Right m)]
-
 -- | Make a type substitution.
 subsType :: Variable -> T.KindedType -> Substitution
-subsType iv t = Θ [(iv, Left t)]
+subsType iv t = Θ [(iv, t)]
 
 -- | Apply a substitution.
 applySubs :: Substitution -> T.KindedType -> T.KindedType
-applySubs (Θ ivtms) t = 
-  foldr (\(ivi, tmi) ti -> either (subst ivi) (subsm ivi) tmi ti) t ivtms
+applySubs (Θ ivts) t = foldr (uncurry subst) t ivts
   where
     subst iv t = \case
       T.Var _ _ InstLv iv' | iv == iv' -> t
       T.Abs s aks u -> T.Abs s aks (subst iv t u)
       T.App s u us -> T.App s (subst iv t u) (map (subst iv t) us)
       t -> t
-
-    subsm = subsMultType InstLv
-
-applySubsMult :: Substitution -> K.Multiplicity -> K.Multiplicity
-applySubsMult (Θ ivtms) m =
-  foldr (\(ivi, tmi) mi -> either (\_ m -> m) (subsMultMult InstLv ivi) tmi mi) m ivtms
 
 -- | Make a fresh type instantiation variable. Its kind carries a fresh,
 -- multiplicity rather than the one provided in the kind, so that

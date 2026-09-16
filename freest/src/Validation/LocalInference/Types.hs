@@ -15,7 +15,7 @@ import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
 import Validation.LocalInference.Substitution
-  (Substitution, emptySubs, subsMult, subsType)
+  (Substitution, emptySubs, subsType)
 import Validation.Normalisation 
   (tNameRedex, isWhnf, reduce, normalise)
 
@@ -58,17 +58,17 @@ match e tdecls = match' e tdecls Set.empty Set.empty
         match' e tdecls bindings visited (T.AppDual (getSpan t1) t1) t2'
       -- M-AbsorbSeqL/R
       (T.AppSemi _ (T.End _ p1) t1, T.End _ p2)
-        | p1 == p2 -> return ([], isubsAbsorbed fiv12)
+        | p1 == p2 -> return (isubsAbsorbed fiv12)
       (T.End _ p1, T.AppSemi _ (T.End _ p2) t2)
-        | p1 == p2 -> return ([], isubsAbsorbed fiv12)
+        | p1 == p2 -> return (isubsAbsorbed fiv12)
       (T.AppSemi _ (T.Void _ k1) t1, T.Void _ k2)
-        -> return (kindEqConstraints k1 k2, isubsAbsorbed fiv12)
+        -> return (first (kindEqConstraints k1 k2 ++) (isubsAbsorbed fiv12))
       (T.Void _ k1, T.AppSemi _ (T.Void _ k2) t2)
-        -> return (kindEqConstraints k1 k2, isubsAbsorbed fiv12)
+        -> return (first (kindEqConstraints k1 k2 ++) (isubsAbsorbed fiv12))
       (T.AppSemi _ (T.UnChoice _ p1 ls1) t1, T.UnChoice _ p2 ls2)
-        | p1 == p2 && sort ls1 == sort ls2 -> return ([], isubsAbsorbed fiv12)
+        | p1 == p2 && sort ls1 == sort ls2 -> return (isubsAbsorbed fiv12)
       (T.UnChoice _ p1 ls1, T.AppSemi _ (T.UnChoice _ p2 ls2) t2)
-        | p1 == p2 && sort ls1 == sort ls2 -> return ([], isubsAbsorbed fiv12)
+        | p1 == p2 && sort ls1 == sort ls2 -> return (isubsAbsorbed fiv12)
       -- M-MsgSeqL
       (T.AppSemi _ (T.AppMessage _ m1 p1 t11) t12, T.AppMessage s m2 p2 t21)
         | m1 == m2 && p1 == p2
@@ -76,7 +76,7 @@ match e tdecls = match' e tdecls Set.empty Set.empty
         mcsθ1 <- match' e tdecls bindings visited t11 t21
         mcsθ2 <- case m1 of
           K.Lin{} -> match' e tdecls bindings visited t12 (T.Skip s)
-          K.Un{}  -> return ([], isubsAbsorbed (fiv t12))
+          K.Un{}  -> return (isubsAbsorbed (fiv t12))
         return $ mcsθ2 <> mcsθ1
       -- M-MsgSeqR
       (T.AppMessage s m1 p1 t11, T.AppSemi _ (T.AppMessage _ m2 p2 t21) t22)
@@ -85,7 +85,7 @@ match e tdecls = match' e tdecls Set.empty Set.empty
         mcsθ1 <- match' e tdecls bindings visited t11 t21
         mcsθ2 <- case m2 of
           K.Lin{} -> match' e tdecls bindings visited t22 (T.Skip s)
-          K.Un{}  -> return ([], isubsAbsorbed (fiv t22))
+          K.Un{}  -> return (isubsAbsorbed (fiv t22))
         return $ mcsθ2 <> mcsθ1
       -- M-Msg
       (T.AppMessage s m1 p1 t1', T.AppMessage _ m2 p2 t2')
@@ -98,7 +98,7 @@ match e tdecls = match' e tdecls Set.empty Set.empty
         mcsθ1 <- match' e tdecls bindings visited t11 t21
         mcsθ2 <- case m1 of
           K.Lin{} -> match' e tdecls bindings visited t12 t22
-          K.Un{}  -> return ([], isubsAbsorbed (fiv t12))
+          K.Un{}  -> return (isubsAbsorbed (fiv t12))
         return $ mcsθ2 <> mcsθ1
       -- M-DualVar
       (T.AppDual _ (T.AppVar _ a1 k1 ObjLv t1s), T.AppDual _ (T.AppVar _ a2 k2 ObjLv t2s))
@@ -160,17 +160,13 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       -- no match
         | otherwise -> return ([], emptySubs)
 
-  isubsAbsorbed =
-    foldl (\θ -> \case
-        Left  iv -> subsType iv (T.Void (getSpan iv) (K.uc (getSpan iv))) <> θ
-        Right iv -> subsMult iv (K.Un (getSpan iv)) <> θ)
-      emptySubs
+  isubsAbsorbed = ([],) . foldMap \iv -> subsType iv (T.Void (getSpan iv) (K.uc (getSpan iv)))
 
   foldMatch e tdecls bindings visited (mcs, θ) t1s t2s =
     (<> (mcs, θ)) . fold <$> zipWithM (match' e tdecls bindings visited) t1s t2s
 
--- | 'fiv' for the other level of open variable: a binder kind inference has not
--- settled yet. Matching must not stop at a pair that still carries one.
+-- | Whether a type still carries a solvable kind, baseKind or multiplicity.
+-- Matching must not stop at a pair that does.
 openKinds :: T.KindedType -> Bool
 openKinds = \case
   T.Var _ k _ _         -> openK k
@@ -190,22 +186,13 @@ openKinds = \case
       K.Sup _ as -> any ((/= ObjLv) . fst) as
       _          -> False
 
--- | The free instantiation variables in a type.
-fiv :: T.KindedType -> Set.Set (Either Variable Variable)
+-- | The free type instantiation variables in a type.
+fiv :: T.KindedType -> Set.Set Variable
 fiv = \case
-  T.Var _ _ InstLv iv -> Set.singleton (Left iv)
-  T.Arrow _ m -> fivm m
-  T.AppForall _ m aks t -> Set.unions (fiv t : fivm m : map (fivk . snd) aks)
-  T.AppExists _ aks t -> Set.unions (fiv t : map (fivk . snd) aks)
-  T.ForallM _ m _ t -> fivm m `Set.union` fiv t
-  T.Abs _ aks t -> Set.unions (fiv t : map (fivk . snd) aks)
+  T.Var _ _ InstLv iv -> Set.singleton iv
+  T.AppForall _ _ _ t -> fiv t
+  T.AppExists _ _ t -> fiv t
+  T.ForallM _ _ _ t -> fiv t
+  T.Abs _ _ t -> fiv t
   T.App _ t ts -> Set.unions (fiv t : map fiv ts)
   _ -> Set.empty
-  where
-  fivk = \case
-    K.Proper _ m bk -> fivm m
-    K.Arrow _ k1 k2 -> fivk k1 `Set.union` fivk k2
-    _ -> Set.empty
-  fivm = \case
-    K.Sup _ lvφs -> Set.fromList (map (Right . snd) $ filter ((== InstLv) . fst) lvφs)
-    _ -> Set.empty

@@ -19,7 +19,6 @@ import Syntax.Kind (Multiplicity(..), pattern Un, pattern VarM)
 import Syntax.Kind qualified as K
 import Syntax.Provenance (Origin(..))
 import Validation.Base (Validation, incCounter)
-import Validation.LocalInference.Substitution (Substitution(..), emptySubs, subsMult)
 
 import Control.Monad (guard)
 import Data.List (foldl')
@@ -113,11 +112,10 @@ newtype SolverState = SolverState (Map.Map Variable Multiplicity)
 -- found in breadth-first search. On failure, returns the first
 -- equation with no solution (with the accumulated substitution applied).
 -- The search is /not/ complete — see the note on `unifySup`.
-solveMultConstraints :: MultConstraints -> Validation (Either MultEquation Substitution)
+solveMultConstraints :: MultConstraints -> Validation (Either MultEquation (Map.Map Variable Multiplicity))
 solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
   where
-  finish (SolverState sub) =
-    Map.foldrWithKey (\φ m -> (subsMult φ m <>)) emptySubs (Map.map (apply sub) sub)
+  finish (SolverState sub) = Map.map (apply sub) sub
 
   bfs :: MultConstraints -> [SolverState] -> Validation (Either MultEquation SolverState)
   bfs = \cases
