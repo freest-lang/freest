@@ -1,4 +1,0 @@
-<pending>
-
-Accepted today (prints 5): the escaped instantiation variable reaches a case
-binding as well as a let. Retire with ChanTypeConfusionLet.

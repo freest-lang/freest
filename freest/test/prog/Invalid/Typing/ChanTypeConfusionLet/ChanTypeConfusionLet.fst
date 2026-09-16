@@ -1,5 +1,5 @@
--- The let-bound pair keeps initQueue's type argument open and each use re-binds
--- it locally, so an Int is sent and a Char received.
+-- The let-bound pair would keep initQueue's type argument open, letting each use
+-- re-bind it: an Int sent and a Char received.
 initQueue : forall a -> () -> (*?a, *!a)
 initQueue @a _ = channel @(*?a)
 

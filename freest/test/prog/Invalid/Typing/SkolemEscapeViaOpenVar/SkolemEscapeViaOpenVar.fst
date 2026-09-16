@@ -1,5 +1,5 @@
--- The unpacked existential's witness type escapes its scope through a channel
--- whose element type is still open, and is then received as a Char.
+-- The unpacked existential's witness type would escape its scope through a
+-- channel whose element type is still open, and be received as a Char.
 type P = (exists (c : *T), (c, c -> Int))
 
 mk : Int -> P

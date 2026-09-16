@@ -44,6 +44,7 @@ data Error
       K.Multiplicity Origin
       K.Multiplicity Origin
   | CannotInferHigherKindedTypeApp Span K.Kind
+  | CannotInferTypeArgAtBinding Span Variable Span
   | CannotSatisfyKindConstraint Origin K.Kind K.Kind
   | CannotSatisfyBaseKindConstraint Origin K.BaseKind K.BaseKind
   | InfiniteKind Origin Variable K.Kind
@@ -140,6 +141,7 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
+    CannotInferTypeArgAtBinding s _ _ -> s
     CannotSatisfyKindConstraint o _ _ -> getSpan o
     CannotSatisfyBaseKindConstraint o _ _ -> getSpan o
     InfiniteKind o _ _ -> getSpan o
@@ -321,6 +323,11 @@ toMessage src = \case
     ++ "The type parameter has kind " ++ bt (tidyK k) ++ ", declared at"
     ++ locateSpan src (getSpan k)
     ++ "Higher-kinded type arguments are not inferred; please provide them explicitly"
+  CannotInferTypeArgAtBinding s x s' -> makeError src s
+    ("Could not infer the type of " ++ bt (show x))
+    ++ "A type argument of the application at"
+    ++ locateSpan src s'
+    ++ "is left open; please provide it explicitly"
   CannotSatisfyKindConstraint o k1 k2 -> kindMismatch src (getSpan o) k2 k1
   CannotSatisfyBaseKindConstraint o p1 p2 -> makeError src (getSpan o)
     ("Expected a " ++ prettyBk p2 ++ ", but got a " ++ prettyBk p1)

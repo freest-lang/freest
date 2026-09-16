@@ -1,9 +1,0 @@
-<pending>
-
-Accepted today (prints 4): `ạ` is owned outside the unpack, so binding it to the
-scoped rigid `d` should be a skolem escape, and binding it again to Char should
-conflict. Needs promotion (handoff-2026-09-15 §4 step 3) plus an escape check.
-
-Not merely a wrong type: applying `ord` to what is received crashes the
-interpreter (Builtin.hs:208), and sending the existential's function component
-and receiving it as an Int crashes integer addition (Builtin.hs:225).

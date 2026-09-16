@@ -1,5 +1,0 @@
-<pending>
-
-Accepted today (prints 5): an instantiation variable left open by `initQueue ()`
-escapes into the let and is re-bound by each use. Retire once leftover type
-variables are handled at the application's escape point.
