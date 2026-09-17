@@ -195,7 +195,7 @@ builtins :: Map.Map String Value
 builtins = Map.fromList
   [
   -- * Undefined
-    ("undefined",     VBuiltin undefined)
+    ("undefined",     VIO (throwIO (UserError nullSpan "undefined")))
   -- * Error
   , ("error",         VBuiltin (VIO . throwIO . UserError nullSpan . fstToHsString))
 

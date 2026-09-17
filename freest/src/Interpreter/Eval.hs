@@ -257,9 +257,9 @@ eval _ (E.DCons _ (B.Identifier _ str)) =
 eval ctx (E.List _ es) = do
   vs <- mapM (eval ctx) es
   return $ foldr (\v acc -> VCons "(::)" [v, acc]) (VCons "[]" []) vs
-eval ctx (E.Var _ var) =
+eval ctx (E.Var span var) =
   case ctxLookup ctx var of
-    VIO io -> io
+    VIO io -> io `catch` \(e :: Exception) -> throwIO (attachSpan span e)
     val -> return val
 eval ctx (E.App span exp args) = do
   func <- eval ctx exp
