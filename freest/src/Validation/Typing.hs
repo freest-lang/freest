@@ -295,7 +295,7 @@ synth tdecls ddecls kctx tctx = \case
     -- TODO: detect redundant and incomplete patterns
     (e'', t, tctx') <- synthScrutinee tdecls ddecls kctx tctx e'
     (kctxp1, tctxp1) <- checkPat tdecls ddecls kctx p1 t
-    (rhs1', t1, tctxrhs1) <- synthRHS tdecls ddecls kctxp1 (freshCtx tctxp1 `Map.union` tctx') (Right e') rhs1
+    (rhs1', t1, tctxrhs1) <- synthRHS synth tdecls ddecls kctxp1 (freshCtx tctxp1 `Map.union` tctx') (Right e') rhs1
     tctx1 <- typeCtxDifference tdecls kctxp1 tctxrhs1 tctxp1
     (unzip -> (cs'', tctxis)) <- forM cs' \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi t
@@ -333,13 +333,16 @@ synthScrutinee tdecls ddecls kctx tctx e = do
   forM_ kivs \(k, ms, w) -> checkInstKind (getSpan e) mempty k ms w
   return (if null args then e' else E.App (getSpan e) e' args, u, tctx')
 
-synthRHS :: D.KindedTypeDecls -> D.KindedDataDecls
+-- | Synthesis for RHSs, synthesising each result expression with the given function.
+synthRHS :: (D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> E.KindedExp
+             -> Validation (E.KindedExp, T.KindedType, TypeCtx))
+         -> D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
          -> Either (Either Variable E.KindedPat) E.KindedExp
          -> E.RHS Kinded
          -> Validation (E.KindedRHS, T.KindedType, TypeCtx)
-synthRHS tdecls ddecls kctx tctx fep = \case
+synthRHS synthE tdecls ddecls kctx tctx fep = \case
   E.GuardedRHS ((g1, e1) : ges) ds -> do
     (ds', tctxds, kctx', tctx') <- case ds of
       Nothing -> pure (Nothing, Map.empty, kctx, tctx)
@@ -348,7 +351,7 @@ synthRHS tdecls ddecls kctx tctx fep = \case
         return (Just ds', tctxds, kctx', tctx')
     (g1', tctxg1) <- check tdecls ddecls kctx' tctx' g1 (T.Bool (getSpan g1))
     checkEquivTypeCtxsGuard tctxg1 tctx'
-    (e1', t1, tctxe1) <- synth tdecls ddecls kctx' tctxg1 e1
+    (e1', t1, tctxe1) <- synthE tdecls ddecls kctx' tctxg1 e1
     (unzip -> (ges', tctxes)) <- forM ges \(gi, ei) -> do
       (gi', tctxgi) <- check tdecls ddecls kctx' tctx' gi (T.Bool (getSpan gi))
       checkEquivTypeCtxsGuard tctxgi tctx'
@@ -363,7 +366,7 @@ synthRHS tdecls ddecls kctx tctx fep = \case
       Just ds -> do
         (ds', tctxds, kctx', tctx') <- checkDecls tdecls ddecls kctx tctx ds
         return (Just ds', tctxds, kctx', tctx')
-    (e', t, tctx'') <- synth tdecls ddecls kctx' tctx' e
+    (e', t, tctx'') <- synthE tdecls ddecls kctx' tctx' e
     (E.UnguardedRHS e' mds', t,) <$> typeCtxDifference tdecls kctx' tctx'' tctxds
 
 -- | Check-against for expressions. Given kind and type contexts, it checks
@@ -569,7 +572,9 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
                    , freshCtx tctxp `Map.union` tctx''
                    )
       E.ValDef p rhs -> do
-        (rhs', trhs, tctx'') <- synthRHS tdecls ddecls kctxi tctxi (Left (Right p)) rhs
+        -- a pattern that matches instantiates the value; a variable or wildcard binds it by name
+        let synthE = case p of { E.VarPat{} -> synth; E.WildPat{} -> synth; _ -> synthScrutinee }
+        (rhs', trhs, tctx'') <- synthRHS synthE tdecls ddecls kctxi tctxi (Left (Right p)) rhs
         (kctxp, tctxp) <- checkPat tdecls ddecls kctxi p trhs
         forM_ (Map.assocs tctxp) \case
           (Left x, t) -> forM_ (tctxi Map.!? Left x) \b ->
