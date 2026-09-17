@@ -615,13 +615,12 @@ checkInstBaseKind sp t k = checkWhenSolved \g ->
 checkInstKind :: Span -> LI.Substitution -> K.Kind -> [(Variable, K.Multiplicity)] -> T.KindedType -> Validation ()
 checkInstKind sp θ k ms w = do
   checkInstBaseKind sp t k
-  go (T.kindOf t) k
+  go True (T.kindOf t) k
   where
     t = LI.applySubs θ w
-    go = \cases
-      (K.Proper _ m1 _) (K.Proper _ m2 _) ->
-        addCallBound (Origin sp) m1 m2 ms
-      (K.Arrow _ _ k12) (K.Arrow _ _ k22) -> go k12 k22
+    go result = \cases
+      (K.Proper _ m1 _) (K.Proper _ m2 _) -> addCallBound (CallBound (Origin sp) result m1 m2 ms)
+      (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> go (not result) k11 k21 >> go result k12 k22
       _ _ -> return ()
 
 -- | Check a (synthesised) head applied to a possibly empty

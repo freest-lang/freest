@@ -10,6 +10,7 @@ module Validation.Base
   , addMultEquation
   , addBaseKindConstraint
   , addCondSeqMult
+  , CallBound(..)
   , addCallBound
   , addMultParam
   , KindState
@@ -65,9 +66,7 @@ data ValidationState
     -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
     -- baseKind υ₁ is still a variable; discharged once baseKinds are solved.
     , condSeqMults :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-    -- | Bounds @(o, m1, m2, ms)@ meaning @m1 <: m2@, from a call @o@ that
-    -- instantiates @m2@'s solution by @ms@.
-    , callBounds :: [(Origin, K.Multiplicity, K.Multiplicity, [(Variable, K.Multiplicity)])]
+    , callBounds :: [CallBound]
     -- | A function's #m parameter and the signature binder it stands for.
     , multParams :: Map.Map Variable Variable
     -- | Kind-reading checks recorded to run after the solve, most recent first.
@@ -172,10 +171,13 @@ addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.
 addCondSeqMult o bk φ m1 m2 =
   modify \s -> s{condSeqMults = (o, bk, φ, m1, m2) : condSeqMults s}
 
--- | Record a call-site bound (see 'callBounds').
-addCallBound :: Origin -> K.Multiplicity -> K.Multiplicity -> [(Variable, K.Multiplicity)] -> Validation ()
-addCallBound o m1 m2 ms =
-  modify \s -> s{callBounds = (o, m1, m2, ms) : callBounds s}
+-- | A call's bound between an argument's multiplicity and the binder kind's it
+-- instantiates, whose solution the call's #m instantiations @ms@ copy:
+-- @arg <: binder@ on the result side of a kind, @binder <: arg@ on a parameter side.
+data CallBound = CallBound Origin Bool K.Multiplicity K.Multiplicity [(Variable, K.Multiplicity)]
+
+addCallBound :: CallBound -> Validation ()
+addCallBound b = modify \s -> s{callBounds = b : callBounds s}
 
 -- | Record a function's #m parameter (see 'multParams').
 addMultParam :: Variable -> Variable -> Validation ()
@@ -188,7 +190,7 @@ type KindState =
   , [(Origin, K.Multiplicity, K.Multiplicity)]
   , [BaseKindConstraint]
   , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-  , [(Origin, K.Multiplicity, K.Multiplicity, [(Variable, K.Multiplicity)])]
+  , [CallBound]
   , Map.Map Variable Variable )
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in

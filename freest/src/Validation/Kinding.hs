@@ -1155,8 +1155,8 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
   θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
          >>= either (throwE . multErr) pure
   let bodySubs = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
-      callSubs σ' = [ MultSub (applyMultSubst θ m1) (instantiate ms (applyMultSubst σ' (applyMultSubst θ m2))) o
-                    | (o, m1, m2, ms) <- calls ]
+      copy σ' m ms = instantiate ms (applyMultSubst σ' (applyMultSubst θ m))
+      callSubs σ' = [MultSub (applyMultSubst θ a) (copy σ' b ms) o | CallBound o True a b ms <- calls]
       instantiate ms m = foldr (\(φ, m') -> subsMultMult ObjLv φ m') (asSignature m) ms
       asSignature = \case
         Sup s as -> Sup s [(lv, if lv == ObjLv then Map.findWithDefault φ φ params else φ) | (lv, φ) <- as]
@@ -1165,15 +1165,16 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       fixpoint σ' = let σ'' = solveMultSubs (bodySubs ++ callSubs σ') in if σ'' == σ' then σ' else fixpoint σ''
       sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
-      bounds = [(m1, m2, m2, o) | MultSub m1 m2 o <- msubs]
-            ++ [(m1, m2', m2, o) | ((o, m1, m2, _), MultSub _ m2' _) <- zip calls (callSubs σ)]
+      bounds = [(m1, m1, m2, m2, o) | MultSub m1 m2 o <- msubs]
+            ++ [ if result then (a, a, copy σ b ms, b, o) else (copy σ b ms, b, a, a, o)
+               | CallBound o result a b ms <- calls ]
       cause o m = head $
         [ o' | φ <- solvables m, MultSub l r o' <- msubs ++ callSubs σ, φ `elem` solvables l, resolve r == resolve m ]
         ++ [ o' | φ <- solvables m, MultEquation a o' b _ <- map toMultEq meqs ++ condEqs
                 , (x, y) <- [(a, b), (b, a)], φ `elem` solvables x, resolve y == resolve m ]
         ++ [o]
-  forM_ (List.find (\(l, r, _, _) -> not (resolve l <: resolve r)) bounds) \(m1, m2, why2, o) ->
-    throwE (CannotSatisfyMultConstraint (getSpan o) (resolve m1) (cause o m1) (resolve m2) (cause o why2))
+  forM_ (List.find (\(l, _, r, _, _) -> not (resolve l <: resolve r)) bounds) \(l, whyL, r, whyR, o) ->
+    throwE (CannotSatisfyMultConstraint (getSpan o) (resolve l) (cause o whyL) (resolve r) (cause o whyR))
   return sol
   where
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
