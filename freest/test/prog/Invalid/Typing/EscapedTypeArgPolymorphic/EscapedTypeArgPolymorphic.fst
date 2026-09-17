@@ -1,12 +1,13 @@
--- undefined is passed as a polymorphic value, not instantiated, so the queue's element type cannot be taken from it.
-initQueue : forall a -> () -> (*?a, *!a)
-initQueue @a _ = channel @(*?a)
+-- ids' element type is polymorphic, and the queue's open element type must be a
+-- monotype, so its type argument has to be written.
+mkq : forall a -> () -> (*?[a], *![a])
+mkq @a _ = channel @(*?[a])
+
+ids : [forall a -> a -> a]
+ids = [id]
 
 main : ()
 main =
-  let (r, w) = initQueue () in
-  let _ = send_ (undefined) w in
-  let _ = send_ (undefined) w in
-  let x = receive_ r in
-  let y = receive_ r in
-  print @Int x; print @Int y
+  let (r, w) = mkq () in
+  let _ = send_ ids w in
+  print @Int 1

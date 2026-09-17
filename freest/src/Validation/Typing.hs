@@ -1071,23 +1071,28 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         let θ = θ2 <> θ1
         return (ExpLevel e : args'', kivs', θ, LI.applySubs θ t1 : us, t₃)
         where
+          -- a polymorphic argument gives a bare variable no advice, so checking instantiates it
+          advise e u = case (t1, normalise tdecls u) of
+            (T.Var _ _ InstLv _, T.AppForall{}) -> return mempty
+            (T.Var _ _ InstLv _, T.ForallM{})   -> return mempty
+            _                                   -> LTI.match e tdecls t1 u
           quickLook :: E.Exp Kinded -> T.KindedType -> Validation LI.Substitution
           quickLook = \cases
             e@E.Tuple{} _ -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
               (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-              LTI.match e tdecls t1 t3
+              advise e t3
             e@E.List{} _ -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
               (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-              LTI.match e tdecls t1 t3
+              advise e t3
             e@(E.App s f@(E.Select s' m i) args) t1 -> case args of
               [] -> throwE (CannotSynthesiseSelect s' m i)
               (ExpLevel  e : args') -> do
                 (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                 t2 <- Expose.internalChoice tdecls m e u1 i
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
-                LTI.match e tdecls t1 t3
+                advise e t3
               (arg : _) -> 
                 throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App s h@(E.SendType s' t0) args) t1 -> 
@@ -1097,7 +1102,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                   (a, _, t2) <- Expose.typeOutput tdecls e u1
                   (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs a t0 t2) args'
-                  LTI.match e tdecls t1 t3
+                  advise e t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App s f@(E.ReceiveType s') args) t1 ->
@@ -1108,27 +1113,27 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                   (a, k, u1') <- Expose.typeInput tdecls (Right e) u1
                   let t2 = T.AppExists (spanFromTo f e) [(a, k)] u1'
                   (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
-                  LTI.match e tdecls t1 t3
+                  advise e t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
             e@(E.App _ h args) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               (_, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 args
-              LTI.match e tdecls t1 t3
+              advise e t3
             h@(E.Var _ x) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               (_, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-              LTI.match e tdecls t1 t3
+              advise e t3
             e t1@(T.Var _ _ InstLv _) -> do
               (_, t2, _) <- synth tdecls ddecls kctx tctx e
-              LTI.match e tdecls t1 t2
+              advise e t2
             -- A lambda that cannot be synthesised still declares its multiplicity:
             -- the expected arrows must carry it, and the rest is left to checkValArgs.
             e@(E.Abs _ ps m _) t1 ->
               do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
                 (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-                LTI.match e tdecls t1 t3
+                advise e t3
               `catchE` \_ -> mempty <$ mapM_ (\m' -> addMultEquation (Origin (getSpan m')) m' m)
                                                (arrowMults ps (normalise tdecls t1))
               where
@@ -1143,7 +1148,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
                 (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-                LTI.match e tdecls t1 t3
+                advise e t3
               `catchE` \_ -> return mempty
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)

@@ -329,8 +329,8 @@ toMessage src = \case
     ("Polymorphic type " ++ bt (unparse t) ++ " for the type argument left open in " ++ bt (show x))
     ++ "The type of " ++ bt (show x) ++ ", bound at"
     ++ locateSpan src (getSpan x)
-    ++ "cannot be instantiated here: a polymorphic value is not instantiated implicitly.\n"
-    ++ "Provide the type argument where " ++ bt (show x) ++ " is bound"
+    ++ "stands for a single monotype; if it should be polymorphic, provide the type argument where "
+    ++ bt (show x) ++ " is bound"
   EscapedTypeArgOutOfScope s x a -> makeError src s
     ("Type variable " ++ bt (show a) ++ " escapes its scope")
     ++ "It would enter the type of " ++ bt (show x) ++ ", bound at"
