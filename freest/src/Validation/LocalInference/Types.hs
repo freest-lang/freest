@@ -10,7 +10,7 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, incCounter, addKindConstraint, addMultEquation)
+import Validation.Base (Validation, incCounter, addKindConstraint, addMultEquation, escapedTypeVar, bindEscapedTypeVar)
 import Syntax.Provenance (Origin(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
@@ -19,7 +19,7 @@ import Validation.LocalInference.Substitution
 import Validation.Normalisation 
   (tNameRedex, isWhnf, reduce, normalise)
 
-import Control.Monad (zipWithM, unless, forM_)
+import Control.Monad (zipWithM, unless, when, forM_)
 import Control.Monad.Extra (whileM)
 import Control.Monad.Trans.Except (throwE)
 import Data.Foldable (fold)
@@ -50,8 +50,8 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       -- M-FIV
       _ | Set.null fiv12 && not (openKinds t1 || openKinds t2) -> return emptySubs
       -- M-Inst
-      (T.Var _ _ InstLv iv, t2) -> return (subsType iv t2)
-      (t1, T.Var _ _ InstLv iv) -> return (subsType iv t1)
+      (T.Var _ _ InstLv iv, t2) -> instVar iv t2
+      (t1, T.Var _ _ InstLv iv) -> instVar iv t1
       -- M-DualInst
       (T.AppDual _ t1'@(T.Var _ _ InstLv iv), t2) ->
         match' e tdecls bindings visited t1' (T.AppDual (getSpan t2) t2)
@@ -162,6 +162,36 @@ match e tdecls = match' e tdecls Set.empty Set.empty
         -> match' e tdecls bindings visited t1 (reduce tdecls t2)
       -- no match
         | otherwise -> return emptySubs
+
+  -- an escaped variable is bound once, to an in-scope monotype; a fresh variable it meets is bound instead
+  instVar iv t = escapedTypeVar iv >>= \case
+    _ | T.Var _ _ InstLv iv' <- t, iv' == iv -> return emptySubs
+    Nothing -> return (subsType iv t)
+    Just entry | T.Var s k InstLv jv <- t -> escapedTypeVar jv >>= \case
+      Nothing -> return (subsType jv (T.Var s k InstLv iv))
+      Just _  -> bindEscaped iv entry t
+    Just entry -> bindEscaped iv entry t
+
+  bindEscaped iv (x, scope, stored) t = case stored of
+    Just u  -> (subsType iv u <>) <$> match e tdecls u t
+    Nothing -> do
+      when (polytype t) $ throwE (Error.EscapedTypeArgPolymorphic (getSpan e) x t)
+      forM_ (Set.lookupMin (objVars t Set.\\ scope)) \a ->
+        throwE (Error.EscapedTypeArgOutOfScope (getSpan e) x a)
+      subsType iv t <$ bindEscapedTypeVar iv t
+
+  polytype = \case
+    T.AppForall{} -> True
+    T.ForallM{}   -> True
+    T.App _ u us  -> polytype u || any polytype us
+    T.Abs _ _ u   -> polytype u
+    _             -> False
+
+  objVars = \case
+    T.Var _ _ ObjLv a -> Set.singleton a
+    T.Abs _ aks u     -> objVars u Set.\\ Set.fromList (map fst aks)
+    T.App _ u us      -> Set.unions (objVars u : map objVars us)
+    _                 -> Set.empty
 
   isubsAbsorbed = foldMap \iv -> subsType iv (T.Void (getSpan iv) (K.uc (getSpan iv)))
 

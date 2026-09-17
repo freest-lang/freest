@@ -13,6 +13,9 @@ module Validation.Base
   , CallBound(..)
   , addCallBound
   , addMultParam
+  , escapeTypeVar
+  , escapedTypeVar
+  , bindEscapedTypeVar
   , KindState
   , peekKindState
   , takeKindState
@@ -44,6 +47,7 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Except
 import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
+import Data.Set qualified as Set
 
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
@@ -69,6 +73,9 @@ data ValidationState
     , callBounds :: [CallBound]
     -- | A function's #m parameter and the signature binder it stands for.
     , multParams :: Map.Map Variable Variable
+    -- | Instantiation variables left open when a binder received their type:
+    -- the binder, the type variables in scope there, and the monotype bound once.
+    , typeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe TK.KindedType)
     -- | Kind-reading checks recorded to run after the solve, most recent first.
     , obligations :: [Obligation]
     -- | The solution kinding computed, kept for 'dischargeObligations'.
@@ -88,6 +95,7 @@ emptyValidationState = ValidationState
   , condSeqMults = []
   , callBounds = []
   , multParams = Map.empty
+  , typeStore = Map.empty
   , obligations = []
   , kindSolution = Nothing
   }
@@ -162,9 +170,30 @@ dischargeObligations = gets obligations >>= \case
     Nothing  -> internalError "kind obligations recorded before the solve"
     Just sol -> do
       modify \s -> s{obligations = []}
-      let g = Ground (resolveType sol) (resolveKind sol) (resolveMult sol)
-                     (Map.map (second (resolveType sol)))
+      store <- gets typeStore
+      let ground = resolveType sol . zonkTypeStore store
+          g = Ground ground (resolveKind sol) (resolveMult sol) (Map.map (second ground))
       mapM_ ($ g) (reverse obs)
+
+escapeTypeVar :: Variable -> Variable -> Set.Set Variable -> Validation ()
+escapeTypeVar iv x scope =
+  modify \s -> s{typeStore = Map.insertWith (\_ old -> old) iv (x, scope, Nothing) (typeStore s)}
+
+escapedTypeVar :: Variable -> Validation (Maybe (Variable, Set.Set Variable, Maybe TK.KindedType))
+escapedTypeVar iv = gets (Map.lookup iv . typeStore)
+
+bindEscapedTypeVar :: Variable -> TK.KindedType -> Validation ()
+bindEscapedTypeVar iv t =
+  modify \s -> s{typeStore = Map.adjust (\(x, scope, _) -> (x, scope, Just t)) iv (typeStore s)}
+
+zonkTypeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe TK.KindedType) -> TK.KindedType -> TK.KindedType
+zonkTypeStore store = go Set.empty
+  where
+    go seen = \case
+      TK.Var _ _ InstLv iv | iv `Set.notMember` seen, Just (_, _, Just u) <- Map.lookup iv store -> go (Set.insert iv seen) u
+      TK.Abs s aks u -> TK.Abs s aks (go seen u)
+      TK.App s u us  -> TK.App s (go seen u) (map (go seen) us)
+      t -> t
 
 -- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
 addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()

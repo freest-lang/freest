@@ -44,7 +44,8 @@ data Error
       K.Multiplicity Origin
       K.Multiplicity Origin
   | CannotInferHigherKindedTypeApp Span K.Kind
-  | CannotInferTypeArgAtBinding Span Variable Span
+  | EscapedTypeArgPolymorphic Span Variable TK.KindedType
+  | EscapedTypeArgOutOfScope Span Variable Variable
   | CannotSatisfyKindConstraint Origin K.Kind K.Kind
   | CannotSatisfyBaseKindConstraint Origin K.BaseKind K.BaseKind
   | InfiniteKind Origin Variable K.Kind
@@ -141,7 +142,8 @@ instance Located Error where
   getSpan = \case
     ArrowMultMismatch s _ _ _ _ _ _ -> s
     CannotInferHigherKindedTypeApp s _ -> s
-    CannotInferTypeArgAtBinding s _ _ -> s
+    EscapedTypeArgPolymorphic s _ _ -> s
+    EscapedTypeArgOutOfScope s _ _ -> s
     CannotSatisfyKindConstraint o _ _ -> getSpan o
     CannotSatisfyBaseKindConstraint o _ _ -> getSpan o
     InfiniteKind o _ _ -> getSpan o
@@ -323,11 +325,17 @@ toMessage src = \case
     ++ "The type parameter has kind " ++ bt (tidyK k) ++ ", declared at"
     ++ locateSpan src (getSpan k)
     ++ "Higher-kinded type arguments are not inferred; please provide them explicitly"
-  CannotInferTypeArgAtBinding s x s' -> makeError src s
-    ("Could not infer the type of " ++ bt (show x))
-    ++ "A type argument of the application at"
-    ++ locateSpan src s'
-    ++ "is left open; please provide it explicitly"
+  EscapedTypeArgPolymorphic s x t -> makeError src s
+    ("Polymorphic type " ++ bt (unparse t) ++ " for the type argument left open in " ++ bt (show x))
+    ++ "The type of " ++ bt (show x) ++ ", bound at"
+    ++ locateSpan src (getSpan x)
+    ++ "cannot be instantiated here: a polymorphic value is not instantiated implicitly.\n"
+    ++ "Provide the type argument where " ++ bt (show x) ++ " is bound"
+  EscapedTypeArgOutOfScope s x a -> makeError src s
+    ("Type variable " ++ bt (show a) ++ " escapes its scope")
+    ++ "It would enter the type of " ++ bt (show x) ++ ", bound at"
+    ++ locateSpan src (getSpan x)
+    ++ "where " ++ bt (show a) ++ " is not in scope"
   CannotSatisfyKindConstraint o k1 k2 -> kindMismatch src (getSpan o) k2 k1
   CannotSatisfyBaseKindConstraint o p1 p2 -> makeError src (getSpan o)
     ("Expected a " ++ prettyBk p2 ++ ", but got a " ++ prettyBk p1)

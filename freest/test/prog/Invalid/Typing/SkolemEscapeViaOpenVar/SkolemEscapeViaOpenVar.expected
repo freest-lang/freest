@@ -1,2 +1,3 @@
-SkolemEscapeViaOpenVar.fst:13:8–13:9: error:
-Could not infer the type of `r`
+SkolemEscapeViaOpenVar.fst:15:19–15:20: error:
+Type variable `d` escapes its scope
+SkolemEscapeViaOpenVar.fst:13:8–13:9

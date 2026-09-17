@@ -783,7 +783,7 @@ checkPat tdecls ddecls kctx p t = case p of
     checkEquivTypes tdecls ddecls (Right p) t (T.List s (T.Char s))
     pure (kctx, Map.empty)
   -- x
-  E.VarPat    s x   -> (kctx, Map.singleton (Left x) t) <$ checkNoOpenTypeArg x t
+  E.VarPat    s x   -> (kctx, Map.singleton (Left x) t) <$ escapeOpenTypeArgs kctx x t
   -- (@t1, ..., @tn, p)
   E.PackPat s aks p ->
     case normalise tdecls t of
@@ -875,14 +875,15 @@ checkPat tdecls ddecls kctx p t = case p of
     Kinding.boundMultBy (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
       (throwE (NonLinPat s p (groundType g t)))
-    checkNoOpenTypeArg x t
+    escapeOpenTypeArgs kctx x t
     second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
 
--- | A type reaching a binder may not leave a type argument open: types have no
--- global store, so each use would instantiate it anew.
-checkNoOpenTypeArg :: Variable -> T.KindedType -> Validation ()
-checkNoOpenTypeArg x t = forM_ (Set.lookupMin (LTI.fiv t)) \iv ->
-  throwE (CannotInferTypeArgAtBinding (getSpan x) x (getSpan iv))
+-- | A type reaching a binder leaves the application that built it: its open type
+-- arguments become global, each bound once by a later use (Quick Look's
+-- unification variables).
+escapeOpenTypeArgs :: KindCtx -> Variable -> T.KindedType -> Validation ()
+escapeOpenTypeArgs kctx x t =
+  forM_ (LTI.fiv t) \iv -> escapeTypeVar iv x (Set.fromList [a | Left a <- Map.keys kctx])
 
 -- | Check-against for RHSs. Given kind and type contexts (and the 
 -- pattern/expression where the RHS occurs in, for error messages), this 
@@ -1118,9 +1119,9 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               (_, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               LTI.match e tdecls t1 t3
-            e (T.Var _ _ InstLv iv) -> do
+            e t1@(T.Var _ _ InstLv _) -> do
               (_, t2, _) <- synth tdecls ddecls kctx tctx e
-              return (LI.subsType iv t2)
+              LTI.match e tdecls t1 t2
             -- A lambda that cannot be synthesised still declares its multiplicity:
             -- the expected arrows must carry it, and the rest is left to checkValArgs.
             e@(E.Abs _ ps m _) t1 ->
