@@ -293,7 +293,7 @@ synth tdecls ddecls kctx tctx = \case
     (E.Let s ds' e', t,) <$> typeCtxDifference tdecls kctx' tctxe tctxds
   e@(E.Case s e' cs@((p1, rhs1) : cs'))   -> do
     -- TODO: detect redundant and incomplete patterns
-    (e'', t, tctx') <- synth tdecls ddecls kctx tctx e'
+    (e'', t, tctx') <- synthScrutinee tdecls ddecls kctx tctx e'
     (kctxp1, tctxp1) <- checkPat tdecls ddecls kctx p1 t
     (rhs1', t1, tctxrhs1) <- synthRHS tdecls ddecls kctxp1 (freshCtx tctxp1 `Map.union` tctx') (Right e') rhs1
     tctx1 <- typeCtxDifference tdecls kctxp1 tctxrhs1 tctxp1
@@ -323,6 +323,16 @@ synth tdecls ddecls kctx tctx = \case
 -- pattern/expression where the RHS occurs in, for error messages), this 
 -- function synthesizes the type of a RHS, returning its type and the updated
 -- type context without the linear variables consumed in it.
+-- | 'synth' for an expression whose value is matched: its leading quantifiers are
+-- instantiated there, as a function head's are.
+synthScrutinee :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> E.KindedExp
+               -> Validation (E.KindedExp, T.KindedType, TypeCtx)
+synthScrutinee tdecls ddecls kctx tctx e = do
+  (e', t, tctx') <- synth tdecls ddecls kctx tctx e
+  (args, kivs, _, u) <- instantiateResult (getSpan e) 0 tdecls ddecls kctx tctx' t []
+  forM_ kivs \(k, ms, w) -> checkInstKind (getSpan e) mempty k ms w
+  return (if null args then e' else E.App (getSpan e) e' args, u, tctx')
+
 synthRHS :: D.KindedTypeDecls -> D.KindedDataDecls
          -> KindCtx
          -> TypeCtx
@@ -474,7 +484,7 @@ check tdecls ddecls kctx tctx e t = case e of
     (e'', tctx'') <- check tdecls ddecls kctx' tctx' e' t
     (E.Let s ds' e'',) <$> typeCtxDifference tdecls kctx' tctx'' tctxds
   E.Case s e' psrhss -> do
-    (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
+    (e'', u, tctx') <- synthScrutinee tdecls ddecls kctx tctx e'
     (unzip -> (psrhss', tctxs)) <- forM psrhss \(pi, rhsi) -> do
       (kctxpi, tctxpi) <- checkPat tdecls ddecls kctx pi u
       let kctx' = kctxpi `Map.union` kctx
