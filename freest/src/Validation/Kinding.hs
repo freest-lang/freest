@@ -1166,6 +1166,9 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       σ   = ascend (fixpoint (solveMultSubs bodySubs))
       fixpoint σ' = let σ'' = solveMultSubs (bodySubs ++ callSubs σ') in if σ'' == σ' then σ' else fixpoint σ''
       ascend σ' = let σ'' = foldr (\φ -> Map.insert φ (lub σ' φ)) σ' paramSide in if σ'' == σ' then σ' else ascend σ''
+      -- body bounds suffice while higher-kinded type arguments are written; inferring one
+      -- needs the parameter-side call bounds back:
+      -- ++ [ copy σ' b ms | CallBound _ False a b ms <- calls, atom a == Just φ ]
       lub σ' φ = List.foldl' join (Sup nullSpan []) $
            [ applyMultSubst σ' l | MultSub l r _ <- bodySubs, atom r == Just φ ]
       paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
