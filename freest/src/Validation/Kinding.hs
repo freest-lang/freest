@@ -72,6 +72,7 @@ import Data.Set qualified as Set
 import Data.List qualified as List
 import Data.Maybe ( isJust, listToMaybe )
 import Data.Graph qualified as Graph
+import qualified Debug.Trace
 import Validation.HOTRecursion (checkNoHOTRec)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
@@ -758,16 +759,18 @@ kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
     (kctx',lds'') <- kindLetDecls tdecls ddecls kctx tctxds (sigs ++ fndefs)
     return (kctx', tctxds, lds ++ [E.Mutual lds''])
 
--- | Bound an inferred type's multiplicity by a given one: descend tuples to the
--- type-variable leaves and constrain each whose kind is still being inferred.
+-- | Bound an inferred type's multiplicity by a given one, blaming @site@: the
+-- use, discard or capture that imposes it, which is not where the bounding
+-- multiplicity itself was written. Descend tuples to the type-variable leaves
+-- and constrain each whose kind is still being inferred.
 -- Other shapes (sessions, functions, ground types) are left to the type checker
 -- — and matching on structure, rather than forcing the type's kind, avoids a
 -- 'normalise'-rebuilt session node whose eager smart constructor assumes
 -- proper-kinded operands.
-boundMultBy :: Multiplicity -> TK.KindedType -> Validation ()
-boundMultBy m = \case
+boundMultBy :: Span -> Multiplicity -> TK.KindedType -> Validation ()
+boundMultBy site m = \case
   TK.Var s k _ _ | hasSolvableVar k -> addKindConstraint o k (Proper s m Top)
-  TK.Tuple _ ts                     -> mapM_ (boundMultBy m) ts
+  TK.Tuple _ ts                     -> mapM_ (boundMultBy site m) ts
   TK.AppArrow s m' _ _ | hasSolvableVar (Proper s m' Top)
                                     -> addKindConstraint o (Proper s m' Top) (Proper s m Top)
   TK.ForallM s m' _ _ | hasSolvableVar (Proper s m' Top)
@@ -776,7 +779,7 @@ boundMultBy m = \case
                                     -> addKindConstraint o (Proper s m' Top) (Proper s m Top)
   TK.TName s k _ | hasSolvableVar k -> addKindConstraint o k (Proper s m Top)
   _                                 -> pure ()
-  where o = Origin AtUse (getSpan m)
+  where o = Origin AtUse site
 
 -- | Decompose a pattern against its type into the (variable, type) leaves it
 -- binds, plus the types an as-pattern forces unrestricted. Variable, wildcard,
@@ -1177,6 +1180,7 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       lowers σ' φ = [ (applyMultSubst σ' l, (o, l)) | MultSub l r o <- bodySubs, atom r == Just φ ]
       -- the bound a variable's value came from: the join that raised it on the
       -- parameter side, else the meet that lowered it in the descent
+      _dbg = Debug.Trace.trace ("ATUSE-SUBS " ++ show [ (l, r, getSpan o') | MultSub l r o' <- msubs, explains True o' == 0 ]) ()
       witness = Map.unions
         [ Map.fromList [ (φ, w) | φ <- paramSide, Just w <- [earliest (lub σ φ) (lowers σ φ)] ], wd, wEq ]
       -- The earliest bound reaching the value, because kinding emits a signature's
@@ -1196,7 +1200,7 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
         in if c' == c then c else shrink c'
       atom m = case applyMultSubst θ m of VarM _ lv φ | solvable lv -> Just φ; _ -> Nothing
       nonAtom m = if isJust (atom m) then [] else solvables (applyMultSubst θ m)
-      sol = KindSolution ksub psub (Map.union θ σ)
+      sol = _dbg `seq` KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
       bounds = [(m1, [m1], m2, [m2], o) | MultSub m1 m2 o <- msubs]
             ++ [ let c = copy σ b ms in

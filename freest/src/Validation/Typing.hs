@@ -133,7 +133,7 @@ lookupType kctx tctx xi = case Map.lookupIndex xi tctx of
     let (bound, Binding t us) = Map.elemAt ix tctx
     case us of
       prev : _ -> do
-        Kinding.boundMultBy (K.Un (getSpan xi)) t   -- Merge
+        Kinding.boundMultBy (getSpan xi) (K.Un (getSpan xi)) t   -- Merge
         checkWhenSolved \g ->
           when (Kinding.isRestricted (groundType g t)) do
             throwE (LinConsumedTwice (getSpan xi) bound (groundType g t) prev)
@@ -161,7 +161,7 @@ typeCtxDifference tdecls kctx tctx1 tctx2 = do
   foldM (\tctx1' x -> case tctx1 Map.!? x of
       Just (Binding t us) -> do
         when (null us) do
-          Kinding.boundMultBy (K.Un (getSpan x)) t  -- Weaken
+          Kinding.boundMultBy (getSpan x) (K.Un (getSpan x)) t  -- Weaken
           checkWhenSolved \g ->
             let t' = groundType g t in
             when (Kinding.isRestricted t') do
@@ -818,7 +818,7 @@ checkPat tdecls ddecls kctx p t = case p of
           checkPackPat (Map.insert (Left a) k' kctx) (subs b (T.fromVariable ObjLv a k') u) aks bks
   E.WildPat  s _    -> do
     -- the pattern binds nothing, so this discard reaches no context: force here
-    Kinding.boundMultBy (K.Un s) t
+    Kinding.boundMultBy s (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
       (throwE (NonLinPat s p (groundType g t)))
     return (kctx, Map.empty)
@@ -887,7 +887,7 @@ checkPat tdecls ddecls kctx p t = case p of
   -- x@p
   E.AsPat s x p'     -> do
     -- bound twice over, as @x@ and by @p'@
-    Kinding.boundMultBy (K.Un s) t
+    Kinding.boundMultBy s (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
       (throwE (NonLinPat s p (groundType g t)))
     escapeOpenTypeArgs kctx x t
@@ -962,7 +962,7 @@ checkEquivTypeCtxsCase fpe = \case
     case map used tctxs of
       us@(u1 : us') ->
         forM_ (Map.elems (Map.unions us `Map.difference` intersections u1 us'))
-          \t -> Kinding.boundMultBy (K.Un (getSpan t)) t
+          \t -> Kinding.boundMultBy (getSpan t) (K.Un (getSpan t)) t
       [] -> return ()
     checkWhenSolved \g -> case map (consumed g) tctxs of
       cs@(c1 : cs') ->
@@ -985,7 +985,7 @@ checkEquivTypeCtxsFun
   -> Span
   -> Validation ()
 checkEquivTypeCtxsFun m tctx1 tctx2 s = do
-  mapM_ (Kinding.boundMultBy m) (newlyUsed tctx2 tctx1)   -- capture under a closure
+  mapM_ (Kinding.boundMultBy s m) (newlyUsed tctx2 tctx1)   -- capture under a closure
   checkWhenSolved \g ->
     forM_ (newlyConsumed g tctx2 tctx1) \(xa, t) ->
       case T.kindOf t of
