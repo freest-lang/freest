@@ -27,7 +27,7 @@ import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Syntax.Names
 import Syntax.Type.Kinded qualified as T
-import Syntax.Provenance ( Origin(..) )
+import Syntax.Provenance ( Origin(..), Reason(..) )
 import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
@@ -634,7 +634,7 @@ checkInstKind sp θ k ms w = do
   where
     t = LI.applySubs θ w
     go result = \cases
-      (K.Proper _ m1 _) (K.Proper _ m2 _) -> addCallBound (CallBound (Origin sp) result m1 m2 ms)
+      (K.Proper _ m1 _) (K.Proper _ m2 _) -> addCallBound (CallBound (Origin AtApp sp) result m1 m2 ms)
       (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> go (not result) k11 k21 >> go result k12 k22
       _ _ -> return ()
 
@@ -765,9 +765,9 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
       TypeLevel (a, mk) -> maybe (getSpan a) (spanFromTo a) mk
       MultLevel φ -> getSpan φ
     matchArrowMult sp i m m'
-      | not (LMI.rigid m && LMI.rigid m') = addMultEquation (Origin (getSpan m')) m m'
+      | not (LMI.rigid m && LMI.rigid m') = addMultEquation (Origin AtLambda (getSpan m')) m m'
       | otherwise = unless (m' == m) do
-          throwE (ArrowMultMismatch sp fe i m (Origin (getSpan m)) m' (Origin (getSpan m')))
+          throwE (ArrowMultMismatch sp fe i m (Origin AtLambda (getSpan m)) m' (Origin AtLambda (getSpan m')))
     fpe = case fe of
       Left f -> Left (Left f)
       Right e -> Right e
@@ -1149,7 +1149,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
                 (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
                 advise e t3
-              `catchE` \_ -> mempty <$ mapM_ (\m' -> addMultEquation (Origin (getSpan m')) m' m)
+              `catchE` \_ -> mempty <$ mapM_ (\m' -> addMultEquation (Origin AtLambda (getSpan m')) m' m)
                                                (arrowMults ps (normalise tdecls t1))
               where
                 arrowMults = \cases

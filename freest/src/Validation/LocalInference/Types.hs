@@ -11,7 +11,7 @@ import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
 import Validation.Base (Validation, incCounter, addKindConstraint, addMultEquation, escapedTypeVar, bindEscapedTypeVar)
-import Syntax.Provenance (Origin(..))
+import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
 import Validation.LocalInference.Substitution
@@ -36,7 +36,7 @@ match :: E.KindedExp -> D.KindedTypeDecls
       -> Validation Substitution
 match e tdecls = match' e tdecls Set.empty Set.empty
   where
-  emit = mapM_ \(MultEquation l _ r _) -> addMultEquation (Origin (getSpan e)) l r
+  emit = mapM_ \(MultEquation l _ r _) -> addMultEquation (Origin AtApp (getSpan e)) l r
 
   match' e tdecls bindings visited t1 t2 =
     case (tNameRedex t1, tNameRedex t2) of

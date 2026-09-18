@@ -8,6 +8,7 @@ module Validation.LocalInference.Multiplicities
   , multEq
   , applyMultSubst
   , solveMultSubs
+  , solveMultSubsWitnessed
   , kindEqConstraints
   , rigid
   , solvables
@@ -17,10 +18,11 @@ module Validation.LocalInference.Multiplicities
 import Syntax.Base
 import Syntax.Kind (Multiplicity(..), pattern Un, pattern VarM)
 import Syntax.Kind qualified as K
-import Syntax.Provenance (Origin(..))
+import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.Base (Validation, incCounter)
 
 import Control.Monad (guard)
+import Data.Bifunctor (first)
 import Data.List (foldl')
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
@@ -36,7 +38,7 @@ data MultEquation = MultEquation Multiplicity Origin Multiplicity Origin
 
 -- | Build an equation between two multiplicities.
 multEq :: Multiplicity -> Multiplicity -> MultEquation
-multEq m1 m2 = MultEquation m1 (Origin (getSpan m1)) m2 (Origin (getSpan m2))
+multEq m1 m2 = MultEquation m1 (Origin InSignature (getSpan m1)) m2 (Origin InSignature (getSpan m2))
 
 kindEqConstraints :: K.Kind -> K.Kind -> MultConstraints
 kindEqConstraints = \cases
@@ -70,17 +72,24 @@ applyMultSubst σ = go Set.empty
 -- | The paper's Fig. 14: each variable starts at the top and is met with its
 -- rigid upper bounds. It only computes; the caller checks.
 solveMultSubs :: MultSubConstraints -> Map.Map Variable Multiplicity
-solveMultSubs cs = aliasMutual (fixpoint Map.empty)
-  where
-    fixpoint σ = let σ' = foldl' step σ cs in if σ' == σ then σ else fixpoint σ'
+solveMultSubs = fst . solveMultSubsWitnessed
 
-    step σ (MultSub l r _)
-      | rigid r', not (isTop r') = foldl' (meetWith r') σ (solvables l)
-      | otherwise                = σ
+-- | 'solveMultSubs', keeping for each variable the bound that last lowered it:
+-- the constraint its value came from, which error messages blame.
+solveMultSubsWitnessed :: MultSubConstraints -> (Map.Map Variable Multiplicity, Map.Map Variable Origin)
+solveMultSubsWitnessed cs = first aliasMutual (fixpoint (Map.empty, Map.empty))
+  where
+    fixpoint st = let st' = foldl' step st cs in if fst st' == fst st then st else fixpoint st'
+
+    step st@(σ, _) (MultSub l r o)
+      | rigid r', not (isTop r') = foldl' (meetWith o r') st (solvables l)
+      | otherwise                = st
       where r' = applyMultSubst σ r
 
-    meetWith r' σ φ =
-      Map.insert φ (K.meet (Map.findWithDefault (Lin (getSpan r')) φ σ) r') σ
+    meetWith o r' (σ, ws) φ =
+      let m = K.meet (Map.findWithDefault (Lin (getSpan r')) φ σ) r'
+      in ( Map.insert φ m σ
+         , if Map.lookup φ σ == Just m then ws else Map.insert φ o ws )
 
     -- a mutual pair is an equality descent never sees; unaliased, the two default apart
     aliasMutual σ = foldl' alias σ

@@ -2,7 +2,7 @@ module MultEquationSolverSpec (spec) where
 
 import Syntax.Base
 import Syntax.Kind (Multiplicity(..))
-import Syntax.Provenance (Origin(..))
+import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.Base (emptyValidationState, runValidation)
 import Validation.LocalInference.Multiplicities
 
@@ -24,7 +24,7 @@ spec = describe "Multiplicity equation solver (ACUI)" $ do
   it "keeps a variable the kind unifier minted bound under its own id" $
     fmap (any (same x) . Map.keys) (solved [eq [x, y] [a, b]]) `shouldBe` Just True
   where
-    o = Origin nullSpan
+    o = Origin InSignature nullSpan
     x = Variable nullSpan "φ-2" (-2)
     y = Variable nullSpan "φ1001" 1001
     a = Variable nullSpan "φ1002" 1002

@@ -24,7 +24,7 @@ import Parser.Unparser
 import Syntax.Base
 import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
-import Syntax.Provenance ( Origin(..) )
+import Syntax.Provenance ( Origin(..), Reason(..) )
 import Syntax.Type.Kinded qualified as TK
 import Validation.Substitution ( betaRule )
 import Compiler.Bug ( internalError )
@@ -49,7 +49,7 @@ data Error
   | CannotSatisfyKindConstraint Origin K.Kind K.Kind
   | CannotSatisfyBaseKindConstraint Origin K.BaseKind K.BaseKind
   | InfiniteKind Origin Variable K.Kind
-  | CannotSatisfyMultConstraint Span K.Multiplicity Origin K.Multiplicity Origin
+  | CannotSatisfyMultConstraint Origin K.Multiplicity Origin K.Multiplicity Origin
   | CannotSynthesisePack Span E.KindedExp
   | CannotSynthesisePat Span E.KindedPat
   | CannotSynthesiseReceiveType Span
@@ -147,7 +147,7 @@ instance Located Error where
     CannotSatisfyKindConstraint o _ _ -> getSpan o
     CannotSatisfyBaseKindConstraint o _ _ -> getSpan o
     InfiniteKind o _ _ -> getSpan o
-    CannotSatisfyMultConstraint s _ _ _ _ -> s
+    CannotSatisfyMultConstraint o _ _ _ _ -> getSpan o
     CannotSynthesisePack s _ -> s
     CannotSynthesisePat s _ -> s
     CannotSynthesiseReceiveType s -> s
@@ -344,8 +344,8 @@ toMessage src = \case
     where e  = mkTidy (('k', v) : kMetas k)
           va = tidyName e v
           vk = tidyKind e k
-  CannotSatisfyMultConstraint s m1 o1 m2 o2 -> makeError src s
-    "Could not infer consistent multiplicities for this application"
+  CannotSatisfyMultConstraint o m1 o1 m2 o2 -> makeError src (getSpan o)
+    ("Could not infer consistent multiplicities for this " ++ site o)
     ++ "Could not match multiplicity " ++ multSide src m1 o1
     ++ "with multiplicity " ++ multSide src m2 o2
   CannotSynthesisePack s e -> makeError src s
@@ -832,8 +832,16 @@ toMessage src = \case
     | otherwise = lead ++ "taken from:\n" ++ snippet src sp True
 
   -- | Render one side of a multiplicity mismatch
+  -- | What the span of a failing constraint points at
+  site :: Origin -> String
+  site (Origin r _) = case r of
+    AtUse       -> "use"
+    AtApp       -> "application"
+    AtLambda    -> "function"
+    InSignature -> "type"
+
   multSide :: Source -> K.Multiplicity -> Origin -> String
-  multSide src m (Origin sp) =
+  multSide src m (Origin _ sp) =
     bt (tidyM m) ++ multAdj ++ " inferred from" ++locateSpan src sp
     where
     multAdj = case m of

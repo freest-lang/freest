@@ -46,10 +46,10 @@ import Validation.Base
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
 import Validation.Substitution ( subs, subsAll, subsMultType, subsMultMult )
-import Syntax.Provenance ( Origin(..) )
+import Syntax.Provenance ( Origin(..), Reason(..), explains )
 import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyKindSubs )
 import Validation.LocalInference.Multiplicities
-  ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs
+  ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs, solveMultSubsWitnessed
   , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveNonMultModule )
@@ -66,6 +66,7 @@ import Data.Foldable.Extra ( allM )
 import Data.Functor ( (<&>) )
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
+import Data.Ord qualified as Ord
 import Data.Set qualified as Set
 import Data.List qualified as List
 import Data.Maybe ( isJust )
@@ -159,7 +160,7 @@ synth ctx = \case
           _ | bk1 == Channel       -> pure m1
           VarBK lv _ | solvable lv -> do
             φv <- freshUnifMult s
-            addCondSeqMult (Origin s) bk1 φv m1 m2
+            addCondSeqMult (Origin InSignature s) bk1 φv m1 m2
             pure φv
           _                         -> pure (join m1 m2)
         return $ TK.appSemiWithKind s (Proper s φ ψ) t' u'
@@ -283,7 +284,7 @@ checkSession ctx t = checkBaseKind ctx t Session
 checkOperand :: KindCtx -> BaseKind -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
 checkOperand ctx req t = do
   t' <- synth ctx t
-  let o = Origin (getSpan t)
+  let o = Origin InSignature (getSpan t)
   case TK.kindOf t' of
     k@(Proper _ m bk)
       | isVarBaseKind bk -> addBaseKindConstraint (SubBaseKind o bk req) >> return (m, bk, t')
@@ -329,7 +330,7 @@ combineBaseKinds op unit mkC s bks
   | all ground bks = pure (foldr op unit bks)
   | otherwise = do
       ψv <- freshUnifBaseKindVar s
-      addBaseKindConstraint (mkC (Origin s) ψv bks)
+      addBaseKindConstraint (mkC (Origin InSignature s) ψv bks)
       return (VarBK UnifLv ψv)
   where ground = \case VarBK lv _ -> not (solvable lv); _ -> True
 
@@ -363,7 +364,7 @@ checkBaseKindK t bk = do
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k
   | hasSolvableVar k' || hasSolvableVar k =
-      addKindConstraint (Origin (getSpan t)) k' k
+      addKindConstraint (Origin InSignature (getSpan t)) k' k
   | otherwise = unless (k' <: k) $ throwE (KindMismatch (getSpan t) k t)
 
 -- | Does a kind mention a solvable (inference) variable?
@@ -514,13 +515,13 @@ kindModule ctx mod = do
   forM_ (Map.keys extMap) $ \i -> do
     let members = Set.intersection (Map.findWithDefault (Set.singleton i) i sccOf) (Map.keysSet siglessDatas)
         m       = foldr join (Un (getSpan i)) [ e | j <- Set.toList members, Just e <- [Map.lookup j extMap] ]
-    addMultEquation (Origin (getSpan i)) (resultMult (fst (freshSigs Map.! i))) m
+    addMultEquation (Origin InSignature (getSpan i)) (resultMult (fst (freshSigs Map.! i))) m
   -- an unannotated datatype parameter used as a proper field defaults to
   -- unrestricted (a datatype is shared unless a field forces linearity)
   binds <- gets kindBindings
   forM_ (concatMap (paramKindVars . fst) (Map.elems freshD)) $ \v ->
     case Map.lookup v binds of
-      Just (Proper _ φ _) -> addMultEquation (Origin (getSpan v)) φ (Un (getSpan v))
+      Just (Proper _ φ _) -> addMultEquation (Origin InSignature (getSpan v)) φ (Un (getSpan v))
       _                   -> pure ()
   let ddecls = D.DataDecls dcdecls kdtdecls
   (_, lds) <- kindLetDecls tdecls ddecls ctx' Map.empty (M.definitions mod)
@@ -591,7 +592,7 @@ kindModule ctx mod = do
         inferBody recursive s ctxB body resK pkv
           | recursive = do
               b <- check ctxB body resK
-              let o = Origin s
+              let o = Origin InSignature s
               -- the multiplicity is a fixpoint, not just a lower bound: equate it
               -- to the body's, so a shared recursive channel stays unrestricted
               case (resK, TK.kindOf b) of
@@ -602,7 +603,7 @@ kindModule ctx mod = do
               return b
           | otherwise = do
               b <- synth ctxB body
-              let o = Origin s
+              let o = Origin InSignature s
               addKindConstraint o (TK.kindOf b) resK
               addKindConstraint o resK (TK.kindOf b)
               return b
@@ -774,7 +775,7 @@ boundMultBy m = \case
                                     -> addKindConstraint o (Proper s m' Top) (Proper s m Top)
   TK.TName s k _ | hasSolvableVar k -> addKindConstraint o k (Proper s m Top)
   _                                 -> pure ()
-  where o = Origin (getSpan m)
+  where o = Origin AtUse (getSpan m)
 
 -- | Decompose a pattern against its type into the (variable, type) leaves it
 -- binds, plus the types an as-pattern forces unrestricted. Variable, wildcard,
@@ -1004,7 +1005,7 @@ kindAbsParams tdecls ddecls = \kctx mt pars ->
             E.Written ki <$ checkK (TK.fromVariable ObjLv a ki) k
           (Nothing, Just (TK.AppForall _ _ ((_, k) : _) _)) -> do
             k' <- freshUnifKind a
-            addKindConstraint (Origin (getSpan a)) k' k
+            addKindConstraint (Origin InSignature (getSpan a)) k' k
             pure (E.Inferred k')
           _ -> snd <$> resolveExpBndKind (a, mk)
         let k' = E.bndKind bk
@@ -1163,14 +1164,19 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
         Sup s as -> Sup s [(lv, if lv == ObjLv then Map.findWithDefault φ φ params else φ) | (lv, φ) <- as]
         m        -> m
       -- callers see a binder's parameter contravariantly, so its least solution is the most general
-      σ   = ascend (fixpoint (solveMultSubs bodySubs))
-      fixpoint σ' = let σ'' = solveMultSubs (bodySubs ++ callSubs σ') in if σ'' == σ' then σ' else fixpoint σ''
+      σ   = ascend σd
+      (σd, wd) = fixpoint (solveMultSubsWitnessed bodySubs)
+      fixpoint st@(σ', _) = let st'@(σ'', _) = solveMultSubsWitnessed (bodySubs ++ callSubs σ')
+                            in if σ'' == σ' then st' else fixpoint st'
       ascend σ' = let σ'' = foldr (\φ -> Map.insert φ (lub σ' φ)) σ' paramSide in if σ'' == σ' then σ' else ascend σ''
       -- body bounds suffice while higher-kinded type arguments are written; inferring one
       -- needs the parameter-side call bounds back:
       -- ++ [ copy σ' b ms | CallBound _ False a b ms <- calls, atom a == Just φ ]
-      lub σ' φ = List.foldl' join (Sup nullSpan []) $
-           [ applyMultSubst σ' l | MultSub l r _ <- bodySubs, atom r == Just φ ]
+      lub σ' φ = List.foldl' join (Sup nullSpan []) (map fst (lowers σ' φ))
+      lowers σ' φ = [ (applyMultSubst σ' l, o) | MultSub l r o <- bodySubs, atom r == Just φ ]
+      -- the bound a variable's value came from: the join that raised it on the
+      -- parameter side, else the meet that lowered it in the descent
+      witness = Map.union (Map.fromList [ (φ, o) | φ <- paramSide, (m, o) <- lowers σ φ, m == lub σ φ ]) wd
       paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
                              , φ `notElem` elsewhere ]
       elsewhere = concat $
@@ -1184,16 +1190,29 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       nonAtom m = if isJust (atom m) then [] else solvables (applyMultSubst θ m)
       sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
-      bounds = [(m1, m1, m2, m2, o) | MultSub m1 m2 o <- msubs]
-            ++ [ if result then (a, a, copy σ b ms, b, o) else (copy σ b ms, b, a, a, o)
+      bounds = [(m1, [m1], m2, [m2], o) | MultSub m1 m2 o <- msubs]
+            ++ [ let c = copy σ b ms in
+                 if result then (a, [a], c, [c, b], o) else (c, [c, b], a, [a], o)
                | CallBound o result a b ms <- calls ]
-      cause o m = head $
-        [ o' | φ <- solvables m, MultSub l r o' <- msubs ++ callSubs σ, φ `elem` solvables l, resolve r == resolve m ]
-        ++ [ o' | φ <- solvables m, MultEquation a o' b _ <- map toMultEq meqs ++ condEqs
-                , (x, y) <- [(a, b), (b, a)], φ `elem` solvables x, resolve y == resolve m ]
-        ++ [o]
+      -- a use or an application explains a multiplicity, a signature only restates it;
+      -- and a span other than the one already reported says more than repeating it
+      -- search the call's instantiation and the callee's own binder: a use in the
+      -- caller constrains the first, one in the callee's body the second; and a span
+      -- other than the one already reported says more than repeating it
+      cause o whys fixed = case [ o' | m <- whys, φ <- solvables m
+                                      , Just v <- [Map.lookup φ σ], resolve v == fixed
+                                      , Just o' <- [Map.lookup φ witness] ] of
+        (o' : _) -> o'
+        []       -> ranked o whys fixed
+      ranked o whys fixed = List.minimumBy (Ord.comparing (\o' -> (getSpan o' == getSpan o, explains (isUn fixed) o'))) $
+        [ o' | m <- whys, φ <- solvables m, MultSub l r o' <- msubs ++ callSubs σ
+             , φ `elem` solvables l, resolve r == fixed ]
+        ++ [ o' | m <- whys, φ <- solvables m, MultEquation a o' b _ <- map toMultEq meqs ++ condEqs
+                , (x, y) <- [(a, b), (b, a)], φ `elem` solvables x, resolve y == fixed ]
+        ++ [ setSpan (getSpan m) o | m <- whys, getSpan m /= nullSpan ] ++ [o]
   forM_ (List.find (\(l, _, r, _, _) -> not (resolve l <: resolve r)) bounds) \(l, whyL, r, whyR, o) ->
-    throwE (CannotSatisfyMultConstraint (getSpan o) (resolve l) (cause o whyL) (resolve r) (cause o whyR))
+    throwE (CannotSatisfyMultConstraint o (resolve l) (cause o whyL (resolve l))
+                                          (resolve r) (cause o whyR (resolve r)))
   return sol
   where
     resolveBK psub = \case VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ psub; bk -> bk
@@ -1201,7 +1220,7 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
     unifyErr = \case
       Mismatch o k1 k2 -> CannotSatisfyKindConstraint o k1 k2
       Occurs o v k     -> InfiniteKind o v k
-    multErr (MultEquation m1 o1 m2 o2) = CannotSatisfyMultConstraint (getSpan o1) m1 o1 m2 o2
+    multErr (MultEquation m1 o1 m2 o2) = CannotSatisfyMultConstraint o1 m1 o1 m2 o2
     preErr = \case
       SubBaseKind o p1 p2 -> CannotSatisfyBaseKindConstraint o p1 p2
       -- The baseKind solver only ever fails a subkinding constraint; a meet/join

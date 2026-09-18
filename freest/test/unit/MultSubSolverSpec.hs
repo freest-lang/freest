@@ -2,7 +2,7 @@ module MultSubSolverSpec (spec) where
 
 import Syntax.Base
 import Syntax.Kind (Multiplicity(..), pattern Un, (<:))
-import Syntax.Provenance (Origin(..))
+import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
 
 import Data.Map.Strict qualified as Map
@@ -23,7 +23,7 @@ spec = describe "Multiplicity subkinding solver (Fig. 14 descent)" $ do
   it "reports a constraint the solution violates" $
     unsat [sub (r [1, 2]) (v 1), sub (v 1) (r [1])] `shouldBe` True
   where
-    o = Origin nullSpan
+    o = Origin InSignature nullSpan
     var n = Variable nullSpan ("φ" ++ show n) n
     obj n = Variable nullSpan ("m" ++ show n) (100 + n)
     v n   = Sup nullSpan [(UnifLv, var n)]

@@ -2,7 +2,7 @@ module BaseKindSolverSpec (spec) where
 
 import Syntax.Base
 import Syntax.Kind (BaseKind(..))
-import Syntax.Provenance (Origin(..))
+import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.BaseKinds
 
 import Test.Hspec
@@ -26,7 +26,7 @@ spec = describe "BaseKind chain solver (C <: S <: T)" $ do
   it "does not solve object-level (rigid) variables" $
     solveFor [sub (v 1) Session] (rv 9) `shouldBe` Just (rv 9)
   where
-    o = Origin nullSpan
+    o = Origin InSignature nullSpan
     var n = Variable nullSpan ("ψ" ++ show n) n
     v  n  = VarBK UnifLv (var n)  -- a solvable baseKind variable
     rv n  = VarBK ObjLv (var n)   -- a rigid baseKind variable

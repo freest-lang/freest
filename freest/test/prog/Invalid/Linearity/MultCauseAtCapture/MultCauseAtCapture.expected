@@ -1,0 +1,4 @@
+MultCauseAtCapture.fst:8:16–8:53: error:
+Could not infer consistent multiplicities for this application
+MultCauseAtCapture.fst:8:27–8:28
+MultCauseAtCapture.fst:10:8–10:9
