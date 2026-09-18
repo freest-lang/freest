@@ -173,12 +173,12 @@ match e tdecls = match' e tdecls Set.empty Set.empty
     Just entry -> bindEscaped iv entry t
 
   bindEscaped iv (x, scope, stored) t = case stored of
-    Just u  -> (subsType iv u <>) <$> match e tdecls u t
+    Just (u, _) -> (subsType iv u <>) <$> match e tdecls u t
     Nothing -> do
       when (polytype t) $ throwE (Error.EscapedTypeArgPolymorphic (getSpan e) x t)
       forM_ (Set.lookupMin (objVars t Set.\\ scope)) \a ->
         throwE (Error.EscapedTypeArgOutOfScope (getSpan e) x a)
-      subsType iv t <$ bindEscapedTypeVar iv t
+      subsType iv t <$ bindEscapedTypeVar iv t (getSpan e)
 
   polytype = \case
     T.AppForall{} -> True

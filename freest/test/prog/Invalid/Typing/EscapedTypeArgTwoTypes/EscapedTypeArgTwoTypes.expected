@@ -1,2 +1,4 @@
 EscapedTypeArgTwoTypes.fst:3:50–3:53: error:
 Type mismatch
+The type argument of `k` was fixed:
+EscapedTypeArgTwoTypes.fst:3:41–3:45

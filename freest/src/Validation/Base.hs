@@ -16,6 +16,7 @@ module Validation.Base
   , escapeTypeVar
   , escapedTypeVar
   , bindEscapedTypeVar
+  , escapedTypeArgFixedAt
   , KindState
   , peekKindState
   , takeKindState
@@ -75,7 +76,7 @@ data ValidationState
     , multParams :: Map.Map Variable Variable
     -- | Instantiation variables left open when a binder received their type:
     -- the binder, the type variables in scope there, and the monotype bound once.
-    , typeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe TK.KindedType)
+    , typeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe (TK.KindedType, Span))
     -- | Kind-reading checks recorded to run after the solve, most recent first.
     , obligations :: [Obligation]
     -- | The solution kinding computed, kept for 'dischargeObligations'.
@@ -179,18 +180,29 @@ escapeTypeVar :: Variable -> Variable -> Set.Set Variable -> Validation ()
 escapeTypeVar iv x scope =
   modify \s -> s{typeStore = Map.insertWith (\_ old -> old) iv (x, scope, Nothing) (typeStore s)}
 
-escapedTypeVar :: Variable -> Validation (Maybe (Variable, Set.Set Variable, Maybe TK.KindedType))
+escapedTypeVar :: Variable -> Validation (Maybe (Variable, Set.Set Variable, Maybe (TK.KindedType, Span)))
 escapedTypeVar iv = gets (Map.lookup iv . typeStore)
 
-bindEscapedTypeVar :: Variable -> TK.KindedType -> Validation ()
-bindEscapedTypeVar iv t =
-  modify \s -> s{typeStore = Map.adjust (\(x, scope, _) -> (x, scope, Just t)) iv (typeStore s)}
+-- | Bind an escaped type argument, keeping the span of the expression that fixed
+-- it for 'escapedTypeArgFixedAt'.
+bindEscapedTypeVar :: Variable -> TK.KindedType -> Span -> Validation ()
+bindEscapedTypeVar iv t sp =
+  modify \s -> s{typeStore = Map.adjust (\(x, scope, _) -> (x, scope, Just (t, sp))) iv (typeStore s)}
 
-zonkTypeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe TK.KindedType) -> TK.KindedType -> TK.KindedType
+-- | The variable whose escaped type argument was bound to a type at one of the
+-- given spans, and where it was fixed. Error messages add that site: a type read
+-- off the store is otherwise reported at the span it was declared at.
+escapedTypeArgFixedAt :: [Span] -> Validation (Maybe (Variable, Span))
+escapedTypeArgFixedAt sps = gets \s ->
+  case [ (x, sp) | (x, _, Just (u, sp)) <- Map.elems (typeStore s), getSpan u `elem` sps ] of
+    (r : _) -> Just r
+    []      -> Nothing
+
+zonkTypeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe (TK.KindedType, Span)) -> TK.KindedType -> TK.KindedType
 zonkTypeStore store = go Set.empty
   where
     go seen = \case
-      TK.Var _ _ InstLv iv | iv `Set.notMember` seen, Just (_, _, Just u) <- Map.lookup iv store -> go (Set.insert iv seen) u
+      TK.Var _ _ InstLv iv | iv `Set.notMember` seen, Just (_, _, Just (u, _)) <- Map.lookup iv store -> go (Set.insert iv seen) u
       TK.Abs s aks u -> TK.Abs s aks (go seen u)
       TK.App s u us  -> TK.App s (go seen u) (map (go seen) us)
       t -> t

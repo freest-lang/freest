@@ -107,7 +107,8 @@ data Error
   | RestrictedFunInMutual Span Variable TK.KindedType
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.KindedPat)
+  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.KindedPat) (Maybe (Variable, Span))
+    -- ^ The last field names the variable whose escaped type argument was fixed, and where.
   | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.KindedPat)
   | TypeMismatchChoice Span TK.KindedType Identifier E.KindedPat
   | TypeMismatchExists Span TK.KindedType (Either E.KindedPat E.KindedExp) -- TODO: should be (Either E.KindedPat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
@@ -189,7 +190,7 @@ instance Located Error where
     RestrictedFunInMutual s _ _ -> s
     SigLacksDef s _ -> s
     TypeConsOutOfScope s _ -> s
-    TypeMismatch s _ _ _ -> s
+    TypeMismatch s _ _ _ _ -> s
     TypeMismatchExists s _ _ -> s
     TypeMismatchList s _ _ -> s
     TypeMismatchChoice s _ _ _ -> s
@@ -568,11 +569,18 @@ toMessage src = \case
           E.If{}   -> " conditional expression"
           _        -> "n expression") ++ "\n"
       ++ snippet src fpe True)
-  TypeMismatch s t u _ -> makeError src s "Type mismatch:"
+  TypeMismatch s t u _ fixed -> makeError src s "Type mismatch:"
     ++ "Couldn't match expected type " ++ bt (unparse t) ++ takenFrom src s ", " t
     ++ "with actual type " ++ bt (unparse u) ++ takenFrom src s ", " u
+    ++ fixedHint
     ++ inferenceHint
     where
+    -- The type came from the global store: say where the type argument was fixed,
+    -- since the span above is where that type was declared
+    fixedHint = case fixed of
+      Just (x, sp) -> "The type argument of " ++ bt (show x) ++ " was fixed" ++ locateSpan src sp
+      Nothing      -> ""
+
     -- Only when a type argument was left unresolved (it shows as `_`): the
     -- mismatch may stem from a limitation of type inference, and an explicit
     -- type argument is the fix. Stays silent on ordinary mismatches.

@@ -398,7 +398,7 @@ check tdecls ddecls kctx tctx e t = case e of
         return (E.Tuple s es', tctx')
       _ -> do
         (_, u, _) <- synth tdecls ddecls kctx tctx e
-        throwE (TypeMismatch s t u (Left e))
+        throwE (TypeMismatch s t u (Left e) Nothing)
   E.List s es -> check tdecls ddecls kctx tctx (foldr (E.Cons s) (E.DCons s (mkNilId s)) es) t
   E.DCons s i      -> do
     (u,tctx') <- lookupType kctx tctx (Right i)
@@ -510,7 +510,7 @@ check tdecls ddecls kctx tctx e t = case e of
         return (e, tctx)
       _ -> do
         (_, u, _) <- synth tdecls ddecls kctx tctx e
-        throwE (TypeMismatch s t u (Left e))
+        throwE (TypeMismatch s t u (Left e) Nothing)
   E.Select s mi i -> do
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
@@ -864,7 +864,7 @@ checkPat tdecls ddecls kctx p t = case p of
           (kctx, Map.empty) (zip ps ts')
       t' -> throwE
         (TypeMismatch (getSpan p) t
-          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable ObjLv a k)) aks)) (Right p))
+          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable ObjLv a k)) aks)) (Right p) Nothing)
   -- Wait
   E.WaitPat s -> do
     Expose.wait tdecls p t
@@ -943,8 +943,9 @@ checkEquivTypes :: D.KindedTypeDecls -> D.KindedDataDecls
                 -> Validation ()
 checkEquivTypes tdecls ddecls eop t1 t2 = checkWhenSolved \g ->
   let (u1, u2) = (groundType g t1, groundType g t2) in
-  unless (equivalent (groundDecls g tdecls) u1 u2) $
-    throwE (TypeMismatch (getSpan eop) u1 u2 eop)
+  unless (equivalent (groundDecls g tdecls) u1 u2) do
+    fixed <- escapedTypeArgFixedAt [getSpan u1, getSpan u2]
+    throwE (TypeMismatch (getSpan eop) u1 u2 eop fixed)
 
 -- | Type context equivalence. Checks if two type contexts contain the same
 -- variables and constructors, throwing an error if they do not. An expression
