@@ -70,7 +70,7 @@ import Data.Map.Strict qualified as Map
 import Data.Ord qualified as Ord
 import Data.Set qualified as Set
 import Data.List qualified as List
-import Data.Maybe ( isJust )
+import Data.Maybe ( isJust, listToMaybe )
 import Data.Graph qualified as Graph
 import Validation.HOTRecursion (checkNoHOTRec)
 
@@ -1178,7 +1178,13 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       -- the bound a variable's value came from: the join that raised it on the
       -- parameter side, else the meet that lowered it in the descent
       witness = Map.unions
-        [ Map.fromList [ (φ, w) | φ <- paramSide, (m, w) <- lowers σ φ, m == lub σ φ ], wd, wEq ]
+        [ Map.fromList [ (φ, w) | φ <- paramSide, Just w <- [earliest (lub σ φ) (lowers σ φ)] ], wd, wEq ]
+      -- The earliest bound reaching the value, because kinding emits a signature's
+      -- constraints before typing emits any call bound: the first bound on a binder
+      -- is the one its own declaration imposes, which is where blame belongs — a
+      -- later one only carries the same requirement in from somewhere else. Reorder
+      -- the two phases and this picks the wrong end.
+      earliest v ls = listToMaybe [ w | (m, w) <- ls, m == v ]
       paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
                              , φ `notElem` elsewhere ]
       elsewhere = concat $
