@@ -75,21 +75,23 @@ solveMultSubs :: MultSubConstraints -> Map.Map Variable Multiplicity
 solveMultSubs = fst . solveMultSubsWitnessed
 
 -- | 'solveMultSubs', keeping for each variable the bound that last lowered it:
--- the constraint its value came from, which error messages blame.
-solveMultSubsWitnessed :: MultSubConstraints -> (Map.Map Variable Multiplicity, Map.Map Variable Origin)
+-- the constraint its value came from, which error messages blame, together with
+-- the multiplicity it was bounded against, so the blame can be followed through
+-- the variables that carried the value.
+solveMultSubsWitnessed :: MultSubConstraints -> (Map.Map Variable Multiplicity, Map.Map Variable (Origin, Multiplicity))
 solveMultSubsWitnessed cs = first aliasMutual (fixpoint (Map.empty, Map.empty))
   where
     fixpoint st = let st' = foldl' step st cs in if fst st' == fst st then st else fixpoint st'
 
     step st@(σ, _) (MultSub l r o)
-      | rigid r', not (isTop r') = foldl' (meetWith o r') st (solvables l)
+      | rigid r', not (isTop r') = foldl' (meetWith (o, r) r') st (solvables l)
       | otherwise                = st
       where r' = applyMultSubst σ r
 
-    meetWith o r' (σ, ws) φ =
+    meetWith (o, r) r' (σ, ws) φ =
       let m = K.meet (Map.findWithDefault (Lin (getSpan r')) φ σ) r'
       in ( Map.insert φ m σ
-         , if Map.lookup φ σ == Just m then ws else Map.insert φ o ws )
+         , if Map.lookup φ σ == Just m then ws else Map.insert φ (o, r) ws )
 
     -- a mutual pair is an equality descent never sees; unaliased, the two default apart
     aliasMutual σ = foldl' alias σ

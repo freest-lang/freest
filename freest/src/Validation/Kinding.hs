@@ -1173,10 +1173,10 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       -- needs the parameter-side call bounds back:
       -- ++ [ copy σ' b ms | CallBound _ False a b ms <- calls, atom a == Just φ ]
       lub σ' φ = List.foldl' join (Sup nullSpan []) (map fst (lowers σ' φ))
-      lowers σ' φ = [ (applyMultSubst σ' l, o) | MultSub l r o <- bodySubs, atom r == Just φ ]
+      lowers σ' φ = [ (applyMultSubst σ' l, (o, l)) | MultSub l r o <- bodySubs, atom r == Just φ ]
       -- the bound a variable's value came from: the join that raised it on the
       -- parameter side, else the meet that lowered it in the descent
-      witness = Map.union (Map.fromList [ (φ, o) | φ <- paramSide, (m, o) <- lowers σ φ, m == lub σ φ ]) wd
+      witness = Map.union (Map.fromList [ (φ, w) | φ <- paramSide, (m, w) <- lowers σ φ, m == lub σ φ ]) wd
       paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
                              , φ `notElem` elsewhere ]
       elsewhere = concat $
@@ -1199,11 +1199,17 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       -- search the call's instantiation and the callee's own binder: a use in the
       -- caller constrains the first, one in the callee's body the second; and a span
       -- other than the one already reported says more than repeating it
-      cause o whys fixed = case [ o' | m <- whys, φ <- solvables m
-                                      , Just v <- [Map.lookup φ σ], resolve v == fixed
-                                      , Just o' <- [Map.lookup φ witness] ] of
+      cause o whys fixed = case [ o' | m <- whys, φ <- solvables m, atFixed fixed φ
+                                      , Just o' <- [blame fixed Set.empty φ] ] of
         (o' : _) -> o'
         []       -> ranked o whys fixed
+      atFixed fixed φ = maybe False ((== fixed) . resolve) (Map.lookup φ σ)
+      -- follow the witness through the variables it was bounded against: the cause
+      -- is the use that required the value, not a hop that carried it
+      blame fixed seen φ = Map.lookup φ witness <&> \(o', b) ->
+        case [ ψ | ψ <- solvables b, ψ `Set.notMember` seen, atFixed fixed ψ ] of
+          ψ : _ | Just o'' <- blame fixed (Set.insert φ seen) ψ -> o''
+          _ -> o'
       ranked o whys fixed = List.minimumBy (Ord.comparing (\o' -> (getSpan o' == getSpan o, explains (isUn fixed) o'))) $
         [ o' | m <- whys, φ <- solvables m, MultSub l r o' <- msubs ++ callSubs σ
              , φ `elem` solvables l, resolve r == fixed ]
