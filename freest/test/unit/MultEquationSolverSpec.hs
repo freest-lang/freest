@@ -36,7 +36,7 @@ spec = describe "Multiplicity equation solver (ACUI)" $ do
     sup vs = Sup nullSpan [(UnifLv, v) | v <- vs]
 
     solved eqs = case runValidation emptyValidationState (solveMultConstraints eqs) of
-      Right (Right θ) -> Just θ
+      Right (Right (θ, _)) -> Just θ
       _               -> Nothing
 
     atomsUnder σ = Set.unions . map (go [])

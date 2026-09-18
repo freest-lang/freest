@@ -116,17 +116,19 @@ solveMultSubsWitnessed cs = first aliasMutual (fixpoint (Map.empty, Map.empty))
 
     isTop     = \case Lin{} -> True; _ -> False
 
--- The substitution accumulated so far.
-newtype SolverState = SolverState (Map.Map Variable Multiplicity)
+-- The substitution accumulated so far, and for each variable the requirement that
+-- bound it: what error messages blame, as for the bounds.
+data SolverState = SolverState (Map.Map Variable Multiplicity) (Map.Map Variable (Origin, Multiplicity))
 
 -- | Solves the equations, returning he first most general unifier
 -- found in breadth-first search. On failure, returns the first
 -- equation with no solution (with the accumulated substitution applied).
 -- The search is /not/ complete — see the note on `unifySup`.
-solveMultConstraints :: MultConstraints -> Validation (Either MultEquation (Map.Map Variable Multiplicity))
-solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
+solveMultConstraints :: MultConstraints
+                     -> Validation (Either MultEquation (Map.Map Variable Multiplicity, Map.Map Variable (Origin, Multiplicity)))
+solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty Map.empty]
   where
-  finish (SolverState sub) = Map.map (apply sub) sub
+  finish (SolverState sub ws) = (Map.map (apply sub) sub, ws)
 
   bfs :: MultConstraints -> [SolverState] -> Validation (Either MultEquation SolverState)
   bfs = \cases
@@ -134,29 +136,34 @@ solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
     []                []       -> internalError "multiplicity unification: no states"
     (mc@(MultEquation l ol r or') : mcs) sts -> do
       let substituted = [(MultEquation (apply sub l) ol (apply sub r) or', st)
-                        | st@(SolverState sub) <- sts]
-      next <- concat <$> sequence [solveOne l' r' st | (MultEquation l' _ r' _, st) <- substituted]
+                        | st@(SolverState sub _) <- sts]
+      -- the left operand is the requirement: it explains the variables of the right,
+      -- kept unsubstituted so the blame can be followed through the variables in it
+      next <- concat <$> sequence [solveOne (l', Nothing) (r', Just (ol', l)) st
+                                  | (MultEquation l' ol' r' _, st) <- substituted]
       case next of
         [] -> pure (Left case substituted of (eq', _) : _ -> eq'; [] -> mc)
         _  -> bfs mcs next
 
-  solveOne :: Multiplicity -> Multiplicity -> SolverState -> Validation [SolverState]
+  solveOne :: (Multiplicity, Maybe (Origin, Multiplicity)) -> (Multiplicity, Maybe (Origin, Multiplicity))
+           -> SolverState -> Validation [SolverState]
   solveOne = \cases
-    Lin{}    Lin{}    st -> pure [st]
-    Lin{}    m@Sup{}  st -> pure (collapseSide m st)
-    m@Sup{}  Lin{}    st -> pure (collapseSide m st)
-    m1@Sup{} m2@Sup{} st
+    (Lin{}, _)     (Lin{}, _)      st -> pure [st]
+    (Lin{}, _)     (m@Sup{}, w)    st -> pure (collapseSide w m st)
+    (m@Sup{}, w)   (Lin{}, _)      st -> pure (collapseSide w m st)
+    (m1@Sup{}, w1) (m2@Sup{}, w2)  st
       | atoms m1 == atoms m2 -> pure [st]
-      | otherwise            -> unifySup m1 m2 st
+      | otherwise            -> unifySup (m1, w1) (m2, w2) st
 
   atoms = \case
     Lin{}      -> Set.empty
     Sup _ lvφs -> Set.fromList lvφs
 
-  collapseSide m (SolverState sub) = do
+  collapseSide w m (SolverState sub ws) = do
     (lv, φ) <- Set.toList (atoms m)
     guard (solvable lv)
     return $ SolverState (Map.insert φ (Lin (getSpan m)) sub)
+                         (maybe ws (\w' -> Map.insert φ w' ws) w)
 
   -- Most general unifier(s) of `⊔A = ⊔B` modulo ACUI (associativity,
   -- commutativity, idempotence, unit), with the `ObjLv` atoms as constants.
@@ -179,8 +186,9 @@ solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
   -- so the bias is systematically towards `*`, the least element — which for a
   -- multiplicity read as a bound is the least general choice. Not unsoundness:
   -- every answer returned does satisfy the equations.
-  unifySup :: Multiplicity -> Multiplicity -> SolverState -> Validation [SolverState]
-  unifySup m1 m2 (SolverState sub) = do
+  unifySup :: (Multiplicity, Maybe (Origin, Multiplicity)) -> (Multiplicity, Maybe (Origin, Multiplicity))
+           -> SolverState -> Validation [SolverState]
+  unifySup (m1, w1) (m2, w2) (SolverState sub ws) = do
     let s     = getSpan m1
         as1   = atoms m1
         as2   = atoms m2
@@ -206,7 +214,9 @@ solveMultConstraints eqs = fmap finish <$> bfs eqs [SolverState Map.empty]
                 rig = [(ObjLv, r) | r <- Set.toList (Map.findWithDefault Set.empty v absorbed)]
             in Map.insert v (Sup s (row ++ col ++ rig)) acc
           toBind = Set.toList (Set.union asSet bsSet)
-      return (SolverState (foldl' bind sub toBind))
+          witness acc v = maybe acc (\w' -> Map.insert v w' acc)
+                            (if Set.member v bsSet then w2 else w1)
+      return (SolverState (foldl' bind sub toBind) (foldl' witness ws toBind))
 
   apply :: Map.Map Variable Multiplicity -> Multiplicity -> Multiplicity
   apply sub = go Set.empty

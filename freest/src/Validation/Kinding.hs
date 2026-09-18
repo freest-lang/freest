@@ -56,6 +56,7 @@ import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resol
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
+import Control.Applicative ( (<|>) )
 import Control.Monad.Identity ( Identity(..) )
 import Control.Monad.Extra ( unlessM, (&&^), zipWithM_ )
 import Control.Monad.State ( MonadState, foldM, unless, forM, forM_, when, runState, StateT (runStateT), gets, modify )
@@ -521,7 +522,7 @@ kindModule ctx mod = do
   binds <- gets kindBindings
   forM_ (concatMap (paramKindVars . fst) (Map.elems freshD)) $ \v ->
     case Map.lookup v binds of
-      Just (Proper _ φ _) -> addMultEquation (Origin InSignature (getSpan v)) φ (Un (getSpan v))
+      Just (Proper _ φ _) -> addMultEquation (Origin InSignature (getSpan v)) (Un (getSpan v)) φ
       _                   -> pure ()
   let ddecls = D.DataDecls dcdecls kdtdecls
   (_, lds) <- kindLetDecls tdecls ddecls ctx' Map.empty (M.definitions mod)
@@ -1154,8 +1155,8 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
   let condEqs = [ MultEquation φ o (if resolveBK psub bk == Channel then m1 else join m1 m2) o
                 | (o, bk, φ, m1, m2) <- condmults ]
   -- equations first: descent only lowers against a bound they have made rigid
-  θ <- solveMultConstraints (map toMultEq meqs ++ condEqs)
-         >>= either (throwE . multErr) pure
+  (θ, wEq) <- solveMultConstraints (map toMultEq meqs ++ condEqs)
+                >>= either (throwE . multErr) pure
   let bodySubs = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
       copy σ' m ms = instantiate ms (applyMultSubst σ' (applyMultSubst θ m))
       callSubs σ' = [MultSub (applyMultSubst θ a) (copy σ' b ms) o | CallBound o True a b ms <- calls]
@@ -1176,7 +1177,8 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       lowers σ' φ = [ (applyMultSubst σ' l, (o, l)) | MultSub l r o <- bodySubs, atom r == Just φ ]
       -- the bound a variable's value came from: the join that raised it on the
       -- parameter side, else the meet that lowered it in the descent
-      witness = Map.union (Map.fromList [ (φ, w) | φ <- paramSide, (m, w) <- lowers σ φ, m == lub σ φ ]) wd
+      witness = Map.unions
+        [ Map.fromList [ (φ, w) | φ <- paramSide, (m, w) <- lowers σ φ, m == lub σ φ ], wd, wEq ]
       paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
                              , φ `notElem` elsewhere ]
       elsewhere = concat $
@@ -1199,11 +1201,14 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       -- search the call's instantiation and the callee's own binder: a use in the
       -- caller constrains the first, one in the callee's body the second; and a span
       -- other than the one already reported says more than repeating it
+      -- a cause that only repeats the span the error already points at explains
+      -- nothing: let the ranked search look for another one
       cause o whys fixed = case [ o' | m <- whys, φ <- solvables m, atFixed fixed φ
-                                      , Just o' <- [blame fixed Set.empty φ] ] of
+                                      , Just o' <- [blame fixed Set.empty φ]
+                                      , getSpan o' /= getSpan o ] of
         (o' : _) -> o'
         []       -> ranked o whys fixed
-      atFixed fixed φ = maybe False ((== fixed) . resolve) (Map.lookup φ σ)
+      atFixed fixed φ = maybe False ((== fixed) . resolve) (Map.lookup φ σ <|> Map.lookup φ θ)
       -- follow the witness through the variables it was bounded against: the cause
       -- is the use that required the value, not a hop that carried it
       blame fixed seen φ = Map.lookup φ witness <&> \(o', b) ->
