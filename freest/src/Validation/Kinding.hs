@@ -68,6 +68,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.List qualified as List
+import Data.Maybe ( isJust )
 import Data.Graph qualified as Graph
 import Validation.HOTRecursion (checkNoHOTRec)
 
@@ -1161,8 +1162,23 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
       asSignature = \case
         Sup s as -> Sup s [(lv, if lv == ObjLv then Map.findWithDefault φ φ params else φ) | (lv, φ) <- as]
         m        -> m
-      σ   = fixpoint (solveMultSubs bodySubs)
+      -- callers see a binder's parameter contravariantly, so its least solution is the most general
+      σ   = ascend (fixpoint (solveMultSubs bodySubs))
       fixpoint σ' = let σ'' = solveMultSubs (bodySubs ++ callSubs σ') in if σ'' == σ' then σ' else fixpoint σ''
+      ascend σ' = let σ'' = foldr (\φ -> Map.insert φ (lub σ' φ)) σ' paramSide in if σ'' == σ' then σ' else ascend σ''
+      lub σ' φ = List.foldl' join (Sup nullSpan []) $
+           [ applyMultSubst σ' l | MultSub l r _ <- bodySubs, atom r == Just φ ]
+      paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
+                             , φ `notElem` elsewhere ]
+      elsewhere = concat $
+           [ nonAtom r | MultSub _ r _ <- bodySubs ]
+        ++ [ solvables (applyMultSubst θ a) ++ solvables (applyMultSubst θ b) ++ concatMap (solvables . snd) ms | CallBound _ True a b ms <- calls ]
+        ++ [ nonAtom a ++ concatMap (solvables . snd) ms | CallBound _ False a _ ms <- calls ]
+      shrink c =
+        let c' = [ φ | φ <- c, and [ atom r `elem` map Just c | MultSub l r _ <- bodySubs, not (isLin r), φ `elem` solvables l ] ]
+        in if c' == c then c else shrink c'
+      atom m = case applyMultSubst θ m of VarM _ lv φ | solvable lv -> Just φ; _ -> Nothing
+      nonAtom m = if isJust (atom m) then [] else solvables (applyMultSubst θ m)
       sol = KindSolution ksub psub (Map.union θ σ)
       resolve = resolveMult sol
       bounds = [(m1, m1, m2, m2, o) | MultSub m1 m2 o <- msubs]
