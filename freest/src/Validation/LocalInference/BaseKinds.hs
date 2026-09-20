@@ -40,9 +40,13 @@ type BaseKindSubst = Map.Map Variable BaseKind
 -- | Resolve a baseKind through a solution. A solved substitution maps each
 -- variable to a ground baseKind, so a single lookup suffices.
 applyBaseKindSubst :: BaseKindSubst -> BaseKind -> BaseKind
-applyBaseKindSubst sub = \case
-  VarBK lv ψ | solvable lv -> Map.findWithDefault (VarBK lv ψ) ψ sub
-  bk                       -> bk
+applyBaseKindSubst sub = go
+  where
+    go = \case
+      VarBK lv ψ | solvable lv -> Map.findWithDefault (VarBK lv ψ) ψ sub
+      MeetBK bk1 bk2           -> meet (go bk1) (go bk2)
+      JoinBK bk1 bk2           -> join (go bk1) (go bk2)
+      bk                       -> bk
 
 -- | Solve a set of baseKind constraints, returning the most general unifier or
 -- the first constraint with no solution. Every solvable baseKind variable is
@@ -69,6 +73,8 @@ solveBaseKindConstraints cs = go (Map.fromSet (const Top) (solvableVars cs))
 
     eval sub = \case
       VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ sub
+      MeetBK bk1 bk2           -> meet (eval sub bk1) (eval sub bk2)
+      JoinBK bk1 bk2           -> join (eval sub bk1) (eval sub bk2)
       bk                       -> bk
 
 -- | The solvable baseKind variables occurring in a constraint set.
@@ -79,6 +85,8 @@ solvableVars = Set.unions . map \case
   JoinBaseKind _ ψ υs -> Set.insert ψ (foldMap pkVars υs)
   where
     pkVars (VarBK lv ψ) | solvable lv = Set.singleton ψ
+    pkVars (MeetBK bk1 bk2)           = pkVars bk1 <> pkVars bk2
+    pkVars (JoinBK bk1 bk2)           = pkVars bk1 <> pkVars bk2
     pkVars _                          = Set.empty
 
 -- | Decompose a kind subkinding constraint @K1 <: K2@ into its baseKind

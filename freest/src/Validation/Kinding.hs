@@ -334,7 +334,7 @@ combineBaseKinds op unit mkC s bks
       ψv <- freshUnifBaseKindVar s
       addBaseKindConstraint (mkC (Origin InSignature s) ψv bks)
       return (VarBK UnifLv ψv)
-  where ground = \case VarBK lv _ -> not (solvable lv); _ -> True
+  where ground = not . solvableBaseKind
 
 checkSessionK :: TK.KindedType -> Validation (Multiplicity, BaseKind)
 checkSessionK t = checkBaseKindK t Session
@@ -385,9 +385,14 @@ deferBaseKindSub o k1 k2 = mapM_ addBaseKindConstraint
   [ c | c@(SubBaseKind _ bk1 bk2) <- kindSubBaseKindConstraints o k1 k2
       , solvableBaseKind bk1 || solvableBaseKind bk2 ]
 
--- | Is a baseKind a solvable (inference) variable, and so undecidable now?
+-- | Does a baseKind rest on a solvable (inference) variable, and so stay
+-- undecidable now?
 solvableBaseKind :: BaseKind -> Bool
-solvableBaseKind = \case VarBK lv _ -> solvable lv; _ -> False
+solvableBaseKind = \case
+  VarBK lv _     -> solvable lv
+  MeetBK bk1 bk2 -> solvableBaseKind bk1 || solvableBaseKind bk2
+  JoinBK bk1 bk2 -> solvableBaseKind bk1 || solvableBaseKind bk2
+  _              -> False
 
 -- | Equate the kinds of the binders two types pair up, for the obligation that
 -- will compare them. Type equivalence keys its nonterminals on whole kinds, so
@@ -432,8 +437,8 @@ hasSolvableVar = \case
   Arrow _ k1 k2 -> hasSolvableVar k1 || hasSolvableVar k2
   Var _ lv _    -> solvable lv
   where
-    multVar    = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
-    baseKindVar = \case VarBK lv _ -> solvable lv; _ -> False
+    multVar     = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
+    baseKindVar = solvableBaseKind
 
 isRestricted, isStrictlyChannel, isStrictlySession :: TK.KindedType -> Bool
 

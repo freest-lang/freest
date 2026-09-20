@@ -20,6 +20,7 @@ import Syntax.Type.Internal qualified as TI
 import Syntax.Expression qualified as E
 import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
+import Compiler.Bug ( internalError )
 
 import Data.Bifunctor (bimap, first, second)
 import Data.Either (partitionEithers)
@@ -49,11 +50,23 @@ resolveKind sol = go Set.empty
         | Just k' <- Map.lookup ψ (kindVars sol) -> go (Set.insert ψ seen) k'
         | otherwise                              -> Proper s (Lin s) Top -- unconstrained → top (1T)
 
--- | Resolve a baseKind, defaulting an unconstrained solvable variable to the top.
+-- | Resolve a baseKind, defaulting an unconstrained solvable variable to the
+-- top and evaluating the symbolic 'MeetBK' and 'JoinBK' a variable operand left
+-- behind. This is their only evaluator, so nothing it returns may still carry
+-- one: 'Validation.TypeEquivalence' keys its nonterminals on whole kinds, and a
+-- symbolic form and the baseKind it evaluates to would be different keys.
 resolveBaseKind :: KindSolution -> BaseKind -> BaseKind
-resolveBaseKind sol = \case
-  VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ (baseKinds sol)
-  bk                       -> bk
+resolveBaseKind sol = grounded . go
+  where
+    go = \case
+      VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ (baseKinds sol)
+      MeetBK bk1 bk2           -> K.meet (go bk1) (go bk2)
+      JoinBK bk1 bk2           -> K.join (go bk1) (go bk2)
+      bk                       -> bk
+    grounded bk = case bk of
+      MeetBK{} -> internalError ("symbolic baseKind survived the zonk: " ++ show bk)
+      JoinBK{} -> internalError ("symbolic baseKind survived the zonk: " ++ show bk)
+      _        -> bk
 
 -- | Apply the solution to a multiplicity: replace each solved solvable atom by
 -- its value and join with the remaining (rigid or unsolved) atoms.

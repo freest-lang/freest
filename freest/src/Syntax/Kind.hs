@@ -114,7 +114,13 @@ instance Show Multiplicity where
 
 -- 2. BaseKinds
 
+-- | The chain @C <: S <: T@, plus the two symbolic forms a variable operand
+-- leaves behind: 'meet' and 'join' are total, and the zonk
+-- ('Validation.LocalInference.Solution.resolveBaseKind') is their only
+-- evaluator. Nothing downstream may key on an unevaluated one.
 data BaseKind = Top | Session | Channel | VarBK VarLv Variable
+              | MeetBK BaseKind BaseKind
+              | JoinBK BaseKind BaseKind
   deriving (Eq, Ord)
 
 instance Subsort BaseKind where
@@ -124,22 +130,30 @@ instance Subsort BaseKind where
   bk1     <: bk2     = bk1 == bk2
 
 instance Join BaseKind where
-  join ψ@VarBK{} _  = internalError ("baseKind variable " ++ show ψ)
-  join _ ψ@VarBK{}  = internalError ("baseKind variable " ++ show ψ)
-  join Channel Channel = Channel
-  join Session Session = Session
-  join Channel Session = Session
-  join Session Channel = Session  
-  join _       _       = Top
+  join = \cases
+    Channel bk      -> bk                              -- C is the bottom
+    bk      Channel -> bk
+    Top     _       -> Top
+    _       Top     -> Top
+    Session Session -> Session
+    bk1     bk2     -> symbolic JoinBK bk1 bk2
 
 instance Meet BaseKind where
-  meet ψ@VarBK{} _  = internalError ("baseKind variable " ++ show ψ)
-  meet _ ψ@VarBK{}  = internalError ("baseKind variable " ++ show ψ)
-  meet Channel _       = Channel
-  meet _       Channel = Channel
-  meet Session _       = Session
-  meet _       Session = Session
-  meet _       _       = Top
+  meet = \cases
+    Top     bk      -> bk                              -- T is the top
+    bk      Top     -> bk
+    Channel _       -> Channel
+    _       Channel -> Channel
+    Session Session -> Session
+    bk1     bk2     -> symbolic MeetBK bk1 bk2
+
+-- | Defer an operation a variable operand leaves undecided, ordering the
+-- operands so that a commutative pair has one form.
+symbolic :: (BaseKind -> BaseKind -> BaseKind) -> BaseKind -> BaseKind -> BaseKind
+symbolic op bk1 bk2
+  | bk1 == bk2 = bk1
+  | bk1 <= bk2 = op bk1 bk2
+  | otherwise  = op bk2 bk1
 
 instance Show BaseKind where
   show = \case 
@@ -147,6 +161,8 @@ instance Show BaseKind where
     Session -> "S"
     Channel -> "C"
     VarBK _ ψ -> external ψ
+    MeetBK bk1 bk2 -> "(" ++ show bk1 ++ "⊓" ++ show bk2 ++ ")"
+    JoinBK bk1 bk2 -> "(" ++ show bk1 ++ "⊔" ++ show bk2 ++ ")"
 
 -- 3. Kinds
 
@@ -232,7 +248,11 @@ hasMetavar = \case
   Var _ lv _    -> solvable lv
   where
     multMeta = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
-    baseMeta  = \case VarBK lv _ -> solvable lv; _ -> False
+    baseMeta  = \case
+      VarBK lv _     -> solvable lv
+      MeetBK bk1 bk2 -> baseMeta bk1 || baseMeta bk2
+      JoinBK bk1 bk2 -> baseMeta bk1 || baseMeta bk2
+      _              -> False
 
 depth :: Kind -> Int
 depth = \case

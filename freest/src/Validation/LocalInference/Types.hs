@@ -212,12 +212,17 @@ openKinds = \case
   _                     -> False
   where
     openK = \case
-      K.Proper _ m bk -> openM m || (case bk of { K.VarBK lv _ -> lv /= ObjLv; _ -> False })
+      K.Proper _ m bk -> openM m || openBK bk
       K.Arrow _ a b   -> openK a || openK b
       K.Var _ lv _    -> lv /= ObjLv
     openM = \case
       K.Sup _ as -> any ((/= ObjLv) . fst) as
       _          -> False
+    openBK = \case
+      K.VarBK lv _     -> lv /= ObjLv
+      K.MeetBK bk1 bk2 -> openBK bk1 || openBK bk2
+      K.JoinBK bk1 bk2 -> openBK bk1 || openBK bk2
+      _                -> False
 
 -- | The free type instantiation variables in a type.
 fiv :: T.KindedType -> Set.Set Variable
