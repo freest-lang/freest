@@ -23,7 +23,6 @@ where
 import Parser.Token
 import Parser.Unparser
 import Syntax.Base
-import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin(..), Reason(..) )
 import Syntax.Type.Kinded qualified as TK
@@ -36,15 +35,16 @@ import Data.List qualified as List
 import Debug.Trace ( traceM )
 import System.IO ( stderr, hPutStrLn )
 
--- | The site a linearity or multiplicity error points at. Only the form and
--- the span are ever reported, so nothing has to carry the expression itself --
--- which the walk that reports these does not always hold yet.
+-- | The site an error points at. Only the form and the span are ever reported,
+-- so nothing has to carry the expression or pattern itself -- which the walk
+-- that reports these does not always hold yet.
 data ErrorSite
   = AtFnDef Variable
   | AtValDef Span
   | AtCaseExp Span
   | AtIfExp Span
   | AtOtherExp Span
+  | AtPat Span
 
 instance Located ErrorSite where
   getSpan = \case
@@ -53,7 +53,12 @@ instance Located ErrorSite where
     AtCaseExp s  -> s
     AtIfExp s    -> s
     AtOtherExp s -> s
+    AtPat s      -> s
   setSpan = internalError "span not settable for ErrorSite"
+
+-- | Whether the site is a pattern, for the messages worded either way.
+atPat :: ErrorSite -> Bool
+atPat = \case AtPat{} -> True; _ -> False
 
 -- | The errors that can be found in a FreeST program.
 data Error
@@ -70,8 +75,8 @@ data Error
   | CannotSatisfyBaseKindConstraint Origin K.BaseKind K.BaseKind
   | InfiniteKind Origin Variable K.Kind
   | CannotSatisfyMultConstraint Origin K.Multiplicity Origin K.Multiplicity Origin
-  | CannotSynthesisePack Span E.KindedExp
-  | CannotSynthesisePat Span E.KindedPat
+  | CannotSynthesisePack Span
+  | CannotSynthesisePat Span
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span K.Multiplicity Identifier
   | CannotSynthesiseSendType Span
@@ -82,7 +87,7 @@ data Error
   | EquationArityMismatch Span Variable Int Int
   | ExpectsTooManyArgs Span TK.KindedType Int Int
   | ExpectsTooManyArgsK Span Identifier K.Kind
-  | ExposeError Span (Either E.KindedPat E.KindedExp) String TK.KindedType TK.KindedType
+  | ExposeError ErrorSite String TK.KindedType TK.KindedType
     -- ^ The type as written, then its weak head normal form (used for hints).
   | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
@@ -116,7 +121,7 @@ data Error
   | MultipleTypeDecls Span [Identifier]
   | MultipleVarDecls Span [Variable]
   | MultVarOutOfScope Span Variable
-  | NonLinPat Span E.KindedPat TK.KindedType
+  | NonLinPat Span TK.KindedType
   -- what the offside rule made of the offending line, when that explains more
   -- than the token the parser stopped at
   | ParseError Span (Token, [String]) (Maybe LayoutNote)
@@ -126,21 +131,21 @@ data Error
   | RestrictedFunInMutual Span Variable TK.KindedType
   | SigLacksDef Span Variable
   | TypeConsOutOfScope Span Identifier
-  | TypeMismatch Span TK.KindedType TK.KindedType (Either E.KindedExp E.KindedPat) (Maybe (Variable, Span))
+  | TypeMismatch Span TK.KindedType TK.KindedType (Maybe (Variable, Span))
     -- ^ The last field names the variable whose escaped type argument was fixed, and where.
-  | TypeMismatchList Span TK.KindedType (Either E.KindedExp E.KindedPat)
-  | TypeMismatchChoice Span TK.KindedType Identifier E.KindedPat
-  | TypeMismatchExists Span TK.KindedType (Either E.KindedPat E.KindedExp) -- TODO: should be (Either E.KindedPat E.Exp) everywhere. Mnemonic: pats occur on LHSs, exps on RHSs
+  | TypeMismatchList Span TK.KindedType
+  | TypeMismatchChoice Span TK.KindedType Identifier
+  | TypeMismatchExists Span TK.KindedType ErrorSite
   | TypeMismatchReceiveType Span TK.KindedType (Maybe TK.KindedType)
-  | TypeMismatchSelect Span K.Multiplicity TK.KindedType Identifier E.KindedExp
+  | TypeMismatchSelect Span K.Multiplicity TK.KindedType Identifier
   | TypeMismatchSendType Span TK.KindedType TK.KindedType (Maybe TK.KindedType)
-  | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.KindedPat)
+  | TypeMismatchTuple Span Int TK.KindedType
   | TypeVarOutOfScope Span Variable
   | UnexpectedArg 
       Span
       Int
       (Level (Maybe TK.KindedType) K.Kind ())
-      (Level E.KindedExp TK.KindedType K.Multiplicity)
+      (Level () () ())
   | UnexpectedParam Span Int (Level TK.KindedType K.Kind ()) (Level () () ())
   | UnsupportedError Span String String
   | VarOutOfScope Span Variable
@@ -150,7 +155,7 @@ data Error
       [Variable]
       (Either K.Kind TK.KindedType)
   | HigherOrderTypeRHS Span Identifier
-  | MixedSessionVarPats Span E.KindedPat E.KindedPat
+  | MixedSessionVarPats Span Span Span
   | UnexpectedEOF Span
     -- ^ Alex ran past the end of the file with no more input to inspect —
     -- typically an unterminated string literal or block comment.
@@ -168,8 +173,8 @@ instance Located Error where
     CannotSatisfyBaseKindConstraint o _ _ -> getSpan o
     InfiniteKind o _ _ -> getSpan o
     CannotSatisfyMultConstraint o _ _ _ _ -> getSpan o
-    CannotSynthesisePack s _ -> s
-    CannotSynthesisePat s _ -> s
+    CannotSynthesisePack s -> s
+    CannotSynthesisePat s -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ _ -> s
     CannotSynthesiseSendType s -> s
@@ -180,7 +185,7 @@ instance Located Error where
     EquationArityMismatch s _ _ _ -> s
     ExpectsTooManyArgs s _ _ _ -> s
     ExpectsTooManyArgsK s _ _ -> s
-    ExposeError s _ _ _ _ -> s
+    ExposeError site _ _ _ -> getSpan site
     GivenTooManyArgs s _ _ _ -> s
     GivenTooManyArgsK s _ _ _ _ -> s
     IllegalChoice s _ _ -> s
@@ -202,21 +207,21 @@ instance Located Error where
     MultipleTypeDecls s _ -> s
     MultipleVarDecls s _ ->  s
     MultVarOutOfScope s _ -> s
-    NonLinPat s _ _ -> s
+    NonLinPat s _ -> s
     ParseError s _ _ -> s
     BaseKindMismatch s _ _ _ -> s
     ProperKindMismatch s _ _ -> s
     RestrictedFunInMutual s _ _ -> s
     SigLacksDef s _ -> s
     TypeConsOutOfScope s _ -> s
-    TypeMismatch s _ _ _ _ -> s
+    TypeMismatch s _ _ _ -> s
     TypeMismatchExists s _ _ -> s
-    TypeMismatchList s _ _ -> s
-    TypeMismatchChoice s _ _ _ -> s
+    TypeMismatchList s _ -> s
+    TypeMismatchChoice s _ _ -> s
     TypeMismatchReceiveType s _ _ -> s
-    TypeMismatchSelect s _ _ _ _ -> s
+    TypeMismatchSelect s _ _ _ -> s
     TypeMismatchSendType s _ _ _ -> s
-    TypeMismatchTuple s _ _ _ -> s
+    TypeMismatchTuple s _ _ -> s
     TypeVarOutOfScope s _ -> s
     UnexpectedArg s _ _ _ -> s
     UnexpectedParam s _ _ _ -> s
@@ -368,11 +373,11 @@ toMessage src = \case
     ("Could not infer consistent multiplicities for this " ++ site o)
     ++ "Could not match multiplicity " ++ multSide src m1 o1
     ++ "with multiplicity " ++ multSide src m2 o2
-  CannotSynthesisePack s e -> makeError src s
+  CannotSynthesisePack s -> makeError src s
     "Could not infer a type for this package expression"
-  CannotSynthesisePat s p -> makeError src s
-    ("Could not infer a type for pattern " ++ bt (getFromSpan src p))
-    ++ "Consider giving it a type annotation: " ++ bt ("(" ++ getFromSpan src p ++ " : T)")
+  CannotSynthesisePat s -> makeError src s
+    ("Could not infer a type for pattern " ++ bt (getFromSpan src s))
+    ++ "Consider giving it a type annotation: " ++ bt ("(" ++ getFromSpan src s ++ " : T)")
   CannotSynthesiseReceiveType s -> makeError src s
     "Could not infer a type for this `receiveType` expression"
   CannotSynthesiseSelect s m id -> makeError src s
@@ -406,14 +411,14 @@ toMessage src = \case
   ExpectsTooManyArgsK s i k -> makeError src s
     ("Type " ++ bt (show i) ++ " expects too many arguments, its kind "
       ++ bt (tidyK k) ++ " takes only " ++ show (K.depth k))
-  ExposeError s pe msg t whnf -> makeError src s
-    case pe of
-      Left _  -> "Cannot match this pattern against the expected type " ++ bt (unparse (unRedex t))
-      Right _ -> "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse (unRedex t))
-    ++ case pe of
-         Left _  -> "(It matches " ++ msg ++ ")"
+  ExposeError site msg t whnf -> makeError src (getSpan site)
+    (if atPat site
+      then "Cannot match this pattern against the expected type " ++ bt (unparse (unRedex t))
+      else "Expected " ++ msg ++ ", but got an expression of type " ++ bt (unparse (unRedex t)))
+    ++ (if atPat site
+         then "(It matches " ++ msg ++ ")"
                  ++ maybe "" (("\n  hint: this type is matched by " ++) . bt) (patternHint whnf)
-         Right _ -> maybe "" (("  hint: consume it with " ++) . bt) (sessionHint whnf)
+         else maybe "" (("  hint: consume it with " ++) . bt) (sessionHint whnf))
   GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(This expression cannot be applied to further arguments: it has type " ++ bt (unparse t)
@@ -508,7 +513,7 @@ toMessage src = \case
     ++ unlines (map (("  " ++) . show . getSpan) xs)
   MultVarOutOfScope s φ -> makeError src s
     ("Multiplicity variable out of scope: " ++ external φ)
-  NonLinPat s p t -> makeError src s
+  NonLinPat s t -> makeError src s
     ("Non-linear pattern for" ++ case TK.kindOf t of
       K.Proper _ K.Lin{} _ -> " linear type " ++ bt (unparse t)
       K.Proper _ m _       -> " potentially linear type " ++ bt (unparse t) ++ " with multiplicity " ++ bt (tidyM m)
@@ -587,7 +592,7 @@ toMessage src = \case
         AtIfExp _    -> " conditional expression"
         AtOtherExp _ -> "n expression") ++ "\n"
       ++ snippet src site True)
-  TypeMismatch s t u _ fixed -> makeError src s "Type mismatch:"
+  TypeMismatch s t u fixed -> makeError src s "Type mismatch:"
     ++ "Couldn't match expected type " ++ bt (unparse t) ++ takenFrom src s ", " t
     ++ "with actual type " ++ bt (unparse u) ++ takenFrom src s ", " u
     ++ fixedHint
@@ -613,21 +618,20 @@ toMessage src = \case
           ++ "(note the `forall`).\nConsider giving it an explicit type argument "
           ++ "(e.g. `Nothing @a`) or a type annotation."
       | otherwise = ""
-  TypeMismatchExists s t poe -> makeError src s
+  TypeMismatchExists s t site -> makeError src s
     ("Couldn't match expected type " ++ bt (show t) ++ " with a package "
-      ++ case poe of Left  p -> "pattern"
-                     Right e -> "expression")
-  TypeMismatchList s t _ -> makeError src s
+      ++ if atPat site then "pattern" else "expression")
+  TypeMismatchList s t -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a list pattern")
-  TypeMismatchChoice s t i p -> makeError src s
+  TypeMismatchChoice s t i -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with choice pattern " ++ bt (getFromSpan src i))
   TypeMismatchReceiveType s t dom -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a `receiveType` expression")
     ++ mustConsume "receiveType" ("a " ++ bt "?type a. S" ++ " channel") dom
-  TypeMismatchSelect s m t i _ -> makeError src s
+  TypeMismatchSelect s m t i -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t)
       ++ " with a " ++ bt op ++ " expression")
     ++ mustConsume op "an internal choice" Nothing
@@ -637,7 +641,7 @@ toMessage src = \case
       ++ " with a " ++ bt op ++ " expression")
     ++ mustConsume op ("a " ++ bt "!type a. S" ++ " channel") dom
     where op = "sendType @" ++ unparseArg u
-  TypeMismatchTuple s n t _ -> makeError src s
+  TypeMismatchTuple s n t -> makeError src s
     ("Couldn't match expected type " ++ bt (unparse t) ++ " with "
       ++ (case n of 0 -> "()"
                     2 -> "a pair pattern"

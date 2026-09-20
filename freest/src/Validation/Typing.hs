@@ -217,32 +217,32 @@ synth tdecls ddecls kctx tctx = \case
       [] -> throwE (CannotSynthesiseSelect s' m i)
       (ExpLevel  e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
-        ui <- Expose.internalChoice tdecls m e u i
+        ui <- Expose.internalChoice tdecls m (siteOf e) u i
         (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _  ) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
   E.App s f@(E.SendType s' t) as ->                                            -- TODO: is there a better way to deal with SendType and ReceiveType?
     case as of
       [] -> throwE (CannotSynthesiseSendType s)
       (ExpLevel e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
-        (a, _, u') <- Expose.typeOutput tdecls e u
+        (a, _, u') <- Expose.typeOutput tdecls (siteOf e) u
         (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a t u') as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
   E.App s f@(E.ReceiveType s') as ->
     case as of
       [] -> throwE (CannotSynthesiseReceiveType s)
       (ExpLevel e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
-        (a, k, u') <- Expose.typeInput tdecls (Right e) u
+        (a, k, u') <- Expose.typeInput tdecls (siteOf e) u
         let v = T.AppExists (spanFromTo f e) [(a, k)] u'
         (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v as'
         return (E.App s f (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
   E.App s h as    -> do
     (h', t, tctx') <- synth tdecls ddecls kctx tctx h
     (as', u, tctx'') <- checkArgsQL 0 s tdecls ddecls kctx tctx' t as
@@ -254,7 +254,7 @@ synth tdecls ddecls kctx tctx = \case
           (e'', t, tctx') <- synth tdecls ddecls kctxi tctxi e'
           return (E.Abs s ps m e'', t, tctx')
         ExpLevel (pi, Nothing) : _ ->
-          throwE (CannotSynthesisePat (getSpan pi) pi)
+          throwE (CannotSynthesisePat (getSpan pi))
         ExpLevel (pi, Just ti) : ps' -> do
           Kinding.checkProperK ti
           (kctxi', tctxp) <- checkPat tdecls ddecls kctxi pi ti
@@ -291,7 +291,7 @@ synth tdecls ddecls kctx tctx = \case
             q    = K.join m (operandMult tdecls s rest)
         synth tdecls ddecls kctx tctx (E.Abs s [ExpLevel (E.VarPat s x, Just dom)] q body)
       _ -> throwE (CannotSynthesiseSection s op)
-  E.Pack s ts e -> throwE (CannotSynthesisePack s e)
+  E.Pack s ts e -> throwE (CannotSynthesisePack s)
   E.Asc s e t -> do
     (e', tctx') <- check tdecls ddecls kctx tctx e t
     return (E.Asc s e' t, t, tctx')
@@ -385,16 +385,16 @@ check :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -> E.Kinde
       -> Validation (E.KindedExp, TypeCtx)
 check tdecls ddecls kctx tctx e t = case e of
   E.Int s _   -> do
-    checkEquivTypes tdecls ddecls (Left e) t (T.Int s)
+    checkEquivTypes tdecls ddecls (siteOf e) t (T.Int s)
     return (e, tctx)
   E.Float s _ -> do 
-    checkEquivTypes tdecls ddecls (Left e) t (T.Float s)
+    checkEquivTypes tdecls ddecls (siteOf e) t (T.Float s)
     return (e, tctx)
   E.Char s _  -> do
-    checkEquivTypes tdecls ddecls (Left e) t (T.Char s)
+    checkEquivTypes tdecls ddecls (siteOf e) t (T.Char s)
     return (e, tctx)
   E.String s _ -> do
-    checkEquivTypes tdecls ddecls (Left e) t (T.List s (T.Char s))
+    checkEquivTypes tdecls ddecls (siteOf e) t (T.List s (T.Char s))
     return (e, tctx)
   -- Tuples, (e1 ... , en)
   E.Tuple s es ->
@@ -406,51 +406,51 @@ check tdecls ddecls kctx tctx e t = case e of
         return (E.Tuple s es', tctx')
       _ -> do
         (_, u, _) <- synth tdecls ddecls kctx tctx e
-        throwE (TypeMismatch s t u (Left e) Nothing)
+        throwE (TypeMismatch s t u Nothing)
   E.List s es -> check tdecls ddecls kctx tctx (foldr (E.Cons s) (E.DCons s (mkNilId s)) es) t
   E.DCons s i      -> do
     (u,tctx') <- lookupType kctx tctx (Right i)
-    --   checkEquivTypes tdecls ddecls (Left e) t u >> return (e, tctx') -- no bare-head app inference
+    --   checkEquivTypes tdecls ddecls (siteOf e) t u >> return (e, tctx') -- no bare-head app inference
     checkApp tdecls ddecls kctx e s e u tctx' [] t                       -- bare-head app inference
   E.Var s x       -> do
     (u, tctx') <- lookupType kctx tctx (Left x)
-    --   checkEquivTypes tdecls ddecls (Left e) t u >> return (e, tctx') -- no bare-head app inference
+    --   checkEquivTypes tdecls ddecls (siteOf e) t u >> return (e, tctx') -- no bare-head app inference
     checkApp tdecls ddecls kctx e s e u tctx' [] t                       -- bare-head app inference
   E.App s h@(E.Select s' m i) args ->
     case args of
       [] -> throwE (CannotSynthesiseSelect s' m i)
       (ExpLevel  e' : args') -> do
         (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
-        ui <- Expose.internalChoice tdecls m e' u i
+        ui <- Expose.internalChoice tdecls m (siteOf e') u i
         (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui args'
-        checkEquivTypes tdecls ddecls (Left e) t t'
+        checkEquivTypes tdecls ddecls (siteOf e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _  ) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
   E.App s h@(E.SendType s' u) args ->
     case args of
       [] -> throwE (CannotSynthesiseSendType s')
       (ExpLevel e' : args') -> do
         (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
-        (a, k, v') <- Expose.typeOutput tdecls e' v
+        (a, k, v') <- Expose.typeOutput tdecls (siteOf e') v
         Kinding.checkK u k
         (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a u v') args'
-        checkEquivTypes tdecls ddecls (Left e) t t'
+        checkEquivTypes tdecls ddecls (siteOf e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
   E.App s h@(E.ReceiveType s') args ->
     case args of
       [] -> throwE (CannotSynthesiseReceiveType s)
       (ExpLevel e' : args') -> do
         (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
-        (a, k, u') <- Expose.typeInput tdecls (Right e') u
+        (a, k, u') <- Expose.typeInput tdecls (siteOf e') u
         let v = T.AppExists (spanFromTo h e') [(a, k)] u'
         (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v args'
-        checkEquivTypes tdecls ddecls (Left e) t t'
+        checkEquivTypes tdecls ddecls (siteOf e) t t'
         return (E.App s h (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
   E.App s h args -> do
     (h', t', tctx') <- synth tdecls ddecls kctx tctx h
     checkApp tdecls ddecls kctx e s h' t' tctx' args t
@@ -481,13 +481,13 @@ check tdecls ddecls kctx tctx e t = case e of
           tsi@(ti : _) [] u ->
             case normalise tdecls u of
               T.AppExists _ bks u' -> checkPack tsi bks u'
-              _ -> throwE (TypeMismatchExists (spanFromTo ti u) u (Right e'))
+              _ -> throwE (TypeMismatchExists (spanFromTo ti u) u (siteOf e'))
           (ti : tsi') ((ai, ki) : aksi') u -> do
             Kinding.checkK ti ki
             checkPack tsi' aksi' (subs ai ti u)
-      _ -> throwE (TypeMismatchExists s t (Right e'))
+      _ -> throwE (TypeMismatchExists s t (siteOf e'))
   E.Asc s e u -> do
-    checkEquivTypes tdecls ddecls (Left e) t u
+    checkEquivTypes tdecls ddecls (siteOf e) t u
     (e', tctx') <- check tdecls ddecls kctx tctx e u
     return (E.Asc s e' u, tctx')
   E.Let s ds e' -> do
@@ -513,27 +513,27 @@ check tdecls ddecls kctx tctx e t = case e of
     Kinding.checkChannel u
     case normalise tdecls t of
       T.Tuple _ [t1,t2] -> do
-        checkEquivTypes tdecls ddecls (Left e) u t1
-        checkEquivTypes tdecls ddecls (Left e) (T.AppDual (getSpan u) u) t2
+        checkEquivTypes tdecls ddecls (siteOf e) u t1
+        checkEquivTypes tdecls ddecls (siteOf e) (T.AppDual (getSpan u) u) t2
         return (e, tctx)
       _ -> do
         (_, u, _) <- synth tdecls ddecls kctx tctx e
-        throwE (TypeMismatch s t u (Left e) Nothing)
+        throwE (TypeMismatch s t u Nothing)
   E.Select s mi i -> do
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        t1i <- Expose.internalChoice tdecls mi e t1 i
-        checkEquivTypes tdecls ddecls (Left e)
+        t1i <- Expose.internalChoice tdecls mi (siteOf e) t1 i
+        checkEquivTypes tdecls ddecls (siteOf e)
           (T.AppArrow s' m t1 t2 )
           (T.AppArrow s' m t1 t1i)
         return (e, tctx)
-      _ -> throwE (TypeMismatchSelect s mi t i e)
+      _ -> throwE (TypeMismatchSelect s mi t i)
   E.SendType s u -> do
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
         case normalise tdecls t1 of
           T.AppQuantS _ Pos a _ t1' -> do
-            checkEquivTypes tdecls ddecls (Left e)
+            checkEquivTypes tdecls ddecls (siteOf e)
               (T.AppArrow s' m t1 t2)
               (T.AppArrow s' m t1 (subs a u t1'))
             return (e, tctx)
@@ -546,7 +546,7 @@ check tdecls ddecls kctx tctx e t = case e of
           T.AppQuantS s'' Neg a k t1' -> do
             let actual = T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1')
             _ <- LTI.match e tdecls (T.AppArrow s' m t1 t2) actual `catchE` \_ -> pure mempty
-            checkEquivTypes tdecls ddecls (Left e) (T.AppArrow s' m t1 t2) actual
+            checkEquivTypes tdecls ddecls (siteOf e) (T.AppArrow s' m t1 t2) actual
             return (e, tctx)
           whnf -> throwE (TypeMismatchReceiveType s t (Just whnf))
       _ -> throwE (TypeMismatchReceiveType s t Nothing)
@@ -586,7 +586,7 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
         (kctxp, tctxp) <- checkPat tdecls ddecls kctxi p trhs
         forM_ (Map.assocs tctxp) \case
           (Left x, t) -> forM_ (tctxi Map.!? Left x) \b ->
-            checkEquivTypes tdecls ddecls (Left (E.Var (getSpan x) x)) (bndType b) t
+            checkEquivTypes tdecls ddecls (AtOtherExp (getSpan x)) (bndType b) t
           _ -> return ()
         return ( List.snoc ds (E.ValDef p rhs')
                , tctxp `Map.union` tctxds
@@ -662,7 +662,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
   (args', kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
   θ <- LTI.match e tdecls t t''
   forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
-  checkEquivTypes tdecls ddecls (Left e) (LI.applySubs θ t) (LI.applySubs θ t'')
+  checkEquivTypes tdecls ddecls (siteOf e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
 
@@ -744,7 +744,7 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
           case mti of
             Just ti -> do
               Kinding.checkProperK ti
-              checkEquivTypes tdecls ddecls (Right pi) ti u
+              checkEquivTypes tdecls ddecls (AtPat (getSpan pi)) ti u
             Nothing -> return ()
           forM_ mm (matchArrowMult (spanFromTo pi site) i m)
           (kctxp, tctxp) <- checkPat tdecls ddecls kctxi pi u
@@ -769,7 +769,6 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
           throwE (UnexpectedParam (paramSpan pi) i (MultLevel ()) (voidLevel pi))
         (ps'', t') -> do
           throwE (ExpectsTooManyArgs (getSpan site) t (i + length ps'') i)
-    levelUnit = mapLevel (const ()) (const ()) (const ())
     paramSpan = \case
       ExpLevel (p, mt) -> maybe (getSpan p) (spanFromTo p) mt
       TypeLevel (a, mk) -> maybe (getSpan a) (spanFromTo a) mk
@@ -790,19 +789,19 @@ checkPat :: D.KindedTypeDecls -> D.KindedDataDecls
 checkPat tdecls ddecls kctx p t = case p of
   -- 0
   E.IntPat    s _   -> do
-    checkEquivTypes tdecls ddecls (Right p) t (T.Int s)
+    checkEquivTypes tdecls ddecls (AtPat (getSpan p)) t (T.Int s)
     pure (kctx, Map.empty)
   -- 0.0
   E.FloatPat  s _   -> do
-    checkEquivTypes tdecls ddecls (Right p) t (T.Float s)
+    checkEquivTypes tdecls ddecls (AtPat (getSpan p)) t (T.Float s)
     pure (kctx, Map.empty)
   -- 'a'
   E.CharPat   s _   -> do
-    checkEquivTypes tdecls ddecls (Right p) t (T.Char s)
+    checkEquivTypes tdecls ddecls (AtPat (getSpan p)) t (T.Char s)
     pure (kctx, Map.empty)
   -- "abc"
   E.StringPat s _   -> do
-    checkEquivTypes tdecls ddecls (Right p) t (T.List s (T.Char s))
+    checkEquivTypes tdecls ddecls (AtPat (getSpan p)) t (T.List s (T.Char s))
     pure (kctx, Map.empty)
   -- x
   E.VarPat    s x   -> (kctx, Map.singleton (Left x) t) <$ escapeOpenTypeArgs kctx x t
@@ -810,7 +809,7 @@ checkPat tdecls ddecls kctx p t = case p of
   E.PackPat s aks p ->
     case normalise tdecls t of
       t'@(T.AppExists _ bks t'') -> checkPackPat kctx t'' aks bks
-      t' -> throwE (TypeMismatchExists (getSpan p) t (Left p))
+      t' -> throwE (TypeMismatchExists (getSpan p) t (AtPat (getSpan p)))
     where
       checkPackPat kctx' u = \cases
         [] [] -> checkPat tdecls ddecls kctx' p u
@@ -818,8 +817,7 @@ checkPat tdecls ddecls kctx p t = case p of
           checkPat tdecls ddecls kctx' p (T.AppExists (spanFromTo b u) bks u)
         aks@((a, k) : _) [] -> case normalise tdecls u of
           u'@(T.AppExists _ bks u'') -> checkPackPat kctx' u'' aks bks
-          u' -> throwE (TypeMismatchExists (spanFromTo a p) u
-            (Left $ E.PackPat (spanFromTo a p) aks p))
+          u' -> throwE (TypeMismatchExists (spanFromTo a p) u (AtPat (spanFromTo a p)))
         ((a, k) : aks) ((b, k') : bks) -> do
           Kinding.checkK (T.fromVariable ObjLv a k') (E.bndKind k)
           checkPackPat (Map.insert (Left a) k' kctx) (subs b (T.fromVariable ObjLv a k') u) aks bks
@@ -827,13 +825,13 @@ checkPat tdecls ddecls kctx p t = case p of
     -- the pattern binds nothing, so this discard reaches no context: force here
     Kinding.boundMultBy s (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
-      (throwE (NonLinPat s p (groundType g t)))
+      (throwE (NonLinPat s (groundType g t)))
     return (kctx, Map.empty)
   -- []
   E.NilPat s        ->
     case normalise tdecls t of
       T.List _ _ -> return (kctx, Map.empty)
-      t' -> throwE (TypeMismatchList (getSpan p) t (Right p))
+      t' -> throwE (TypeMismatchList (getSpan p) t)
   -- (p1 :: p2)
   E.ConsPat s p1 p2 ->
     case normalise tdecls t of
@@ -841,7 +839,7 @@ checkPat tdecls ddecls kctx p t = case p of
         (kctx' , tctxp1) <- checkPat tdecls ddecls kctx p1 t''
         (kctx'', tctxp2) <- checkPat tdecls ddecls kctx' p2 t'
         return (kctx'', Map.union tctxp1 tctxp2)
-      t' -> throwE (TypeMismatchList (getSpan p) t' (Right p))
+      t' -> throwE (TypeMismatchList (getSpan p) t')
   -- (p1 ... , pn)
   E.TuplePat s ps -> do
     case normalise tdecls t of
@@ -849,7 +847,7 @@ checkPat tdecls ddecls kctx p t = case p of
         foldM (\(kctx', tctxi) (pi, ti) ->
             second (Map.union tctxi) <$> checkPat tdecls ddecls kctx' pi ti)
           (kctx, Map.empty) (zip ps ts)
-      t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t' (Right p))
+      t' -> throwE (TypeMismatchTuple (getSpan p) (length ps) t')
   -- (C p1 ... pn)
   E.DConsPat s i ps -> do
     (i', ts) <- case D.ddCons ddecls Map.!? i of
@@ -871,32 +869,32 @@ checkPat tdecls ddecls kctx p t = case p of
           (kctx, Map.empty) (zip ps ts')
       t' -> throwE
         (TypeMismatch (getSpan p) t
-          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable ObjLv a k)) aks)) (Right p) Nothing)
+          (T.AppDName (getSpan i) k i' (map (\(a, k) -> setSpan (getSpan i) (T.fromVariable ObjLv a k)) aks)) Nothing)
   -- Wait
   E.WaitPat s -> do
-    Expose.wait tdecls p t
+    Expose.wait tdecls (AtPat (getSpan p)) t
     return (kctx, Map.empty)
   -- ?p; p and *?p; p
   E.InPat s m p1 p2 -> do
-    (t1, t2) <- Expose.input tdecls m (Left p) t
+    (t1, t2) <- Expose.input tdecls m (AtPat (getSpan p)) t
     (kctx' , tctxp1) <- checkPat tdecls ddecls kctx p1 t1
     (kctx'', tctxp2) <- checkPat tdecls ddecls kctx' p2 t2
     return (kctx'', Map.union tctxp1 tctxp2)
   -- ?type a. p
   E.TypeInPat s (a, k) p' -> do
-    (b, k', t') <- Expose.typeInput tdecls (Left p) t
+    (b, k', t') <- Expose.typeInput tdecls (AtPat (getSpan p)) t
     Kinding.checkK (T.fromVariable ObjLv a k') (E.bndKind k)
     checkPat tdecls ddecls (Map.insert (Left a) k' kctx) p' (subs b (T.fromVariable ObjLv a k') t')
   -- (&C p) and (*&C p)
   E.ChoicePat s m i p' -> do
-    ti <- Expose.externalChoice tdecls m p t i
+    ti <- Expose.externalChoice tdecls m (AtPat (getSpan p)) t i
     checkPat tdecls ddecls kctx p' ti
   -- x@p
   E.AsPat s x p'     -> do
     -- bound twice over, as @x@ and by @p'@
     Kinding.boundMultBy s (K.Un s) t
     checkWhenSolved \g -> when (Kinding.isRestricted (groundType g t))
-      (throwE (NonLinPat s p (groundType g t)))
+      (throwE (NonLinPat s (groundType g t)))
     escapeOpenTypeArgs kctx x t
     second (Map.insert (Left x) t) <$> checkPat tdecls ddecls kctx p' t
 
@@ -944,17 +942,17 @@ checkRHS tdecls ddecls kctx tctx site rhs t = case rhs of
 -- | Type equivalence. Checks if two types are equivalent, throwing an error
 -- if they are not. An expression or pattern is provided to locate the error.
 checkEquivTypes :: D.KindedTypeDecls -> D.KindedDataDecls
-                -> Either E.KindedExp E.KindedPat
+                -> ErrorSite
                 -> T.KindedType
                 -> T.KindedType
                 -> Validation ()
-checkEquivTypes tdecls ddecls eop t1 t2 = do
-  Kinding.alignBinderKinds tdecls (Origin AtApp (getSpan eop)) t1 t2
+checkEquivTypes tdecls ddecls site t1 t2 = do
+  Kinding.alignBinderKinds tdecls (Origin AtApp (getSpan site)) t1 t2
   checkWhenSolved \g ->
     let (u1, u2) = (groundType g t1, groundType g t2) in
     unless (equivalent (groundDecls g tdecls) u1 u2) do
       fixed <- escapedTypeArgFixedAt [getSpan u1, getSpan u2]
-      throwE (TypeMismatch (getSpan eop) u1 u2 eop fixed)
+      throwE (TypeMismatch (getSpan site) u1 u2 fixed)
 
 -- | Type context equivalence. Checks if two type contexts contain the same
 -- variables and constructors, throwing an error if they do not. An expression
@@ -1115,32 +1113,32 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               [] -> throwE (CannotSynthesiseSelect s' m i)
               (ExpLevel  e : args') -> do
                 (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                t2 <- Expose.internalChoice tdecls m e u1 i
+                t2 <- Expose.internalChoice tdecls m (siteOf e) u1 i
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
                 advise e t3
               (arg : _) -> 
-                throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+                throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
             e@(E.App s h@(E.SendType s' t0) args) t1 -> 
               case args of
                 [] -> throwE (CannotSynthesiseSendType s')
                 (ExpLevel e : args') -> do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                  (a, _, t2) <- Expose.typeOutput tdecls e u1
+                  (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
                   (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs a t0 t2) args'
                   advise e t3
                 (arg : _) ->
-                  throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+                  throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
             e@(E.App s f@(E.ReceiveType s') args) t1 ->
               case args of
                 [] -> throwE (CannotSynthesiseReceiveType s)
                 (ExpLevel e : args') -> do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                  (a, k, u1') <- Expose.typeInput tdecls (Right e) u1
+                  (a, k, u1') <- Expose.typeInput tdecls (siteOf e) u1
                   let t2 = T.AppExists (spanFromTo f e) [(a, k)] u1'
                   (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args'
                   advise e t3
                 (arg : _) ->
-                  throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
+                  throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
             e@(E.App _ h args) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               (_, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 args
@@ -1176,7 +1174,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 advise e t3
               `catchE` \_ -> return mempty
       (T.AppArrow _ _ t1 _, arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) arg)
+        throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) (voidLevel arg))
       (t, as) -> 
         throwE (GivenTooManyArgs (spanFromTo (head as) (last as)) t i (i + length as))
 

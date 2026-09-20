@@ -18,7 +18,6 @@ where
 import UI.Error
 import Validation.Base
 import Syntax.Base
-import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
@@ -35,37 +34,37 @@ kindArrow :: K.Kind -> ([K.Kind], K.Kind)
 kindArrow (K.Arrow _ k1 k2) = first (k1:) (kindArrow k2)
 kindArrow k = ([], k)
 
-function :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation T.KindedType
-function tdecls e t = do
+function :: D.KindedTypeDecls -> ErrorSite -> T.KindedType -> Validation T.KindedType
+function tdecls site t = do
   case normalise tdecls t of
     t'@(T.AppArrow s m u v) -> pure t'
     t'@(T.AppForall s m aks u) -> pure t'
-    t' -> throwE (ExposeError (getSpan e) (Right e) "a function" t t')
+    t' -> throwE (ExposeError site "a function" t t')
 
-arrow :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
-arrow tdecls e t = do
+arrow :: D.KindedTypeDecls -> ErrorSite -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
+arrow tdecls site t = do
   case normalise tdecls t of
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
-    t' -> throwE (ExposeError (getSpan e) (Right e) "a monomorphic function" t t')
+    t' -> throwE (ExposeError site "a monomorphic function" t t')
 
 exists :: D.KindedTypeDecls
-       -> Either E.KindedPat E.KindedExp
+       -> ErrorSite
        -> T.KindedType 
        -> Validation ([(Variable, K.Kind)], T.KindedType)
-exists tdecls pe t = do
+exists tdecls site t = do
   case normalise tdecls t of
     t'@(T.AppExists s aks u) -> pure (aks, u)
-    _ -> throwE (TypeMismatchExists (getSpan pe) t pe) 
+    _ -> throwE (TypeMismatchExists (getSpan site) t site) 
 
 -- | Expose the continuation of an external choice matched by a @&l p@ pattern
 -- (linear) or a @*&l p@ pattern (unrestricted). An unrestricted choice makes no
 -- progress, so its continuation is the channel itself.
-externalChoice :: D.KindedTypeDecls -> K.Multiplicity -> E.KindedPat -> T.KindedType -> Identifier
+externalChoice :: D.KindedTypeDecls -> K.Multiplicity -> ErrorSite -> T.KindedType -> Identifier
                -> Validation T.KindedType
-externalChoice tdecls m p t i = case externalChoice' tdecls m t i of
+externalChoice tdecls m site t i = case externalChoice' tdecls m t i of
   Just (Just ti) -> return ti
   Just Nothing   -> throwE (IllegalChoice (getSpan i) i t)
-  Nothing        -> throwE (ExposeError (getSpan p) (Left p) msg t (normalise tdecls t))
+  Nothing        -> throwE (ExposeError site msg t (normalise tdecls t))
   where msg | K.isUn m  = "an unrestricted (`*&`) external choice channel"
             | otherwise = "a linear external choice channel"
 
@@ -86,19 +85,19 @@ externalChoice' tdecls m t i
 
 -- | Expose the continuation of an internal choice selected by @select l@
 -- (linear) or @select_ l@ (unrestricted).
-internalChoice :: D.KindedTypeDecls -> K.Multiplicity -> E.KindedExp -> T.KindedType -> Identifier
+internalChoice :: D.KindedTypeDecls -> K.Multiplicity -> ErrorSite -> T.KindedType -> Identifier
                -> Validation T.KindedType
-internalChoice tdecls m e t i
+internalChoice tdecls m site t i
   | K.isUn m = case normalise tdecls t of
       t'@(T.UnChoice s Pos ls)               -> pick s t' ls
       T.AppSemi _ t'@(T.UnChoice s Pos ls) _ -> pick s t' ls
-      t' -> throwE (ExposeError (getSpan e) (Right e) "an unrestricted (`*+`) internal choice channel" t t')
+      t' -> throwE (ExposeError site "an unrestricted (`*+`) internal choice channel" t t')
   | otherwise = case normalise tdecls t of
       T.AppLinChoice s Pos its ->
         case lookup i its of
           Just t' -> return t'
           Nothing -> throwE (IllegalChoice s i t)
-      t' -> throwE (ExposeError (getSpan e) (Right e) "a linear internal choice channel" t t')
+      t' -> throwE (ExposeError site "a linear internal choice channel" t t')
   where
     pick s t' ls | i `elem` ls = return t'
                  | otherwise   = throwE (IllegalChoice s i t)
@@ -106,18 +105,18 @@ internalChoice tdecls m e t i
 -- | Expose the payload and continuation of an input matched by a @?p; q@
 -- pattern (linear) or a @*?p; q@ pattern (unrestricted). An unrestricted input
 -- makes no progress, so its continuation is the channel itself.
-input :: D.KindedTypeDecls -> K.Multiplicity -> Either E.KindedPat E.KindedExp -> T.KindedType
+input :: D.KindedTypeDecls -> K.Multiplicity -> ErrorSite -> T.KindedType
       -> Validation (T.KindedType, T.KindedType)
 input tdecls = message tdecls Neg
 
-output :: D.KindedTypeDecls -> K.Multiplicity -> E.KindedExp -> T.KindedType -> Validation (T.KindedType, T.KindedType)
-output tdecls m = message tdecls Pos m . Right
+output :: D.KindedTypeDecls -> K.Multiplicity -> ErrorSite -> T.KindedType -> Validation (T.KindedType, T.KindedType)
+output tdecls = message tdecls Pos
 
-message :: D.KindedTypeDecls -> Polarity -> K.Multiplicity -> Either E.KindedPat E.KindedExp -> T.KindedType
+message :: D.KindedTypeDecls -> Polarity -> K.Multiplicity -> ErrorSite -> T.KindedType
         -> Validation (T.KindedType, T.KindedType)
-message tdecls p m pe t = case message' tdecls p m t of
+message tdecls p m site t = case message' tdecls p m t of
   Just uv -> return uv
-  Nothing -> throwE (ExposeError (getSpan pe) pe expected t (normalise tdecls t))
+  Nothing -> throwE (ExposeError site expected t (normalise tdecls t))
   where
     expected | K.isUn m  = msg ("an unrestricted (`*" ++ sigil ++ "`) ")
              | otherwise = msg "a linear "
@@ -137,19 +136,19 @@ message' tdecls p m t
       T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> Just (u, v)
       _ -> Nothing
 
-typeOutput :: D.KindedTypeDecls -> E.KindedExp -> T.KindedType 
+typeOutput :: D.KindedTypeDecls -> ErrorSite -> T.KindedType 
            -> Validation (Variable, K.Kind, T.KindedType)
-typeOutput tdecls = typeMsg tdecls Pos . Right
+typeOutput tdecls = typeMsg tdecls Pos
 
-typeInput :: D.KindedTypeDecls -> Either E.KindedPat E.KindedExp -> T.KindedType 
+typeInput :: D.KindedTypeDecls -> ErrorSite -> T.KindedType 
           -> Validation (Variable, K.Kind, T.KindedType)
 typeInput tdecls = typeMsg tdecls Neg
 
-typeMsg :: D.KindedTypeDecls -> Polarity -> Either E.KindedPat E.KindedExp -> T.KindedType
+typeMsg :: D.KindedTypeDecls -> Polarity -> ErrorSite -> T.KindedType
             -> Validation (Variable, K.Kind, T.KindedType)
-typeMsg tdecls p pe t = case typeMsg' tdecls p t of
+typeMsg tdecls p site t = case typeMsg' tdecls p t of
   Just akt -> return akt
-  Nothing  -> throwE (ExposeError (getSpan pe) pe msg t (normalise tdecls t))
+  Nothing  -> throwE (ExposeError site msg t (normalise tdecls t))
   where msg = "a type-" ++ (case p of Neg -> "input"; Pos -> "output") ++ " channel"
 
 -- | 'typeMsg' without the failure.
@@ -159,9 +158,9 @@ typeMsg' tdecls p t = case normalise tdecls t of
   T.AppQuantS _ p' a k t' | p == p' -> Just (a, k, t')
   _ -> Nothing
 
-wait :: D.KindedTypeDecls -> E.KindedPat -> T.KindedType -> Validation ()
-wait tdecls p t = do
+wait :: D.KindedTypeDecls -> ErrorSite -> T.KindedType -> Validation ()
+wait tdecls site t = do
   case normalise tdecls t of
     T.End _ Neg -> return ()
     T.AppSemi _ (T.End _ Neg) _ -> return ()
-    t' -> throwE (ExposeError (getSpan p) (Left p) "a `Wait` channel" t t')
+    t' -> throwE (ExposeError site "a `Wait` channel" t t')

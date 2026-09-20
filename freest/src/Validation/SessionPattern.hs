@@ -84,7 +84,8 @@ checkPatColumn topSpan col = topErr ++ concatMap (checkPatColumn Nothing) subCol
     groups = groupBySession col
     topErr = case filter isMixedPat groups of
       []      -> []
-      (g : _) -> [MixedSessionVarPats spn (head (filter isSessionPat g)) (head (filter isVar g))]
+      (g : _) -> [MixedSessionVarPats spn (getSpan (head (filter isSessionPat g)))
+                                        (getSpan (head (filter isVar g)))]
         where
           spn = case topSpan of
             Just s -> s
