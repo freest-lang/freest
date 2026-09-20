@@ -5,7 +5,6 @@
 module Validation.LocalInference.Types where
 
 import Syntax.Base
-import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
@@ -31,20 +30,24 @@ import Data.Set qualified as Set
 -- types equivalent, recording the multiplicity equations it needs. Adapted (heavily)
 -- from Almeida et al., Local Type Inference for Context-Free Session Types
 -- (https://doi.org/10.4204/EPTCS.420.1)
-match :: E.KindedExp -> D.KindedTypeDecls
+-- | The 'Span' is the application being matched: everything 'match' reports --
+-- an escaped type argument bound to a polytype or out of scope, a higher-kinded
+-- argument it cannot infer -- is located there, and nothing needs the
+-- expression itself.
+match :: Span -> D.KindedTypeDecls
       -> T.KindedType -> T.KindedType
       -> Validation Substitution
-match e tdecls = match' e tdecls Set.empty Set.empty
+match sp tdecls = match' sp tdecls Set.empty Set.empty
   where
-  emit = mapM_ \(MultEquation l _ r _) -> addMultEquation (Origin AtApp (getSpan e)) l r
+  emit = mapM_ \(MultEquation l _ r _) -> addMultEquation (Origin AtApp sp) l r
 
-  match' e tdecls bindings visited t1 t2 =
+  match' sp tdecls bindings visited t1 t2 =
     case (tNameRedex t1, tNameRedex t2) of
       (Just t1', _) | t1' `Set.member` visited -> return emptySubs
       (_, Just t2') | t2' `Set.member` visited -> return emptySubs
-      _ -> match'' e tdecls bindings visited t1 t2
+      _ -> match'' sp tdecls bindings visited t1 t2
 
-  match'' e tdecls bindings visited t1 t2 = do
+  match'' sp tdecls bindings visited t1 t2 = do
     let fiv12 = fiv t1 `Set.union` fiv t2
     case (t1, t2) of
       -- M-FIV
@@ -54,9 +57,9 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       (t1, T.Var _ _ InstLv iv) -> instVar iv t1
       -- M-DualInst
       (T.AppDual _ t1'@(T.Var _ _ InstLv iv), t2) ->
-        match' e tdecls bindings visited t1' (T.AppDual (getSpan t2) t2)
+        match' sp tdecls bindings visited t1' (T.AppDual (getSpan t2) t2)
       (t1, T.AppDual _ t2'@(T.Var _ _ InstLv iv)) ->
-        match' e tdecls bindings visited (T.AppDual (getSpan t1) t1) t2'
+        match' sp tdecls bindings visited (T.AppDual (getSpan t1) t1) t2'
       -- M-AbsorbSeqL/R
       (T.AppSemi _ (T.End _ p1) t1, T.End _ p2)
         | p1 == p2 -> return (isubsAbsorbed fiv12)
@@ -74,43 +77,43 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       (T.AppSemi _ (T.AppMessage _ m1 p1 t11) t12, T.AppMessage s m2 p2 t21)
         | m1 == m2 && p1 == p2
         -> do
-        θ1 <- match' e tdecls bindings visited t11 t21
+        θ1 <- match' sp tdecls bindings visited t11 t21
         θ2 <- case m1 of
-          K.Lin{} -> match' e tdecls bindings visited t12 (T.Skip s)
+          K.Lin{} -> match' sp tdecls bindings visited t12 (T.Skip s)
           K.Un{}  -> return (isubsAbsorbed (fiv t12))
         return $ θ2 <> θ1
       -- M-MsgSeqR
       (T.AppMessage s m1 p1 t11, T.AppSemi _ (T.AppMessage _ m2 p2 t21) t22)
         | m1 == m2 && p1 == p2
         -> do
-        θ1 <- match' e tdecls bindings visited t11 t21
+        θ1 <- match' sp tdecls bindings visited t11 t21
         θ2 <- case m2 of
-          K.Lin{} -> match' e tdecls bindings visited t22 (T.Skip s)
+          K.Lin{} -> match' sp tdecls bindings visited t22 (T.Skip s)
           K.Un{}  -> return (isubsAbsorbed (fiv t22))
         return $ θ2 <> θ1
       -- M-Msg
       (T.AppMessage s m1 p1 t1', T.AppMessage _ m2 p2 t2')
         | m1 == m2 && p1 == p2
-        -> match' e tdecls bindings visited t1' t2'
+        -> match' sp tdecls bindings visited t1' t2'
       -- M-MsgSeq
       (T.AppSemi _ (T.AppMessage _ m1 p1 t11) t12, T.AppSemi _ (T.AppMessage _ m2 p2 t21) t22)
         | m1 == m2 && p1 == p2
         -> do
-        θ1 <- match' e tdecls bindings visited t11 t21
+        θ1 <- match' sp tdecls bindings visited t11 t21
         θ2 <- case m1 of
-          K.Lin{} -> match' e tdecls bindings visited t12 t22
+          K.Lin{} -> match' sp tdecls bindings visited t12 t22
           K.Un{}  -> return (isubsAbsorbed (fiv t12))
         return $ θ2 <> θ1
       -- M-DualVar
       (T.AppDual _ (T.AppVar _ a1 k1 ObjLv t1s), T.AppDual _ (T.AppVar _ a2 k2 ObjLv t2s))
         | (a1, a2) `Set.member` bindings && length t1s == length t2s
-        -> foldMatch e tdecls bindings visited emptySubs t1s t2s
+        -> foldMatch sp tdecls bindings visited emptySubs t1s t2s
       (T.AppDual _ (T.AppVar _ a1 k1 vm1 t1s), T.AppDual _ (T.AppVar _ a2 k2 vm2 t2s))
         | vm1 == vm2 && length t1s == length t2s
         -> do
-        θ <- match' e tdecls bindings visited (T.Var (getSpan a1) k1 vm1 a1)
+        θ <- match' sp tdecls bindings visited (T.Var (getSpan a1) k1 vm1 a1)
                                                (T.Var (getSpan a2) k2 vm2 a2)
-        foldMatch e tdecls bindings visited θ t1s t2s
+        foldMatch sp tdecls bindings visited θ t1s t2s
       -- M-Const (M-ArrowL/R)
       (T.App _ t1' t1s, T.App _ t2' t2s)
         |  T.isProper t1 && T.isProper t2
@@ -120,7 +123,7 @@ match e tdecls = match' e tdecls Set.empty Set.empty
             )
         -> do
           emit [multEq m1 m2 | (T.Arrow _ m1, T.Arrow _ m2) <- [(t1', t2')]]
-          foldMatch e tdecls bindings visited emptySubs t1s t2s
+          foldMatch sp tdecls bindings visited emptySubs t1s t2s
       -- M-Quant
       (T.AppQuant s1 p1 bk1 m1 ((a1, k1) : aks1) t1', T.AppQuant s2 p2 bk2 m2 ((a2, k2) : aks2) t2')
         | p1 == p2 && bk1 == bk2
@@ -129,37 +132,37 @@ match e tdecls = match' e tdecls Set.empty Set.empty
             -- binder variable: give it the multiplicity relation as two opposite
             -- bounds, over a common baseKind so no baseKind is constrained
             forM_ eqs \(MultEquation em1 eo em2 _) -> do
-              addKindConstraint eo (K.Proper (getSpan e) em1 K.Top) (K.Proper (getSpan e) em2 K.Top)
-              addKindConstraint eo (K.Proper (getSpan e) em2 K.Top) (K.Proper (getSpan e) em1 K.Top)
+              addKindConstraint eo (K.Proper sp em1 K.Top) (K.Proper sp em2 K.Top)
+              addKindConstraint eo (K.Proper sp em2 K.Top) (K.Proper sp em1 K.Top)
             emit mcs
-            match' e tdecls (Set.insert (a1, a2) bindings) visited
+            match' sp tdecls (Set.insert (a1, a2) bindings) visited
               (T.AppQuant s1 p1 bk1 m1 aks1 t1') (T.AppQuant s2 p2 bk2 m2 aks2 t2')
         where eqs = kindEqConstraints k1 k2
               mcs = eqs ++ [multEq m1 m2 | p1 == Neg && bk1 == K.Top]
       -- M-Var
       (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
         | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
-        -> foldMatch e tdecls bindings visited emptySubs t1s t2s
+        -> foldMatch sp tdecls bindings visited emptySubs t1s t2s
       (t1, t2)
       -- M-RedexL
         | isJust (tNameRedex t1)
         -> let visited' = Set.insert (fromJust $ tNameRedex t1) visited
-            in match' e tdecls bindings visited' (normalise tdecls t1) t2
+            in match' sp tdecls bindings visited' (normalise tdecls t1) t2
       -- M-RedexR
         | isJust (tNameRedex t2)
         -> let visited' = Set.insert (fromJust $ tNameRedex t2) visited 
-            in match' e tdecls bindings visited' t1 (normalise tdecls t2)
+            in match' sp tdecls bindings visited' t1 (normalise tdecls t2)
       -- no matching for higher-kinded types
         | not (T.isProper t1)
-        -> throwE (Error.CannotInferHigherKindedTypeApp (getSpan e) (T.kindOf t1))
+        -> throwE (Error.CannotInferHigherKindedTypeApp sp (T.kindOf t1))
         | not (T.isProper t2)
-        -> throwE (Error.CannotInferHigherKindedTypeApp (getSpan e) (T.kindOf t2))
+        -> throwE (Error.CannotInferHigherKindedTypeApp sp (T.kindOf t2))
       -- M-ReduceL
         | not (isWhnf t1)
-        -> match' e tdecls bindings visited (reduce tdecls t1) t2
+        -> match' sp tdecls bindings visited (reduce tdecls t1) t2
       -- M-ReduceR
         | not (isWhnf t2)
-        -> match' e tdecls bindings visited t1 (reduce tdecls t2)
+        -> match' sp tdecls bindings visited t1 (reduce tdecls t2)
       -- no match
         | otherwise -> return emptySubs
 
@@ -173,17 +176,17 @@ match e tdecls = match' e tdecls Set.empty Set.empty
     Just entry -> bindEscaped iv entry t
 
   bindEscaped iv (x, scope, stored) t = case stored of
-    Just (u, _) -> (subsType iv u <>) <$> match e tdecls u t
+    Just (u, _) -> (subsType iv u <>) <$> match sp tdecls u t
     Nothing -> do
-      when (polytype t) $ throwE (Error.EscapedTypeArgPolymorphic (getSpan e) x t)
+      when (polytype t) $ throwE (Error.EscapedTypeArgPolymorphic sp x t)
       forM_ (Set.lookupMin (objVars t Set.\\ scope)) \a ->
-        throwE (Error.EscapedTypeArgOutOfScope (getSpan e) x a)
+        throwE (Error.EscapedTypeArgOutOfScope sp x a)
       -- the bound type's own instantiation variables belong to the application
       -- still running, and its local substitution never reaches the store:
       -- promote them as well, so that a later use binds them and the store's
       -- zonk, which is transitive, resolves this entry through them
       forM_ (fiv t) \iv' -> escapeTypeVar iv' x scope
-      subsType iv t <$ bindEscapedTypeVar iv t (getSpan e)
+      subsType iv t <$ bindEscapedTypeVar iv t sp
 
   polytype = \case
     T.AppForall{} -> True
@@ -200,8 +203,8 @@ match e tdecls = match' e tdecls Set.empty Set.empty
 
   isubsAbsorbed = foldMap \iv -> subsType iv (T.Void (getSpan iv) (K.uc (getSpan iv)))
 
-  foldMatch e tdecls bindings visited θ t1s t2s =
-    (<> θ) . fold <$> zipWithM (match' e tdecls bindings visited) t1s t2s
+  foldMatch sp tdecls bindings visited θ t1s t2s =
+    (<> θ) . fold <$> zipWithM (match' sp tdecls bindings visited) t1s t2s
 
 -- | Whether a type still carries a solvable kind, baseKind or multiplicity.
 -- Matching must not stop at a pair that does.

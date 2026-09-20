@@ -545,7 +545,7 @@ check tdecls ddecls kctx tctx e t = case e of
         case normalise tdecls t1 of
           T.AppQuantS s'' Neg a k t1' -> do
             let actual = T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1')
-            _ <- LTI.match e tdecls (T.AppArrow s' m t1 t2) actual `catchE` \_ -> pure mempty
+            _ <- LTI.match (getSpan e) tdecls (T.AppArrow s' m t1 t2) actual `catchE` \_ -> pure mempty
             checkEquivTypes tdecls ddecls (siteOf e) (T.AppArrow s' m t1 t2) actual
             return (e, tctx)
           whnf -> throwE (TypeMismatchReceiveType s t (Just whnf))
@@ -660,7 +660,7 @@ checkApp tdecls ddecls kctx e s h' t' tctx' args t = do
         T.ForallM{}   -> instantiate
         _             -> instantiateResult
   (args', kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
-  θ <- LTI.match e tdecls t t''
+  θ <- LTI.match (getSpan e) tdecls t t''
   forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
   checkEquivTypes tdecls ddecls (siteOf e) (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
@@ -1098,7 +1098,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
           advise e u = case (t1, normalise tdecls u) of
             (T.Var _ _ InstLv _, T.AppForall{}) -> return mempty
             (T.Var _ _ InstLv _, T.ForallM{})   -> return mempty
-            _                                   -> LTI.match e tdecls t1 u
+            _                                   -> LTI.match (getSpan e) tdecls t1 u
           quickLook :: E.Exp Kinded -> T.KindedType -> Validation LI.Substitution
           quickLook = \cases
             e@E.Tuple{} _ -> do
