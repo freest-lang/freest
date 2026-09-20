@@ -55,7 +55,7 @@ import Validation.LocalInference.Multiplicities
   , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds
   ( BaseKindConstraint(..), solveBaseKindConstraints, kindSubBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveNonMultModule )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
@@ -597,9 +597,9 @@ kindModule ctx mod = do
                  , M.definitions  = lds
                  }
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
-  -- everything but the multiplicities: typing must face those unsolved, but not
-  -- kinds it cannot dispatch on. 'Compiler.Pipeline' applies the rest at the end
-  return (ctxOut, resolveNonMultModule sol mod')
+  -- shapes only: typing must face both components unsolved, but not a kind it
+  -- cannot dispatch on. 'Compiler.Pipeline' applies the rest at the end
+  return (ctxOut, resolveShapeModule sol mod')
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 
