@@ -609,15 +609,17 @@ checkDecls tdecls ddecls kctx tctx = foldM checkDecl ([], Map.empty, kctx, tctx)
         return (List.snoc ds (E.Mutual ds''), Map.union tctxds' tctxds, kctxi', tctx')
 
 
--- | Check the baseKinding half of subkinding for an instantiated type
--- argument against the quantified variable's kind, once the substitution is
--- final. The error is located at @sp@, the application that forced the
+-- | Require the baseKinding half of subkinding for an instantiated type
+-- argument against the quantified variable's kind: as a constraint wherever a
+-- baseKind is still a variable, and as a check on the final substitution
+-- otherwise. The error is located at @sp@, the application that forced the
 -- instantiation: an /inferred/ type argument is stitched from the function's
 -- signature and so carries that (unrelated) span, whereas the requirement is
 -- imposed here, at the call site.
 checkInstBaseKind :: Span -> T.KindedType -> K.Kind -> Validation ()
-checkInstBaseKind sp t k = checkWhenSolved \g ->
-  go (T.kindOf (groundType g t)) (groundKind g k)
+checkInstBaseKind sp t k = do
+  Kinding.deferBaseKindSub (Origin AtApp sp) (T.kindOf t) k
+  checkWhenSolved \g -> go (T.kindOf (groundType g t)) (groundKind g k)
   where
     go (K.Proper _ m bk1) (K.Proper s _ bk2)
       | not (bk1 K.<: bk2) = throwE (BaseKindMismatch sp bk2 t (K.Proper s m bk1))
@@ -941,11 +943,13 @@ checkEquivTypes :: D.KindedTypeDecls -> D.KindedDataDecls
                 -> T.KindedType
                 -> T.KindedType
                 -> Validation ()
-checkEquivTypes tdecls ddecls eop t1 t2 = checkWhenSolved \g ->
-  let (u1, u2) = (groundType g t1, groundType g t2) in
-  unless (equivalent (groundDecls g tdecls) u1 u2) do
-    fixed <- escapedTypeArgFixedAt [getSpan u1, getSpan u2]
-    throwE (TypeMismatch (getSpan eop) u1 u2 eop fixed)
+checkEquivTypes tdecls ddecls eop t1 t2 = do
+  Kinding.alignBinderKinds tdecls (Origin AtApp (getSpan eop)) t1 t2
+  checkWhenSolved \g ->
+    let (u1, u2) = (groundType g t1, groundType g t2) in
+    unless (equivalent (groundDecls g tdecls) u1 u2) do
+      fixed <- escapedTypeArgFixedAt [getSpan u1, getSpan u2]
+      throwE (TypeMismatch (getSpan eop) u1 u2 eop fixed)
 
 -- | Type context equivalence. Checks if two type contexts contain the same
 -- variables and constructors, throwing an error if they do not. An expression

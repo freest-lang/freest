@@ -12,6 +12,8 @@ module Validation.Kinding
   , check
   , checkK
   , checkSubkindOf
+  , deferBaseKindSub
+  , alignBinderKinds
   , checkProper
   , checkProperK
   , checkBaseKind
@@ -51,7 +53,8 @@ import Validation.LocalInference.Kinds ( KindUnifier(..), UnifyError(..), unifyK
 import Validation.LocalInference.Multiplicities
   ( MultEquation(..), MultSub(..), applyMultSubst, solveMultSubs, solveMultSubsWitnessed
   , solveMultConstraints, solvables )
-import Validation.LocalInference.BaseKinds ( BaseKindConstraint(..), solveBaseKindConstraints )
+import Validation.LocalInference.BaseKinds
+  ( BaseKindConstraint(..), solveBaseKindConstraints, kindSubBaseKindConstraints )
 import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveNonMultModule )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
@@ -288,7 +291,7 @@ checkOperand ctx req t = do
   let o = Origin InSignature (getSpan t)
   case TK.kindOf t' of
     k@(Proper _ m bk)
-      | isVarBaseKind bk -> addBaseKindConstraint (SubBaseKind o bk req) >> return (m, bk, t')
+      | solvableBaseKind bk -> addBaseKindConstraint (SubBaseKind o bk req) >> return (m, bk, t')
       | bk <: req       -> return (m, bk, t')
       | otherwise       -> throwE (BaseKindMismatch (getSpan t) req t' k)
     Var _ lv a | solvable lv -> do
@@ -311,8 +314,6 @@ checkOperand ctx req t = do
                   _               -> t'
       return (m, bk, t'')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
-  where
-    isVarBaseKind = \case VarBK lv _ -> solvable lv; _ -> False
 
 -- | The greatest lower bound (@meetBaseKinds@) or least upper bound
 -- (@joinBaseKinds@) of operand baseKinds, computed eagerly when all are ground and
@@ -355,8 +356,16 @@ checkBaseKind ctx t bk = do
 checkBaseKindK :: TK.KindedType -> BaseKind -> Validation (Multiplicity, BaseKind)
 checkBaseKindK t bk = do
   (m, bk', _) <- checkProperK t
-  unless (bk' <: bk) $
-    throwE (BaseKindMismatch (getSpan t) bk t (TK.kindOf t))
+  if solvableBaseKind bk'
+    -- the requirement takes part in fixing the value, and is reported on it
+    then do
+      addBaseKindConstraint (SubBaseKind (Origin AtUse (getSpan t)) bk' bk)
+      checkWhenSolved \g -> case groundKind g (TK.kindOf t) of
+        k'@(Proper _ _ gbk) -> unless (gbk <: bk) $
+          throwE (BaseKindMismatch (getSpan t) bk t k')
+        _ -> return ()
+    else unless (bk' <: bk) $
+      throwE (BaseKindMismatch (getSpan t) bk t (TK.kindOf t))
   return (m, bk')
 
 -- | Check that the kind of a type is a subkind of another. When a solvable
@@ -367,6 +376,54 @@ checkSubkindOf t k' k
   | hasSolvableVar k' || hasSolvableVar k =
       addKindConstraint (Origin InSignature (getSpan t)) k' k
   | otherwise = unless (k' <: k) $ throwE (KindMismatch (getSpan t) k t)
+
+-- | Gather the baseKind half of @k1 <: k2@ as constraints, for the operands a
+-- solvable variable leaves undecidable now. A check reads a value the solver
+-- reached without it; a constraint takes part in reaching it.
+deferBaseKindSub :: Origin -> Kind -> Kind -> Validation ()
+deferBaseKindSub o k1 k2 = mapM_ addBaseKindConstraint
+  [ c | c@(SubBaseKind _ bk1 bk2) <- kindSubBaseKindConstraints o k1 k2
+      , solvableBaseKind bk1 || solvableBaseKind bk2 ]
+
+-- | Is a baseKind a solvable (inference) variable, and so undecidable now?
+solvableBaseKind :: BaseKind -> Bool
+solvableBaseKind = \case VarBK lv _ -> solvable lv; _ -> False
+
+-- | Equate the kinds of the binders two types pair up, for the obligation that
+-- will compare them. Type equivalence keys its nonterminals on whole kinds, so
+-- an inferred binder kind must be related to the written one it is checked
+-- against before the solve rather than read after it. The requirement is the
+-- left operand, as at every other emission site.
+alignBinderKinds :: D.KindedTypeDecls -> Origin -> TK.KindedType -> TK.KindedType -> Validation ()
+alignBinderKinds tdecls o = go Set.empty
+  where
+    go seen t u
+      | (t, u) `Set.member` seen = pure ()
+      | otherwise = case (normalise tdecls t, normalise tdecls u) of
+          (TK.AppQuant _ _ _ _ aks t', TK.AppQuant _ _ _ _ bks u')
+            | length aks == length bks -> do
+                sequence_ [ equate k k' | ((_, k), (_, k')) <- zip aks bks ]
+                go seen' t' u'
+          (TK.ForallM _ _ φs t', TK.ForallM _ _ φs' u')
+            | length φs == length φs' -> go seen' t' u'
+          -- an arrow spine, so a quantifier under a signature's parameters or
+          -- result is still paired up; nothing else is walked, a general
+          -- descent having cost more than the suite could carry
+          (TK.AppArrow _ _ t1 t2, TK.AppArrow _ _ u1 u2) ->
+            go seen' t1 u1 >> go seen' t2 u2
+          _ -> pure ()
+      where seen' = Set.insert (t, u) seen
+
+    equate (Proper _ m1 bk1) (Proper _ m2 bk2) = do
+      when (solvableBaseKind bk1 || solvableBaseKind bk2) $
+        mapM_ addBaseKindConstraint [SubBaseKind o bk1 bk2, SubBaseKind o bk2 bk1]
+      when (solvableMult m1 || solvableMult m2) $
+        addMultEquation o m1 m2
+    equate _ _ = pure ()
+
+-- | Is a multiplicity one a solvable (inference) variable takes part in?
+solvableMult :: Multiplicity -> Bool
+solvableMult = \case Sup _ atoms -> any (solvable . fst) atoms; _ -> False
 
 -- | Does a kind mention a solvable (inference) variable?
 hasSolvableVar :: Kind -> Bool
