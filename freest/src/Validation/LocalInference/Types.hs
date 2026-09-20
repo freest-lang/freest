@@ -10,7 +10,7 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, incCounter, addKindConstraint, addMultEquation, escapedTypeVar, bindEscapedTypeVar)
+import Validation.Base (Validation, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
 import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
@@ -178,6 +178,11 @@ match e tdecls = match' e tdecls Set.empty Set.empty
       when (polytype t) $ throwE (Error.EscapedTypeArgPolymorphic (getSpan e) x t)
       forM_ (Set.lookupMin (objVars t Set.\\ scope)) \a ->
         throwE (Error.EscapedTypeArgOutOfScope (getSpan e) x a)
+      -- the bound type's own instantiation variables belong to the application
+      -- still running, and its local substitution never reaches the store:
+      -- promote them as well, so that a later use binds them and the store's
+      -- zonk, which is transitive, resolves this entry through them
+      forM_ (fiv t) \iv' -> escapeTypeVar iv' x scope
       subsType iv t <$ bindEscapedTypeVar iv t (getSpan e)
 
   polytype = \case
