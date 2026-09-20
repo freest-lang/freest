@@ -61,7 +61,7 @@ import Validation.LocalInference.Substitution
 
 import Control.Applicative ( (<|>) )
 import Control.Monad.Identity ( Identity(..) )
-import Control.Monad.Extra ( unlessM, (&&^), zipWithM_ )
+import Control.Monad.Extra ( unlessM, (&&^) )
 import Control.Monad.State ( MonadState, foldM, unless, forM, forM_, when, runState, StateT (runStateT), gets, modify )
 import Control.Monad.Trans.Except ( throwE, runExceptT, ExceptT (ExceptT) )
 import Data.Bifunctor ( first, second, bimap )
@@ -73,7 +73,7 @@ import Data.Map.Strict qualified as Map
 import Data.Ord qualified as Ord
 import Data.Set qualified as Set
 import Data.List qualified as List
-import Data.Maybe ( isJust, listToMaybe )
+import Data.Maybe ( isJust, listToMaybe, fromMaybe )
 import Data.Graph qualified as Graph
 import Validation.HOTRecursion (checkNoHOTRec)
 
@@ -905,9 +905,7 @@ kindFun tdecls ddecls e = kindFun' 0 []
         rhs' <- kindRHS tdecls ddecls kctx (paramCtx tracked tctxds) (Just t') rhs
         return ([], rhs')
       (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
-        k' <- case mki of
-          Just ki -> checkK (TK.fromVariable ObjLv ai ki) k >> return ki
-          Nothing -> return k
+        let k' = fromMaybe k mki
         first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) tracked (Map.insert (Left ai) k' kctx) tctxds ps'
           rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv ai k') u)
       (ExpLevel  (p, mtp) : ps', TK.AppArrow _ am u v) -> do
@@ -1155,13 +1153,7 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
     pure $ E.Abs s pars' m e'
   E.Pack s' ts e -> do
     ts' <- mapM (synth kctx) ts
-    zipWithM_ checkK ts' (existsKinds mt)
     E.Pack s' ts' <$> kindExp tdecls ddecls kctx tctxds e
-    where
-      existsKinds = \case
-        Just (normalise tdecls -> TK.AppExists _ aks u) ->
-          map snd aks ++ existsKinds (Just u)
-        _ -> []
   E.Asc s e t -> do
     t' <- synth kctx t
     e' <- kindExpAgainst tdecls ddecls kctx tctxds (Just t') e
@@ -1182,7 +1174,7 @@ kindExpAgainst tdecls ddecls kctx tctxds mt = \case
            <*> kindExpAgainst tdecls ddecls kctx tctxds mt e2
            <*> kindExpAgainst tdecls ddecls kctx tctxds mt e3
   E.List s es -> E.List s <$> mapM (kindExp tdecls ddecls kctx tctxds) es
-  E.Channel s t -> (\(_, _, t') -> E.Channel s t') <$> checkOperand kctx Channel t
+  E.Channel s t -> E.Channel s <$> synth kctx t
   E.Select s m i -> pure $ E.Select s m i
   E.SendType s t -> E.SendType s <$> synth kctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
