@@ -13,7 +13,7 @@ import Test.Hspec
 spec :: Spec
 spec = describe "Kind unifier (K1 <: K2)" $ do
   it "resolves a whole-kind variable against a proper kind, emitting one leaf each" $
-    case unifyKindSub o (kv 1) (proper lin Top) of
+    case unifyKindSub 1000 o (kv 1) (proper lin Top) of
       Right u -> do
         fmap isProper (Map.lookup (var 1) (kindSubst u)) `shouldBe` Just True
         length (multSubConstraints u) `shouldBe` 1
@@ -21,21 +21,21 @@ spec = describe "Kind unifier (K1 <: K2)" $ do
       Left _ -> expectationFailure "expected success"
 
   it "aliases two whole-kind variables without promoting to proper" $
-    case unifyKindSub o (kv 1) (kv 2) of
+    case unifyKindSub 1000 o (kv 1) (kv 2) of
       Right u -> Map.lookup (var 1) (kindSubst u) `shouldSatisfy` isVar
       Left _  -> expectationFailure "expected success"
 
   it "recurses through arrows, binding both ends" $
-    case unifyKindSub o (arrow (kv 1) (kv 2)) (arrow (proper lin Top) (proper lin Session)) of
+    case unifyKindSub 1000 o (arrow (kv 1) (kv 2)) (arrow (proper lin Top) (proper lin Session)) of
       Right u -> Map.size (kindSubst u) `shouldBe` 2
       Left _  -> expectationFailure "expected success"
 
   it "rejects a proper-vs-arrow mismatch" $
-    isLeft (unifyKindSub o (proper lin Top) (arrow (proper lin Top) (proper lin Top)))
+    isLeft (unifyKindSub 1000 o (proper lin Top) (arrow (proper lin Top) (proper lin Top)))
       `shouldBe` True
 
   it "hands baseKind leaves to the baseKind solver (a free leaf resolves to T)" $
-    case unifyKindSub o (kv 1) (proper lin Top) of
+    case unifyKindSub 1000 o (kv 1) (proper lin Top) of
       Right u -> case (Map.lookup (var 1) (kindSubst u), solveBaseKindConstraints (baseKindConstraints u)) of
         (Just (Proper _ _ p), Right psub) -> applyBaseKindSubst psub p `shouldBe` Top
         _ -> expectationFailure "expected a proper leaf and a baseKind solution"

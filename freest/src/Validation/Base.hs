@@ -4,6 +4,7 @@ module Validation.Base
   , emptyValidationState
   , runValidation
   , incCounter
+  , advanceCounter
   , freshInternal
   , addKindConstraint
   , addKindBinding
@@ -112,6 +113,11 @@ incCounter = do
   c <- gets counter
   modify (\s -> s{counter=succ (counter s)})
   return c
+
+-- | Advance the counter past the names another allocator consumed, so the
+-- variables it made stay disjoint from every later one.
+advanceCounter :: Int -> Validation ()
+advanceCounter c = modify \s -> s{counter = max c (counter s)}
 
 -- | Give a variable a fresh internal name, keeping its external name and span.
 freshInternal :: Variable -> Validation Variable

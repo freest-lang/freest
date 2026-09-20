@@ -50,9 +50,9 @@ validateModule :: ScopingCtx -> KindCtx -> TypeCtx
                -> Validation (ScopingCtx, KindCtx, TypeCtx, M.KindedModule)
 validateModule sctx kctx tctx tdecls ddecls modl = do
   (sctx', smodl) <- scopeModule' sctx modl
-  (kctx', kmodl) <- kindModule kctx smodl
+  (kctx', kmodl, defs, sigs) <- kindModule kctx smodl
   checkNoHOTRec (M.typeDecls kmodl)
-  (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls kmodl)
+  (kmodl', kctx'', tctx') <- typeModule kctx' tctx (inheritDecls kmodl) defs sigs
   -- kinding's solution was provisional: typing may have added constraints of its
   -- own, so the store is solved once more, and this answer is the one the
   -- obligations are checked against

@@ -1,1 +1,4 @@
-1
+<pending>
+the merged walk drops kinding's subkinding check on a written type argument,
+so the forwarded binder never learns pass's `1T -> 1T`. Restoring the check
+as it stood costs two other programs; see handoff-2026-09-20-2 sections 3 and 5.

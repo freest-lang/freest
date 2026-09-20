@@ -8,10 +8,14 @@ This module implements FreeST's bidirectional kinding algorithm.
 
 module Validation.Kinding
   ( synth
+  , synthShaped
+  , inferredBndKind
   , kindType
   , check
   , checkK
   , checkSubkindOf
+  , hasSolvableVar
+  , neutralMults
   , deferBaseKindSub
   , alignBinderKinds
   , checkProper
@@ -27,8 +31,7 @@ module Validation.Kinding
   , emptyKindCtx
   , kindModule
   , solveKindConstraints
-  , kindExp
-  , kindLetDecls -- freesti
+  , resolveExpBndKind
   , runKindModule
   , runSynth
   , runCheck
@@ -55,7 +58,7 @@ import Validation.LocalInference.Multiplicities
   , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds
   ( BaseKindConstraint(..), solveBaseKindConstraints, kindSubBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule, resolveShapeType, resolveShapeTypeOpen, resolveShape )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
@@ -371,6 +374,18 @@ checkBaseKindK t bk = do
 -- | Check that the kind of a type is a subkind of another. When a solvable
 -- variable is involved, the relation cannot be decided locally, so the
 -- constraint is gathered and solved later; otherwise it is checked eagerly.
+-- | A written type argument's kind, with its multiplicities neutralised, for
+-- the check against a binder kind that is still a variable: the argument's own
+-- multiplicity says nothing about the binder, and forcing it would fix the
+-- binder at the argument's rather than leaving it to the global solve. What the
+-- check does carry is the /shape/ -- which is what tells the unifier a
+-- higher-kinded binder's kind is an arrow.
+neutralMults :: Bool -> Kind -> Kind
+neutralMults co = \case
+  Proper s _ bk -> Proper s (if co then Un s else Lin s) bk
+  Arrow s k1 k2 -> Arrow s (neutralMults (not co) k1) (neutralMults co k2)
+  k             -> k
+
 checkSubkindOf :: TK.KindedType -> Kind -> Kind -> Validation ()
 checkSubkindOf t k' k
   | hasSolvableVar k' || hasSolvableVar k =
@@ -544,7 +559,12 @@ isRecursiveDecl sccOf i t =
   Set.size (Map.findWithDefault (Set.singleton i) i sccOf) > 1 || mentions i t
 
 -- | Check a module for type formation.
-kindModule :: KindCtx -> M.ScopedModule -> Validation (KindCtx, M.KindedModule)
+-- | Validate a module's types: its declarations, datatypes and signatures. The
+-- definitions are returned still scoped, for expression validation to kind and
+-- type in one walk.
+kindModule :: KindCtx -> M.ScopedModule
+           -> Validation ( KindCtx, M.KindedModule, [E.LetDecl Scoped]
+                         , Map.Map Variable TK.KindedType )
 kindModule ctx mod = do
   let declared = mod.kindSigs
       undeclared :: Map.Map Identifier a -> Map.Map Identifier a
@@ -586,20 +606,20 @@ kindModule ctx mod = do
     case Map.lookup v binds of
       Just (Proper _ φ _) -> addMultEquation (Origin InSignature (getSpan v)) (Un (getSpan v)) φ
       _                   -> pure ()
-  let ddecls = D.DataDecls dcdecls kdtdecls
-  (_, lds) <- kindLetDecls tdecls ddecls ctx' Map.empty (M.definitions mod)
+  sigs <- kindSignatures tdecls ctx' (M.definitions mod)
   sol <- provisionalKindSolution
   setKindSolution sol
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
       mod' = mod { M.typeDecls   = tdecls
                  , M.dataDecls    = D.DataDecls dcdecls kdtdecls
                  , M.kindSigs     = Map.union declared inferredSigs
-                 , M.definitions  = lds
+                 , M.definitions  = []
                  }
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
   -- shapes only: typing must face both components unsolved, but not a kind it
   -- cannot dispatch on. 'Compiler.Pipeline' applies the rest at the end
-  return (ctxOut, resolveShapeModule sol mod')
+  return ( ctxOut, resolveShapeModule sol mod', M.definitions mod
+         , Map.map (resolveShapeType sol) sigs )
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 
@@ -739,12 +759,6 @@ kindModule ctx mod = do
             Nothing -> internalError ("constructor " ++ show ci ++ " not found"))
           (Un (getSpan i), Map.empty) cis
 
--- | The parameters bound by a definition or a lambda, in scope for its body
--- alongside the signatures. They shadow: a parameter named as an outer
--- definition is the parameter.
-paramCtx :: [(Variable, TK.KindedType)] -> TypeCtx -> TypeCtx
-paramCtx ps tctxds = Map.fromList ps `Map.union` tctxds
-
 -- | Fix a definition's omitted binder kinds to those of the name it is defined
 -- as: @f = g@ is accepted only if the two types are equivalent, and a binder kind
 -- is part of type identity, so an omitted one /is/ @g@'s rather than merely
@@ -760,65 +774,37 @@ boundBinderKinds tdecls = go
     go t u = case (normalise tdecls t, normalise tdecls u) of
       (TK.AppForall _ _ aks t', TK.AppForall _ _ bks u')
         | length aks == length bks -> do
-            sequence_ [ addKindBinding τ k'
-                      | ((_, Var _ lv τ), (_, k')) <- zip aks bks
-                      , solvable lv, not (hasSolvableVar k') ]
+            sequence_ [ bind k k'
+                      | ((_, k), (_, k')) <- zip aks bks
+                      , inferenceOwned k, not (hasSolvableVar k') ]
             go t' u'
       (TK.ForallM _ _ φs t', TK.ForallM _ _ φs' u')
         | length φs == length φs' -> go t' (foldr rename u' (zip φs' φs))
       _ -> pure ()
 
+    -- a whole-kind variable is bound outright; once its shape has been settled
+    -- there is no variable left to bind, so each component is fixed in its own
+    -- solver's terms -- an equation, not a pair of opposite bounds, which the
+    -- multiplicity solver reads as a constant it may drop
+    bind k k' = case (k, k') of
+      (Var _ _ τ, _) -> addKindBinding τ k'
+      (Proper _ m bk, Proper _ m' bk') -> do
+        let o = Origin InSignature (getSpan k')
+        addMultEquation o m m'
+        mapM_ addBaseKindConstraint [SubBaseKind o bk bk', SubBaseKind o bk' bk]
+      _ -> pure ()
+
+    -- an omitted binder kind: a whole-kind variable, or the proper kind over
+    -- fresh components that settling its shape leaves behind
+    inferenceOwned = \case
+      Var _ lv _                           -> solvable lv
+      Proper _ (VarM _ lv _) (VarBK lv' _) -> solvable lv && solvable lv'
+      _                                    -> False
+
     rename (φ', φ) = subsMultType ObjLv φ' (VarM (getSpan φ') ObjLv φ)
 
 -- | The enclosing signatures stay in scope for a nested @let@ or @where@ block;
 -- a local signature shadows an outer one of the same name.
-kindLetDecls :: D.KindedTypeDecls
-             -> D.KindedDataDecls
-             -> KindCtx
-             -> TypeCtx
-             -> [E.LetDecl Scoped]
-             -> Validation (KindCtx, [E.LetDecl Kinded])
-kindLetDecls tdecls ddecls kctx tctxds lds = do
-  (kctx, _, lds) <- foldM (kindLetDecl tdecls ddecls) (kctx, tctxds, []) lds
-  return (kctx, lds)
-
-kindLetDecl :: D.KindedTypeDecls
-            -> D.KindedDataDecls
-            -> (KindCtx, TypeCtx, [E.LetDecl Kinded])
-            -> E.LetDecl Scoped
-            -> Validation (KindCtx, TypeCtx, [E.LetDecl Kinded])
-kindLetDecl tdecls ddecls (kctx, tctxds, lds) = \case
-  E.ValDef p rhs -> do
-    -- the signature so that @f = \… -> e@ kinds as the clause form @f … = e@;
-    -- the right-hand side's because a bare signed variable is the only one
-    -- kinding can type before kinding it, and an unpacking pattern needs it
-    let msig = case p of E.VarPat _ x -> tctxds Map.!? x; _ -> Nothing
-        mvar = case rhs of E.UnguardedRHS (E.Var _ v) _ -> tctxds Map.!? v; _ -> Nothing
-        mt   = maybe mvar Just msig
-    -- only a bare signed variable fixes the binder kinds; a synthesised type
-    -- carries instantiation variables, which are not this definition's binders
-    sequence_ (boundBinderKinds tdecls <$> msig <*> mvar)
-    rhs' <- kindRHS tdecls ddecls kctx tctxds mt rhs
-    (kctx', p') <- kindPat tdecls kctx mt p
-    return (kctx', tctxds, lds ++ [E.ValDef p' rhs'])
-  E.FnDef x psrhss -> do
-    case tctxds Map.!? x of
-      Just t -> do
-        psrhss' <- forM psrhss \(psi, rhsi) ->
-          unwrap <$> kindFun tdecls ddecls x kctx tctxds (wrap psi) rhsi t
-        return (kctx, tctxds, lds ++ [E.FnDef x psrhss'])
-        where
-          wrap   = map (mapLevel (, Nothing) (, Nothing) id)
-          unwrap = first (map (mapLevel fst fst id))
-      Nothing -> throwE (LacksTypeSig (getSpan x) x)
-  E.TypeSig xs t -> do
-    t' <- synth kctx t
-    let tctxds' = Map.fromList (map (, t') xs) `Map.union` tctxds
-    return (kctx, tctxds', lds ++ [E.TypeSig xs t'])
-  E.Mutual lds' -> do
-    let (sigs, fndefs) = List.partition (\case E.TypeSig{} -> True; _ -> False) lds'
-    (kctx',lds'') <- kindLetDecls tdecls ddecls kctx tctxds (sigs ++ fndefs)
-    return (kctx', tctxds, lds ++ [E.Mutual lds''])
 
 -- | Bound an inferred type's multiplicity by a given one, blaming @site@: the
 -- use, discard or capture that imposes it, which is not where the bounding
@@ -847,339 +833,67 @@ boundMultBy site m = \case
 -- as, tuple and constructor patterns are followed — a constructor's binders take
 -- its field types at the scrutinee's type arguments, mirroring 'checkPat'. Other
 -- shapes (notably session patterns) are left to the type checker.
-decomposePat :: D.KindedTypeDecls -> D.KindedDataDecls -> E.KindedPat -> TK.KindedType
-             -> ([(Variable, TK.KindedType)], [TK.KindedType])
-decomposePat tdecls ddecls = go
+
+-- | 'synth', with the kind shapes gathered so far settled on the result. The
+-- expression walk elaborates a type after the module's provisional solve, so
+-- nothing has settled its whole-kind variables; typing dispatches on shape --
+-- @isProper@ at an instantiation, the irrefutable @Proper@ of the smart
+-- constructors -- and cannot face one. Shape is ordinary first-order
+-- unification, so it can be run at any point over the constraints in hand; a
+-- failure is left to the final solve, which reports it.
+-- | Kind a module's top-level signatures, before the provisional solve settles
+-- shapes. Signatures are type validation -- a definition's own kinding is the
+-- expression walk's -- and kinding them here is what lets that walk face a
+-- signature whose shape is settled and whose components are not.
+--
+-- @f = g@ belongs here too: it is a fact about two signatures, and it fixes f's
+-- omitted binder kinds to g's by a /binding/, which needs f's binder kind to be
+-- the whole-kind variable that settling its shape would replace.
+kindSignatures :: D.KindedTypeDecls -> KindCtx -> [E.LetDecl Scoped]
+               -> Validation (Map.Map Variable TK.KindedType)
+kindSignatures tdecls ctx = foldM decl Map.empty
   where
-    go (E.VarPat _ x)    t              = ([(x, t)], [])
-    go (E.WildPat _ x)   t              = ([(x, t)], []) -- (x should have zero uses)
-    go (E.AsPat _ x p)   t              = ([(x, t)], [t]) <> go p t
-    go (E.TuplePat _ ps) (TK.Tuple _ ts)
-      | length ps == length ts          = mconcat (zipWith go ps ts)
-    go (E.DConsPat _ c ps) t
-      | Just (dty, fields)        <- Map.lookup c (D.ddCons ddecls)
-      , Just (aks, _)             <- Map.lookup dty (D.ddTypes ddecls)
-      , TK.AppDName _ _ dty' args <- normalise tdecls t
-      , dty == dty', length args == length aks, length ps == length fields
-      = mconcat (zipWith go ps (map (subsAll (map fst aks) args) fields))
-    go (E.PackPat _ aks p) t = peel aks t
-      where
-        peel [] u = go p u
-        peel ((a, bk) : aks') u = case normalise tdecls u of
-          TK.AppExists s' ((b, k') : bks) v ->
-            peel aks' ((if null bks then id else TK.AppExists s' bks)
-                        (subs b (TK.fromVariable ObjLv a (E.bndKind bk)) v))
-          _ -> ([], [])
-    go (E.ChoicePat _ m i p) t
-      | Just (Just t')   <- Expose.externalChoice' tdecls m t i = go p t'
-    go (E.InPat _ m p1 p2) t
-      | Just (u, v)      <- Expose.message' tdecls Neg m t
-                                        = go p1 u <> go p2 v
-    go (E.TypeInPat _ (a, k) p) t
-      | Just (b, _, t')  <- Expose.typeMsg' tdecls Neg t
-                                        = go p (subs b (TK.fromVariable ObjLv a (E.bndKind k)) t')
-    go _                 _              = ([], [])
+    decl sigs = \case
+      E.TypeSig xs t -> do
+        t' <- synth ctx t
+        return (Map.union (Map.fromList (map (, t') xs)) sigs)
+      E.Mutual lds -> foldM decl sigs lds
+      E.ValDef (E.VarPat _ x) (E.UnguardedRHS (E.Var _ v) _) ->
+        sigs <$ sequence_ (boundBinderKinds tdecls <$> sigs Map.!? x <*> sigs Map.!? v)
+      _ -> return sigs
 
-kindFun :: Located e
-        => D.KindedTypeDecls
-        -> D.KindedDataDecls
-        -> e
-        -> KindCtx
-        -> TypeCtx
-        -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
-        -> E.ScopedRHS
-        -> TK.KindedType
-        -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-kindFun tdecls ddecls e = kindFun' 0 []
-  where
-    kindFun' :: Int
-            -> [(Variable, TK.KindedType)]  -- value parameters and their types, so the body kinds with them
-            -> KindCtx
-            -> TypeCtx
-            -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
-            -> E.ScopedRHS
-            -> TK.KindedType
-            -> Validation ([Level (E.KindedPat, TK.KindedType) (Variable, Kind) Variable], E.RHS Kinded)
-    kindFun' i tracked kctx tctxds ps rhs t = case (ps, normalise tdecls t) of
-      ([], t') -> do
-        rhs' <- kindRHS tdecls ddecls kctx (paramCtx tracked tctxds) (Just t') rhs
-        return ([], rhs')
-      (TypeLevel (ai, mki) : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
-        let k' = fromMaybe k mki
-        first (TypeLevel (ai, k') :) <$> kindFun' (i + 1) tracked (Map.insert (Left ai) k' kctx) tctxds ps'
-          rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv ai k') u)
-      (ExpLevel  (p, mtp) : ps', TK.AppArrow _ am u v) -> do
-        tp' <- case mtp of
-          Just tp -> do
-            (_, _, tp') <- checkProper kctx tp
-            return tp'
-          Nothing -> pure u
-        (kctxi', p') <- kindPat tdecls kctx (Just u) p
-        -- the parameter pattern's bound leaves, so the body kinds with their types
-        let (pvars, _) = decomposePat tdecls ddecls p' tp'
-        first (ExpLevel (p', tp') :) <$> kindFun' (i + 1) (pvars ++ tracked) kctxi' tctxds ps' rhs v
-      (MultLevel φ : ps', TK.ForallM s' m (φ' : φs) u) -> do
-        addMultParam φ φ'
-        first (MultLevel φ :) <$> kindFun' (i + 1) tracked kctx tctxds ps' rhs
-          ((if null φs then id else TK.ForallM s' m φs) $
-            subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u)
-      (pi : ps', TK.AppArrow _ _ u _) ->
-        throwE (UnexpectedParam (paramSpan pi) i (ExpLevel  u ) (voidLevel pi))
-      -- a signature quantifier with no matching abstraction param: reconstruct
-      -- the omitted binder from the signature (anonymous, rigid ObjLv) without
-      -- consuming the current param
-      (pi : ps', TK.AppForall s' m ((a, k) : aks) u) -> do
-        a' <- freshInternal a
-        first (TypeLevel (a', k) :) <$> kindFun' (i + 1) tracked (Map.insert (Left a') k kctx) tctxds (pi : ps')
-          rhs (TK.AppForall s' m aks $ subs a (TK.fromVariable ObjLv a' k) u)
-      (pi : ps', TK.ForallM s' m (φ' : φs) u) -> do
-        φ'' <- freshInternal φ'
-        addMultParam φ'' φ'
-        first (MultLevel φ'' :) <$> kindFun' (i + 1) tracked kctx tctxds (pi : ps') rhs
-          ((if null φs then id else TK.ForallM s' m φs) $
-            subsMultType ObjLv φ' (VarM (getSpan φ'') ObjLv φ'') u)
-      (as, t') -> do
-        throwE (ExpectsTooManyArgs (getSpan e) t (i + length as) i)
-      where
-        -- TODO: duplicates in Typing
-        paramSpan = \case
-          ExpLevel (p, mt) -> maybe (getSpan p) (spanFromTo p) mt
-          TypeLevel (a, mk) -> maybe (getSpan a) (spanFromTo a) mk
-          MultLevel φ -> getSpan φ
+-- | The kind of an abstraction's omitted @\\\@a@ binder, against the quantifier it
+-- faces: a fresh variable bounded by the signature's rather than the signature's
+-- kind itself, so the binder keeps a multiplicity of its own.
+inferredBndKind :: Variable -> Kind -> Validation E.BndKind
+inferredBndKind a k = do
+  k' <- freshUnifKind a
+  addKindConstraint (Origin InSignature (getSpan a)) k' k
+  sol <- currentShapes
+  pure (E.Inferred (resolveShape sol k'))
 
--- | The type a right-hand side is checked against, when known, guides the
--- kinding of a body that is an abstraction. Guards are booleans and take no guidance.
-kindRHS :: D.KindedTypeDecls
-        -> D.KindedDataDecls
-        -> KindCtx -> TypeCtx -> Maybe TK.KindedType -> E.RHS Scoped -> Validation (E.RHS Kinded)
-kindRHS tdecls ddecls kctx tctxds mt = \case
-  E.GuardedRHS es mlds -> do
-    (kctx', mlds') <- case mlds of
-      Just lds -> second Just <$> kindLetDecls tdecls ddecls kctx tctxds lds
-      Nothing -> pure (kctx, Nothing)
-    es' <- mapM (bitraverse (kindExp tdecls ddecls kctx' tctxds) (body kctx')) es
-    return $ E.GuardedRHS es' mlds'
-  E.UnguardedRHS e mlds -> do
-    (kctx', mlds') <- case mlds of
-      Just lds -> second Just <$> kindLetDecls tdecls ddecls kctx tctxds lds
-      Nothing -> pure (kctx, Nothing)
-    e' <- body kctx' e
-    return $ E.UnguardedRHS e' mlds'
-  where
-    body kctx' = kindExpAgainst tdecls ddecls kctx' tctxds mt
+synthShaped :: KindCtx -> T.ScopedType -> Validation TK.KindedType
+synthShaped ctx t = do
+  kt <- synth ctx t
+  sol <- currentShapes
+  return (resolveShapeType sol kt)
 
--- | The type a pattern is matched against, when known, binds an unpacked
--- abstract type at the existential's own binder kind. Without it the binder can
--- only get a placeholder, which the solver defaults to the top.
-kindPat :: D.KindedTypeDecls
-        -> KindCtx -> Maybe TK.KindedType -> E.ScopedPat -> Validation (KindCtx, E.KindedPat)
-kindPat tdecls kctx mt = \case
-  E.IntPat   s i -> pure (kctx, E.IntPat   s i)
-  E.FloatPat s f -> pure (kctx, E.FloatPat s f)
-  E.CharPat  s c -> pure (kctx, E.CharPat  s c)
-  E.StringPat s t -> pure (kctx, E.StringPat s t)
-  E.WildPat  s x -> pure (kctx, E.WildPat  s x)
-  E.VarPat   s x -> pure (kctx, E.VarPat   s x)
-  E.PackPat s aks p -> do
-    (aks', mu) <- packBinders (normalise tdecls <$> mt) aks
-    second (E.PackPat s aks')
-      <$> kindPat tdecls (Map.fromList (bimap Left E.bndKind <$> aks') `Map.union` kctx) mu p
-    where
-      packBinders mu [] = pure ([], mu)
-      packBinders mu (ak@(a, mk) : aks') = do
-        (bk, mu') <- case (mk, mu) of
-          (Nothing, Just (TK.AppExists s' ((b, k') : bks) u)) -> pure
-            ( E.Inferred k'
-            , Just . normalise tdecls
-                $ (if null bks then id else TK.AppExists s' bks)
-                    (subs b (TK.fromVariable ObjLv a k') u) )
-          _ -> (, Nothing) . snd <$> resolveExpBndKind ak
-        first ((a, bk) :) <$> packBinders mu' aks'
-  E.NilPat   s   -> pure (kctx, E.NilPat   s  )
-  E.ConsPat s p1 p2 -> do
-    (kctx' , p1') <- kindPat tdecls kctx Nothing p1
-    (kctx'', p2') <- kindPat tdecls kctx Nothing p2
-    return (kctx'', E.ConsPat s p1' p2')
-  E.TuplePat s ps -> do
-    (kctx', ps') <- foldM (\(kctxi, psi) pi -> do
-        (kctxi', pi') <- kindPat tdecls kctxi Nothing pi
-        return (kctxi', psi ++ [pi']))
-      (kctx, []) ps
-    return (kctx', E.TuplePat s ps')
-  -- (C p1 ... pn)
-  E.DConsPat s i ps -> do
-    (kctx', ps') <- foldM (\(kctxi, psi) pi -> do
-        (kctxi', pi') <- kindPat tdecls kctxi Nothing pi
-        return (kctxi', psi ++ [pi']))
-      (kctx, []) ps
-    return (kctx', E.DConsPat s i ps')
-  E.WaitPat s       -> pure (kctx, E.WaitPat s)
-  E.InPat s m p1 p2 -> do
-    let mpay = Expose.message' tdecls Neg m =<< mt
-    (kctx', p1') <- kindPat tdecls kctx (fst <$> mpay) p1
-    (kctx'', p2') <- kindPat tdecls kctx (snd <$> mpay) p2
-    return (kctx'', E.InPat s m p1' p2')
-  E.ChoicePat s m i p ->
-    second (E.ChoicePat s m i)
-    <$> kindPat tdecls kctx (branch =<< mt) p
-    where branch t = maybe Nothing id (Expose.externalChoice' tdecls m t i)
-  E.TypeInPat s ak p -> do
-    let mb = Expose.typeMsg' tdecls Neg =<< mt
-    ak'@(a, k) <- case (snd ak, mb) of
-      (Nothing, Just (_, k', _)) -> pure (fst ak, E.Inferred k')
-      _                          -> resolveExpBndKind ak
-    let mu = (\(b, _, t') -> subs b (TK.fromVariable ObjLv a (E.bndKind k)) t') <$> mb
-    second (E.TypeInPat s ak')
-      <$> kindPat tdecls (Map.insert (Left a) (E.bndKind k) kctx) mu p
-  E.AsPat s x p ->
-    second (E.AsPat s x)
-    <$> kindPat tdecls kctx Nothing p
-
--- | Walk an abstraction's parameters, optionally guided by the type the
--- abstraction will be checked against. Guidance supplies the kind of an omitted
--- @\\\@a@ binder from the quantifier it faces, instead of an unconstrained
--- metavariable that the solver can only default. It is best-effort: where the
--- parameters stop following the type, the residual type is dropped and the rest
--- is kinded as if unguided, leaving any real mismatch for the type checker.
--- The last component is the value parameters decomposed into their bound
--- leaves, for the usage-based multiplicity inference in 'kindExpAgainst'.
-kindAbsParams :: D.KindedTypeDecls
-              -> D.KindedDataDecls
-              -> KindCtx
-              -> Maybe TK.KindedType
-              -> [Level (E.ScopedPat, Maybe T.ScopedType) (Variable, Maybe Kind) Variable]
-              -> Validation ( KindCtx
-                            , [Level (E.KindedPat, Maybe TK.KindedType) (Variable, E.BndKind) Variable]
-                            , Maybe TK.KindedType
-                            , ([(Variable, TK.KindedType)], [TK.KindedType]) )
-kindAbsParams tdecls ddecls = \kctx mt pars ->
-  foldM step (kctx, [], normalise tdecls <$> mt, mempty) pars
-  where
-    step (kctxi, parsi, mti, tracked) = \case
-      ExpLevel (p, t) -> do
-        let dom = mti >>= arrowDom
-        (kctxi', p') <- kindPat tdecls kctxi dom p
-        t' <- traverse (synth kctxi') t
-        return ( kctxi', parsi ++ [ExpLevel (p', t')], peel arrowRest mti
-               , tracked <> maybe mempty (decomposePat tdecls ddecls p') (maybe dom Just t') )
-      TypeLevel (a, mk) -> do
-        bk <- case (mk, mti) of
-          (Just ki, Just (TK.AppForall _ _ ((_, k) : _) _)) ->
-            E.Written ki <$ checkK (TK.fromVariable ObjLv a ki) k
-          (Nothing, Just (TK.AppForall _ _ ((_, k) : _) _)) -> do
-            k' <- freshUnifKind a
-            addKindConstraint (Origin InSignature (getSpan a)) k' k
-            pure (E.Inferred k')
-          _ -> snd <$> resolveExpBndKind (a, mk)
-        let k' = E.bndKind bk
-        return ( Map.insert (Left a) k' kctxi
-               , parsi ++ [TypeLevel (a, bk)]
-               , peel (forallRest a k') mti
-               , tracked )
-      MultLevel φ ->
-        return (kctxi, parsi ++ [MultLevel φ], peel (forallMRest φ) mti, tracked)
-
-    peel f = fmap (normalise tdecls) . (>>= f)
-
-    arrowDom  = \case TK.AppArrow _ _ u _ -> Just u; _ -> Nothing
-    arrowRest = \case TK.AppArrow _ _ _ v -> Just v; _ -> Nothing
-    forallRest a k = \case
-      TK.AppForall s' m ((b, _) : aks) u ->
-        Just (TK.AppForall s' m aks (subs b (TK.fromVariable ObjLv a k) u))
-      _ -> Nothing
-    forallMRest φ = \case
-      TK.ForallM s' m (φ' : φs) u ->
-        Just ((if null φs then id else TK.ForallM s' m φs)
-                (subsMultType ObjLv φ' (VarM (getSpan φ) ObjLv φ) u))
-      _ -> Nothing
-
-kindExp :: D.KindedTypeDecls
-        -> D.KindedDataDecls
-        -> KindCtx -> TypeCtx -> E.ScopedExp -> Validation E.KindedExp
-kindExp tdecls ddecls kctx tctxds = kindExpAgainst tdecls ddecls kctx tctxds Nothing
-
--- | 'kindExp' carrying the type the expression is checked against, where one is
--- known. Only an abstraction consumes it; the positions that take the whole
--- expression's type pass it on.
-kindExpAgainst :: D.KindedTypeDecls
-               -> D.KindedDataDecls
-               -> KindCtx -> TypeCtx -> Maybe TK.KindedType -> E.ScopedExp -> Validation E.KindedExp
-kindExpAgainst tdecls ddecls kctx tctxds mt = \case
-  E.Int   s i -> pure $ E.Int   s i
-  E.Float s d -> pure $ E.Float s d
-  E.Char  s c -> pure $ E.Char  s c
-  E.String s t -> pure $ E.String s t
-  E.DCons s i -> pure $ E.DCons s i
-  E.Var   s a -> pure $ E.Var   s a
-  E.App s e args -> do
-    e' <- kindExp tdecls ddecls kctx tctxds e
-    args' <- kindArgs (functionType e) args
-    return $ E.App s e' args'
-    where
-      functionType = \case
-        E.Var _ v -> normalise tdecls <$> tctxds Map.!? v
-        _         -> Nothing
-      neutralMults co = \case
-        Proper s _ bk -> Proper s (if co then Un s else Lin s) bk
-        Arrow s k1 k2 -> Arrow s (neutralMults (not co) k1) (neutralMults co k2)
-        k             -> k
-      kindArgs _ [] = pure []
-      kindArgs mt' (arg : rest) = case (arg, mt') of
-        (ExpLevel a, Just (TK.AppArrow _ _ u v)) -> do
-          a' <- kindExpAgainst tdecls ddecls kctx tctxds (Just u) a
-          (ExpLevel a' :) <$> kindArgs (Just (normalise tdecls v)) rest
-        (TypeLevel ty, Just (TK.AppForall s' m ((b, k) : bks) u)) -> do
-          ty' <- synth kctx ty
-          checkSubkindOf ty' (if hasSolvableVar k then neutralMults True (TK.kindOf ty') else TK.kindOf ty') k
-          (TypeLevel ty' :) <$> kindArgs
-            (Just . normalise tdecls
-               $ (if null bks then id else TK.AppForall s' m bks) (subs b ty' u))
-            rest
-        (MultLevel φ, Just (TK.ForallM s' m (φ' : φs) u)) ->
-          (MultLevel φ :) <$> kindArgs
-            (Just . normalise tdecls
-               $ (if null φs then id else TK.ForallM s' m φs)
-                   (subsMultType ObjLv φ' φ u))
-            rest
-        -- an implicit instantiation, or a shape the signature does not follow:
-        -- kinding cannot say what the remaining arguments face
-        _ -> forM (arg : rest) \case
-          ExpLevel a   -> ExpLevel  <$> kindExp tdecls ddecls kctx tctxds a
-          TypeLevel ty -> TypeLevel <$> synth kctx ty
-          MultLevel φ  -> pure $ MultLevel φ
-  E.Abs s pars m e -> do
-    (kctx', pars', mt', (pvars, _)) <- kindAbsParams tdecls ddecls kctx mt pars
-    e' <- kindExpAgainst tdecls ddecls kctx' (paramCtx pvars tctxds) mt' e
-    pure $ E.Abs s pars' m e'
-  E.Pack s' ts e -> do
-    ts' <- mapM (synth kctx) ts
-    E.Pack s' ts' <$> kindExp tdecls ddecls kctx tctxds e
-  E.Asc s e t -> do
-    t' <- synth kctx t
-    e' <- kindExpAgainst tdecls ddecls kctx tctxds (Just t') e
-    pure $ E.Asc s e' t'
-  E.Let s lds e -> do
-    (kctx', lds') <- kindLetDecls tdecls ddecls kctx tctxds lds
-    e' <- kindExpAgainst tdecls ddecls kctx' tctxds mt e
-    return (E.Let s lds' e')
-  E.Case s e prhss -> do
-    e' <- kindExp tdecls ddecls kctx tctxds e
-    prhss' <- forM prhss \(pi, rhsi) -> do
-      (kctxi, pi') <- kindPat tdecls kctx Nothing pi
-      rhsi' <- kindRHS tdecls ddecls kctxi tctxds mt rhsi
-      return (pi', rhsi')
-    return $ E.Case s e' prhss'
-  E.If s e1 e2 e3 ->
-    E.If s <$> kindExp tdecls ddecls kctx tctxds e1
-           <*> kindExpAgainst tdecls ddecls kctx tctxds mt e2
-           <*> kindExpAgainst tdecls ddecls kctx tctxds mt e3
-  E.List s es -> E.List s <$> mapM (kindExp tdecls ddecls kctx tctxds) es
-  E.Channel s t -> E.Channel s <$> synth kctx t
-  E.Select s m i -> pure $ E.Select s m i
-  E.SendType s t -> E.SendType s <$> synth kctx t
-  E.ReceiveType s -> pure $ E.ReceiveType s
-  E.SectionL s e op -> E.SectionL s <$> kindExp tdecls ddecls kctx tctxds e <*> pure op
-  E.SectionR s x op e -> E.SectionR s x op <$> kindExp tdecls ddecls kctx tctxds e
+-- | The shape solution over the constraints gathered so far.
+currentShapes :: Validation KindSolution
+currentShapes = do
+  (binds, cs, _, _, _, _, _) <- peekKindState
+  i0 <- incCounter
+  case unifyKindSubs i0 binds cs of
+    Left _ -> return (KindSolution Map.empty Map.empty Map.empty)
+    Right (KindUnifier ksub _ _ i1) -> do
+      advanceCounter i1
+      -- keep the substitution: whatever shape is written into the AST names the
+      -- components 'instLike' invented, and those are defined by leaf
+      -- constraints this call discards. Seeding 'kindBindings' with them means
+      -- the final solve starts from the same bindings and re-derives those
+      -- constraints, instead of inventing a fresh set the AST never mentions.
+      mapM_ (uncurry addKindBinding) (Map.toList ksub)
+      return (KindSolution ksub Map.empty Map.empty)
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
 -- apply the resulting solution to the kinded type. The entry point for kinding
@@ -1200,11 +914,18 @@ solveKindConstraints = takeKindState >>= solveFrom
 -- typing dispatches on; typing may add constraints of its own, so the store is
 -- solved again once it is done ('Compiler.Pipeline').
 provisionalKindSolution :: Validation KindSolution
-provisionalKindSolution = peekKindState >>= solveFrom
+provisionalKindSolution = do
+  sol <- peekKindState >>= solveFrom
+  -- the shapes this settles are written into the AST, so the variables they
+  -- name must survive to the final solve rather than being reinvented there
+  mapM_ (uncurry addKindBinding) (Map.toList (kindVars sol))
+  return sol
 
 solveFrom :: KindState -> Validation KindSolution
 solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
-  KindUnifier ksub msubs pcs <- either (throwE . unifyErr) pure (unifyKindSubs binds cs)
+  i0 <- incCounter
+  KindUnifier ksub msubs pcs i1 <- either (throwE . unifyErr) pure (unifyKindSubs i0 binds cs)
+  advanceCounter i1
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
   psub <- either (throwE . preErr) pure (solveBaseKindConstraints (pcs ++ pcs0))
@@ -1308,7 +1029,7 @@ solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
 --     * the given module, otherwise.
 runKindModule :: M.ScopedModule -> Either [Error] (KindCtx, M.KindedModule)
 runKindModule modl = runValidation emptyValidationState do
-  (ctx, modl') <- kindModule Map.empty modl
+  (ctx, modl', _, _) <- kindModule Map.empty modl
   checkNoHOTRec (M.typeDecls modl')
   return (ctx, modl')
 

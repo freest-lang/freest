@@ -28,6 +28,7 @@ data KindUnifier = KindUnifier
   { kindSubst          :: Map.Map Variable Kind
   , multSubConstraints :: MultSubConstraints
   , baseKindConstraints :: BaseKindConstraints
+  , nextFresh          :: Int
   }
 
 -- | Why unification failed. Each carries the 'Origin' of the constraint being
@@ -36,8 +37,11 @@ data UnifyError
   = Mismatch Origin Kind Kind    -- ^ incompatible kind structure (e.g. proper vs. arrow), the kind given before the one required
   | Occurs Origin Variable Kind  -- ^ a variable would be bound to a kind that mentions it
 
--- The solver threads a fresh-variable counter (decreasing negative internal IDs,
--- assumed disjoint from the input) and the accumulating result.
+-- The solver threads a fresh-variable counter and the accumulating result. The
+-- counter is supplied by the caller and counts upward, and where it stopped is
+-- reported back ('nextFresh'): the variables it makes can outlive the run --
+-- they reach the substitution, and through it the AST -- so they must be
+-- disjoint from every other run's, not merely from one run's input.
 data Acc = Acc
   { counter :: !Int
   , kSub    :: Map.Map Variable Kind
@@ -49,18 +53,18 @@ type U = StateT Acc (Either UnifyError)
 
 -- | Unify two kinds related by @<:@, producing the whole-kind bindings and the
 -- residual multiplicity/baseKind leaf constraints, or a 'UnifyError'.
-unifyKindSub :: Origin -> Kind -> Kind -> Either UnifyError KindUnifier
-unifyKindSub o k1 k2 = unifyKindSubs Map.empty [(o, k1, k2)]
+unifyKindSub :: Int -> Origin -> Kind -> Kind -> Either UnifyError KindUnifier
+unifyKindSub i o k1 k2 = unifyKindSubs i Map.empty [(o, k1, k2)]
 
 -- | Unify a set of subkinding constraints together, threading one substitution
 -- and fresh-variable counter, so bindings from one constraint inform the next.
 -- The substitution is seeded with @binds@ (e.g. whole-kind bindings established
 -- elsewhere during kinding).
-unifyKindSubs :: Map.Map Variable Kind -> [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
-unifyKindSubs binds cs =
-  case runStateT (mapM_ (\(o, k1, k2) -> go o Pos k1 k2) cs) (Acc (-2) binds [] []) of
+unifyKindSubs :: Int -> Map.Map Variable Kind -> [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
+unifyKindSubs i0 binds cs =
+  case runStateT (mapM_ (\(o, k1, k2) -> go o Pos k1 k2) cs) (Acc i0 binds [] []) of
     Left e         -> Left e
-    Right (_, acc) -> Right (KindUnifier (kSub acc) (mCs acc) (pCs acc))
+    Right (_, acc) -> Right (KindUnifier (kSub acc) (mCs acc) (pCs acc) (counter acc))
 
 go :: Origin -> Polarity -> Kind -> Kind -> U ()
 go o pol k1 k2 = do
@@ -95,7 +99,7 @@ instLike s = \case
   Var{}    -> freshKind s
 
 fresh :: U Int
-fresh = gets counter <* modify \a -> a { counter = counter a - 1 }
+fresh = gets counter <* modify \a -> a { counter = counter a + 1 }
 
 freshKind :: Span -> U Kind
 freshKind s = fresh >>= \i -> pure (Var s UnifLv (Variable s ("κ" ++ show i) i))

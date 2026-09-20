@@ -10,6 +10,10 @@ module Validation.LocalInference.Solution
   , resolveType
   , resolveModule
   , resolveShapeModule
+  , resolveShapeType
+  , resolveShapeTypeOpen
+  , resolveShapeOpen
+  , resolveShape
   ) where
 
 import Syntax.Base
@@ -121,7 +125,18 @@ data Zonk = Zonk
 -- after it, the same device 'Kinding.resolveQuantBinder' uses: nothing binds
 -- it, so the solvers default it exactly as they would the variable.
 resolveShape :: KindSolution -> Kind -> Kind
-resolveShape sol = go Set.empty
+resolveShape = resolveShapeWith True
+
+-- | 'resolveShape' for a zonk run /during/ the walk. It refuses a binding whose
+-- components the unifier invented ('instLike', negative ids): those are defined
+-- by leaf constraints the caller does not keep, so writing them into the AST
+-- orphans them -- nothing can bind them and the final zonk defaults them to
+-- @1T@. Such a variable is left alone for the final solve to settle.
+resolveShapeOpen :: KindSolution -> Kind -> Kind
+resolveShapeOpen = resolveShapeWith False
+
+resolveShapeWith :: Bool -> KindSolution -> Kind -> Kind
+resolveShapeWith final sol = go Set.empty
   where
     go seen = \case
       k@Proper{}    -> k
@@ -129,17 +144,40 @@ resolveShape sol = go Set.empty
       k@(Var s lv ψ)
         | not (solvable lv)                      -> k
         | ψ `Set.member` seen                    -> k
-        | Just k' <- Map.lookup ψ (kindVars sol) -> go (Set.insert ψ seen) k'
-        | otherwise                              -> Proper s (Sup s [(lv, ψ)]) (VarBK lv ψ)
+        | Just k' <- Map.lookup ψ (kindVars sol)
+        , final || not (invented k')             -> go (Set.insert ψ seen) k'
+        | final                                  -> Proper s (Sup s [(lv, ψ)]) (VarBK lv ψ)
+        | otherwise                              -> k
+
+-- | Does this kind mention a variable the unifier invented for itself?
+invented :: Kind -> Bool
+invented = \case
+  Proper _ m bk -> inM m || inB bk
+  Arrow _ a b   -> invented a || invented b
+  Var _ _ v     -> internal v < 0
+  where
+    inM = \case Sup _ as -> any ((< 0) . internal . snd) as; _ -> False
+    inB = \case
+      VarBK _ v  -> internal v < 0
+      MeetBK a b -> inB a || inB b
+      JoinBK a b -> inB a || inB b
+      _          -> False
 
 -- | 'resolveShape' over every kind annotation in a type, rewritten in place.
 -- Unlike 'resolveType' this must not rebuild through the kinded smart
 -- constructors: theirs are derived kinds, and the components they meet and join
 -- are still variables at this point.
 resolveShapeType :: KindSolution -> TK.KindedType -> TK.KindedType
-resolveShapeType sol = go
+resolveShapeType = resolveShapeTypeWith resolveShape
+
+-- | 'resolveShapeType' with 'resolveShapeOpen'.
+resolveShapeTypeOpen :: KindSolution -> TK.KindedType -> TK.KindedType
+resolveShapeTypeOpen = resolveShapeTypeWith resolveShapeOpen
+
+resolveShapeTypeWith :: (KindSolution -> Kind -> Kind) -> KindSolution -> TK.KindedType -> TK.KindedType
+resolveShapeTypeWith res sol = go
   where
-    k = resolveShape sol
+    k = res sol
     go = \case
       TI.Int s x             -> TI.Int s (k x)
       TI.Float s x           -> TI.Float s (k x)

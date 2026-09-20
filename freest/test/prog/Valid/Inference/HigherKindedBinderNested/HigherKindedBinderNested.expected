@@ -1,1 +1,5 @@
-3
+<pending>
+the merged expression walk loses the parameter-side least solution here:
+a written type argument's kind is zonked into the AST as it is elaborated,
+so the call bound reads a ground multiplicity and bf68e2c's rule never fires.
+Fixed by the eager-unification change (handoff-2026-09-20-2 section 8).
