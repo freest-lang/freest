@@ -8,6 +8,7 @@ Errors. A work in progress -- Life is a work in progress
 
 module UI.Error
   ( Error(..)
+  , ErrorSite(..)
   , Source
   , toMessage
   , header
@@ -35,11 +36,30 @@ import Data.List qualified as List
 import Debug.Trace ( traceM )
 import System.IO ( stderr, hPutStrLn )
 
+-- | The site a linearity or multiplicity error points at. Only the form and
+-- the span are ever reported, so nothing has to carry the expression itself --
+-- which the walk that reports these does not always hold yet.
+data ErrorSite
+  = AtFnDef Variable
+  | AtValDef Span
+  | AtCaseExp Span
+  | AtIfExp Span
+  | AtOtherExp Span
+
+instance Located ErrorSite where
+  getSpan = \case
+    AtFnDef x    -> getSpan x
+    AtValDef s   -> s
+    AtCaseExp s  -> s
+    AtIfExp s    -> s
+    AtOtherExp s -> s
+  setSpan = internalError "span not settable for ErrorSite"
+
 -- | The errors that can be found in a FreeST program.
 data Error
   = ArrowMultMismatch
       Span
-      (Either Variable E.KindedExp)
+      ErrorSite
       Int
       K.Multiplicity Origin
       K.Multiplicity Origin
@@ -84,8 +104,7 @@ data Error
       TK.KindedType 
       Span 
       K.Multiplicity
-  | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
-    (Either (Either Variable E.KindedPat) E.KindedExp)
+  | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType ErrorSite
   | LinVarAtEndOfScope Span (Either Variable Identifier) TK.KindedType TK.KindedType
     -- ^ The type as written, then its weak head normal form (used for hints).
   | LinConsumedTwice Span (Either Variable Identifier) TK.KindedType Span
@@ -311,15 +330,15 @@ hasForall = \case
 
 toMessage :: Source -> Error -> String
 toMessage src = \case
-  ArrowMultMismatch s xe i m om m' om' -> makeError src s
+  ArrowMultMismatch s site i m om m' om' -> makeError src s
     ("Multiplicity mismatch:" ++ onParam)
     ++ "expected " ++ multSide src m om
     ++ "but got " ++ multSide src m' om'
     where
       onParam
         | i > 0 = " (on the " ++ ordinal (i + 1) ++ " parameter of this "
-                  ++ (case xe of Left _  -> "function definition" -- should not occur
-                                 Right _ -> "expression") ++ ")"
+                  ++ (case site of AtFnDef _ -> "function definition" -- should not occur
+                                   _         -> "expression") ++ ")"
         | otherwise = ""
   CannotInferHigherKindedTypeApp s k -> makeError src s
     "Cannot infer a higher-kinded type argument"
@@ -555,20 +574,19 @@ toMessage src = \case
     ("Variable " ++  external x ++ " has a type signature but no definition")
   TypeConsOutOfScope s i -> makeError src s
     ("Type constructor out of scope: " ++ bt (show i))
-  LinNotConsumedEvenly s xi t fpe -> errorHeader s ++ "\n" ++
+  LinNotConsumedEvenly s xi t site -> errorHeader s ++ "\n" ++
     ("Linear " ++ (case xi of Left x  -> "variable " ++ bt (external x)
                               Right i -> "constructor " ++ bt (show i))
       ++ " of type " ++ bt (unparse t) ++", bound at\n"
       ++ snippet src xi True
       ++ "is not consumed evenly among the branches of a"
-      ++ (case fpe of
-        Left (Left  x) -> " function definition"
-        Left (Right p) -> " value definition"
-        Right e        -> case e of
-          E.Case{} -> " case expression"
-          E.If{}   -> " conditional expression"
-          _        -> "n expression") ++ "\n"
-      ++ snippet src fpe True)
+      ++ (case site of
+        AtFnDef _    -> " function definition"
+        AtValDef _   -> " value definition"
+        AtCaseExp _  -> " case expression"
+        AtIfExp _    -> " conditional expression"
+        AtOtherExp _ -> "n expression") ++ "\n"
+      ++ snippet src site True)
   TypeMismatch s t u _ fixed -> makeError src s "Type mismatch:"
     ++ "Couldn't match expected type " ++ bt (unparse t) ++ takenFrom src s ", " t
     ++ "with actual type " ++ bt (unparse u) ++ takenFrom src s ", " u
