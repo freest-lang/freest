@@ -390,7 +390,7 @@ synthScrutinee :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx -
 synthScrutinee tdecls ddecls kctx tctx e = do
   (e', t, tctx') <- synth tdecls ddecls kctx tctx e
   (args, kivs, _, u) <- instantiateResult (getSpan e) 0 tdecls ddecls kctx tctx' t []
-  forM_ kivs \(k, ms, w) -> checkInstKind (getSpan e) mempty k ms w
+  mapM_ (checkInstKind (getSpan e) mempty) kivs
   return (if null args then e' else E.App (getSpan e) e' (instArgs args), u, tctx')
 
 -- | Synthesis for RHSs, synthesising each result expression with the given function.
@@ -708,9 +708,10 @@ checkInstBaseKind sp t k = do
     go _ _ = return ()
 
 -- | 'checkInstBaseKind', plus the call's multiplicity bounds for the global solve.
-checkInstKind :: Span -> LI.Substitution -> K.Kind -> [(Variable, K.Multiplicity)] -> T.KindedType -> Validation ()
-checkInstKind sp θ k ms w = do
+checkInstKind :: Span -> LI.Substitution -> InstKind -> Validation ()
+checkInstKind sp θ (written, k, ms, w) = do
   checkInstBaseKind sp t k
+  when written (Kinding.fixInferredBinderKind sp k (T.kindOf t))
   go True (T.kindOf t) k
   where
     t = LI.applySubs θ w
@@ -732,7 +733,7 @@ checkApp tdecls ddecls kctx site s h' t' tctx' args t = do
         _             -> instantiateResult
   (args', kivs, us, t'') <- inst s 0 tdecls ddecls kctx tctx' t' args
   θ <- LTI.match (getSpan site) tdecls t t''
-  forM_ kivs \(k, ms, w) -> checkInstKind s θ k ms w
+  mapM_ (checkInstKind s θ) kivs
   checkEquivTypes tdecls ddecls site (LI.applySubs θ t) (LI.applySubs θ t'')
   (args'', tctx'') <- checkValArgs tdecls ddecls kctx θ tctx' args' us
   return (if null args'' then h' else E.App s h' args'', tctx'')
@@ -752,7 +753,7 @@ checkArgsQL :: Int
                           , TypeCtx)
 checkArgsQL i s tdecls ddecls kctx tctx t args = do
   (args', kivs, us, t') <- instantiate s i tdecls ddecls kctx tctx t args
-  forM_ kivs \(k, ms, w) -> checkInstKind s mempty k ms w
+  mapM_ (checkInstKind s mempty) kivs
   (args'', tctx') <- checkValArgs tdecls ddecls kctx mempty tctx args' us
   return (args'', t', tctx')
 
@@ -1116,7 +1117,10 @@ checkEquivTypeCtxsGuard tctx1 tctx2 = checkWhenSolved \g ->
       _ -> internalError "non-proper type in type context"
 
 -- | A binder's kind, the #m instantiations in scope of it, and the type it is instantiated at.
-type InstKind = (K.Kind, [(Variable, K.Multiplicity)], T.KindedType)
+-- | A type application's binder kind, the @#m@ instantiations in scope, and the
+-- argument — with whether the argument was /written/. A written one says what an
+-- inferred binder kind is; an inferred one is only bounded by it.
+type InstKind = (Bool, K.Kind, [(Variable, K.Multiplicity)], T.KindedType)
 
 -- | Argument-driven instantiation: opens the head's quantifiers as the arguments
 -- consume them, leaving any quantifiers in the result.
@@ -1147,7 +1151,7 @@ instantiateWith :: Bool
             -> Validation ([Level E.ScopedExp T.KindedType K.Multiplicity], [InstKind], [T.KindedType], T.KindedType)
 instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
   (args', kivs, θ, us, t2) <- instantiate' i t1 [] [] args
-  let kivs' = [(k, ms, LI.applySubs θ t) | (k, ms, t) <- kivs]
+  let kivs' = [(wr, k, ms, LI.applySubs θ t) | (wr, k, ms, t) <- kivs]
   return ( map (mapLevel id (LI.applySubs θ) id) args'
          , kivs'
          , us
@@ -1162,7 +1166,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
     instantiate' i t ms kivs args = case (normalise tdecls t, args) of
       -- I-AllType
       (T.AppForall s m ((a, k) : aks) t1, TypeLevel t2 : args') -> do
-        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ms ((k, ms, t2) : kivs) args'
+        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ms ((True, k, ms, t2) : kivs) args'
         return (TypeLevel t2 : args'', kivs, θ, us, u)
       -- I-AllOther (also opens a trailing quantifier when instResult and args is [])
       (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
@@ -1170,7 +1174,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         unless (K.isProper k) do
           throwE (CannotInferHigherKindedTypeApp useSpan k)
         tiv <- LI.freshInstVarT sp k
-        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ms ((k, ms, tiv) : kivs) args
+        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ms ((False, k, ms, tiv) : kivs) args
         return (TypeLevel tiv : args'', kivs, θ, us, u)
       -- I-AllMMult
       (T.ForallM s m (φ : φs) t1, MultLevel m' : args') -> do

@@ -10,6 +10,7 @@ module Validation.Kinding
   ( synth
   , synthShaped
   , chaseShape
+  , fixInferredBinderKind
   , inferredBndKind
   , kindType
   , check
@@ -794,14 +795,38 @@ boundBinderKinds tdecls = go
         mapM_ addBaseKindConstraint [SubBaseKind o bk bk', SubBaseKind o bk' bk]
       _ -> pure ()
 
-    -- an omitted binder kind: a whole-kind variable, or the proper kind over
-    -- fresh components that settling its shape leaves behind
-    inferenceOwned = \case
-      Var _ lv _                           -> solvable lv
-      Proper _ (VarM _ lv _) (VarBK lv' _) -> solvable lv && solvable lv'
-      _                                    -> False
-
     rename (φ', φ) = subsMultType ObjLv φ' (VarM (getSpan φ') ObjLv φ)
+
+-- | Fix a kind inference owns to a given one. A whole-kind variable is bound
+-- outright; where settling its shape has left no variable to bind, each
+-- component is fixed in its own solver's terms -- an equation, not a pair of
+-- opposite bounds, which the multiplicity solver reads as a constant it may
+-- drop.
+fixKind :: Origin -> Kind -> Kind -> Validation ()
+fixKind o = go
+  where
+    go k k' = do
+      kc  <- chaseShape k
+      kc' <- chaseShape k'
+      case (kc, kc') of
+        -- the codomain only: a binder's parameter multiplicity already has a
+        -- rule of its own -- the callers see it contravariantly, and the least
+        -- solution of 'paramSide' is the most general -- and fixing it here
+        -- would report the clash at the signature rather than at the call
+        (Arrow _ _ k2, Arrow _ _ k2') -> go k2 k2'
+        (Proper _ m _, Proper _ m' _)
+          | [φ] <- solvables m        -> addBinderMultBound o φ m'
+        _                             -> pure ()
+
+-- | An omitted binder kind: a whole-kind variable, an arrow over such kinds, or
+-- the proper kind over fresh components that settling a shape leaves behind.
+-- Nothing in it was written, so nothing but a use says what it is.
+inferenceOwned :: Kind -> Bool
+inferenceOwned = \case
+  Var _ lv _                           -> solvable lv
+  Proper _ (VarM _ lv _) (VarBK lv' _) -> solvable lv && solvable lv'
+  Arrow _ k1 k2                        -> inferenceOwned k1 && inferenceOwned k2
+  _                                    -> False
 
 -- | The enclosing signatures stay in scope for a nested @let@ or @where@ block;
 -- a local signature shadows an outer one of the same name.
@@ -878,6 +903,21 @@ synthShaped ctx t = do
   sol <- currentShapes
   return (resolveShapeType sol kt)
 
+-- | Fix a binder kind inference owns to the kind of a type argument written for
+-- it. A written binder kind /bounds/ its arguments and the call bounds carry
+-- that; an inferred one has nothing else to say what it is, and before the
+-- walks were merged the unifier settled it by /identifying/ the two whole-kind
+-- variables when a written argument met it -- an equation, not a bound. Shape
+-- is settled well before the instantiation now, so the identification is
+-- spelled out rather than left to the accident of both variables still being
+-- open. It is what "inference ≤ annotation" asks for here: no written binder
+-- kind accepts two arguments whose kinds this rejects, since neither of those
+-- is a subkind of the other.
+fixInferredBinderKind :: Span -> Kind -> Kind -> Validation ()
+fixInferredBinderKind sp k karg = chaseShape k >>= \case
+  k'@Arrow{} | inferenceOwned k' -> fixKind (Origin AtApp sp) k' karg
+  _                              -> pure ()
+
 -- | Follow a kind through the state's substitution, /without/ rewriting it
 -- anywhere: the AST keeps the variable, so a constraint emitted later can still
 -- reach it. The dispatches that cannot face a whole-kind variable -- the
@@ -892,7 +932,7 @@ chaseShape k = do
 -- subkinding constraint has already been unified into ('addKindConstraint').
 currentShapes :: Validation KindSolution
 currentShapes = do
-  (binds, _, _, _, _, _, _, _) <- peekKindState
+  (binds, _, _, _, _, _, _, _, _) <- peekKindState
   return (KindSolution binds Map.empty Map.empty)
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
@@ -922,7 +962,7 @@ provisionalKindSolution = do
   return sol
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params) = do
+solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params, bmb) = do
   i0 <- incCounter
   -- @cs@ holds only what eager unification deferred; everything else is already
   -- in @binds@, @msubs0@ and @pcs0@
@@ -937,7 +977,8 @@ solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params) = do
   let condEqs = [ MultEquation φ o (if resolveBK psub bk == Channel then m1 else join m1 m2) o
                 | (o, bk, φ, m1, m2) <- condmults ]
   -- equations first: descent only lowers against a bound they have made rigid
-  (θ, wEq) <- solveMultConstraints (map toMultEq meqs ++ condEqs)
+  let binderEqs = [ MultEquation (VarM (getSpan φ) UnifLv φ) o m o | (φ, (o, m)) <- Map.toList bmb ]
+  (θ, wEq) <- solveMultConstraints (map toMultEq meqs ++ condEqs ++ binderEqs)
                 >>= either (throwE . multErr) pure
   let bodySubs = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
       copy σ' m ms = instantiate ms (applyMultSubst σ' (applyMultSubst θ m))
@@ -952,10 +993,11 @@ solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params) = do
       fixpoint st@(σ', _) = let st'@(σ'', _) = solveMultSubsWitnessed (bodySubs ++ callSubs σ')
                             in if σ'' == σ' then st' else fixpoint st'
       ascend σ' = let σ'' = foldr (\φ -> Map.insert φ (lub σ' φ)) σ' paramSide in if σ'' == σ' then σ' else ascend σ''
-      -- body bounds suffice while higher-kinded type arguments are written; inferring one
-      -- needs the parameter-side call bounds back:
-      -- ++ [ copy σ' b ms | CallBound _ False a b ms <- calls, atom a == Just φ ]
-      lub σ' φ = List.foldl' join (Sup nullSpan []) (map fst (lowers σ' φ))
+      lub σ' φ = List.foldl' join (Sup nullSpan []) (map fst (lowers σ' φ) ++ forwarded σ' φ)
+      -- a binder forwarded to a callee's parameter must accept whatever that
+      -- one does: the bound is on the argument side, so it lowers nothing in
+      -- the descent and only the join sees it
+      forwarded σ' φ = [ copy σ' b ms | CallBound _ False a b ms <- calls, atom a == Just φ ]
       lowers σ' φ = [ (applyMultSubst σ' l, (o, l)) | MultSub l r o <- bodySubs, atom r == Just φ ]
       -- the bound a variable's value came from: the join that raised it on the
       -- parameter side, else the meet that lowered it in the descent

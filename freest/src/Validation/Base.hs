@@ -9,6 +9,7 @@ module Validation.Base
   , addKindConstraint
   , addKindBinding
   , addMultEquation
+  , addBinderMultBound
   , addBaseKindConstraint
   , addCondSeqMult
   , CallBound(..)
@@ -81,6 +82,9 @@ data ValidationState
     , callBounds :: [CallBound]
     -- | A function's #m parameter and the signature binder it stands for.
     , multParams :: Map.Map Variable Variable
+    -- | Per inferred binder multiplicity, the join of what the written type
+    -- arguments given for it require (see 'addBinderMultBound').
+    , binderMultBounds :: Map.Map Variable (Origin, K.Multiplicity)
     -- | Instantiation variables left open when a binder received their type:
     -- the binder, the type variables in scope there, and the monotype bound once.
     , typeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe (TK.KindedType, Span))
@@ -104,6 +108,7 @@ emptyValidationState = ValidationState
   , condSeqMults = []
   , callBounds = []
   , multParams = Map.empty
+  , binderMultBounds = Map.empty
   , typeStore = Map.empty
   , obligations = []
   , kindSolution = Nothing
@@ -156,6 +161,17 @@ addKindConstraint o k1 k2 = do
 addKindBinding :: Variable -> K.Kind -> Validation ()
 addKindBinding a k =
   modify \s -> s{kindBindings = Map.insert a k (kindBindings s)}
+
+-- | Require an inferred binder multiplicity to admit what a written type
+-- argument gives for it. The binder takes the /join/ of its arguments, which is
+-- the least multiplicity admitting them all: with one argument that fixes the
+-- binder at it, which is what an inferred binder kind otherwise has nothing to
+-- say; with two it lands where writing the kind by hand would, since arrow
+-- kinds have upper bounds even when neither argument's kind is below the other.
+addBinderMultBound :: Origin -> Variable -> K.Multiplicity -> Validation ()
+addBinderMultBound o φ m =
+  modify \s -> s{binderMultBounds =
+    Map.insertWith (\_ (o', m') -> (o', K.join m m')) φ (o, m) (binderMultBounds s)}
 
 -- | Record a multiplicity equation @m1 = m2@.
 addMultEquation :: Origin -> K.Multiplicity -> K.Multiplicity -> Validation ()
@@ -263,13 +279,14 @@ type KindState =
   , [BaseKindConstraint]
   , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
   , [CallBound]
-  , Map.Map Variable Variable )
+  , Map.Map Variable Variable
+  , Map.Map Variable (Origin, K.Multiplicity) )
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in
 -- place, for a solution that is not the last word on them.
 peekKindState :: Validation KindState
 peekKindState = gets \s ->
-  (kindBindings s, kindConstraints s, multEquations s, multSubs s, baseKindConstraints s, condSeqMults s, callBounds s, multParams s)
+  (kindBindings s, kindConstraints s, multEquations s, multSubs s, baseKindConstraints s, condSeqMults s, callBounds s, multParams s, binderMultBounds s)
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
