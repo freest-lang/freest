@@ -11,7 +11,6 @@ module Validation.Kinding
   , synthShaped
   , chaseShape
   , fixInferredBinderKind
-  , inferredBndKind
   , kindType
   , check
   , checkK
@@ -893,16 +892,6 @@ kindSignatures tdecls ctx = foldM decl Map.empty
       E.ValDef (E.VarPat _ x) (E.UnguardedRHS (E.Var _ v) _) ->
         sigs <$ sequence_ (boundBinderKinds tdecls <$> sigs Map.!? x <*> sigs Map.!? v)
       _ -> return sigs
-
--- | The kind of an abstraction's omitted @\\\@a@ binder, against the quantifier it
--- faces: a fresh variable bounded by the signature's rather than the signature's
--- kind itself, so the binder keeps a multiplicity of its own.
-inferredBndKind :: Variable -> Kind -> Validation E.BndKind
-inferredBndKind a k = do
-  k' <- freshUnifKind a
-  addKindConstraint (Origin InSignature (getSpan a)) k' k
-  sol <- currentShapes
-  pure (E.Inferred (resolveShape sol k'))
 
 synthShaped :: KindCtx -> T.ScopedType -> Validation TK.KindedType
 synthShaped ctx t = do
