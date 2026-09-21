@@ -608,6 +608,10 @@ kindModule ctx mod = do
       Just (Proper _ φ _) -> addMultEquation (Origin InSignature (getSpan v)) (Un (getSpan v)) φ
       _                   -> pure ()
   sigs <- kindSignatures tdecls ctx' (M.definitions mod)
+  -- TODO: retirable -- typing needs only shapes, which 'kindBindings' holds. The
+  -- cost is the kind mismatch against a written binder kind: reporting it needs
+  -- the argument's kind ground, and an obligation never runs once the solve
+  -- throws. A solver reporting every failure rather than the first would lift it.
   sol <- provisionalKindSolution
   setKindSolution sol
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
