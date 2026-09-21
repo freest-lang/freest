@@ -166,16 +166,32 @@ currentKindSubst = gets kindBindings
 chaseShapeType :: TK.KindedType -> Validation TK.KindedType
 chaseShapeType t = gets \s -> resolveShapeTypeOpen (KindSolution (kindBindings s) mempty mempty) t
 
+-- Which of the two to use is decided by what the reading rule does when the
+-- kind is still a whole-kind variable, and getting it backwards is silent in
+-- both directions:
+--
+--   * the rule /raises/ -- an irrefutable @Proper@, or a @throwE@ on the
+--     fallthrough -- then 'chaseShape'. The variable is left where a constraint
+--     emitted later can still reach it, and an ill-kinded program still fails.
+--   * the rule /returns having emitted nothing/ -- a @_ _ -> pure ()@ catch-all
+--     -- then 'chaseShapeProper', or it quietly stops doing its job on exactly
+--     the programs inference was written for.
+--
+-- Both mistakes have been made here. Committing where the open read belongs
+-- pinned a binder before the constraint that would have settled it arrived
+-- (@FunctionDemandInferKind@); reading open where the committing one belongs
+-- dropped a call bound entirely, and accepted a program no written binder kind
+-- accepts (@InferredBinderCallBound@).
+
 -- | Follow a kind through the state's substitution, /without/ rewriting it
 -- anywhere: the AST keeps the variable, so a constraint emitted later can still
--- reach it. The dispatches that cannot face a whole-kind variable -- the
--- irrefutable @Proper@ of the smart constructors, @isProper@ at an
--- instantiation -- read through this instead of being handed a settled AST.
+-- reach it.
 chaseShape :: K.Kind -> Validation K.Kind
 chaseShape k = gets \s -> resolveShapeOpen (KindSolution (kindBindings s) mempty mempty) k
 
--- | 'chaseShape', defaulting a variable nothing has settled to the proper kind
--- the final zonk gives it anyway. For a dispatch that must decide now.
+-- | 'chaseShape', reading a variable nothing has settled as the proper kind
+-- over components named after it -- the answer the final zonk gives it anyway.
+-- For a dispatch that emits per matched pair and would otherwise emit nothing.
 chaseShapeProper :: K.Kind -> Validation K.Kind
 chaseShapeProper k = gets \s -> resolveShape (KindSolution (kindBindings s) mempty mempty) k
 

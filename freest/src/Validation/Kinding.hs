@@ -814,11 +814,19 @@ boundBinderKinds tdecls = go
 
     rename (φ', φ) = subsMultType ObjLv φ' (VarM (getSpan φ') ObjLv φ)
 
--- | Fix a kind inference owns to a given one. A whole-kind variable is bound
--- outright; where settling its shape has left no variable to bind, each
--- component is fixed in its own solver's terms -- an equation, not a pair of
--- opposite bounds, which the multiplicity solver reads as a constant it may
--- drop.
+-- | Bound an inferred binder kind's codomain multiplicity by that of a written
+-- type argument, walking the two arrow spines together. A /bound/, not an
+-- equation: the binder takes the join of what its arguments require, so two
+-- instantiations at unrelated kinds both fit. Only 'fixInferredBinderKind'
+-- calls this, and only on a kind inference owns.
+--
+-- TODO: the second operand is the argument's kind, which nothing settles, so a
+-- whole-kind variable falls through the pair below and no bound is emitted --
+-- the quiet half of the rule 'chaseShape' and 'chaseShapeProper' divide.
+-- Reading both operands with 'chaseShapeProper' instead was measured
+-- 2026-09-21: prog 838/0/28, corpus byte-identical, sweep 0/0, store witnesses
+-- unchanged. Nothing witnesses the difference, and the change is in the
+-- accepting direction, so it wants a program written on purpose first.
 fixKind :: Origin -> Kind -> Kind -> Validation ()
 fixKind o = go
   where
