@@ -709,7 +709,11 @@ checkInstBaseKind sp t k = do
 
 -- | 'checkInstBaseKind', plus the call's multiplicity bounds for the global solve.
 checkInstKind :: Span -> LI.Substitution -> InstKind -> Validation ()
-checkInstKind sp θ (written, k, ms, w) = do
+checkInstKind sp θ (written, k0, ms, w) = do
+  -- the binder kind as the state has it, not as the AST last had it: 'go' below
+  -- pairs it up with the argument's structurally, and a whole-kind variable
+  -- falls through its cases and emits nothing at all
+  k <- Kinding.chaseShape k0
   checkInstBaseKind sp t k
   when written do
     -- a binder kind with nothing left to infer only /checks/ its argument, and
