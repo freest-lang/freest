@@ -715,7 +715,7 @@ toMessage src = \case
   -- keeps showing the familiar name instead of its expanded body.
   unRedex :: TK.KindedType -> TK.KindedType
   unRedex = \case
-    TK.App _ h@TK.Abs{} us  -> unRedex (betaRule h us)
+    TK.App _ h@TK.Abs{} us  -> unRedex (betaRule mempty h us)
     TK.AppDual s t          -> TK.AppDual s (unRedex t)
     TK.AppSemi s t u        -> TK.AppSemi s (unRedex t) (unRedex u)
     TK.AppQuantS s p a k t  -> TK.AppQuantS s p a k (unRedex t)

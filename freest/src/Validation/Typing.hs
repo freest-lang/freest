@@ -166,7 +166,7 @@ typeCtxDifference tdecls kctx tctx1 tctx2 = do
           checkWhenSolved \g ->
             let t' = groundType g t in
             when (Kinding.isRestricted t') do
-              throwE (LinVarAtEndOfScope (getSpan x) x t' (normalise tdecls t'))
+              throwE (LinVarAtEndOfScope (getSpan x) x t' (normalise mempty tdecls t'))
         return (Map.delete x tctx1')
       Nothing -> return tctx1'
     ) tctx1 (Map.keys tctx2)
@@ -185,7 +185,7 @@ siteOf = \case
 -- | Multiplicity bound contributed by a right section's captured operand,
 -- joined with the operator's own multiplicity.
 operandMult :: D.KindedTypeDecls -> Span -> T.KindedType -> K.Multiplicity
-operandMult tdecls s rest = case normalise tdecls rest of
+operandMult tdecls s rest = case normalise mempty tdecls rest of
   T.AppArrow _ _ t2 _ | K.Proper _ mq _ <- T.kindOf t2 -> mq
   _                                                    -> K.Un s
 
@@ -264,7 +264,7 @@ synth tdecls ddecls kctx tctx = \case
         (e', v, tctx') <- synth tdecls ddecls kctx tctx e
         (a, _, v') <- Expose.typeOutput tdecls (siteOf e) v
         as2 <- elabArgs kctx as'
-        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a u' v') as2
+        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs mempty a u' v') as2
         return (E.App s (E.SendType s' u') (ExpLevel e' : as''), t, tctx'')
       (arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
@@ -297,7 +297,7 @@ synth tdecls ddecls kctx tctx = \case
   E.SectionR s x op e -> do
     let opE = sectionOpExp s op
     (_, tOp, _) <- synth tdecls ddecls kctx tctx opE
-    case normalise tdecls tOp of
+    case normalise mempty tdecls tOp of
       T.AppArrow _ m dom rest -> do
         let body = E.App s opE [ExpLevel (E.Var s x), ExpLevel e]
             q    = K.join m (operandMult tdecls s rest)
@@ -442,7 +442,7 @@ check tdecls ddecls kctx tctx e t = case e of
   E.String s v -> leaf (E.String s v) (T.List s (T.Char s))
   -- Tuples, (e1 ... , en)
   E.Tuple s es ->
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.Tuple _ ts | length es == length ts -> do
         (es', tctx') <- foldM (\(esi, tctx') (ei, ti) -> 
             first (List.snoc esi) <$> check tdecls ddecls kctx tctx' ei ti) 
@@ -481,7 +481,7 @@ check tdecls ddecls kctx tctx e t = case e of
         u' <- Kinding.synth kctx u
         Kinding.checkK u' k
         args2 <- elabArgs kctx args'
-        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a u' v') args2
+        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs mempty a u' v') args2
         checkEquivTypes tdecls ddecls (siteOf e) t t'
         return (E.App s (E.SendType s' u') (ExpLevel e'' : args''), tctx'')
       (arg : _) ->
@@ -515,13 +515,13 @@ check tdecls ddecls kctx tctx e t = case e of
     let opE  = sectionOpExp s op
         body = E.App s opE [ExpLevel (E.Var s x), ExpLevel e']
     (_, tOp, _) <- synth tdecls ddecls kctx tctx opE
-    let q = case normalise tdecls tOp of
+    let q = case normalise mempty tdecls tOp of
               T.AppArrow _ m _ rest -> K.join m (operandMult tdecls s rest)
               _                     -> K.Un s
     check tdecls ddecls kctx tctx (E.Abs s [ExpLevel (E.VarPat s x, Nothing)] q body) t
   E.Pack s ts e' -> do
     ts' <- mapM (Kinding.synth kctx) ts
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.AppExists _ aks t' -> first (E.Pack s ts') <$> checkPack ts' aks t'
         where
         checkPack = \cases
@@ -530,12 +530,12 @@ check tdecls ddecls kctx tctx e t = case e of
           [] aksi@((ai, _) : _) u ->
             check tdecls ddecls kctx tctx e' (T.AppExists (spanFromTo ai u) aksi u)
           tsi@(ti : _) [] u ->
-            case normalise tdecls u of
+            case normalise mempty tdecls u of
               T.AppExists _ bks u' -> checkPack tsi bks u'
               _ -> throwE (TypeMismatchExists (spanFromTo ti u) u (siteOf e'))
           (ti : tsi') ((ai, ki) : aksi') u -> do
             Kinding.checkK ti ki
-            checkPack tsi' aksi' (subs ai ti u)
+            checkPack tsi' aksi' (subs mempty ai ti u)
       _ -> throwE (TypeMismatchExists s t (siteOf e'))
   E.Asc s e u -> do
     u' <- Kinding.synth kctx u
@@ -564,7 +564,7 @@ check tdecls ddecls kctx tctx e t = case e of
   E.Channel s u -> do
     u' <- Kinding.synth kctx u
     Kinding.checkChannel u'
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.Tuple _ [t1,t2] -> do
         checkEquivTypes tdecls ddecls (siteOf e) u' t1
         checkEquivTypes tdecls ddecls (siteOf e) (T.AppDual (getSpan u') u') t2
@@ -573,7 +573,7 @@ check tdecls ddecls kctx tctx e t = case e of
         (_, v, _) <- synth tdecls ddecls kctx tctx e
         throwE (TypeMismatch s t v Nothing)
   E.Select s mi i -> do
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.AppArrow s' m t1 t2 -> do
         t1i <- Expose.internalChoice tdecls mi (siteOf e) t1 i
         checkEquivTypes tdecls ddecls (siteOf e)
@@ -583,20 +583,20 @@ check tdecls ddecls kctx tctx e t = case e of
       _ -> throwE (TypeMismatchSelect s mi t i)
   E.SendType s u -> do
     u' <- Kinding.synth kctx u
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        case normalise tdecls t1 of
+        case normalise mempty tdecls t1 of
           T.AppQuantS _ Pos a _ t1' -> do
             checkEquivTypes tdecls ddecls (siteOf e)
               (T.AppArrow s' m t1 t2)
-              (T.AppArrow s' m t1 (subs a u' t1'))
+              (T.AppArrow s' m t1 (subs mempty a u' t1'))
             return (E.SendType s u', tctx)
           whnf -> throwE (TypeMismatchSendType s u' t (Just whnf))
       _ -> throwE (TypeMismatchSendType s u' t Nothing)
   E.ReceiveType s -> do
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.AppArrow s' m t1 t2 -> do
-        case normalise tdecls t1 of
+        case normalise mempty tdecls t1 of
           T.AppQuantS s'' Neg a k t1' -> do
             let actual = T.AppArrow s' m t1 (T.AppExists s'' [(a, k)] t1')
             _ <- LTI.match (getSpan e) tdecls (T.AppArrow s' m t1 t2) actual `catchE` \_ -> pure mempty
@@ -735,7 +735,7 @@ checkApp :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> ErrorSite -> Sp
          -> [Level E.ScopedExp T.KindedType K.Multiplicity] -> T.KindedType
          -> Validation (E.KindedExp, TypeCtx)
 checkApp tdecls ddecls kctx site s h' t' tctx' args t = do
-  let inst = case normalise tdecls t of
+  let inst = case normalise mempty tdecls t of
         T.AppForall{} -> instantiate
         T.ForallM{}   -> instantiate
         _             -> instantiateResult
@@ -808,7 +808,7 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
               -> T.KindedType
               -> Validation (E.KindedRHS, [Level (E.KindedPat, Maybe T.KindedType) (Variable, E.BndKind) Variable], TypeCtx)
     checkFun' i kctxi tctxi ps' t' =
-      case (ps', normalise tdecls t') of
+      case (ps', normalise mempty tdecls t') of
         -- no more parameters, check RHS
         ([], t') -> do
           (rhs', tctxr) <- checkRHS tdecls ddecls kctxi tctxi site rhs t'
@@ -823,7 +823,7 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
           let ki = E.bndKind bki
           forM_ mm (matchArrowMult (spanFromTo ai site) i m)
           (rhs', ps3, tctxi') <- checkFun' (i + 1) (Map.insert (Left ai) ki kctxi) tctxi ps''
-            (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv ai ki) u)
+            (T.AppForall s' m aks $ subs mempty a (T.fromVariable ObjLv ai ki) u)
           checkEquivTypeCtxsFun m tctxi' tctxi (spanFromTo ai rhs)
           return (rhs', TypeLevel (ai, bki) : ps3, tctxi')
         (ExpLevel  (pi, mti) : ps'', t''@(T.AppArrow s' m u v)) -> do
@@ -853,7 +853,7 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
         (pi : ps'', T.AppForall s' m ((a, k) : aks) u) -> do
           a' <- freshInternal a
           (rhs', ps3, tctxi') <- checkFun' (i + 1) (Map.insert (Left a') k kctxi) tctxi (pi : ps'')
-            (T.AppForall s' m aks $ subs a (T.fromVariable ObjLv a' k) u)
+            (T.AppForall s' m aks $ subs mempty a (T.fromVariable ObjLv a' k) u)
           return (rhs', TypeLevel (a', E.Inferred k) : ps3, tctxi')
         (pi : ps'', T.ForallM s' m (φ' : φs) u) -> do
           φ'' <- freshInternal φ'
@@ -898,7 +898,7 @@ checkPat tdecls ddecls kctx p t = case p of
     (kctx, E.VarPat s x, Map.singleton (Left x) t) <$ escapeOpenTypeArgs kctx x t
   -- (@t1, ..., @tn, p)
   E.PackPat s aks p' ->
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       t'@(T.AppExists _ bks t'') -> checkPackPat kctx [] t'' aks bks
       t' -> throwE (TypeMismatchExists (getSpan p) t (AtPat (getSpan p)))
     where
@@ -909,7 +909,7 @@ checkPat tdecls ddecls kctx p t = case p of
         [] bks@((b, _) : _) -> do
           (kctx'', p'', tctxp) <- checkPat tdecls ddecls kctx' p' (T.AppExists (spanFromTo b u) bks u)
           return (kctx'', E.PackPat s (reverse acc) p'', tctxp)
-        aks@((a, _) : _) [] -> case normalise tdecls u of
+        aks@((a, _) : _) [] -> case normalise mempty tdecls u of
           u'@(T.AppExists _ bks u'') -> checkPackPat kctx' acc u'' aks bks
           u' -> throwE (TypeMismatchExists (spanFromTo a p') u (AtPat (spanFromTo a p')))
         ((a, mk) : aks) ((b, k') : bks) -> do
@@ -919,7 +919,7 @@ checkPat tdecls ddecls kctx p t = case p of
             Just k  -> E.Written k <$ Kinding.checkK (T.fromVariable ObjLv a k') k
             Nothing -> pure (E.Inferred k')
           checkPackPat (Map.insert (Left a) k' kctx') ((a, bk) : acc)
-            (subs b (T.fromVariable ObjLv a k') u) aks bks
+            (subs mempty b (T.fromVariable ObjLv a k') u) aks bks
   E.WildPat  s x    -> do
     -- the pattern binds nothing, so this discard reaches no context: force here
     Kinding.boundMultBy s (K.Un s) t
@@ -928,12 +928,12 @@ checkPat tdecls ddecls kctx p t = case p of
     return (kctx, E.WildPat s x, Map.empty)
   -- []
   E.NilPat s        ->
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.List _ _ -> return (kctx, E.NilPat s, Map.empty)
       t' -> throwE (TypeMismatchList (getSpan p) t)
   -- (p1 :: p2)
   E.ConsPat s p1 p2 ->
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       t'@(T.List s' t'') -> do
         (kctx' , p1', tctxp1) <- checkPat tdecls ddecls kctx  p1 t''
         (kctx'', p2', tctxp2) <- checkPat tdecls ddecls kctx' p2 t'
@@ -941,7 +941,7 @@ checkPat tdecls ddecls kctx p t = case p of
       t' -> throwE (TypeMismatchList (getSpan p) t')
   -- (p1 ... , pn)
   E.TuplePat s ps ->
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       t'@(T.Tuple _ ts) | length ps == length ts -> do
         (kctx', ps', tctxp) <- foldM (\(kctxj, psj, tctxj) (pj, tj) -> do
             (kctxj', pj', tctxj') <- checkPat tdecls ddecls kctxj pj tj
@@ -960,9 +960,9 @@ checkPat tdecls ddecls kctx p t = case p of
     k <- case kctx Map.!? Right i' of
       Just k -> return k
       Nothing -> internalError ("data type " ++ show i' ++ " has no associated kind signature")
-    case normalise tdecls t of
+    case normalise mempty tdecls t of
       T.AppDName _ _ i'' us | i' == i'' -> do
-        let ts' = map (subsAll (map fst aks) us) ts
+        let ts' = map (subsAll mempty (map fst aks) us) ts
         let (lts', lps) = (length ts', length ps)
         when (lts' /= lps) (throwE (DConsPatArgMismatch (getSpan p) i lts' lps))
         (kctx', ps', tctxp) <- foldM (\(kctxj, psj, tctxj) (pj, tj) -> do
@@ -990,7 +990,7 @@ checkPat tdecls ddecls kctx p t = case p of
       Just k  -> E.Written k <$ Kinding.checkK (T.fromVariable ObjLv a k') k
       Nothing -> pure (E.Inferred k')
     (kctx', p'', tctxp) <-
-      checkPat tdecls ddecls (Map.insert (Left a) k' kctx) p' (subs b (T.fromVariable ObjLv a k') t')
+      checkPat tdecls ddecls (Map.insert (Left a) k' kctx) p' (subs mempty b (T.fromVariable ObjLv a k') t')
     return (kctx', E.TypeInPat s (a, bk) p'', tctxp)
   -- (&C p) and (*&C p)
   E.ChoicePat s m i p' -> do
@@ -1171,10 +1171,10 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                  -> [InstKind]
                  -> [Level E.ScopedExp T.KindedType K.Multiplicity]
                  -> Validation ([Level E.ScopedExp T.KindedType K.Multiplicity], [InstKind], LI.Substitution, [T.KindedType], T.KindedType)
-    instantiate' i t ms kivs args = case (normalise tdecls t, args) of
+    instantiate' i t ms kivs args = case (normalise mempty tdecls t, args) of
       -- I-AllType
       (T.AppForall s m ((a, k) : aks) t1, TypeLevel t2 : args') -> do
-        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a t2 (T.AppForall s m aks t1)) ms ((True, k, ms, t2) : kivs) args'
+        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs mempty a t2 (T.AppForall s m aks t1)) ms ((True, k, ms, t2) : kivs) args'
         return (TypeLevel t2 : args'', kivs, θ, us, u)
       -- I-AllOther (also opens a trailing quantifier when instResult and args is [])
       (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
@@ -1183,7 +1183,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         unless (K.isProper k') do
           throwE (CannotInferHigherKindedTypeApp useSpan k')
         tiv <- LI.freshInstVarT sp k'
-        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ms ((False, k, ms, tiv) : kivs) args
+        (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs mempty a tiv (T.AppForall s m aks t1)) ms ((False, k, ms, tiv) : kivs) args
         return (TypeLevel tiv : args'', kivs, θ, us, u)
       -- I-AllMMult
       (T.ForallM s m (φ : φs) t1, MultLevel m' : args') -> do
@@ -1212,7 +1212,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         return (ExpLevel e : args'', kivs', θ, LI.applySubs θ t1 : us, t₃)
         where
           -- a polymorphic argument gives a bare variable no advice, so checking instantiates it
-          advise e u = case (t1, normalise tdecls u) of
+          advise e u = case (t1, normalise mempty tdecls u) of
             (T.Var _ _ InstLv _, T.AppForall{}) -> return mempty
             (T.Var _ _ InstLv _, T.ForallM{})   -> return mempty
             _                                   -> LTI.match (getSpan e) tdecls t1 u
@@ -1244,7 +1244,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                   (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
                   t0' <- Kinding.synth kctx t0
                   args2 <- elabArgs kctx args'
-                  (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs a t0' t2) args2
+                  (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs mempty a t0' t2) args2
                   advise e t3
                 (arg : _) ->
                   throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
@@ -1280,10 +1280,10 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
                 advise e t3
               `catchE` \_ -> mempty <$ mapM_ (\m' -> addMultEquation (Origin AtLambda (getSpan m')) m' m)
-                                               (arrowMults ps (normalise tdecls t1))
+                                               (arrowMults ps (normalise mempty tdecls t1))
               where
                 arrowMults = \cases
-                  (ExpLevel{}  : ps') (T.AppArrow _ m' _ v) -> m' : arrowMults ps' (normalise tdecls v)
+                  (ExpLevel{}  : ps') (T.AppArrow _ m' _ v) -> m' : arrowMults ps' (normalise mempty tdecls v)
                   (TypeLevel{} : ps') (T.AppForall s m' (_:aks) v) ->
                     m' : arrowMults ps' (if null aks then v else T.AppForall s m' aks v)
                   (MultLevel{} : ps') (T.ForallM s m' (_:φs) v) ->

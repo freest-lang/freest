@@ -247,7 +247,7 @@ handleEquivalent src = runPipeline src parseTwoTypes
 handleNormalise :: String -> Repl () -- freest> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
-  (\[t'] -> get >>= \s -> putLines [unparse (normalise (tdecls s) t')])
+  (\[t'] -> get >>= \s -> putLines [unparse (normalise mempty (tdecls s) t')])
 
 handleWhnf :: String -> Repl () -- freest> :w <type>
 handleWhnf src = runPipeline src parseType
@@ -260,7 +260,7 @@ handleReduce src = runPipeline src parseType
   (\[t'] -> get >>= \s -> putLines
     [ if isWhnf t'
         then unparse t' ++ " is a weak head normal form (weak head normal forms do not reduce)"
-        else unparse (reduce (tdecls s) t') ])
+        else unparse (reduce mempty (tdecls s) t') ])
 
 handleGrammar :: String -> Repl () -- freest> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes

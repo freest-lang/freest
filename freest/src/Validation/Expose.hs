@@ -36,14 +36,14 @@ kindArrow k = ([], k)
 
 function :: D.KindedTypeDecls -> ErrorSite -> T.KindedType -> Validation T.KindedType
 function tdecls site t = do
-  case normalise tdecls t of
+  case normalise mempty tdecls t of
     t'@(T.AppArrow s m u v) -> pure t'
     t'@(T.AppForall s m aks u) -> pure t'
     t' -> throwE (ExposeError site "a function" t t')
 
 arrow :: D.KindedTypeDecls -> ErrorSite -> T.KindedType -> Validation (K.Multiplicity, T.KindedType, T.KindedType)
 arrow tdecls site t = do
-  case normalise tdecls t of
+  case normalise mempty tdecls t of
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
     t' -> throwE (ExposeError site "a monomorphic function" t t')
 
@@ -52,7 +52,7 @@ exists :: D.KindedTypeDecls
        -> T.KindedType 
        -> Validation ([(Variable, K.Kind)], T.KindedType)
 exists tdecls site t = do
-  case normalise tdecls t of
+  case normalise mempty tdecls t of
     t'@(T.AppExists s aks u) -> pure (aks, u)
     _ -> throwE (TypeMismatchExists (getSpan site) t site) 
 
@@ -64,7 +64,7 @@ externalChoice :: D.KindedTypeDecls -> K.Multiplicity -> ErrorSite -> T.KindedTy
 externalChoice tdecls m site t i = case externalChoice' tdecls m t i of
   Just (Just ti) -> return ti
   Just Nothing   -> throwE (IllegalChoice (getSpan i) i t)
-  Nothing        -> throwE (ExposeError site msg t (normalise tdecls t))
+  Nothing        -> throwE (ExposeError site msg t (normalise mempty tdecls t))
   where msg | K.isUn m  = "an unrestricted (`*&`) external choice channel"
             | otherwise = "a linear external choice channel"
 
@@ -73,11 +73,11 @@ externalChoice tdecls m site t i = case externalChoice' tdecls m t i of
 externalChoice' :: D.KindedTypeDecls -> K.Multiplicity -> T.KindedType -> Identifier
                 -> Maybe (Maybe T.KindedType)
 externalChoice' tdecls m t i
-  | K.isUn m = case normalise tdecls t of
+  | K.isUn m = case normalise mempty tdecls t of
       t'@(T.UnChoice _ Neg ls)               -> Just (pick t' ls)
       T.AppSemi _ t'@(T.UnChoice _ Neg ls) _ -> Just (pick t' ls)
       _ -> Nothing
-  | otherwise = case normalise tdecls t of
+  | otherwise = case normalise mempty tdecls t of
       T.AppLinChoice _ Neg lts -> Just (lookup i lts)
       _ -> Nothing
   where pick t' ls | i `elem` ls = Just t'
@@ -88,11 +88,11 @@ externalChoice' tdecls m t i
 internalChoice :: D.KindedTypeDecls -> K.Multiplicity -> ErrorSite -> T.KindedType -> Identifier
                -> Validation T.KindedType
 internalChoice tdecls m site t i
-  | K.isUn m = case normalise tdecls t of
+  | K.isUn m = case normalise mempty tdecls t of
       t'@(T.UnChoice s Pos ls)               -> pick s t' ls
       T.AppSemi _ t'@(T.UnChoice s Pos ls) _ -> pick s t' ls
       t' -> throwE (ExposeError site "an unrestricted (`*+`) internal choice channel" t t')
-  | otherwise = case normalise tdecls t of
+  | otherwise = case normalise mempty tdecls t of
       T.AppLinChoice s Pos its ->
         case lookup i its of
           Just t' -> return t'
@@ -116,7 +116,7 @@ message :: D.KindedTypeDecls -> Polarity -> K.Multiplicity -> ErrorSite -> T.Kin
         -> Validation (T.KindedType, T.KindedType)
 message tdecls p m site t = case message' tdecls p m t of
   Just uv -> return uv
-  Nothing -> throwE (ExposeError site expected t (normalise tdecls t))
+  Nothing -> throwE (ExposeError site expected t (normalise mempty tdecls t))
   where
     expected | K.isUn m  = msg ("an unrestricted (`*" ++ sigil ++ "`) ")
              | otherwise = msg "a linear "
@@ -127,11 +127,11 @@ message tdecls p m site t = case message' tdecls p m t of
 message' :: D.KindedTypeDecls -> Polarity -> K.Multiplicity -> T.KindedType
          -> Maybe (T.KindedType, T.KindedType)
 message' tdecls p m t
-  | K.isUn m = case normalise tdecls t of
+  | K.isUn m = case normalise mempty tdecls t of
       t'@(T.AppMessage _ K.Un{} p' u)                | p == p' -> Just (u, t')
       T.AppSemi _ t'@(T.AppMessage _ K.Un{} p' u) _  | p == p' -> Just (u, t')
       _ -> Nothing
-  | otherwise = case normalise tdecls t of
+  | otherwise = case normalise mempty tdecls t of
       T.AppMessage s K.Lin{} p' u                    | p == p' -> Just (u, T.Skip s)
       T.AppSemi _    (T.AppMessage _ K.Lin{} p' u) v | p == p' -> Just (u, v)
       _ -> Nothing
@@ -148,19 +148,19 @@ typeMsg :: D.KindedTypeDecls -> Polarity -> ErrorSite -> T.KindedType
             -> Validation (Variable, K.Kind, T.KindedType)
 typeMsg tdecls p site t = case typeMsg' tdecls p t of
   Just akt -> return akt
-  Nothing  -> throwE (ExposeError site msg t (normalise tdecls t))
+  Nothing  -> throwE (ExposeError site msg t (normalise mempty tdecls t))
   where msg = "a type-" ++ (case p of Neg -> "input"; Pos -> "output") ++ " channel"
 
 -- | 'typeMsg' without the failure.
 typeMsg' :: D.KindedTypeDecls -> Polarity -> T.KindedType
          -> Maybe (Variable, K.Kind, T.KindedType)
-typeMsg' tdecls p t = case normalise tdecls t of
+typeMsg' tdecls p t = case normalise mempty tdecls t of
   T.AppQuantS _ p' a k t' | p == p' -> Just (a, k, t')
   _ -> Nothing
 
 wait :: D.KindedTypeDecls -> ErrorSite -> T.KindedType -> Validation ()
 wait tdecls site t = do
-  case normalise tdecls t of
+  case normalise mempty tdecls t of
     T.End _ Neg -> return ()
     T.AppSemi _ (T.End _ Neg) _ -> return ()
     t' -> throwE (ExposeError site "a `Wait` channel" t t')

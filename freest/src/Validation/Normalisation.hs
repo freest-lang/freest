@@ -22,7 +22,8 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import Validation.Base ( unfold )
-import Validation.Substitution ( freeTypeVars, subs, subsAll, betaRule )
+import Validation.Substitution ( freeTypeVars, betaRule )
+import Validation.LocalInference.Solution ( KindSubst, chaseShapeTypeWith )
 import UI.Error ( bt )
 import Compiler.Bug ( internalError )
 
@@ -59,8 +60,16 @@ isWhnf = \case
 
 -- | One step type reduction (aka, the tau rules).
 --   Requires 'not (isWnhf t)'.
-reduce :: D.KindedTypeDecls -> T.KindedType -> T.KindedType
-reduce tdecls = \case
+--
+-- The kind substitution is the boundary, as it is for 'subs': three rules here
+-- take a kind apart irrefutably -- R-SQuantDist and R-DQuant read a quantifier's
+-- arrow kind, R-Void its codomain -- and a whole-kind variable crashes them. The
+-- type is settled on the way in, once, and it is the identity under 'mempty'.
+reduce :: KindSubst -> D.KindedTypeDecls -> T.KindedType -> T.KindedType
+reduce sub tdecls = reduce' sub tdecls . chaseShapeTypeWith sub
+
+reduce' :: KindSubst -> D.KindedTypeDecls -> T.KindedType -> T.KindedType
+reduce' sub tdecls = \case
   -- 1. Sequential composition, the R-S* rules
     -- R-SNeut
   T.AppSemi _ T.Skip{} t -> t
@@ -79,7 +88,7 @@ reduce tdecls = \case
     where a = mkFreshVar s1 (freeTypeVars f `Set.union` freeTypeVars u)
           (K.Arrow _ (K.Arrow _ k _) _) = T.kindOf q
     -- R-SemiL
-  T.AppSemi s t u -> T.AppSemi s (reduce tdecls t) u
+  T.AppSemi s t u -> T.AppSemi s (reduce' sub tdecls t) u
 
   -- 2. Dual, the R-D* rule
     -- R-DSkip
@@ -104,25 +113,25 @@ reduce tdecls = \case
     -- R-DDual
   T.AppDual _ (T.AppDual _ t) -> t
     -- R-DAppR
-  T.AppDual s t -> T.AppDual s (reduce tdecls t)
+  T.AppDual s t -> T.AppDual s (reduce' sub tdecls t)
 
   -- 3. β, μ, Void, AppL
     -- R-β
-  T.App _ t@T.Abs{} us -> betaRule t us
+  T.App _ t@T.Abs{} us -> betaRule sub t us
     -- R-μ
   T.TName _ _ name -> unfold tdecls name
     -- R-Void
   T.App s (T.Void _ (K.Arrow _ _ k)) _ -> T.Void s k
     -- R-AppL
-  T.App s f ts -> T.App s (reduce tdecls f) ts
+  T.App s f ts -> T.App s (reduce' sub tdecls f) ts
 
   -- 4. Should not happen
   t -> internalError $ "Trying to reduce type " ++ bt(show t) ++ ", a " ++ (if isWhnf t then "" else " non ") ++  "whnf"
 
 -- | The weak head normal form of a type. Big-step semantics. A total function for
 -- well-formed types.
-normalise :: D.KindedTypeDecls -> T.KindedType -> T.KindedType
-normalise tdecls = norm Set.empty
+normalise :: KindSubst -> D.KindedTypeDecls -> T.KindedType -> T.KindedType
+normalise sub tdecls = norm Set.empty . chaseShapeTypeWith sub
   where
     norm :: Set.Set T.KindedType -> T.KindedType -> T.KindedType
     norm visited t
@@ -131,7 +140,7 @@ normalise tdecls = norm Set.empty
       -- N-Visited
       | reappears = T.Void (getSpan t) (T.kindOf t)
       -- N-NotVisited + N-NoMuRedex
-      | otherwise = norm visited' (reduce tdecls t)
+      | otherwise = norm visited' (reduce' sub tdecls t)
       where
         u = tNameRedex t -- u is Maybe (µ∗F)
         reappears = maybe False   (`Set.member` visited) u

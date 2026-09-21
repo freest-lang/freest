@@ -17,7 +17,7 @@ main = hspec spec
 spec :: Spec
 spec = mkTypeSpec
   ["test/unit/WellFormedTypes.test"] 
-  "normalise t == normalise (normalise t)" 
+  "normalise t == normalise mempty (normalise t)" 
   errorsAreFailures
   \src (t, mk, modl) -> 
     case do (kctx, modl') <- runKindModule modl
@@ -28,5 +28,5 @@ spec = mkTypeSpec
         if nt' == nnt' then return () 
         else expectationFailure (show nt' ++ "\n/=\n" ++ show nnt')-- `shouldBe` True
         where
-          nt'  = normalise (M.typeDecls modl') t' 
-          nnt' = normalise (M.typeDecls modl') nt'
+          nt'  = normalise mempty (M.typeDecls modl') t' 
+          nnt' = normalise mempty (M.typeDecls modl') nt'

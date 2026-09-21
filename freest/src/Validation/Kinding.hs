@@ -417,7 +417,7 @@ alignBinderKinds tdecls o = go Set.empty
   where
     go seen t u
       | (t, u) `Set.member` seen = pure ()
-      | otherwise = case (normalise tdecls t, normalise tdecls u) of
+      | otherwise = case (normalise mempty tdecls t, normalise mempty tdecls u) of
           (TK.AppQuant _ _ _ _ aks t', TK.AppQuant _ _ _ _ bks u')
             | length aks == length bks -> do
                 sequence_ [ equate k k' | ((_, k), (_, k')) <- zip aks bks ]
@@ -776,7 +776,7 @@ kindModule ctx mod = do
 boundBinderKinds :: D.KindedTypeDecls -> TK.KindedType -> TK.KindedType -> Validation ()
 boundBinderKinds tdecls = go
   where
-    go t u = case (normalise tdecls t, normalise tdecls u) of
+    go t u = case (normalise mempty tdecls t, normalise mempty tdecls u) of
       (TK.AppForall _ _ aks t', TK.AppForall _ _ bks u')
         | length aks == length bks -> do
             sequence_ [ bind k k'

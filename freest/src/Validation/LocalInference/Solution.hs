@@ -5,6 +5,8 @@
 -- variables are left alone.
 module Validation.LocalInference.Solution
   ( KindSolution(..)
+  , KindSubst
+  , chaseShapeTypeWith
   , resolveKind
   , resolveMult
   , resolveType
@@ -30,6 +32,11 @@ import Data.Bifunctor (bimap, first, second)
 import Data.Either (partitionEithers)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
+
+-- | The whole-kind substitution alone: what shape unification has settled so
+-- far. This is what a pure algorithm is threaded, the kind-level analogue of
+-- the type declarations it already carries.
+type KindSubst = Map.Map Variable Kind
 
 -- | A solution from kind inference: a binding for each sort of solvable
 -- variable, gathered from the three solvers.
@@ -157,6 +164,13 @@ resolveShapeType = resolveShapeTypeWith resolveShape
 -- | 'resolveShapeType' with 'resolveShapeOpen'.
 resolveShapeTypeOpen :: KindSolution -> TK.KindedType -> TK.KindedType
 resolveShapeTypeOpen = resolveShapeTypeWith resolveShapeOpen
+
+-- | Settle a type's kind shapes through a threaded substitution. The identity
+-- under 'mempty': 'resolveShapeOpen' returns a 'Proper' as it stands, recurses
+-- structurally through an 'Arrow', and leaves a solvable variable the map does
+-- not bind alone, while the walk rebuilds every node with its own constructor.
+chaseShapeTypeWith :: KindSubst -> TK.KindedType -> TK.KindedType
+chaseShapeTypeWith sub = resolveShapeTypeOpen (KindSolution sub mempty mempty)
 
 resolveShapeTypeWith :: (KindSolution -> Kind -> Kind) -> KindSolution -> TK.KindedType -> TK.KindedType
 resolveShapeTypeWith res sol = go

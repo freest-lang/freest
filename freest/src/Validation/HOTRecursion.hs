@@ -42,7 +42,7 @@ checkNoHOTRec tdecls = forM_ (Map.toList tdecls) checkNoHOTRecDecl
             []       []                   -> True
             (a : as) (T.Var _ _ _ b : ts) -> a == b && paramsEqToArgs as ts
             _      _                      -> False
-          t' = betaRule (snd $ tdecls Map.! i') ts
+          t' = betaRule mempty (snd $ tdecls Map.! i') ts
       T.Abs _ _ t -> checkNoHOTRecType v k i as t
       T.App _ t ts -> forM_ (t : ts) (checkNoHOTRecType v k i as)
       _ -> return ()

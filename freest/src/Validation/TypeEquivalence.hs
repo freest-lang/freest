@@ -117,7 +117,7 @@ word' = \case
   -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
     tdecls <- gets typeDecls
-    let u = normalise tdecls t
+    let u = normalise mempty tdecls t
     case u of
       -- W-μSkip, t normalises to Skip
       T.Skip{} -> pure []
@@ -147,7 +147,7 @@ word' = \case
       _ -> do
         -- W-τ, t reduces
         tdecls <- gets typeDecls
-        word (reduce tdecls t)
+        word (reduce mempty tdecls t)
 
 isProperType :: T.KindedType -> Bool
 isProperType t = case T.kindOf t of

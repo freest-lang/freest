@@ -22,6 +22,7 @@ import Syntax.Base
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Kind qualified as K
+import Validation.LocalInference.Solution ( KindSubst, chaseShapeTypeWith )
 
 import Data.Bifunctor (second)
 import Data.List qualified as List
@@ -58,18 +59,25 @@ allTypeVars = \case
 
 -- | Type substitution. Substitutes ocurrences of a variable in a type for 
 -- another type (usually written @[a -> u] t@).
-subs :: Variable -> TK.KindedType -> TK.KindedType -> TK.KindedType
-subs a u = \case
+--
+-- The kind substitution is the boundary: everything below this point reads a
+-- kind's shape without a state to chase it through, so both operands are
+-- settled here, once, on the way in. It is the identity under 'mempty'.
+subs :: KindSubst -> Variable -> TK.KindedType -> TK.KindedType -> TK.KindedType
+subs sub a u t = subs' a (chaseShapeTypeWith sub u) (chaseShapeTypeWith sub t)
+
+subs' :: Variable -> TK.KindedType -> TK.KindedType -> TK.KindedType
+subs' a u = \case
   -- 
-  TK.ForallM s m [] t' -> TK.ForallM  s m [] (subs a u t')
+  TK.ForallM s m [] t' -> TK.ForallM  s m [] (subs' a u t')
   TK.ForallM s m (φ : φs) t'
     | φ `Set.member` fmvu ->
       let s = getSpan φ
           φ' = mkFreshVar s (Set.insert φ fmvu `Set.union` allMultVarsType t')
-          TK.ForallM _ _ φs' t'' = subs a u (subsMultType ObjLv φ (K.VarM s ObjLv φ') (TK.ForallM s m φs t'))
+          TK.ForallM _ _ φs' t'' = subs' a u (subsMultType ObjLv φ (K.VarM s ObjLv φ') (TK.ForallM s m φs t'))
       in TK.ForallM s m (φ' : φs) t''
     | otherwise ->
-      let TK.ForallM _ _ φs' t'' = subs a u (TK.ForallM s m φs t')
+      let TK.ForallM _ _ φs' t'' = subs' a u (TK.ForallM s m φs t')
       in TK.ForallM s m (φ : φs') t''
     where fmvu = freeMultVars u
   -- Variables
@@ -77,39 +85,47 @@ subs a u = \case
     | b == a    -> u
     | otherwise -> t
   -- Abstractions (can we do this more elegantly?)
-  (TK.Abs s [] t') -> TK.Abs s [] (subs a u t')
+  (TK.Abs s [] t') -> TK.Abs s [] (subs' a u t')
   t@(TK.Abs s ((b,k):bks) t')
       | b == a -> t
       | b `Set.member` fvu ->
         let b' = mkFreshVar (getSpan b) (Set.insert a fvu `Set.union` allTypeVars t')
-            TK.Abs _ bks' t'' = subs a u (subs b (TK.fromVariable ObjLv b' k) (TK.Abs s bks t'))
+            TK.Abs _ bks' t'' = subs' a u (subs' b (TK.fromVariable ObjLv b' k) (TK.Abs s bks t'))
         in TK.Abs s ((b' , k) : bks') t''
       | otherwise ->
-        let TK.Abs _ bks' t'' = subs a u (TK.Abs s bks t')
+        let TK.Abs _ bks' t'' = subs' a u (TK.Abs s bks t')
         in TK.Abs s ((b, k) : bks') t''
     where  fvu = freeTypeVars u
   -- Applications
-  TK.App s f ts -> TK.smartApp s (subs a u f) (fmap (subs a u) ts)
+  TK.App s f ts -> TK.smartApp s (subs' a u f) (fmap (subs' a u) ts)
   t -> t
 
 -- Polyadic substituion (written @[as -> us] t@). Considers only the shortest
 -- between @as@ and @us@.
-subsAll :: [Variable] -> [TK.KindedType] -> TK.KindedType -> TK.KindedType
-subsAll as us t = foldr (uncurry subs) t (zip as us)
+subsAll :: KindSubst -> [Variable] -> [TK.KindedType] -> TK.KindedType -> TK.KindedType
+subsAll sub as us t = subsAll' as (map chase us) (chase t)
+  where chase = chaseShapeTypeWith sub
+
+subsAll' :: [Variable] -> [TK.KindedType] -> TK.KindedType -> TK.KindedType
+subsAll' as us t = foldr (uncurry subs') t (zip as us)
 
 -- | Type application, the beta rule.
 -- (λα1...αn. T) U1 ... Um -->β
 --     T[U1/α1]...[Un/αn]                  if n = m
 --     (T[U1/α1]...[Un/αn]) Un+1 ... Um    if m > n
 --     λαn+1...αm. T[U1/α1]...[Un/αn]      if n > m
-betaRule :: TK.KindedType -> [TK.KindedType] -> TK.KindedType
-betaRule (TK.Abs s aks t) us
+betaRule :: KindSubst -> TK.KindedType -> [TK.KindedType] -> TK.KindedType
+betaRule sub h hs = betaRule' (chase h) (map chase hs)
+  where chase = chaseShapeTypeWith sub
+
+betaRule' :: TK.KindedType -> [TK.KindedType] -> TK.KindedType
+betaRule' (TK.Abs s aks t) us
   | n == m    = v
   | m > n     = TK.App s v (drop n us)
   | otherwise = TK.Abs s (drop m aks) v
   where n = length aks
         m = length us
-        v = subsAll (map fst aks) us t
+        v = subsAll' (map fst aks) us t
 
 subsMultType :: VarLv -> Variable -> K.Multiplicity -> TK.KindedType -> TK.KindedType
 subsMultType lv φ m = \case

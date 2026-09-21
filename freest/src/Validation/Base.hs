@@ -45,7 +45,6 @@ import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import UI.Error
-import Validation.Substitution ( subs )
 import Compiler.Bug ( internalError )
 
 import Control.Monad.State ( State, MonadState, modify, gets, foldM, runState )

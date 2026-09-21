@@ -37,7 +37,7 @@ spec = mkTypeSpec
               -- (length (show u) `seq` pure (not whnf)))
               (\(x::ErrorCall) -> pure True)
             where
-              u' = reduce (M.typeDecls modl') t'
+              u' = reduce mempty (M.typeDecls modl') t'
               whnf = isWhnf t'
 
 showWhnf :: Bool -> String
