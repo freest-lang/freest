@@ -19,18 +19,11 @@ module Validation.Base
   , CallBound(..)
   , addCallBound
   , addMultParam
-  , escapeTypeVar
-  , escapedTypeVar
-  , bindEscapedTypeVar
-  , escapedTypeArgFixedAt
   , KindState(..)
   , peekKindState
   , takeKindState
   , Ground(..)
   , Obligation
-  , checkWhenSolved
-  , setKindSolution
-  , dischargeObligations
   , unfold
   )
 where
@@ -41,7 +34,7 @@ import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
 import Validation.LocalInference.Kinds ( KindUnifier(KindUnifier), unifyKindSubs )
-import Validation.LocalInference.Solution ( KindSolution(..), KindSubst, resolveKind, resolveMult, resolveType, resolveShapeTypeOpen, resolveShape, resolveShapeOpen )
+import Validation.LocalInference.Solution ( KindSolution(..), KindSubst, resolveShapeTypeOpen, resolveShape, resolveShapeOpen )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -227,60 +220,6 @@ data Ground = Ground
 -- The 'Ground' it is handed at discharge is what makes the kinds it captured
 -- readable.
 type Obligation = Ground -> Validation ()
-
--- | Record a kind-reading check to run once the solve is in, when the kinds it
--- would read are still variables. 'dischargeObligations' runs it.
-checkWhenSolved :: Obligation -> Validation ()
-checkWhenSolved chk = modify \s -> s{obligations = chk : obligations s}
-
--- | Record the solution kinding computed, for the deferred checks to read.
-setKindSolution :: KindSolution -> Validation ()
-setKindSolution sol = modify \s -> s{kindSolution = Just sol}
-
--- | Run every recorded check against the kind solution, in the order recorded,
--- and clear the queue.
-dischargeObligations :: Validation ()
-dischargeObligations = gets obligations >>= \case
-  []  -> return ()
-  obs -> gets kindSolution >>= \case
-    Nothing  -> internalError "kind obligations recorded before the solve"
-    Just sol -> do
-      modify \s -> s{obligations = []}
-      store <- gets typeStore
-      let ground = resolveType sol . zonkTypeStore store
-          g = Ground ground (resolveKind sol) (resolveMult sol) (Map.map (second ground))
-      mapM_ ($ g) (reverse obs)
-
-escapeTypeVar :: Variable -> Variable -> Set.Set Variable -> Validation ()
-escapeTypeVar iv x scope =
-  modify \s -> s{typeStore = Map.insertWith (\_ old -> old) iv (x, scope, Nothing) (typeStore s)}
-
-escapedTypeVar :: Variable -> Validation (Maybe (Variable, Set.Set Variable, Maybe (TK.KindedType, Span)))
-escapedTypeVar iv = gets (Map.lookup iv . typeStore)
-
--- | Bind an escaped type argument, keeping the span of the expression that fixed
--- it for 'escapedTypeArgFixedAt'.
-bindEscapedTypeVar :: Variable -> TK.KindedType -> Span -> Validation ()
-bindEscapedTypeVar iv t sp =
-  modify \s -> s{typeStore = Map.adjust (\(x, scope, _) -> (x, scope, Just (t, sp))) iv (typeStore s)}
-
--- | The variable whose escaped type argument was bound to a type at one of the
--- given spans, and where it was fixed. Error messages add that site: a type read
--- off the store is otherwise reported at the span it was declared at.
-escapedTypeArgFixedAt :: [Span] -> Validation (Maybe (Variable, Span))
-escapedTypeArgFixedAt sps = gets \s ->
-  case [ (x, sp) | (x, _, Just (u, sp)) <- Map.elems (typeStore s), getSpan u `elem` sps ] of
-    (r : _) -> Just r
-    []      -> Nothing
-
-zonkTypeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe (TK.KindedType, Span)) -> TK.KindedType -> TK.KindedType
-zonkTypeStore store = go Set.empty
-  where
-    go seen = \case
-      TK.Var _ _ InstLv iv | iv `Set.notMember` seen, Just (_, _, Just (u, _)) <- Map.lookup iv store -> go (Set.insert iv seen) u
-      TK.Abs s aks u -> TK.Abs s aks (go seen u)
-      TK.App s u us  -> TK.App s (go seen u) (map (go seen) us)
-      t -> t
 
 -- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
 addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()

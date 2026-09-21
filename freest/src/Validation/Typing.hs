@@ -32,6 +32,8 @@ import Syntax.Provenance ( Origin(..), Reason(..) )
 import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
+import Validation.Escape ( escapeTypeVar, escapedTypeArgFixedAt )
+import Validation.Obligation ( Ground(..), checkWhenSolved )
 import Validation.Expose qualified as Expose
 import Validation.Kinding ( KindCtx )
 import Validation.Kinding qualified as Kinding

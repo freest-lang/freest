@@ -9,7 +9,8 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, chaseShape, chaseShapeType, currentKindSubst, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
+import Validation.Base (Validation, chaseShape, chaseShapeType, currentKindSubst, incCounter, addKindConstraint, addMultEquation)
+import Validation.Escape (escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
 import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)

@@ -47,6 +47,7 @@ import Syntax.Type.Unkinded qualified as T
 import UI.Error
 import Compiler.Bug ( internalError )
 import Validation.Base
+import Validation.Obligation ( checkWhenSolved, setKindSolution )
 import Validation.Expose qualified as Expose
 import Validation.Normalisation
 import Validation.Substitution ( subs, subsAll, subsMultType, subsMultMult )
