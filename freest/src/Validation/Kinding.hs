@@ -9,6 +9,7 @@ This module implements FreeST's bidirectional kinding algorithm.
 module Validation.Kinding
   ( synth
   , synthShaped
+  , chaseShape
   , inferredBndKind
   , kindType
   , check
@@ -58,7 +59,7 @@ import Validation.LocalInference.Multiplicities
   , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds
   ( BaseKindConstraint(..), solveBaseKindConstraints, kindSubBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule, resolveShapeType, resolveShapeTypeOpen, resolveShape )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule, resolveShapeType, resolveShapeOpen, resolveShape )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
@@ -210,10 +211,9 @@ synth ctx = \case
       expectArrow :: Span -> Int -> TK.KindedType -> Validation TK.KindedType
       expectArrow s n = \case
         TK.Var vs (Var _ lv v) l a | solvable lv, n > 0 -> do
-          existing <- gets kindBindings
-          arrow <- case Map.lookup v existing of
-            Just k@Arrow{} -> pure k
-            _              -> do
+          arrow <- chaseShape (Var s lv v) >>= \case
+            k@Arrow{} -> pure k
+            _         -> do
               ps <- mapM (const (freshUnifKind s)) [1 .. n]
               r  <- freshUnifKind s
               let arrow = foldr (Arrow s) r ps
@@ -291,23 +291,14 @@ checkSession ctx t = checkBaseKind ctx t Session
 checkOperand :: KindCtx -> BaseKind -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
 checkOperand ctx req t = do
   t' <- synth ctx t
-  let o = Origin InSignature (getSpan t)
-  case TK.kindOf t' of
-    k@(Proper _ m bk)
-      | solvableBaseKind bk -> addBaseKindConstraint (SubBaseKind o bk req) >> return (m, bk, t')
-      | bk <: req       -> return (m, bk, t')
-      | otherwise       -> throwE (BaseKindMismatch (getSpan t) req t' k)
+  chaseShape (TK.kindOf t') >>= \case
+    k@(Proper _ m bk) -> (m, bk, t') <$ require t' k m bk
     Var _ lv a | solvable lv -> do
-      existing <- gets kindBindings
-      (m, bk) <- case Map.lookup a existing of
-        Just (Proper _ m bk) -> pure (m, bk)
-        _ -> do
-          m  <- freshUnifMult (getSpan t)
-          ψv <- freshUnifBaseKindVar (getSpan t)
-          let bk = VarBK UnifLv ψv
-          addKindBinding a (Proper (getSpan t) m bk)
-          addBaseKindConstraint (SubBaseKind o bk req)
-          pure (m, bk)
+      m  <- freshUnifMult (getSpan t)
+      ψv <- freshUnifBaseKindVar (getSpan t)
+      let bk = VarBK UnifLv ψv
+      addKindBinding a (Proper (getSpan t) m bk)
+      addBaseKindConstraint (SubBaseKind o bk req)
       -- carry the instantiated 'Proper' kind on the returned type rather than the
       -- bare solvable kind variable. A quantifier body that is exactly this
       -- variable (e.g. @exists a, a@, @?type a. a@) would otherwise reach a smart
@@ -317,6 +308,15 @@ checkOperand ctx req t = do
                   _               -> t'
       return (m, bk, t'')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
+  where
+    o = Origin InSignature (getSpan t)
+    -- the requirement holds whoever settled the shape: with one substitution in
+    -- the state the operand's kind may have been made proper by a constraint
+    -- from anywhere, and reusing that shape must not drop this demand on it
+    require t' k m bk
+      | solvableBaseKind bk = addBaseKindConstraint (SubBaseKind o bk req)
+      | bk <: req           = pure ()
+      | otherwise           = throwE (BaseKindMismatch (getSpan t) req t' k)
 
 -- | The greatest lower bound (@meetBaseKinds@) or least upper bound
 -- (@joinBaseKinds@) of operand baseKinds, computed eagerly when all are ground and
@@ -878,22 +878,22 @@ synthShaped ctx t = do
   sol <- currentShapes
   return (resolveShapeType sol kt)
 
--- | The shape solution over the constraints gathered so far.
+-- | Follow a kind through the state's substitution, /without/ rewriting it
+-- anywhere: the AST keeps the variable, so a constraint emitted later can still
+-- reach it. The dispatches that cannot face a whole-kind variable -- the
+-- irrefutable @Proper@ of the smart constructors, @isProper@ at an
+-- instantiation -- read through this instead of being handed a settled AST.
+chaseShape :: Kind -> Validation Kind
+chaseShape k = do
+  binds <- gets kindBindings
+  return (resolveShapeOpen (KindSolution binds Map.empty Map.empty) k)
+
+-- | The shapes settled so far: the state's own substitution, which every
+-- subkinding constraint has already been unified into ('addKindConstraint').
 currentShapes :: Validation KindSolution
 currentShapes = do
-  (binds, cs, _, _, _, _, _) <- peekKindState
-  i0 <- incCounter
-  case unifyKindSubs i0 binds cs of
-    Left _ -> return (KindSolution Map.empty Map.empty Map.empty)
-    Right (KindUnifier ksub _ _ i1) -> do
-      advanceCounter i1
-      -- keep the substitution: whatever shape is written into the AST names the
-      -- components 'instLike' invented, and those are defined by leaf
-      -- constraints this call discards. Seeding 'kindBindings' with them means
-      -- the final solve starts from the same bindings and re-derives those
-      -- constraints, instead of inventing a fresh set the AST never mentions.
-      mapM_ (uncurry addKindBinding) (Map.toList ksub)
-      return (KindSolution ksub Map.empty Map.empty)
+  (binds, _, _, _, _, _, _, _) <- peekKindState
+  return (KindSolution binds Map.empty Map.empty)
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
 -- apply the resulting solution to the kinded type. The entry point for kinding
@@ -922,10 +922,15 @@ provisionalKindSolution = do
   return sol
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom (binds, cs, meqs, pcs0, condmults, calls, params) = do
+solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params) = do
   i0 <- incCounter
-  KindUnifier ksub msubs pcs i1 <- either (throwE . unifyErr) pure (unifyKindSubs i0 binds cs)
+  -- @cs@ holds only what eager unification deferred; everything else is already
+  -- in @binds@, @msubs0@ and @pcs0@
+  KindUnifier ksub msubs1 pcs i1 <- either (throwE . unifyErr) pure (unifyKindSubs i0 binds cs)
   advanceCounter i1
+  -- emission order: 'earliest' blames the first bound emitted on a variable, and
+  -- the state keeps them newest-first as it does every other constraint list
+  let msubs = [MultSub m1 m2 o | (o, m1, m2) <- reverse msubs0 ++ msubs1]
   -- baseKinds first: the channel-conditional @;@ multiplicities depend on the left
   -- operand's baseKind, and baseKinds are independent of multiplicities
   psub <- either (throwE . preErr) pure (solveBaseKindConstraints (pcs ++ pcs0))

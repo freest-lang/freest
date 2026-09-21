@@ -35,6 +35,7 @@ import Syntax.Expression qualified as E
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
+import Validation.LocalInference.Kinds ( KindUnifier(KindUnifier), unifyKindSubs )
 import Validation.LocalInference.Solution ( KindSolution, resolveKind, resolveMult, resolveType )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
@@ -57,12 +58,17 @@ data ValidationState
   = ValidationState
     { errors  :: [Error]
     , counter :: Int
-    -- | Subkinding constraints @(o, k1, k2)@ meaning @k1 <: k2@, gathered during
-    -- kinding when a solvable variable is involved, and solved together.
+    -- | Subkinding constraints @(o, k1, k2)@ meaning @k1 <: k2@ that the unifier
+    -- could not decide when they were emitted, left for the final solve to
+    -- report on. Deciding one needs no more than the state below, so this is
+    -- the deferral escape, not the normal path.
     , kindConstraints :: [(Origin, K.Kind, K.Kind)]
-    -- | Direct whole-kind-variable bindings (e.g. a variable operand resolved to
-    -- a proper kind), seeding the unifier's substitution.
+    -- | The whole-kind substitution: one live map the walk unifies into and
+    -- every reader chases through, rather than a fresh unifier run per query.
     , kindBindings :: Map.Map Variable K.Kind
+    -- | The multiplicity half of the subkinding constraints the unifier has
+    -- decomposed: @(o, m1, m2)@ meaning @m1 <: m2@.
+    , multSubs :: [(Origin, K.Multiplicity, K.Multiplicity)]
     -- | Multiplicity equations @(o, m1, m2)@ meaning @m1 = m2@, emitted by
     -- multi-operand formers (e.g. the join of @;@).
     , multEquations :: [(Origin, K.Multiplicity, K.Multiplicity)]
@@ -92,6 +98,7 @@ emptyValidationState = ValidationState
   , counter = 0
   , kindConstraints = []
   , kindBindings = Map.empty
+  , multSubs = []
   , multEquations = []
   , baseKindConstraints = []
   , condSeqMults = []
@@ -123,10 +130,27 @@ advanceCounter c = modify \s -> s{counter = max c (counter s)}
 freshInternal :: Variable -> Validation Variable
 freshInternal x = incCounter >>= \i -> return x{internal = i}
 
--- | Record a subkinding constraint @k1 <: k2@ to be solved later.
+-- | Unify a subkinding constraint @k1 <: k2@ into the state's substitution now,
+-- leaving its multiplicity and baseKind leaves to their solvers. Shape is
+-- ordinary first-order unification, so it is decidable the moment the
+-- constraint is made, and deciding it here is what lets a reader chase a kind
+-- through 'kindBindings' instead of re-running the unifier over everything
+-- gathered so far.
+--
+-- A goal the unifier cannot decide is /deferred/ rather than thrown, its
+-- effects discarded: unifying eagerly must not turn a situation the global
+-- solve can still settle into a hard failure, and the final solve reports it.
 addKindConstraint :: Origin -> K.Kind -> K.Kind -> Validation ()
-addKindConstraint o k1 k2 =
-  modify \s -> s{kindConstraints = (o, k1, k2) : kindConstraints s}
+addKindConstraint o k1 k2 = do
+  i     <- gets counter
+  binds <- gets kindBindings
+  case unifyKindSubs i binds [(o, k1, k2)] of
+    Left _ -> modify \st -> st{kindConstraints = (o, k1, k2) : kindConstraints st}
+    Right (KindUnifier ksub msubs pcs i) -> modify \st -> st
+      { kindBindings = ksub
+      , multSubs = msubs ++ multSubs st
+      , baseKindConstraints = pcs ++ baseKindConstraints st
+      , counter = max i (counter st) }
 
 -- | Bind a whole-kind variable directly (seeds the unifier's substitution).
 addKindBinding :: Variable -> K.Kind -> Validation ()
@@ -235,6 +259,7 @@ type KindState =
   ( Map.Map Variable K.Kind
   , [(Origin, K.Kind, K.Kind)]
   , [(Origin, K.Multiplicity, K.Multiplicity)]
+  , [(Origin, K.Multiplicity, K.Multiplicity)]
   , [BaseKindConstraint]
   , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
   , [CallBound]
@@ -244,12 +269,12 @@ type KindState =
 -- place, for a solution that is not the last word on them.
 peekKindState :: Validation KindState
 peekKindState = gets \s ->
-  (kindBindings s, kindConstraints s, multEquations s, baseKindConstraints s, condSeqMults s, callBounds s, multParams s)
+  (kindBindings s, kindConstraints s, multEquations s, multSubs s, baseKindConstraints s, condSeqMults s, callBounds s, multParams s)
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
 takeKindState = peekKindState <* modify \st ->
-  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], baseKindConstraints = [], condSeqMults = [], callBounds = []}
+  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], multSubs = [], baseKindConstraints = [], condSeqMults = [], callBounds = []}
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

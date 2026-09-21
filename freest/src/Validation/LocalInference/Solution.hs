@@ -127,11 +127,10 @@ data Zonk = Zonk
 resolveShape :: KindSolution -> Kind -> Kind
 resolveShape = resolveShapeWith True
 
--- | 'resolveShape' for a zonk run /during/ the walk. It refuses a binding whose
--- components the unifier invented ('instLike', negative ids): those are defined
--- by leaf constraints the caller does not keep, so writing them into the AST
--- orphans them -- nothing can bind them and the final zonk defaults them to
--- @1T@. Such a variable is left alone for the final solve to settle.
+-- | The zonk for a read taken /during/ the walk: it follows the substitution as
+-- far as it goes and leaves a variable nothing has settled alone, so a
+-- constraint emitted later can still reach it. 'resolveShape' is the final one,
+-- which commits.
 resolveShapeOpen :: KindSolution -> Kind -> Kind
 resolveShapeOpen = resolveShapeWith False
 
@@ -142,26 +141,11 @@ resolveShapeWith final sol = go Set.empty
       k@Proper{}    -> k
       Arrow s k1 k2 -> Arrow s (go seen k1) (go seen k2)
       k@(Var s lv ψ)
-        | not (solvable lv)                      -> k
-        | ψ `Set.member` seen                    -> k
-        | Just k' <- Map.lookup ψ (kindVars sol)
-        , final || not (invented k')             -> go (Set.insert ψ seen) k'
-        | final                                  -> Proper s (Sup s [(lv, ψ)]) (VarBK lv ψ)
-        | otherwise                              -> k
-
--- | Does this kind mention a variable the unifier invented for itself?
-invented :: Kind -> Bool
-invented = \case
-  Proper _ m bk -> inM m || inB bk
-  Arrow _ a b   -> invented a || invented b
-  Var _ _ v     -> internal v < 0
-  where
-    inM = \case Sup _ as -> any ((< 0) . internal . snd) as; _ -> False
-    inB = \case
-      VarBK _ v  -> internal v < 0
-      MeetBK a b -> inB a || inB b
-      JoinBK a b -> inB a || inB b
-      _          -> False
+        | not (solvable lv)                 -> k
+        | ψ `Set.member` seen               -> k
+        | Just k' <- Map.lookup ψ (kindVars sol) -> go (Set.insert ψ seen) k'
+        | final                             -> Proper s (Sup s [(lv, ψ)]) (VarBK lv ψ)
+        | otherwise                         -> k
 
 -- | 'resolveShape' over every kind annotation in a type, rewritten in place.
 -- Unlike 'resolveType' this must not rebuild through the kinded smart

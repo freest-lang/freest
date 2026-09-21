@@ -49,24 +49,33 @@ applyBaseKindSubst sub = go
       bk                       -> bk
 
 -- | Solve a set of baseKind constraints, returning the most general unifier or
--- the first constraint with no solution. Every solvable baseKind variable is
--- seeded to the top (T) and lowered by meet until a fixpoint is reached; ground
--- and object-level (rigid) baseKinds are only checked.
+-- a constraint with no solution. Every solvable baseKind variable is seeded to
+-- the top (T) and lowered by meet until a fixpoint is reached; ground and
+-- object-level (rigid) baseKinds are only checked.
+--
+-- Lowering runs to its fixpoint /before/ anything is checked. A check reads the
+-- values the lowering constraints reach, and nothing orders a constraint set so
+-- that they come first -- checking as we go would report a constraint
+-- unsatisfiable on the strength of the seed rather than the solution.
 solveBaseKindConstraints :: BaseKindConstraints -> Either BaseKindConstraint BaseKindSubst
-solveBaseKindConstraints cs = go (Map.fromSet (const Top) (solvableVars cs))
+solveBaseKindConstraints cs = check (go (Map.fromSet (const Top) (solvableVars cs)))
   where
-    go sub = do
-      sub' <- foldM step sub cs
-      if sub' == sub then Right sub' else go sub'
+    go sub = let sub' = foldl' step sub cs in if sub' == sub then sub else go sub'
 
     step sub c = case c of
-      SubBaseKind _ (VarBK lv ψ) υ2 | solvable lv ->
-        Right (lower ψ (eval sub υ2) sub)
-      SubBaseKind _ υ1 υ2
-        | eval sub υ1 <: eval sub υ2 -> Right sub
-        | otherwise                  -> Left c
-      MeetBaseKind _ ψ υs -> Right (lower ψ (foldr (meet . eval sub) Top     υs) sub)
-      JoinBaseKind _ ψ υs -> Right (lower ψ (foldr (join . eval sub) Channel υs) sub)
+      SubBaseKind _ (VarBK lv ψ) υ2 | solvable lv -> lower ψ (eval sub υ2) sub
+      SubBaseKind{}        -> sub
+      MeetBaseKind _ ψ υs -> lower ψ (foldr (meet . eval sub) Top     υs) sub
+      JoinBaseKind _ ψ υs -> lower ψ (foldr (join . eval sub) Channel υs) sub
+
+    -- a lowering constraint defines its variable and so holds by construction;
+    -- every other subkinding constraint is a demand on the solution
+    check sub = case [ c | c@(SubBaseKind _ υ1 υ2) <- cs, not (lowering c)
+                         , not (eval sub υ1 <: eval sub υ2) ] of
+      (c : _) -> Left c
+      []      -> Right sub
+
+    lowering = \case SubBaseKind _ (VarBK lv _) _ -> solvable lv; _ -> False
 
     -- Lower ψ to the greatest lower bound of its current value and @v@.
     lower ψ v sub = Map.insert ψ (meet (Map.findWithDefault Top ψ sub) v) sub

@@ -15,7 +15,6 @@ module Validation.LocalInference.Kinds
 import Syntax.Base
 import Syntax.Kind (Kind(..), Multiplicity(..), BaseKind(..), pattern VarM)
 import Syntax.Provenance (Origin)
-import Validation.LocalInference.Multiplicities (MultSub(..), MultSubConstraints)
 import Validation.LocalInference.BaseKinds (BaseKindConstraints, BaseKindConstraint(..))
 
 import Control.Monad.State (StateT, runStateT, gets, modify, when)
@@ -26,7 +25,7 @@ import Data.Map.Strict qualified as Map
 -- leaf constraints to hand to the multiplicity and baseKind solvers.
 data KindUnifier = KindUnifier
   { kindSubst          :: Map.Map Variable Kind
-  , multSubConstraints :: MultSubConstraints
+  , multSubConstraints :: [(Origin, Multiplicity, Multiplicity)]
   , baseKindConstraints :: BaseKindConstraints
   , nextFresh          :: Int
   }
@@ -45,14 +44,13 @@ data UnifyError
 data Acc = Acc
   { counter :: !Int
   , kSub    :: Map.Map Variable Kind
-  , mCs     :: MultSubConstraints
+  , mCs     :: [(Origin, Multiplicity, Multiplicity)]
   , pCs     :: BaseKindConstraints
   }
 
 type U = StateT Acc (Either UnifyError)
 
--- | Unify two kinds related by @<:@, producing the whole-kind bindings and the
--- residual multiplicity/baseKind leaf constraints, or a 'UnifyError'.
+-- | Unify two kinds related by @<:@ on their own, from an empty substitution.
 unifyKindSub :: Int -> Origin -> Kind -> Kind -> Either UnifyError KindUnifier
 unifyKindSub i o k1 k2 = unifyKindSubs i Map.empty [(o, k1, k2)]
 
@@ -81,7 +79,7 @@ go o pol k1 k2 = do
     (Arrow _ d1 c1, Arrow _ d2 c2) ->  -- contravariant / covariant
       go o (dual pol) d2 d1 >> go o pol c1 c2
     (Proper _ m1 p1, Proper _ m2 p2) -> do
-      emitSub  (MultSub m1 m2 o)
+      emitSub  (o, m1, m2)
       emitPre  (SubBaseKind o p1 p2)
     _ -> mismatch k1' k2'
   where
@@ -139,7 +137,7 @@ occursCheck o a k = do
   occ <- occurs a k
   when occ do lift (Left (Occurs o a k))
 
-emitSub :: MultSub -> U ()
+emitSub :: (Origin, Multiplicity, Multiplicity) -> U ()
 emitSub c = modify \acc -> acc { mCs = c : mCs acc }
 
 emitPre :: BaseKindConstraint -> U ()
