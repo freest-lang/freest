@@ -730,7 +730,7 @@ checkInstKind sp θ (written, k0, ms, w) = do
   where
     t = LI.applySubs θ w
     go result = \cases
-      (K.Proper _ m1 _) (K.Proper _ m2 _) -> addCallBound (CallBound (Origin AtApp sp) result m1 m2 ms)
+      (K.Proper _ m1 _) (K.Proper _ m2 _) -> addCallBound (Origin AtApp sp) result m1 m2 ms
       (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) -> go (not result) k11 k21 >> go result k12 k22
       _ _ -> return ()
 

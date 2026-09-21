@@ -16,7 +16,7 @@ module Validation.Base
   , addBinderMultBound
   , addBaseKindConstraint
   , addCondSeqMult
-  , CallBound(..)
+  , MultConstraint(..)
   , addCallBound
   , addMultParam
   , KindState(..)
@@ -49,6 +49,30 @@ import Data.Bifunctor ( second )
 import Data.List.NonEmpty qualified as NE
 import Data.Set qualified as Set
 
+-- | What the walk says about multiplicities. One theory in five forms, kept in
+-- one list: the forms differ in shape and in when the solve can discharge
+-- them, not in which solver decides them.
+--
+-- Not to be confused with 'Validation.LocalInference.Multiplicities.MultEquations',
+-- which is the equation list that solver works on internally.
+data MultConstraint
+  -- | @m1 = m2@, from a multi-operand former such as the join of @;@.
+  = MEqual Origin K.Multiplicity K.Multiplicity
+  -- | @m1 <: m2@ -- the multiplicity half of a subkinding constraint the
+  -- unifier has decomposed.
+  | MBelow Origin K.Multiplicity K.Multiplicity
+  -- | @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, for a @;@ whose left
+  -- operand's baseKind υ₁ was still a variable. Waits on the baseKind solve.
+  | MCondSeq Origin K.BaseKind K.Multiplicity K.Multiplicity K.Multiplicity
+  -- | A call's bound between an argument's multiplicity and the binder kind's
+  -- it instantiates, whose solution the call's #m instantiations copy:
+  -- @arg <: binder@ on the result side of a kind (@True@), @binder <: arg@ on
+  -- a parameter side.
+  | MCall Origin Bool K.Multiplicity K.Multiplicity [(Variable, K.Multiplicity)]
+  -- | An inferred binder multiplicity admits what a written type argument
+  -- gives for it; the binder takes the join of all of them.
+  | MBinderJoin Origin Variable K.Multiplicity
+
 -- | The validation state. Keeps track of errors. Also stores declarations
 -- for easy lookup, but these are not supposed to change.
 data ValidationState
@@ -63,24 +87,14 @@ data ValidationState
     -- | The whole-kind substitution: one live map the walk unifies into and
     -- every reader chases through, rather than a fresh unifier run per query.
     , kindBindings :: KindSubst
-    -- | The multiplicity half of the subkinding constraints the unifier has
-    -- decomposed: @(o, m1, m2)@ meaning @m1 <: m2@.
-    , multSubs :: [(Origin, K.Multiplicity, K.Multiplicity)]
-    -- | Multiplicity equations @(o, m1, m2)@ meaning @m1 = m2@, emitted by
-    -- multi-operand formers (e.g. the join of @;@).
-    , multEquations :: [(Origin, K.Multiplicity, K.Multiplicity)]
+    -- | Everything the walk says about multiplicities, in emission order,
+    -- newest first. One theory, five forms; 'Validation.Kinding.solveFrom'
+    -- partitions them, and that partition is where its phase order lives.
+    , multConstraints :: [MultConstraint]
     -- | BaseKind constraints (meet/join/sub) emitted by multi-operand formers.
     , baseKindConstraints :: [BaseKindConstraint]
-    -- | Channel-conditional @;@ multiplicities @(o, υ₁, φ, m₁, m₂)@ meaning
-    -- @φ = if υ₁ = Channel then m₁ else m₁ ⊔ m₂@, deferred when the left operand's
-    -- baseKind υ₁ is still a variable; discharged once baseKinds are solved.
-    , condSeqMults :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-    , callBounds :: [CallBound]
     -- | A function's #m parameter and the signature binder it stands for.
     , multParams :: Map.Map Variable Variable
-    -- | Per inferred binder multiplicity, the join of what the written type
-    -- arguments given for it require (see 'addBinderMultBound').
-    , binderMultBounds :: Map.Map Variable (Origin, K.Multiplicity)
     -- | Instantiation variables left open when a binder received their type:
     -- the binder, the type variables in scope there, and the monotype bound once.
     , typeStore :: Map.Map Variable (Variable, Set.Set Variable, Maybe (TK.KindedType, Span))
@@ -98,13 +112,9 @@ emptyValidationState = ValidationState
   , counter = 0
   , kindConstraints = []
   , kindBindings = Map.empty
-  , multSubs = []
-  , multEquations = []
+  , multConstraints = []
   , baseKindConstraints = []
-  , condSeqMults = []
-  , callBounds = []
   , multParams = Map.empty
-  , binderMultBounds = Map.empty
   , typeStore = Map.empty
   , obligations = []
   , kindSolution = Nothing
@@ -149,7 +159,7 @@ addKindConstraint o k1 k2 = do
     Left _ -> modify \st -> st{kindConstraints = (o, k1, k2) : kindConstraints st}
     Right (KindUnifier ksub msubs pcs i) -> modify \st -> st
       { kindBindings = ksub
-      , multSubs = msubs ++ multSubs st
+      , multConstraints = [MBelow o m1 m2 | (o, m1, m2) <- msubs] ++ multConstraints st
       , baseKindConstraints = pcs ++ baseKindConstraints st
       , counter = max i (counter st) }
 
@@ -207,14 +217,14 @@ addKindBinding a k =
 -- say; with two it lands where writing the kind by hand would, since arrow
 -- kinds have upper bounds even when neither argument's kind is below the other.
 addBinderMultBound :: Origin -> Variable -> K.Multiplicity -> Validation ()
-addBinderMultBound o φ m =
-  modify \s -> s{binderMultBounds =
-    Map.insertWith (\_ (o', m') -> (o', K.join m m')) φ (o, m) (binderMultBounds s)}
+addBinderMultBound o φ m = emitMult (MBinderJoin o φ m)
 
 -- | Record a multiplicity equation @m1 = m2@.
 addMultEquation :: Origin -> K.Multiplicity -> K.Multiplicity -> Validation ()
-addMultEquation o m1 m2 =
-  modify \s -> s{multEquations = (o, m1, m2) : multEquations s}
+addMultEquation o m1 m2 = emitMult (MEqual o m1 m2)
+
+emitMult :: MultConstraint -> Validation ()
+emitMult c = modify \s -> s{multConstraints = c : multConstraints s}
 
 -- | Record a baseKind constraint.
 addBaseKindConstraint :: BaseKindConstraint -> Validation ()
@@ -237,37 +247,26 @@ data Ground = Ground
 -- readable.
 type Obligation = Ground -> Validation ()
 
--- | Record a channel-conditional @;@ multiplicity (see 'condSeqMults').
+-- | Record a channel-conditional @;@ multiplicity (see 'MCondSeq').
 addCondSeqMult :: Origin -> K.BaseKind -> K.Multiplicity -> K.Multiplicity -> K.Multiplicity -> Validation ()
-addCondSeqMult o bk φ m1 m2 =
-  modify \s -> s{condSeqMults = (o, bk, φ, m1, m2) : condSeqMults s}
+addCondSeqMult o bk φ m1 m2 = emitMult (MCondSeq o bk φ m1 m2)
 
--- | A call's bound between an argument's multiplicity and the binder kind's it
--- instantiates, whose solution the call's #m instantiations @ms@ copy:
--- @arg <: binder@ on the result side of a kind, @binder <: arg@ on a parameter side.
-data CallBound = CallBound Origin Bool K.Multiplicity K.Multiplicity [(Variable, K.Multiplicity)]
-
-addCallBound :: CallBound -> Validation ()
-addCallBound b = modify \s -> s{callBounds = b : callBounds s}
+addCallBound :: Origin -> Bool -> K.Multiplicity -> K.Multiplicity
+             -> [(Variable, K.Multiplicity)] -> Validation ()
+addCallBound o result m1 m2 ms = emitMult (MCall o result m1 m2 ms)
 
 -- | Record a function's #m parameter (see 'multParams').
 addMultParam :: Variable -> Variable -> Validation ()
 addMultParam φ φ' = modify \s -> s{multParams = Map.insert φ φ' (multParams s)}
 
 -- | Everything the kind solver reads: the bindings and each sort of constraint.
--- | Everything the solve reads, named. Two of these fields have the same type
--- and opposite meanings -- an equation constrains both sides, a sub bounds one
--- by the other -- so they are not to be told apart by position.
+-- | Everything the solve reads.
 data KindState = KindState
   { ksBindings   :: KindSubst
   , ksDeferred   :: [(Origin, K.Kind, K.Kind)]
-  , ksMultEqs    :: [(Origin, K.Multiplicity, K.Multiplicity)]
-  , ksMultSubs   :: [(Origin, K.Multiplicity, K.Multiplicity)]
+  , ksMults      :: [MultConstraint]
   , ksBaseKinds  :: [BaseKindConstraint]
-  , ksCondSeq    :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-  , ksCalls      :: [CallBound]
   , ksMultParams :: Map.Map Variable Variable
-  , ksBinderMult :: Map.Map Variable (Origin, K.Multiplicity)
   }
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in
@@ -276,19 +275,15 @@ peekKindState :: Validation KindState
 peekKindState = gets \s -> KindState
   { ksBindings   = kindBindings s
   , ksDeferred   = kindConstraints s
-  , ksMultEqs    = multEquations s
-  , ksMultSubs   = multSubs s
+  , ksMults      = multConstraints s
   , ksBaseKinds  = baseKindConstraints s
-  , ksCondSeq    = condSeqMults s
-  , ksCalls      = callBounds s
   , ksMultParams = multParams s
-  , ksBinderMult = binderMultBounds s
   }
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
 takeKindState = peekKindState <* modify \st ->
-  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], multSubs = [], baseKindConstraints = [], condSeqMults = [], callBounds = [], binderMultBounds = Map.empty}
+  st{kindConstraints = [], kindBindings = Map.empty, multConstraints = [], baseKindConstraints = []}
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 

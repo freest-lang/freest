@@ -947,14 +947,23 @@ provisionalKindSolution = do
   return sol
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMultEqs = meqs
-                   , ksMultSubs = msubs0, ksBaseKinds = pcs0, ksCondSeq = condmults
-                   , ksCalls = calls, ksMultParams = params, ksBinderMult = bmb } = do
+solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMults = mults
+                   , ksBaseKinds = pcs0, ksMultParams = params } = do
   i0 <- incCounter
   -- @cs@ holds only what eager unification deferred; everything else is already
   -- in @binds@, @msubs0@ and @pcs0@
   KindUnifier ksub msubs1 pcs i1 <- either (throwE . unifyErr) pure (unifyKindSubs i0 binds cs)
   advanceCounter i1
+  -- one list in, five forms out. Filtering keeps each form in the order the
+  -- walk emitted it, which is what the blame selection below reads.
+  let meqs      = [(o, m1, m2)        | MEqual o m1 m2 <- mults]
+      msubs0    = [(o, m1, m2)        | MBelow o m1 m2 <- mults]
+      condmults = [(o, bk, φ, m1, m2) | MCondSeq o bk φ m1 m2 <- mults]
+      calls     = [c                  | c@MCall{} <- mults]
+      -- the join is taken here rather than at each emission, over the emissions
+      -- in chronological order, so the origin kept is still the first recorded
+      bmb = List.foldl' (\acc (o, φ, m) -> Map.insertWith (\_ (o', m') -> (o', join m m')) φ (o, m) acc)
+              Map.empty (reverse [(o, φ, m) | MBinderJoin o φ m <- mults])
   -- emission order: 'earliest' blames the first bound emitted on a variable, and
   -- the state keeps them newest-first as it does every other constraint list
   let msubs = [MultSub m1 m2 o | (o, m1, m2) <- reverse msubs0 ++ msubs1]
@@ -969,7 +978,7 @@ solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMultEqs = meqs
                 >>= either (throwE . multErr) pure
   let bodySubs = [MultSub (applyMultSubst θ m1) (applyMultSubst θ m2) o | MultSub m1 m2 o <- msubs]
       copy σ' m ms = instantiate ms (applyMultSubst σ' (applyMultSubst θ m))
-      callSubs σ' = [MultSub (applyMultSubst θ a) (copy σ' b ms) o | CallBound o True a b ms <- calls]
+      callSubs σ' = [MultSub (applyMultSubst θ a) (copy σ' b ms) o | MCall o True a b ms <- calls]
       instantiate ms m = foldr (\(φ, m') -> subsMultMult ObjLv φ m') (asSignature m) ms
       asSignature = \case
         Sup s as -> Sup s [(lv, if lv == ObjLv then Map.findWithDefault φ φ params else φ) | (lv, φ) <- as]
@@ -984,7 +993,7 @@ solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMultEqs = meqs
       -- a binder forwarded to a callee's parameter must accept whatever that
       -- one does: the bound is on the argument side, so it lowers nothing in
       -- the descent and only the join sees it
-      forwarded σ' φ = [ copy σ' b ms | CallBound _ False a b ms <- calls, atom a == Just φ ]
+      forwarded σ' φ = [ copy σ' b ms | MCall _ False a b ms <- calls, atom a == Just φ ]
       lowers σ' φ = [ (applyMultSubst σ' l, (o, l)) | MultSub l r o <- bodySubs, atom r == Just φ ]
       -- the bound a variable's value came from: the join that raised it on the
       -- parameter side, else the meet that lowered it in the descent
@@ -1000,12 +1009,12 @@ solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMultEqs = meqs
       -- three blame spans -- so stamping each origin as it is recorded, and
       -- picking by that, belongs with the next work on error messages.
       earliest v ls = listToMaybe [ w | (m, w) <- ls, m == v ]
-      paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
+      paramSide = shrink [ φ | φ <- List.nub [ φ | MCall _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
                              , φ `notElem` elsewhere ]
       elsewhere = concat $
            [ nonAtom r | MultSub _ r _ <- bodySubs ]
-        ++ [ solvables (applyMultSubst θ a) ++ solvables (applyMultSubst θ b) ++ concatMap (solvables . snd) ms | CallBound _ True a b ms <- calls ]
-        ++ [ nonAtom a ++ concatMap (solvables . snd) ms | CallBound _ False a _ ms <- calls ]
+        ++ [ solvables (applyMultSubst θ a) ++ solvables (applyMultSubst θ b) ++ concatMap (solvables . snd) ms | MCall _ True a b ms <- calls ]
+        ++ [ nonAtom a ++ concatMap (solvables . snd) ms | MCall _ False a _ ms <- calls ]
       shrink c =
         let c' = [ φ | φ <- c, and [ atom r `elem` map Just c | MultSub l r _ <- bodySubs, not (isLin r), φ `elem` solvables l ] ]
         in if c' == c then c else shrink c'
@@ -1016,7 +1025,7 @@ solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMultEqs = meqs
       bounds = [(m1, [m1], m2, [m2], o) | MultSub m1 m2 o <- msubs]
             ++ [ let c = copy σ b ms in
                  if result then (a, [a], c, [c, b], o) else (c, [c, b], a, [a], o)
-               | CallBound o result a b ms <- calls ]
+               | MCall o result a b ms <- calls ]
       -- a use or an application explains a multiplicity, a signature only restates it;
       -- and a span other than the one already reported says more than repeating it
       -- search the call's instantiation and the callee's own binder: a use in the
