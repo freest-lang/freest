@@ -49,6 +49,8 @@ dependencies:
 
 library:
   source-dirs: src
+  ghc-options:
+    - -Wunused-top-binds
   build-tools:
     - alex
     - happy

@@ -209,6 +209,3 @@ pattern List s t <- T.List s _ _ t
 pattern Bool :: Unkinded x => Span -> T.Type x
 pattern Bool s <- T.Bool s _
   where Bool s = T.Bool s void
-
-fromVariable :: Unkinded x => Variable -> T.Type x
-fromVariable a = T.Var (varSpan a) void ObjLv a

@@ -74,8 +74,6 @@ type KindedType = T.Type Kinded
 type instance T.XType Typed = K.Kind
 type instance T.XBndKind Typed = K.Kind
 
-type TypedType = T.Type Typed
-
 pattern Int :: Span -> KindedType
 pattern Int s <- T.Int s _
   where Int s = T.Int s (K.ut s)

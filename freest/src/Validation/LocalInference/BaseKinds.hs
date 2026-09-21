@@ -11,7 +11,6 @@ module Validation.LocalInference.BaseKinds
   , applyBaseKindSubst
   , solveBaseKindConstraints
   , kindSubBaseKindConstraints
-  , kindEqBaseKindConstraints
   ) where
 
 import Syntax.Base
@@ -107,9 +106,3 @@ kindSubBaseKindConstraints o = \cases
   (K.Arrow _ k11 k12) (K.Arrow _ k21 k22) ->
     kindSubBaseKindConstraints o k21 k11 ++ kindSubBaseKindConstraints o k12 k22
   _ _ -> []
-
--- | Decompose a kind equality constraint @K1 = K2@ into baseKind constraints
--- (subkinding in both directions).
-kindEqBaseKindConstraints :: Origin -> K.Kind -> K.Kind -> BaseKindConstraints
-kindEqBaseKindConstraints o k1 k2 =
-  kindSubBaseKindConstraints o k1 k2 ++ kindSubBaseKindConstraints o k2 k1

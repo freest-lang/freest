@@ -10,6 +10,12 @@ scope (which, in turn, requires grouping function equations, detecting
 duplicate variable declarations, etc.).
 -}
 
+-- The scoping context offers a complete set of operations per namespace --
+-- TId/DId/CId/KSig and TVar/EVar/MVar -- and only some members of each family
+-- have a caller today. They are kept whole on purpose, so the warning is off
+-- for this module rather than the family cut down to whoever happens to use it.
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+
 module Parser.Scoping
   ( ScopingCtx
   , emptyScopingCtx

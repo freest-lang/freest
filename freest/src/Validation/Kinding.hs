@@ -17,10 +17,7 @@ module Validation.Kinding
   , neutralMults
   , deferBaseKindSub
   , alignBinderKinds
-  , checkProper
   , checkProperK
-  , checkBaseKind
-  , checkSession
   , checkChannel
   , isRestricted
   , boundMultBy
@@ -82,9 +79,6 @@ import Validation.HOTRecursion (checkNoHOTRec)
 
 -- | The kinding context. Keeps track of type variables and their kinds.
 type KindCtx = Map.Map (Either Variable Identifier) Kind
-
--- | Function signature context.
-type TypeCtx = Map.Map Variable TK.KindedType
 
 emptyKindCtx :: KindCtx
 emptyKindCtx = Map.empty
@@ -259,22 +253,10 @@ foldCheckProperJoin ctx m = foldM checkProperJoin (m, [])
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and baseKind. Otherwise, throw an error.
-checkProper :: KindCtx -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
-checkProper ctx t = synth ctx t >>= \t' -> chaseShape (TK.kindOf t') >>= \case
-    Proper _ mult bk -> pure (mult, bk, t')
-    k -> throwE (ProperKindMismatch (getSpan t) t' k)
-
--- | Check if a type is a proper type. If so, return its minimal multiplicity 
--- and baseKind. Otherwise, throw an error.
 checkProperK :: TK.KindedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
 checkProperK t = chaseShape (TK.kindOf t) >>= \case
     Proper _ m bk -> pure (m, bk, t)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
-
--- | Check if a type is a session type. If so, return its minimal multiplicity
--- and baseKind. Otherwise, throw an error.
-checkSession :: KindCtx -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
-checkSession ctx t = checkBaseKind ctx t Session
 
 -- | Like 'checkSession', but tolerant of a variable-kinded operand: a solvable
 -- whole-kind variable is resolved to a (fresh) proper session kind via gathered
@@ -338,22 +320,10 @@ combineBaseKinds op unit mkC s bks
       return (VarBK UnifLv ψv)
   where ground = not . solvableBaseKind
 
-checkSessionK :: TK.KindedType -> Validation (Multiplicity, BaseKind)
-checkSessionK t = checkBaseKindK t Session
-
 -- | Check if a type is a session type. If so, return its minimal multiplicity
 -- and baseKind. Otherwise, throw an error.
 checkChannel :: TK.KindedType -> Validation (Multiplicity, BaseKind) -- TODO: parsed version?
 checkChannel t = checkBaseKindK t Channel
-
--- | Check if a type is a proper type of the given baseKind. If so, return its 
--- minimal multiplicity and baseKind. Otherwise, throw an error.
-checkBaseKind :: KindCtx -> T.ScopedType -> BaseKind -> Validation (Multiplicity, BaseKind, TK.KindedType)
-checkBaseKind ctx t bk = do
-  (m, bk', kt) <- checkProper ctx t
-  unless (bk' <: bk) $
-    throwE (BaseKindMismatch (getSpan t) bk kt (TK.kindOf kt))
-  return (m, bk', kt)
 
 checkBaseKindK :: TK.KindedType -> BaseKind -> Validation (Multiplicity, BaseKind)
 checkBaseKindK t bk = do

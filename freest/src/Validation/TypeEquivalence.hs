@@ -218,14 +218,6 @@ addVisited t y = do
   -- trace ("Adding " ++ show t ++ " |-> " ++ show y ++ " to " ++ show v) $ return ()
   modify $ \s -> s { visited = Map.insert t y (visited s) }
 
-getTypeDecls :: TransState (D.KindedTypeDecls)
-getTypeDecls = gets typeDecls
-
--- TODO: Add only if needed
-addProduction :: Nonterminal -> Terminal -> Word -> TransState ()
-addProduction x a w =
-  modify $ \s -> s { productions = insertProduction x a w (productions s) }
-
 addProductions :: Nonterminal -> Transitions -> TransState ()
 addProductions x m =
   modify $ \s -> s { productions = Map.insert x m (productions s) }
@@ -253,24 +245,6 @@ getNonterminal ts = do
     reverseLookup :: Eq a => Ord k => a -> Map.Map k a -> Maybe k
     reverseLookup a =
       Map.foldrWithKey (\k b acc -> if a == b then Just k else acc) Nothing
-
--- | Fat terminal types can be compared for syntactic equality.
-fatTerminal :: T.KindedType -> Maybe T.KindedType
-fatTerminal = \case
-  -- Functional Types
-  t@T.Int{}   -> Just t
-  t@T.Float{} -> Just t
-  t@T.Char{}  -> Just t
-  t@T.Arrow{} -> Just t
-  -- Polymorphism
-  T.AppQuant s p bk m aks t -> Just (T.AppQuant s p bk m aks) <*> fatTerminal t
-  -- Higher-order
-  t@T.Var{}      -> Just t
-  T.App s t ts -> Just (T.App s) <*> fatTerminal t <*> mapM fatTerminal ts
-  -- Equations
-  t@T.DName{} -> Just t
-  -- Otherwise
-  _ -> Nothing
 
 showGrammar :: (Productions, [Word]) -> String
 showGrammar (ps, xss) =

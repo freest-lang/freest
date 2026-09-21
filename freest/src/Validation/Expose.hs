@@ -8,9 +8,6 @@ module Validation.Expose
   , input
   , typeOutput
   , typeInput
-  , externalChoice'
-  , message'
-  , typeMsg'
   , wait
   )
 where
@@ -49,16 +46,6 @@ arrow tdecls site t = do
   case normalise sub tdecls t of
     t'@(T.AppArrow s m u v) -> pure (m, u, v)
     t' -> throwE (ExposeError site "a monomorphic function" t t')
-
-exists :: D.KindedTypeDecls
-       -> ErrorSite
-       -> T.KindedType 
-       -> Validation ([(Variable, K.Kind)], T.KindedType)
-exists tdecls site t = do
-  sub <- currentKindSubst
-  case normalise sub tdecls t of
-    t'@(T.AppExists s aks u) -> pure (aks, u)
-    _ -> throwE (TypeMismatchExists (getSpan site) t site) 
 
 -- | Expose the continuation of an external choice matched by a @&l p@ pattern
 -- (linear) or a @*&l p@ pattern (unrestricted). An unrestricted choice makes no
