@@ -52,7 +52,6 @@ module Syntax.Type.Kinded
   , T.isAppQuant
   , T.isAppDName
   , kindOf
-  , isProper
   , smartApp
   , appSemiWithKind
   , appLinChoiceWithKind
@@ -291,9 +290,6 @@ kindOf = \case
   T.TName _ k _ -> k
   T.DName _ k _ -> k
   T.Void _ k _ -> k
-
-isProper :: KindedType -> Bool
-isProper = K.isProper . kindOf
 
 smartApp :: Span -> KindedType -> [KindedType] -> KindedType
 smartApp s (App x t ts) us = App s t (ts ++ us)

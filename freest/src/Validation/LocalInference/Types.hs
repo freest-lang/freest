@@ -9,7 +9,7 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, chaseShapeType, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
+import Validation.Base (Validation, chaseShape, chaseShapeType, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
 import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
@@ -52,6 +52,11 @@ match sp tdecls t1__ t2__ = do
 
   match'' sp tdecls bindings visited t1 t2 = do
     let fiv12 = fiv t1 `Set.union` fiv t2
+    -- the operands' shapes as the state has them: a declaration unfolded out of
+    -- 'tdecls' carries the kind the module gave it, which typing no longer
+    -- settles in advance
+    k1 <- chaseShape (T.kindOf t1)
+    k2 <- chaseShape (T.kindOf t2)
     case (t1, t2) of
       -- M-FIV
       _ | Set.null fiv12 && not (openKinds t1 || openKinds t2) -> return emptySubs
@@ -119,7 +124,7 @@ match sp tdecls t1__ t2__ = do
         foldMatch sp tdecls bindings visited θ t1s t2s
       -- M-Const (M-ArrowL/R)
       (T.App _ t1' t1s, T.App _ t2' t2s)
-        |  T.isProper t1 && T.isProper t2
+        |  K.isProper k1 && K.isProper k2
         && (  T.isAppArrow t1     && T.isAppArrow t2
            || T.isAppDName t1     && T.isAppDName t2
            || T.isAppLinChoice t1 && T.isAppLinChoice t2
@@ -144,7 +149,7 @@ match sp tdecls t1__ t2__ = do
               mcs = eqs ++ [multEq m1 m2 | p1 == Neg && bk1 == K.Top]
       -- M-Var
       (T.AppVar _ a1 _ ObjLv t1s, T.AppVar _ a2 _ ObjLv t2s)
-        | T.isProper t1 && T.isProper t2 && (a1, a2) `Set.member` bindings
+        | K.isProper k1 && K.isProper k2 && (a1, a2) `Set.member` bindings
         -> foldMatch sp tdecls bindings visited emptySubs t1s t2s
       (t1, t2)
       -- M-RedexL
@@ -156,10 +161,10 @@ match sp tdecls t1__ t2__ = do
         -> let visited' = Set.insert (fromJust $ tNameRedex t2) visited 
             in match' sp tdecls bindings visited' t1 (normalise tdecls t2)
       -- no matching for higher-kinded types
-        | not (T.isProper t1)
-        -> throwE (Error.CannotInferHigherKindedTypeApp sp (T.kindOf t1))
-        | not (T.isProper t2)
-        -> throwE (Error.CannotInferHigherKindedTypeApp sp (T.kindOf t2))
+        | not (K.isProper k1)
+        -> throwE (Error.CannotInferHigherKindedTypeApp sp k1)
+        | not (K.isProper k2)
+        -> throwE (Error.CannotInferHigherKindedTypeApp sp k2)
       -- M-ReduceL
         | not (isWhnf t1)
         -> match' sp tdecls bindings visited (reduce tdecls t1) t2

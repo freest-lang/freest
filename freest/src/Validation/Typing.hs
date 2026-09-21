@@ -713,7 +713,7 @@ checkInstKind sp θ (written, k0, ms, w) = do
   -- the binder kind as the state has it, not as the AST last had it: 'go' below
   -- pairs it up with the argument's structurally, and a whole-kind variable
   -- falls through its cases and emits nothing at all
-  k <- Kinding.chaseShape k0
+  k <- chaseShape k0
   checkInstBaseKind sp t k
   when written do
     -- a binder kind with nothing left to infer only /checks/ its argument, and
@@ -1179,7 +1179,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
       -- I-AllOther (also opens a trailing quantifier when instResult and args is [])
       (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
         let sp = case args of { [] -> s; (arg : rest) -> foldl spanFromTo (getSpan arg) rest }
-        k' <- Kinding.chaseShapeProper k
+        k' <- chaseShapeProper k
         unless (K.isProper k') do
           throwE (CannotInferHigherKindedTypeApp useSpan k')
         tiv <- LI.freshInstVarT sp k'

@@ -9,6 +9,8 @@ module Validation.Base
   , addKindConstraint
   , addKindBinding
   , chaseShapeType
+  , chaseShape
+  , chaseShapeProper
   , addMultEquation
   , addBinderMultBound
   , addBaseKindConstraint
@@ -38,7 +40,7 @@ import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
 import Validation.LocalInference.Kinds ( KindUnifier(KindUnifier), unifyKindSubs )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeTypeOpen )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeTypeOpen, resolveShape, resolveShapeOpen )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -163,6 +165,19 @@ addKindConstraint o k1 k2 = do
 -- alone, so this is the identity under an empty substitution.
 chaseShapeType :: TK.KindedType -> Validation TK.KindedType
 chaseShapeType t = gets \s -> resolveShapeTypeOpen (KindSolution (kindBindings s) mempty mempty) t
+
+-- | Follow a kind through the state's substitution, /without/ rewriting it
+-- anywhere: the AST keeps the variable, so a constraint emitted later can still
+-- reach it. The dispatches that cannot face a whole-kind variable -- the
+-- irrefutable @Proper@ of the smart constructors, @isProper@ at an
+-- instantiation -- read through this instead of being handed a settled AST.
+chaseShape :: K.Kind -> Validation K.Kind
+chaseShape k = gets \s -> resolveShapeOpen (KindSolution (kindBindings s) mempty mempty) k
+
+-- | 'chaseShape', defaulting a variable nothing has settled to the proper kind
+-- the final zonk gives it anyway. For a dispatch that must decide now.
+chaseShapeProper :: K.Kind -> Validation K.Kind
+chaseShapeProper k = gets \s -> resolveShape (KindSolution (kindBindings s) mempty mempty) k
 
 -- | Bind a whole-kind variable directly (seeds the unifier's substitution).
 addKindBinding :: Variable -> K.Kind -> Validation ()

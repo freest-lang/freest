@@ -8,8 +8,6 @@ This module implements FreeST's bidirectional kinding algorithm.
 
 module Validation.Kinding
   ( synth
-  , chaseShape
-  , chaseShapeProper
   , fixInferredBinderKind
   , kindType
   , check
@@ -59,7 +57,7 @@ import Validation.LocalInference.Multiplicities
   , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds
   ( BaseKindConstraint(..), solveBaseKindConstraints, kindSubBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule, resolveShapeType, resolveShapeOpen, resolveShape )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule, resolveShapeType )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
@@ -900,23 +898,6 @@ fixInferredBinderKind :: Span -> Kind -> Kind -> Validation ()
 fixInferredBinderKind sp k karg = chaseShape k >>= \case
   k'@Arrow{} | inferenceOwned k' -> fixKind (Origin AtApp sp) k' karg
   _                              -> pure ()
-
--- | Follow a kind through the state's substitution, /without/ rewriting it
--- anywhere: the AST keeps the variable, so a constraint emitted later can still
--- reach it. The dispatches that cannot face a whole-kind variable -- the
--- irrefutable @Proper@ of the smart constructors, @isProper@ at an
--- instantiation -- read through this instead of being handed a settled AST.
-chaseShape :: Kind -> Validation Kind
-chaseShape k = do
-  binds <- gets kindBindings
-  return (resolveShapeOpen (KindSolution binds Map.empty Map.empty) k)
-
--- | 'chaseShape', defaulting a variable nothing has settled to the proper kind
--- the final zonk gives it anyway. For a dispatch that must decide now.
-chaseShapeProper :: Kind -> Validation Kind
-chaseShapeProper k = do
-  binds <- gets kindBindings
-  return (resolveShape (KindSolution binds Map.empty Map.empty) k)
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
 -- apply the resulting solution to the kinded type. The entry point for kinding
