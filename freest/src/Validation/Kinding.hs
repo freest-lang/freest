@@ -1015,6 +1015,10 @@ solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params, bmb) = do
       -- is the one its own declaration imposes, which is where blame belongs — a
       -- later one only carries the same requirement in from somewhere else. Reorder
       -- the two phases and this picks the wrong end.
+      -- TODO: this, 'cause', 'blame' and 'ranked''s tiebreak all pick by list
+      -- position. Shuffling every constraint list changes no acceptance, only
+      -- three blame spans -- so stamping each origin as it is recorded, and
+      -- picking by that, belongs with the next work on error messages.
       earliest v ls = listToMaybe [ w | (m, w) <- ls, m == v ]
       paramSide = shrink [ φ | φ <- List.nub [ φ | CallBound _ False _ b _ <- calls, φ <- solvables (applyMultSubst θ b) ]
                              , φ `notElem` elsewhere ]
