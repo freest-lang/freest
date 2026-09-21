@@ -291,7 +291,7 @@ peekKindState = gets \s ->
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
 takeKindState = peekKindState <* modify \st ->
-  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], multSubs = [], baseKindConstraints = [], condSeqMults = [], callBounds = []}
+  st{kindConstraints = [], kindBindings = Map.empty, multEquations = [], multSubs = [], baseKindConstraints = [], condSeqMults = [], callBounds = [], binderMultBounds = Map.empty}
 
 -- | Run a validation procedure from an initial state, returning either:
 -- 
