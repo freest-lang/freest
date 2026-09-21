@@ -711,7 +711,11 @@ checkInstBaseKind sp t k = do
 checkInstKind :: Span -> LI.Substitution -> InstKind -> Validation ()
 checkInstKind sp θ (written, k, ms, w) = do
   checkInstBaseKind sp t k
-  when written (Kinding.fixInferredBinderKind sp k (T.kindOf t))
+  when written do
+    -- a binder kind with nothing left to infer only /checks/ its argument, and
+    -- says so precisely; one inference owns is what the argument settles
+    if Kinding.hasSolvableVar k then Kinding.fixInferredBinderKind sp k (T.kindOf t)
+                          else Kinding.checkK t k
   go True (T.kindOf t) k
   where
     t = LI.applySubs θ w
