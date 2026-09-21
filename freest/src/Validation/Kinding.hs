@@ -8,8 +8,8 @@ This module implements FreeST's bidirectional kinding algorithm.
 
 module Validation.Kinding
   ( synth
-  , synthShaped
   , chaseShape
+  , chaseShapeProper
   , fixInferredBinderKind
   , kindType
   , check
@@ -893,12 +893,6 @@ kindSignatures tdecls ctx = foldM decl Map.empty
         sigs <$ sequence_ (boundBinderKinds tdecls <$> sigs Map.!? x <*> sigs Map.!? v)
       _ -> return sigs
 
-synthShaped :: KindCtx -> T.ScopedType -> Validation TK.KindedType
-synthShaped ctx t = do
-  kt <- synth ctx t
-  sol <- currentShapes
-  return (resolveShapeType sol kt)
-
 -- | Fix a binder kind inference owns to the kind of a type argument written for
 -- it. A written binder kind /bounds/ its arguments and the call bounds carry
 -- that; an inferred one has nothing else to say what it is, and before the
@@ -919,17 +913,17 @@ fixInferredBinderKind sp k karg = chaseShape k >>= \case
 -- reach it. The dispatches that cannot face a whole-kind variable -- the
 -- irrefutable @Proper@ of the smart constructors, @isProper@ at an
 -- instantiation -- read through this instead of being handed a settled AST.
+-- | 'chaseShape', defaulting a variable nothing has settled to the proper kind
+-- the final zonk gives it anyway. For a dispatch that must decide now.
+chaseShapeProper :: Kind -> Validation Kind
+chaseShapeProper k = do
+  binds <- gets kindBindings
+  return (resolveShape (KindSolution binds Map.empty Map.empty) k)
+
 chaseShape :: Kind -> Validation Kind
 chaseShape k = do
   binds <- gets kindBindings
   return (resolveShapeOpen (KindSolution binds Map.empty Map.empty) k)
-
--- | The shapes settled so far: the state's own substitution, which every
--- subkinding constraint has already been unified into ('addKindConstraint').
-currentShapes :: Validation KindSolution
-currentShapes = do
-  (binds, _, _, _, _, _, _, _, _) <- peekKindState
-  return (KindSolution binds Map.empty Map.empty)
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
 -- apply the resulting solution to the kinded type. The entry point for kinding

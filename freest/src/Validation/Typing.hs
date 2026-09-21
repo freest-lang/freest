@@ -213,7 +213,7 @@ elabArgs :: KindCtx -> [Level E.ScopedExp TU.ScopedType K.Multiplicity]
          -> Validation [Level E.ScopedExp T.KindedType K.Multiplicity]
 elabArgs kctx = mapM \case
   ExpLevel e  -> pure (ExpLevel e)
-  TypeLevel t -> TypeLevel <$> Kinding.synthShaped kctx t
+  TypeLevel t -> TypeLevel <$> Kinding.synth kctx t
   MultLevel m -> pure (MultLevel m)
 
 -- | Re-level the arguments an instantiation with no value arguments produced:
@@ -260,7 +260,7 @@ synth tdecls ddecls kctx tctx = \case
     case as of
       [] -> throwE (CannotSynthesiseSendType s)
       (ExpLevel e : as') -> do
-        u' <- Kinding.synthShaped kctx u
+        u' <- Kinding.synth kctx u
         (e', v, tctx') <- synth tdecls ddecls kctx tctx e
         (a, _, v') <- Expose.typeOutput tdecls (siteOf e) v
         as2 <- elabArgs kctx as'
@@ -288,7 +288,7 @@ synth tdecls ddecls kctx tctx = \case
   e@(E.Abs s ps m e') -> do
     ps' <- forM ps \case
       ExpLevel (pi, Nothing) -> throwE (CannotSynthesisePat (getSpan pi))
-      ExpLevel (pi, Just ti) -> ExpLevel . (pi,) <$> Kinding.synthShaped kctx ti
+      ExpLevel (pi, Just ti) -> ExpLevel . (pi,) <$> Kinding.synth kctx ti
       TypeLevel ak           -> TypeLevel <$> Kinding.resolveExpBndKind ak
       MultLevel phi          -> pure (MultLevel phi)
     synthAbs tdecls ddecls kctx tctx s m e' (siteOf e) ps'
@@ -306,7 +306,7 @@ synth tdecls ddecls kctx tctx = \case
       _ -> throwE (CannotSynthesiseSection s op)
   E.Pack s ts e -> throwE (CannotSynthesisePack s)
   E.Asc s e t -> do
-    t' <- Kinding.synthShaped kctx t
+    t' <- Kinding.synth kctx t
     (e', tctx') <- check tdecls ddecls kctx tctx e t'
     return (E.Asc s e' t', t', tctx')
   E.Let s ds e -> do
@@ -332,7 +332,7 @@ synth tdecls ddecls kctx tctx = \case
     checkEquivTypeCtxsCase (AtIfExp s) [tctx2, tctx3]
     return (E.If s e1' e2' e3', t2, tctx2)
   E.Channel s t -> do
-    t' <- Kinding.synthShaped kctx t
+    t' <- Kinding.synth kctx t
     Kinding.checkChannel t'
     pure (E.Channel s t', T.Tuple s [t', T.AppDual s t'], tctx)
   E.Select s m i -> do
@@ -478,7 +478,7 @@ check tdecls ddecls kctx tctx e t = case e of
       (ExpLevel e' : args') -> do
         (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
         (a, k, v') <- Expose.typeOutput tdecls (siteOf e') v
-        u' <- Kinding.synthShaped kctx u
+        u' <- Kinding.synth kctx u
         Kinding.checkK u' k
         args2 <- elabArgs kctx args'
         (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs a u' v') args2
@@ -520,7 +520,7 @@ check tdecls ddecls kctx tctx e t = case e of
               _                     -> K.Un s
     check tdecls ddecls kctx tctx (E.Abs s [ExpLevel (E.VarPat s x, Nothing)] q body) t
   E.Pack s ts e' -> do
-    ts' <- mapM (Kinding.synthShaped kctx) ts
+    ts' <- mapM (Kinding.synth kctx) ts
     case normalise tdecls t of
       T.AppExists _ aks t' -> first (E.Pack s ts') <$> checkPack ts' aks t'
         where
@@ -538,7 +538,7 @@ check tdecls ddecls kctx tctx e t = case e of
             checkPack tsi' aksi' (subs ai ti u)
       _ -> throwE (TypeMismatchExists s t (siteOf e'))
   E.Asc s e u -> do
-    u' <- Kinding.synthShaped kctx u
+    u' <- Kinding.synth kctx u
     checkEquivTypes tdecls ddecls (siteOf e) t u'
     (e', tctx') <- check tdecls ddecls kctx tctx e u'
     return (E.Asc s e' u', tctx')
@@ -562,7 +562,7 @@ check tdecls ddecls kctx tctx e t = case e of
     checkEquivTypeCtxsCase (AtIfExp s) [tctx2, tctx3]
     return (E.If s e1' e2' e3', tctx2)
   E.Channel s u -> do
-    u' <- Kinding.synthShaped kctx u
+    u' <- Kinding.synth kctx u
     Kinding.checkChannel u'
     case normalise tdecls t of
       T.Tuple _ [t1,t2] -> do
@@ -582,7 +582,7 @@ check tdecls ddecls kctx tctx e t = case e of
         return (E.Select s mi i, tctx)
       _ -> throwE (TypeMismatchSelect s mi t i)
   E.SendType s u -> do
-    u' <- Kinding.synthShaped kctx u
+    u' <- Kinding.synth kctx u
     case normalise tdecls t of
       T.AppArrow s' m t1 t2 -> do
         case normalise tdecls t1 of
@@ -626,7 +626,7 @@ checkDecls tdecls ddecls kctx tctx sigs = foldM checkDecl ([], Map.empty, kctx, 
         -- one in a local @let@ or @where@ is the expression walk's own
         t' <- case [u | x <- xs, Just u <- [sigs Map.!? x]] of
           (u : _) -> pure u
-          []      -> Kinding.synthShaped kctxi t
+          []      -> Kinding.synth kctxi t
         Kinding.checkProperK t'
         let tctxsig = Map.fromList (map ((,t') . Left) xs)
         return ( List.snoc ds (E.TypeSig xs t')
@@ -828,7 +828,7 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
           return (rhs', TypeLevel (ai, bki) : ps3, tctxi')
         (ExpLevel  (pi, mti) : ps'', t''@(T.AppArrow s' m u v)) -> do
           mti' <- forM mti \ti -> do
-            ti' <- Kinding.synthShaped kctxi ti
+            ti' <- Kinding.synth kctxi ti
             Kinding.checkProperK ti'
             checkEquivTypes tdecls ddecls (AtPat (getSpan pi)) ti' u
             return ti'
@@ -1179,9 +1179,10 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
       -- I-AllOther (also opens a trailing quantifier when instResult and args is [])
       (T.AppForall s m ((a, k) : aks) t1, args) | not (null args) || instResult -> do
         let sp = case args of { [] -> s; (arg : rest) -> foldl spanFromTo (getSpan arg) rest }
-        unless (K.isProper k) do
-          throwE (CannotInferHigherKindedTypeApp useSpan k)
-        tiv <- LI.freshInstVarT sp k
+        k' <- Kinding.chaseShapeProper k
+        unless (K.isProper k') do
+          throwE (CannotInferHigherKindedTypeApp useSpan k')
+        tiv <- LI.freshInstVarT sp k'
         (args'', kivs, θ, us, u) <- instantiate' (succ i) (subs a tiv (T.AppForall s m aks t1)) ms ((False, k, ms, tiv) : kivs) args
         return (TypeLevel tiv : args'', kivs, θ, us, u)
       -- I-AllMMult
@@ -1241,7 +1242,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 (ExpLevel e : args') -> do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                   (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
-                  t0' <- Kinding.synthShaped kctx t0
+                  t0' <- Kinding.synth kctx t0
                   args2 <- elabArgs kctx args'
                   (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs a t0' t2) args2
                   advise e t3

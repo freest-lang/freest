@@ -9,7 +9,7 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
+import Validation.Base (Validation, chaseShapeType, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
 import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
@@ -37,7 +37,10 @@ import Data.Set qualified as Set
 match :: Span -> D.KindedTypeDecls
       -> T.KindedType -> T.KindedType
       -> Validation Substitution
-match sp tdecls = match' sp tdecls Set.empty Set.empty
+match sp tdecls t1__ t2__ = do
+  t1z <- chaseShapeType t1__
+  t2z <- chaseShapeType t2__
+  match' sp tdecls Set.empty Set.empty t1z t2z
   where
   emit = mapM_ \(MultEquation l _ r _) -> addMultEquation (Origin AtApp sp) l r
 

@@ -8,6 +8,7 @@ module Validation.Base
   , freshInternal
   , addKindConstraint
   , addKindBinding
+  , chaseShapeType
   , addMultEquation
   , addBinderMultBound
   , addBaseKindConstraint
@@ -37,7 +38,7 @@ import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
 import Validation.LocalInference.Kinds ( KindUnifier(KindUnifier), unifyKindSubs )
-import Validation.LocalInference.Solution ( KindSolution, resolveKind, resolveMult, resolveType )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeTypeOpen )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -156,6 +157,12 @@ addKindConstraint o k1 k2 = do
       , multSubs = msubs ++ multSubs st
       , baseKindConstraints = pcs ++ baseKindConstraints st
       , counter = max i (counter st) }
+
+-- | Settle a type's kind shapes through the state's substitution, for a pure
+-- algorithm that cannot chase one itself. Leaves a variable nothing has settled
+-- alone, so this is the identity under an empty substitution.
+chaseShapeType :: TK.KindedType -> Validation TK.KindedType
+chaseShapeType t = gets \s -> resolveShapeTypeOpen (KindSolution (kindBindings s) mempty mempty) t
 
 -- | Bind a whole-kind variable directly (seeds the unifier's substitution).
 addKindBinding :: Variable -> K.Kind -> Validation ()
