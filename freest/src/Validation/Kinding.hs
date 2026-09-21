@@ -57,7 +57,7 @@ import Validation.LocalInference.Multiplicities
   , solveMultConstraints, solvables )
 import Validation.LocalInference.BaseKinds
   ( BaseKindConstraint(..), solveBaseKindConstraints, kindSubBaseKindConstraints )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeModule, resolveShapeType )
+import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType )
 import Validation.LocalInference.Substitution
   ( Substitution(..), applySubs, emptySubs, freshInstVarT, freshInstVarM )
 
@@ -432,12 +432,18 @@ alignBinderKinds tdecls o = go Set.empty
           _ -> pure ()
       where seen' = Set.insert (t, u) seen
 
-    equate (Proper _ m1 bk1) (Proper _ m2 bk2) = do
-      when (solvableBaseKind bk1 || solvableBaseKind bk2) $
-        mapM_ addBaseKindConstraint [SubBaseKind o bk1 bk2, SubBaseKind o bk2 bk1]
-      when (solvableMult m1 || solvableMult m2) $
-        addMultEquation o m1 m2
-    equate _ _ = pure ()
+    -- committing, like 'checkInstKind': the pair below is what emits anything
+    -- at all, so a binder kind nothing has settled must be read as proper over
+    -- components named after it rather than left a whole-kind variable that
+    -- falls through
+    equate k1 k2 = chaseShapeProper k1 >>= \k1' -> chaseShapeProper k2 >>= \k2' ->
+      case (k1', k2') of
+        (Proper _ m1 bk1, Proper _ m2 bk2) -> do
+          when (solvableBaseKind bk1 || solvableBaseKind bk2) $
+            mapM_ addBaseKindConstraint [SubBaseKind o bk1 bk2, SubBaseKind o bk2 bk1]
+          when (solvableMult m1 || solvableMult m2) $
+            addMultEquation o m1 m2
+        _ -> pure ()
 
 -- | Is a multiplicity one a solvable (inference) variable takes part in?
 solvableMult :: Multiplicity -> Bool
@@ -621,10 +627,11 @@ kindModule ctx mod = do
                  , M.definitions  = []
                  }
       ctxOut = Map.union (Map.mapKeys Right inferredSigs) ctx'
-  -- shapes only: typing must face both components unsolved, but not a kind it
-  -- cannot dispatch on. 'Compiler.Pipeline' applies the rest at the end
-  return ( ctxOut, resolveShapeModule sol mod', M.definitions mod
-         , Map.map (resolveShapeType sol) sigs )
+  -- nothing is written into the module: every reader of a kind's shape chases
+  -- the state's substitution instead, so a variable a later constraint still
+  -- reaches is not replaced by the answer that happened to hold here.
+  -- 'Compiler.Pipeline' applies the whole solution at the end
+  return (ctxOut, mod', M.definitions mod, sigs)
   where
     declParams hp t = if hp then (case t of T.Abs _ aks _ -> map snd aks; _ -> []) else []
 

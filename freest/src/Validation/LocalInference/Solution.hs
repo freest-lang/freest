@@ -11,8 +11,6 @@ module Validation.LocalInference.Solution
   , resolveMult
   , resolveType
   , resolveModule
-  , resolveShapeModule
-  , resolveShapeType
   , resolveShapeTypeOpen
   , resolveShapeOpen
   , resolveShape
@@ -154,14 +152,10 @@ resolveShapeWith final sol = go Set.empty
         | final                             -> Proper s (Sup s [(lv, ψ)]) (VarBK lv ψ)
         | otherwise                         -> k
 
--- | 'resolveShape' over every kind annotation in a type, rewritten in place.
--- Unlike 'resolveType' this must not rebuild through the kinded smart
+-- | 'resolveShapeOpen' over every kind annotation in a type, rewritten in
+-- place. Unlike 'resolveType' this must not rebuild through the kinded smart
 -- constructors: theirs are derived kinds, and the components they meet and join
 -- are still variables at this point.
-resolveShapeType :: KindSolution -> TK.KindedType -> TK.KindedType
-resolveShapeType = resolveShapeTypeWith resolveShape
-
--- | 'resolveShapeType' with 'resolveShapeOpen'.
 resolveShapeTypeOpen :: KindSolution -> TK.KindedType -> TK.KindedType
 resolveShapeTypeOpen = resolveShapeTypeWith resolveShapeOpen
 
@@ -199,12 +193,6 @@ resolveShapeTypeWith res sol = go
 -- | Apply the whole solution to a module.
 resolveModule :: KindSolution -> M.KindedModule -> M.KindedModule
 resolveModule sol = zonkModule (Zonk (resolveKind sol) (resolveType sol))
-
--- | Apply the shapes alone, which is what typing dispatches on; both components
--- stay symbolic, so neither is decided before the expressions that constrain it
--- have been walked. 'Compiler.Pipeline' applies the rest once typing is done.
-resolveShapeModule :: KindSolution -> M.KindedModule -> M.KindedModule
-resolveShapeModule sol = zonkModule (Zonk (resolveShape sol) (resolveShapeType sol))
 
 -- | Walk every kind annotation in a kinded module — type declarations, kind
 -- signatures, datatypes, and definitions — with the given resolvers.
