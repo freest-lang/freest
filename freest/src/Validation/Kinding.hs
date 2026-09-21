@@ -938,7 +938,9 @@ provisionalKindSolution = do
   return sol
 
 solveFrom :: KindState -> Validation KindSolution
-solveFrom (binds, cs, meqs, msubs0, pcs0, condmults, calls, params, bmb) = do
+solveFrom KindState{ ksBindings = binds, ksDeferred = cs, ksMultEqs = meqs
+                   , ksMultSubs = msubs0, ksBaseKinds = pcs0, ksCondSeq = condmults
+                   , ksCalls = calls, ksMultParams = params, ksBinderMult = bmb } = do
   i0 <- incCounter
   -- @cs@ holds only what eager unification deferred; everything else is already
   -- in @binds@, @msubs0@ and @pcs0@

@@ -23,7 +23,7 @@ module Validation.Base
   , escapedTypeVar
   , bindEscapedTypeVar
   , escapedTypeArgFixedAt
-  , KindState
+  , KindState(..)
   , peekKindState
   , takeKindState
   , Ground(..)
@@ -300,22 +300,35 @@ addMultParam :: Variable -> Variable -> Validation ()
 addMultParam φ φ' = modify \s -> s{multParams = Map.insert φ φ' (multParams s)}
 
 -- | Everything the kind solver reads: the bindings and each sort of constraint.
-type KindState =
-  ( Map.Map Variable K.Kind
-  , [(Origin, K.Kind, K.Kind)]
-  , [(Origin, K.Multiplicity, K.Multiplicity)]
-  , [(Origin, K.Multiplicity, K.Multiplicity)]
-  , [BaseKindConstraint]
-  , [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
-  , [CallBound]
-  , Map.Map Variable Variable
-  , Map.Map Variable (Origin, K.Multiplicity) )
+-- | Everything the solve reads, named. Two of these fields have the same type
+-- and opposite meanings -- an equation constrains both sides, a sub bounds one
+-- by the other -- so they are not to be told apart by position.
+data KindState = KindState
+  { ksBindings   :: KindSubst
+  , ksDeferred   :: [(Origin, K.Kind, K.Kind)]
+  , ksMultEqs    :: [(Origin, K.Multiplicity, K.Multiplicity)]
+  , ksMultSubs   :: [(Origin, K.Multiplicity, K.Multiplicity)]
+  , ksBaseKinds  :: [BaseKindConstraint]
+  , ksCondSeq    :: [(Origin, K.BaseKind, K.Multiplicity, K.Multiplicity, K.Multiplicity)]
+  , ksCalls      :: [CallBound]
+  , ksMultParams :: Map.Map Variable Variable
+  , ksBinderMult :: Map.Map Variable (Origin, K.Multiplicity)
+  }
 
 -- | Read the accumulated kinding constraints and bindings, leaving them in
 -- place, for a solution that is not the last word on them.
 peekKindState :: Validation KindState
-peekKindState = gets \s ->
-  (kindBindings s, kindConstraints s, multEquations s, multSubs s, baseKindConstraints s, condSeqMults s, callBounds s, multParams s, binderMultBounds s)
+peekKindState = gets \s -> KindState
+  { ksBindings   = kindBindings s
+  , ksDeferred   = kindConstraints s
+  , ksMultEqs    = multEquations s
+  , ksMultSubs   = multSubs s
+  , ksBaseKinds  = baseKindConstraints s
+  , ksCondSeq    = condSeqMults s
+  , ksCalls      = callBounds s
+  , ksMultParams = multParams s
+  , ksBinderMult = binderMultBounds s
+  }
 
 -- | Read and clear all accumulated kinding constraints and bindings.
 takeKindState :: Validation KindState
