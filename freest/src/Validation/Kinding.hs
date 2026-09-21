@@ -261,14 +261,14 @@ foldCheckProperJoin ctx m = foldM checkProperJoin (m, [])
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and baseKind. Otherwise, throw an error.
 checkProper :: KindCtx -> T.ScopedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
-checkProper ctx t = synth ctx t >>= \t' -> case TK.kindOf t' of
+checkProper ctx t = synth ctx t >>= \t' -> chaseShape (TK.kindOf t') >>= \case
     Proper _ mult bk -> pure (mult, bk, t')
     k -> throwE (ProperKindMismatch (getSpan t) t' k)
 
 -- | Check if a type is a proper type. If so, return its minimal multiplicity 
 -- and baseKind. Otherwise, throw an error.
 checkProperK :: TK.KindedType -> Validation (Multiplicity, BaseKind, TK.KindedType)
-checkProperK t = case TK.kindOf t of
+checkProperK t = chaseShape (TK.kindOf t) >>= \case
     Proper _ m bk -> pure (m, bk, t)
     k -> throwE (ProperKindMismatch (getSpan t) t k)
 
@@ -865,13 +865,6 @@ boundMultBy site m = \case
 -- its field types at the scrutinee's type arguments, mirroring 'checkPat'. Other
 -- shapes (notably session patterns) are left to the type checker.
 
--- | 'synth', with the kind shapes gathered so far settled on the result. The
--- expression walk elaborates a type after the module's provisional solve, so
--- nothing has settled its whole-kind variables; typing dispatches on shape --
--- @isProper@ at an instantiation, the irrefutable @Proper@ of the smart
--- constructors -- and cannot face one. Shape is ordinary first-order
--- unification, so it can be run at any point over the constraints in hand; a
--- failure is left to the final solve, which reports it.
 -- | Kind a module's top-level signatures, before the provisional solve settles
 -- shapes. Signatures are type validation -- a definition's own kinding is the
 -- expression walk's -- and kinding them here is what lets that walk face a
@@ -913,17 +906,17 @@ fixInferredBinderKind sp k karg = chaseShape k >>= \case
 -- reach it. The dispatches that cannot face a whole-kind variable -- the
 -- irrefutable @Proper@ of the smart constructors, @isProper@ at an
 -- instantiation -- read through this instead of being handed a settled AST.
+chaseShape :: Kind -> Validation Kind
+chaseShape k = do
+  binds <- gets kindBindings
+  return (resolveShapeOpen (KindSolution binds Map.empty Map.empty) k)
+
 -- | 'chaseShape', defaulting a variable nothing has settled to the proper kind
 -- the final zonk gives it anyway. For a dispatch that must decide now.
 chaseShapeProper :: Kind -> Validation Kind
 chaseShapeProper k = do
   binds <- gets kindBindings
   return (resolveShape (KindSolution binds Map.empty Map.empty) k)
-
-chaseShape :: Kind -> Validation Kind
-chaseShape k = do
-  binds <- gets kindBindings
-  return (resolveShapeOpen (KindSolution binds Map.empty Map.empty) k)
 
 -- | Synthesise a type's kind, then solve the gathered kind constraints and
 -- apply the resulting solution to the kinded type. The entry point for kinding
