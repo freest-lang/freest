@@ -113,13 +113,6 @@ resolveType sol = \case
   where
     kinds = map (second (resolveKind sol))
 
--- | The pair of resolvers a zonk walks a module with. Two exist: the full
--- solution, and the one that settles a kind's shape alone.
-data Zonk = Zonk
-  { zKind :: Kind -> Kind
-  , zType :: TK.KindedType -> TK.KindedType
-  }
-
 -- | Settle a kind's shape, leaving both components -- multiplicity and baseKind
 -- -- to the component solvers. Shape is ordinary first-order unification, done
 -- by 'Validation.LocalInference.Kinds.unifyKindSubs', and it is all typing
@@ -157,19 +150,10 @@ resolveShapeWith final sol = go Set.empty
 -- constructors: theirs are derived kinds, and the components they meet and join
 -- are still variables at this point.
 resolveShapeTypeOpen :: KindSolution -> TK.KindedType -> TK.KindedType
-resolveShapeTypeOpen = resolveShapeTypeWith resolveShapeOpen
-
--- | Settle a type's kind shapes through a threaded substitution. The identity
--- under 'mempty': 'resolveShapeOpen' returns a 'Proper' as it stands, recurses
--- structurally through an 'Arrow', and leaves a solvable variable the map does
--- not bind alone, while the walk rebuilds every node with its own constructor.
-chaseShapeTypeWith :: KindSubst -> TK.KindedType -> TK.KindedType
-chaseShapeTypeWith sub = resolveShapeTypeOpen (KindSolution sub mempty mempty)
-
-resolveShapeTypeWith :: (KindSolution -> Kind -> Kind) -> KindSolution -> TK.KindedType -> TK.KindedType
-resolveShapeTypeWith res sol = go
+resolveShapeTypeOpen sol = go
   where
-    k = res sol
+    k = resolveShapeOpen sol
+
     go = \case
       TI.Int s x             -> TI.Int s (k x)
       TI.Float s x           -> TI.Float s (k x)
@@ -190,63 +174,66 @@ resolveShapeTypeWith res sol = go
       TI.Abs s x aks t       -> TI.Abs s (k x) (map (second k) aks) (go t)
       TI.App s x t ts        -> TI.App s (k x) (go t) (map go ts)
 
--- | Apply the whole solution to a module.
-resolveModule :: KindSolution -> M.KindedModule -> M.KindedModule
-resolveModule sol = zonkModule (Zonk (resolveKind sol) (resolveType sol))
+-- | Settle a type's kind shapes through a threaded substitution. The identity
+-- under 'mempty': 'resolveShapeOpen' returns a 'Proper' as it stands, recurses
+-- structurally through an 'Arrow', and leaves a solvable variable the map does
+-- not bind alone, while the walk rebuilds every node with its own constructor.
+chaseShapeTypeWith :: KindSubst -> TK.KindedType -> TK.KindedType
+chaseShapeTypeWith sub = resolveShapeTypeOpen (KindSolution sub mempty mempty)
 
--- | Walk every kind annotation in a kinded module — type declarations, kind
--- signatures, datatypes, and definitions — with the given resolvers.
-zonkModule :: Zonk -> M.KindedModule -> M.KindedModule
-zonkModule z m = m
-  { M.typeDecls   = Map.map (second (zType z)) (M.typeDecls m)
-  , M.kindSigs    = Map.map (zKind z) (M.kindSigs m)
-  , M.dataDecls   = zonkDataDecls (M.dataDecls m)
-  , M.definitions = map (zonkLetDecl z) (M.definitions m)
+-- | Apply the whole solution to every kind annotation in a kinded module —
+-- type declarations, kind signatures, datatypes, and definitions.
+resolveModule :: KindSolution -> M.KindedModule -> M.KindedModule
+resolveModule sol m = m
+  { M.typeDecls   = Map.map (second (resolveType sol)) (M.typeDecls m)
+  , M.kindSigs    = Map.map (resolveKind sol) (M.kindSigs m)
+  , M.dataDecls   = resolveDataDecls (M.dataDecls m)
+  , M.definitions = map (resolveLetDecl sol) (M.definitions m)
   }
   where
-    zonkDataDecls (D.DataDecls cons types) = D.DataDecls
-      (Map.map (second (map (zType z))) cons)
-      (Map.map (first (map (second (zKind z)))) types)
+    resolveDataDecls (D.DataDecls cons types) = D.DataDecls
+      (Map.map (second (map (resolveType sol))) cons)
+      (Map.map (first (map (second (resolveKind sol)))) types)
 
 -- | Walk the kind annotations on a pattern's type-variable
 -- binders ('PackPat' / 'TypeInPat'), recursively. These carry 'UnifLv' kind
 -- vars when the binder kind was omitted (see 'Kinding.resolveExpBndKind').
-zonkPat :: Zonk -> E.Pat Kinded -> E.Pat Kinded
-zonkPat z = \case
-  E.PackPat s aks p   -> E.PackPat s (map (second (E.mapBndKind (zKind z))) aks) (zonkPat z p)
-  E.TypeInPat s ak p  -> E.TypeInPat s (second (E.mapBndKind (zKind z)) ak) (zonkPat z p)
-  E.DConsPat s i ps   -> E.DConsPat s i (map (zonkPat z) ps)
-  E.InPat s m p1 p2   -> E.InPat s m (zonkPat z p1) (zonkPat z p2)
-  E.ChoicePat s m i p -> E.ChoicePat s m i (zonkPat z p)
-  E.AsPat s x p       -> E.AsPat s x (zonkPat z p)
+resolvePat :: KindSolution -> E.Pat Kinded -> E.Pat Kinded
+resolvePat sol = \case
+  E.PackPat s aks p   -> E.PackPat s (map (second (E.mapBndKind (resolveKind sol))) aks) (resolvePat sol p)
+  E.TypeInPat s ak p  -> E.TypeInPat s (second (E.mapBndKind (resolveKind sol)) ak) (resolvePat sol p)
+  E.DConsPat s i ps   -> E.DConsPat s i (map (resolvePat sol) ps)
+  E.InPat s m p1 p2   -> E.InPat s m (resolvePat sol p1) (resolvePat sol p2)
+  E.ChoicePat s m i p -> E.ChoicePat s m i (resolvePat sol p)
+  E.AsPat s x p       -> E.AsPat s x (resolvePat sol p)
   p                   -> p
 
-zonkLetDecl :: Zonk -> E.LetDecl Kinded -> E.LetDecl Kinded
-zonkLetDecl z = \case
-  E.ValDef p rhs    -> E.ValDef (zonkPat z p) (zonkRHS z rhs)
-  E.FnDef x clauses -> E.FnDef x (map (bimap (map (mapLevel (zonkPat z) id id)) (zonkRHS z)) clauses)
-  E.TypeSig xs t    -> E.TypeSig xs (zType z t)
-  E.Mutual lds      -> E.Mutual (map (zonkLetDecl z) lds)
+resolveLetDecl :: KindSolution -> E.LetDecl Kinded -> E.LetDecl Kinded
+resolveLetDecl sol = \case
+  E.ValDef p rhs    -> E.ValDef (resolvePat sol p) (resolveRHS sol rhs)
+  E.FnDef x clauses -> E.FnDef x (map (bimap (map (mapLevel (resolvePat sol) id id)) (resolveRHS sol)) clauses)
+  E.TypeSig xs t    -> E.TypeSig xs (resolveType sol t)
+  E.Mutual lds      -> E.Mutual (map (resolveLetDecl sol) lds)
 
-zonkRHS :: Zonk -> E.RHS Kinded -> E.RHS Kinded
-zonkRHS z = \case
-  E.GuardedRHS ges w -> E.GuardedRHS (map (bimap (zonkExp z) (zonkExp z)) ges) (resolveWhere w)
-  E.UnguardedRHS e w -> E.UnguardedRHS (zonkExp z e) (resolveWhere w)
+resolveRHS :: KindSolution -> E.RHS Kinded -> E.RHS Kinded
+resolveRHS sol = \case
+  E.GuardedRHS ges w -> E.GuardedRHS (map (bimap (resolveExp sol) (resolveExp sol)) ges) (resolveWhere w)
+  E.UnguardedRHS e w -> E.UnguardedRHS (resolveExp sol e) (resolveWhere w)
   where
-    resolveWhere = fmap (map (zonkLetDecl z))
+    resolveWhere = fmap (map (resolveLetDecl sol))
 
-zonkExp :: Zonk -> E.KindedExp -> E.KindedExp
-zonkExp z = \case
-  E.App s e args  -> E.App s (zonkExp z e) (map (mapLevel (zonkExp z) (zType z) id) args)
-  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (zonkPat z) (fmap (zType z))) (second (E.mapBndKind (zKind z))) id) ps) m (zonkExp z e)
-  E.Pack s ts e   -> E.Pack s (map (zType z) ts) (zonkExp z e)
-  E.Asc s e t     -> E.Asc s (zonkExp z e) (zType z t)
-  E.Let s lds e   -> E.Let s (map (zonkLetDecl z) lds) (zonkExp z e)
-  E.Case s e brs  -> E.Case s (zonkExp z e) (map (bimap (zonkPat z) (zonkRHS z)) brs)
-  E.If s e1 e2 e3 -> E.If s (zonkExp z e1) (zonkExp z e2) (zonkExp z e3)
-  E.List s es     -> E.List s (map (zonkExp z) es)
-  E.Channel s t   -> E.Channel s (zType z t)
-  E.SendType s t  -> E.SendType s (zType z t)
-  E.SectionL s e op   -> E.SectionL s (zonkExp z e) op
-  E.SectionR s x op e -> E.SectionR s x op (zonkExp z e)
+resolveExp :: KindSolution -> E.KindedExp -> E.KindedExp
+resolveExp sol = \case
+  E.App s e args  -> E.App s (resolveExp sol e) (map (mapLevel (resolveExp sol) (resolveType sol) id) args)
+  E.Abs s ps m e  -> E.Abs s (map (mapLevel (bimap (resolvePat sol) (fmap (resolveType sol))) (second (E.mapBndKind (resolveKind sol))) id) ps) m (resolveExp sol e)
+  E.Pack s ts e   -> E.Pack s (map (resolveType sol) ts) (resolveExp sol e)
+  E.Asc s e t     -> E.Asc s (resolveExp sol e) (resolveType sol t)
+  E.Let s lds e   -> E.Let s (map (resolveLetDecl sol) lds) (resolveExp sol e)
+  E.Case s e brs  -> E.Case s (resolveExp sol e) (map (bimap (resolvePat sol) (resolveRHS sol)) brs)
+  E.If s e1 e2 e3 -> E.If s (resolveExp sol e1) (resolveExp sol e2) (resolveExp sol e3)
+  E.List s es     -> E.List s (map (resolveExp sol) es)
+  E.Channel s t   -> E.Channel s (resolveType sol t)
+  E.SendType s t  -> E.SendType s (resolveType sol t)
+  E.SectionL s e op   -> E.SectionL s (resolveExp sol e) op
+  E.SectionR s x op e -> E.SectionR s x op (resolveExp sol e)
   e               -> e
