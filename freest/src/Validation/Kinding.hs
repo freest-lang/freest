@@ -612,6 +612,9 @@ kindModule ctx mod = do
   -- cost is the kind mismatch against a written binder kind: reporting it needs
   -- the argument's kind ground, and an obligation never runs once the solve
   -- throws. A solver reporting every failure rather than the first would lift it.
+  -- > binds' <- gets kindBindings
+  -- > let sol = KindSolution binds' mempty mempty
+  -- > inferredSigs = Map.map (resolveShape sol . fst) freshSigs
   sol <- provisionalKindSolution
   setKindSolution sol
   let inferredSigs = Map.map (resolveKind sol . fst) freshSigs
