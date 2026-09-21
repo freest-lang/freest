@@ -8,6 +8,7 @@ module Validation.Base
   , freshInternal
   , addKindConstraint
   , addKindBinding
+  , currentKindSubst
   , chaseShapeType
   , chaseShape
   , chaseShapeProper
@@ -40,7 +41,7 @@ import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin )
 import Validation.LocalInference.BaseKinds ( BaseKindConstraint )
 import Validation.LocalInference.Kinds ( KindUnifier(KindUnifier), unifyKindSubs )
-import Validation.LocalInference.Solution ( KindSolution(..), resolveKind, resolveMult, resolveType, resolveShapeTypeOpen, resolveShape, resolveShapeOpen )
+import Validation.LocalInference.Solution ( KindSolution(..), KindSubst, resolveKind, resolveMult, resolveType, resolveShapeTypeOpen, resolveShape, resolveShapeOpen )
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
@@ -68,7 +69,7 @@ data ValidationState
     , kindConstraints :: [(Origin, K.Kind, K.Kind)]
     -- | The whole-kind substitution: one live map the walk unifies into and
     -- every reader chases through, rather than a fresh unifier run per query.
-    , kindBindings :: Map.Map Variable K.Kind
+    , kindBindings :: KindSubst
     -- | The multiplicity half of the subkinding constraints the unifier has
     -- decomposed: @(o, m1, m2)@ meaning @m1 <: m2@.
     , multSubs :: [(Origin, K.Multiplicity, K.Multiplicity)]
@@ -158,6 +159,13 @@ addKindConstraint o k1 k2 = do
       , multSubs = msubs ++ multSubs st
       , baseKindConstraints = pcs ++ baseKindConstraints st
       , counter = max i (counter st) }
+
+-- | The whole-kind substitution as the state has it, to hand to a pure
+-- algorithm threading one. 'Validation.TypeEquivalence' and the REPL pass
+-- 'mempty' instead: they run post-solve, on ground types, where the identity is
+-- the behaviour wanted.
+currentKindSubst :: Validation KindSubst
+currentKindSubst = gets kindBindings
 
 -- | Settle a type's kind shapes through the state's substitution, for a pure
 -- algorithm that cannot chase one itself. Leaves a variable nothing has settled

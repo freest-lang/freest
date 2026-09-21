@@ -9,7 +9,7 @@ import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as T
 import UI.Error qualified as Error
-import Validation.Base (Validation, chaseShape, chaseShapeType, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
+import Validation.Base (Validation, chaseShape, chaseShapeType, currentKindSubst, incCounter, addKindConstraint, addMultEquation, escapeTypeVar, escapedTypeVar, bindEscapedTypeVar)
 import Syntax.Provenance (Origin(..), Reason(..))
 import Validation.LocalInference.Multiplicities
   (MultConstraints, MultEquation(..), multEq, kindEqConstraints)
@@ -55,6 +55,7 @@ match sp tdecls t1__ t2__ = do
     -- the operands' shapes as the state has them: a declaration unfolded out of
     -- 'tdecls' carries the kind the module gave it, which typing no longer
     -- settles in advance
+    sub <- currentKindSubst
     k1 <- chaseShape (T.kindOf t1)
     k2 <- chaseShape (T.kindOf t2)
     case (t1, t2) of
@@ -155,11 +156,11 @@ match sp tdecls t1__ t2__ = do
       -- M-RedexL
         | isJust (tNameRedex t1)
         -> let visited' = Set.insert (fromJust $ tNameRedex t1) visited
-            in match' sp tdecls bindings visited' (normalise mempty tdecls t1) t2
+            in match' sp tdecls bindings visited' (normalise sub tdecls t1) t2
       -- M-RedexR
         | isJust (tNameRedex t2)
         -> let visited' = Set.insert (fromJust $ tNameRedex t2) visited 
-            in match' sp tdecls bindings visited' t1 (normalise mempty tdecls t2)
+            in match' sp tdecls bindings visited' t1 (normalise sub tdecls t2)
       -- no matching for higher-kinded types
         | not (K.isProper k1)
         -> throwE (Error.CannotInferHigherKindedTypeApp sp k1)
@@ -167,10 +168,10 @@ match sp tdecls t1__ t2__ = do
         -> throwE (Error.CannotInferHigherKindedTypeApp sp k2)
       -- M-ReduceL
         | not (isWhnf t1)
-        -> match' sp tdecls bindings visited (reduce mempty tdecls t1) t2
+        -> match' sp tdecls bindings visited (reduce sub tdecls t1) t2
       -- M-ReduceR
         | not (isWhnf t2)
-        -> match' sp tdecls bindings visited t1 (reduce mempty tdecls t2)
+        -> match' sp tdecls bindings visited t1 (reduce sub tdecls t2)
       -- no match
         | otherwise -> return emptySubs
 

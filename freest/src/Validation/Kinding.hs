@@ -417,7 +417,7 @@ alignBinderKinds tdecls o = go Set.empty
   where
     go seen t u
       | (t, u) `Set.member` seen = pure ()
-      | otherwise = case (normalise mempty tdecls t, normalise mempty tdecls u) of
+      | otherwise = currentKindSubst >>= \sub -> case (normalise sub tdecls t, normalise sub tdecls u) of
           (TK.AppQuant _ _ _ _ aks t', TK.AppQuant _ _ _ _ bks u')
             | length aks == length bks -> do
                 sequence_ [ equate k k' | ((_, k), (_, k')) <- zip aks bks ]
@@ -776,6 +776,11 @@ kindModule ctx mod = do
 boundBinderKinds :: D.KindedTypeDecls -> TK.KindedType -> TK.KindedType -> Validation ()
 boundBinderKinds tdecls = go
   where
+    -- 'mempty', and not the state's substitution: the binder kind this binds
+    -- /is/ the whole-kind variable, and chasing it leaves only the
+    -- component-wise fallback, which does not identify the two. This runs
+    -- inside 'kindModule', before anything settles a module's shapes, so there
+    -- is nothing here for a chase to settle either way.
     go t u = case (normalise mempty tdecls t, normalise mempty tdecls u) of
       (TK.AppForall _ _ aks t', TK.AppForall _ _ bks u')
         | length aks == length bks -> do
