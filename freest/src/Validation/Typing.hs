@@ -220,6 +220,26 @@ elabArgs kctx = mapM \case
   TypeLevel t -> TypeLevel <$> Kinding.synth kctx t
   MultLevel m -> pure (MultLevel m)
 
+-- | The argument shape the three session operations share: @select l@,
+-- @send \@t@ and @receive \@t@ each take their channel as the first argument
+-- and expose a continuation the rest are checked against. Both ways that list
+-- can be wrong are the same for all three, and are the only way any of them
+-- fails on the list itself; the body is handed the channel argument scoped and
+-- elaborated, its type, and the arguments that follow it.
+withChannelArg
+  :: D.KindedTypeDecls -> D.KindedDataDecls -> KindCtx -> TypeCtx
+  -> Error
+  -> [Level E.ScopedExp TU.ScopedType K.Multiplicity]
+  -> (E.ScopedExp -> E.KindedExp -> T.KindedType -> TypeCtx
+        -> [Level E.ScopedExp TU.ScopedType K.Multiplicity] -> Validation a)
+  -> Validation a
+withChannelArg tdecls ddecls kctx tctx noArgs args body = case args of
+  [] -> throwE noArgs
+  (ExpLevel e : args') -> do
+    (e', u, tctx') <- synth tdecls ddecls kctx tctx e
+    body e e' u tctx' args'
+  (arg : _) -> throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
+
 -- | Re-level the arguments an instantiation with no value arguments produced:
 -- they are type and multiplicity applications by construction.
 instArgs :: [Level a T.KindedType K.Multiplicity] -> [Level b T.KindedType K.Multiplicity]
@@ -249,41 +269,26 @@ synth tdecls ddecls kctx tctx e0 = currentKindSubst >>= \sub -> case e0 of
   E.Var s x -> do
     (t, tctx') <- lookupType kctx tctx (Left x)
     return (E.Var s x, t, tctx')
-  E.App s f@(E.Select s' m i) as ->
-    case as of
-      [] -> throwE (CannotSynthesiseSelect s' m i)
-      (ExpLevel  e : as') -> do
-        (e', u, tctx') <- synth tdecls ddecls kctx tctx e
-        ui <- Expose.internalChoice tdecls m (siteOf e) u i
-        as2 <- elabArgs kctx as'
-        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui as2
-        return (E.App s (E.Select s' m i) (ExpLevel e' : as''), t, tctx'')
-      (arg : _  ) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
-  E.App s f@(E.SendType s' u) as ->                                            -- TODO: is there a better way to deal with SendType and ReceiveType?
-    case as of
-      [] -> throwE (CannotSynthesiseSendType s)
-      (ExpLevel e : as') -> do
-        u' <- Kinding.synth kctx u
-        (e', v, tctx') <- synth tdecls ddecls kctx tctx e
-        (a, _, v') <- Expose.typeOutput tdecls (siteOf e) v
-        as2 <- elabArgs kctx as'
-        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs sub a u' v') as2
-        return (E.App s (E.SendType s' u') (ExpLevel e' : as''), t, tctx'')
-      (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
+  E.App s (E.Select s' m i) as ->
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSelect s' m i) as \e e' u tctx' as' -> do
+      ui <- Expose.internalChoice tdecls m (siteOf e) u i
+      as2 <- elabArgs kctx as'
+      (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui as2
+      return (E.App s (E.Select s' m i) (ExpLevel e' : as''), t, tctx'')
+  E.App s (E.SendType s' u) as ->
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s) as \e e' v tctx' as' -> do
+      u' <- Kinding.synth kctx u
+      (a, _, v') <- Expose.typeOutput tdecls (siteOf e) v
+      as2 <- elabArgs kctx as'
+      (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs sub a u' v') as2
+      return (E.App s (E.SendType s' u') (ExpLevel e' : as''), t, tctx'')
   E.App s f@(E.ReceiveType s') as ->
-    case as of
-      [] -> throwE (CannotSynthesiseReceiveType s)
-      (ExpLevel e : as') -> do
-        (e', u, tctx') <- synth tdecls ddecls kctx tctx e
-        (a, k, u') <- Expose.typeInput tdecls (siteOf e) u
-        let v = T.AppExists (spanFromTo f e) [(a, k)] u'
-        as2 <- elabArgs kctx as'
-        (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v as2
-        return (E.App s (E.ReceiveType s') (ExpLevel e' : as''), t, tctx'')
-      (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseReceiveType s) as \e e' u tctx' as' -> do
+      (a, k, u') <- Expose.typeInput tdecls (siteOf e) u
+      let v = T.AppExists (spanFromTo f e) [(a, k)] u'
+      as2 <- elabArgs kctx as'
+      (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v as2
+      return (E.App s (E.ReceiveType s') (ExpLevel e' : as''), t, tctx'')
   E.App s h as    -> do
     (h', t, tctx') <- synth tdecls ddecls kctx tctx h
     as2 <- elabArgs kctx as
@@ -464,45 +469,30 @@ check tdecls ddecls kctx tctx e t = currentKindSubst >>= \sub -> case e of
     (u, tctx') <- lookupType kctx tctx (Left x)
     --   checkEquivTypes tdecls ddecls (siteOf e) t u >> return (e, tctx') -- no bare-head app inference
     checkApp tdecls ddecls kctx (siteOf e) s (E.Var s x) u tctx' [] t    -- bare-head app inference
-  E.App s h@(E.Select s' m i) args ->
-    case args of
-      [] -> throwE (CannotSynthesiseSelect s' m i)
-      (ExpLevel  e' : args') -> do
-        (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
-        ui <- Expose.internalChoice tdecls m (siteOf e') u i
-        args2 <- elabArgs kctx args'
-        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui args2
-        checkEquivTypes tdecls ddecls (siteOf e) t t'
-        return (E.App s (E.Select s' m i) (ExpLevel e'' : args''), tctx'')
-      (arg : _  ) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
-  E.App s h@(E.SendType s' u) args ->
-    case args of
-      [] -> throwE (CannotSynthesiseSendType s')
-      (ExpLevel e' : args') -> do
-        (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
-        (a, k, v') <- Expose.typeOutput tdecls (siteOf e') v
-        u' <- Kinding.synth kctx u
-        Kinding.checkK u' k
-        args2 <- elabArgs kctx args'
-        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs sub a u' v') args2
-        checkEquivTypes tdecls ddecls (siteOf e) t t'
-        return (E.App s (E.SendType s' u') (ExpLevel e'' : args''), tctx'')
-      (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
+  E.App s (E.Select s' m i) args ->
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSelect s' m i) args \e' e'' u tctx' args' -> do
+      ui <- Expose.internalChoice tdecls m (siteOf e') u i
+      args2 <- elabArgs kctx args'
+      (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui args2
+      checkEquivTypes tdecls ddecls (siteOf e) t t'
+      return (E.App s (E.Select s' m i) (ExpLevel e'' : args''), tctx'')
+  E.App s (E.SendType s' u) args ->
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s') args \e' e'' v tctx' args' -> do
+      (a, k, v') <- Expose.typeOutput tdecls (siteOf e') v
+      u' <- Kinding.synth kctx u
+      Kinding.checkK u' k
+      args2 <- elabArgs kctx args'
+      (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' (subs sub a u' v') args2
+      checkEquivTypes tdecls ddecls (siteOf e) t t'
+      return (E.App s (E.SendType s' u') (ExpLevel e'' : args''), tctx'')
   E.App s h@(E.ReceiveType s') args ->
-    case args of
-      [] -> throwE (CannotSynthesiseReceiveType s)
-      (ExpLevel e' : args') -> do
-        (e'', u, tctx') <- synth tdecls ddecls kctx tctx e'
-        (a, k, u') <- Expose.typeInput tdecls (siteOf e') u
-        let v = T.AppExists (spanFromTo h e') [(a, k)] u'
-        args2 <- elabArgs kctx args'
-        (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v args2
-        checkEquivTypes tdecls ddecls (siteOf e) t t'
-        return (E.App s (E.ReceiveType s') (ExpLevel e'' : args''), tctx'')
-      (arg : _) ->
-        throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseReceiveType s) args \e' e'' u tctx' args' -> do
+      (a, k, u') <- Expose.typeInput tdecls (siteOf e') u
+      let v = T.AppExists (spanFromTo h e') [(a, k)] u'
+      args2 <- elabArgs kctx args'
+      (args'', t', tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' v args2
+      checkEquivTypes tdecls ddecls (siteOf e) t t'
+      return (E.App s (E.ReceiveType s') (ExpLevel e'' : args''), tctx'')
   E.App s h args -> do
     (h', t', tctx') <- synth tdecls ddecls kctx tctx h
     args2 <- elabArgs kctx args
@@ -1233,40 +1223,26 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
               (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
               advise e t3
-            e@(E.App s f@(E.Select s' m i) args) t1 -> case args of
-              [] -> throwE (CannotSynthesiseSelect s' m i)
-              (ExpLevel  e : args') -> do
-                (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
+            e@(E.App s (E.Select s' m i) args) _ ->
+              withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSelect s' m i) args \e _ u1 tctx' args' -> do
                 t2 <- Expose.internalChoice tdecls m (siteOf e) u1 i
                 args2 <- elabArgs kctx args'
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args2
                 advise e t3
-              (arg : _) -> 
-                throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
-            e@(E.App s h@(E.SendType s' t0) args) t1 -> 
-              case args of
-                [] -> throwE (CannotSynthesiseSendType s')
-                (ExpLevel e : args') -> do
-                  (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                  (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
-                  t0' <- Kinding.synth kctx t0
-                  args2 <- elabArgs kctx args'
-                  (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs sub a t0' t2) args2
-                  advise e t3
-                (arg : _) ->
-                  throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
-            e@(E.App s f@(E.ReceiveType s') args) t1 ->
-              case args of
-                [] -> throwE (CannotSynthesiseReceiveType s)
-                (ExpLevel e : args') -> do
-                  (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
-                  (a, k, u1') <- Expose.typeInput tdecls (siteOf e) u1
-                  let t2 = T.AppExists (spanFromTo f e) [(a, k)] u1'
-                  args2 <- elabArgs kctx args'
-                  (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args2
-                  advise e t3
-                (arg : _) ->
-                  throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) (voidLevel arg))
+            e@(E.App s (E.SendType s' t0) args) _ ->
+              withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s') args \e _ u1 tctx' args' -> do
+                (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
+                t0' <- Kinding.synth kctx t0
+                args2 <- elabArgs kctx args'
+                (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs sub a t0' t2) args2
+                advise e t3
+            e@(E.App s f@(E.ReceiveType s') args) _ ->
+              withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseReceiveType s) args \e _ u1 tctx' args' -> do
+                (a, k, u1') <- Expose.typeInput tdecls (siteOf e) u1
+                let t2 = T.AppExists (spanFromTo f e) [(a, k)] u1'
+                args2 <- elabArgs kctx args'
+                (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args2
+                advise e t3
             e@(E.App _ h args) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               args2 <- elabArgs kctx args
