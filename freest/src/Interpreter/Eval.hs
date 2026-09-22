@@ -20,7 +20,7 @@ TODO:
  -}
 
 import Control.Concurrent (forkIO)
-import Control.Exception (throwIO)
+import Control.Exception (catch, throwIO)
 import Control.Monad (zipWithM, foldM)
 import Data.Bifunctor (first)
 import Data.Functor (($>), void)
@@ -30,12 +30,13 @@ import Data.Maybe (isJust, fromJust, catMaybes, fromMaybe)
 import qualified Data.Set as Set
 
 import Compiler.Bug (internalError)
-import Interpreter.Exception (Exception(NonExhaustivePatterns))
+import Interpreter.Exception (Exception(..))
 import Interpreter.PatternMatching (matchPat, matchClause, forceColumns)
 import Interpreter.Value (ValueCtx, Clause, Value(..), mkClosure)
 import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
+import qualified Syntax.Kind as K
 import qualified Syntax.Module as M
 
 -- | Bind a clause/alternative's `where` declarations; they are in scope for
@@ -144,11 +145,14 @@ collectLetDecls outer = go outer empty
               go (insertVarPat pat b ctx) (insertVarPat pat b acc) ds
           | otherwise -> do
               res <- resolveRHS ctx rhs
-              (e, ctx') <- maybe (internalError "Non-exhaustive guards in value definition") pure res
+              (e, ctx') <- maybe unmatched pure res
               v     <- eval ctx' e
               mb    <- matchPat v pat
-              binds <- maybe (internalError "Pattern matching failed!") pure mb
+              binds <- maybe unmatched pure mb
               go (binds `union` ctx) (binds `union` acc) ds
+              where 
+              unmatched :: IO r
+              unmatched = throwIO (NonExhaustivePatterns (B.getSpan pat)) :: IO r
 
     funClauses = map (first (map paramPat))
     paramPat (B.ExpLevel p) = Just p
@@ -191,10 +195,16 @@ handleApplication ctx (VClosure collected clauses cctx) args = do
     -- any leftover arguments are applied to the result
     if null rest then return result
     else handleApplication ctx result rest
-handleApplication _ (VBuiltin builtin) args =
-  return $ foldl (\(VBuiltin func) arg -> func arg) (VBuiltin builtin) (termArgs args)
+handleApplication ctx (VBuiltin builtin) args = foldM applyOne (VBuiltin builtin) (termArgs args)
+  where
+    -- Between builtin applications, force any 'VIO' result so effects
+    -- (e.g. the exception thrown by 'error') fire in time for the
+    -- enclosing App's 'catch' to attach the call-site span.
+    applyOne (VBuiltin f) arg = pure (f arg)
+    applyOne (VIO io)     arg = io >>= \v -> applyOne v arg
+    applyOne v            _   = internalError $ "handleApplication: cannot apply value " ++ show v
 handleApplication ctx VFork args = case termArgs args of
-  [fun] -> forkIO (void $ handleApplication ctx fun [Just VUnit]) $> VUnit
+  [fun] -> forkIO (void $ handleApplication ctx fun [Just (VCons "()" [])]) $> VCons "()" []
   []    -> return VFork    -- only type/multiplicity applied so far
   _     -> internalError "fork applied to too many arguments"
 
@@ -202,6 +212,14 @@ handleApplication ctx VFork args = case termArgs args of
 -- applications carry no runtime value.
 termArgs :: [Maybe Value] -> [Value]
 termArgs = catMaybes
+
+-- | Attach a span to an exception, but only if the exception has none yet.
+-- Enclosing 'App' layers keep the innermost span rather than clobbering it
+-- with their own outer call site.
+attachSpan :: B.Span -> Exception -> Exception
+attachSpan s e
+  | B.getSpan e == B.nullSpan = B.setSpan s e
+  | otherwise                 = e
 {- handleApplication (global, local) (VSelect label) args =
   case args of
     [VChan chan] -> do
@@ -243,14 +261,14 @@ eval ctx (E.Var _ var) =
   case ctxLookup ctx var of
     VIO io -> io
     val -> return val
-eval ctx (E.App _ exp args) = do
+eval ctx (E.App span exp args) = do
   func <- eval ctx exp
   -- evaluate term arguments; type/multiplicity applications carry no value but
   -- still consume one of the closure's slots (so it stays a value until filled)
   evalArgs <- mapM evalArg args
-  res <- handleApplication ctx func evalArgs
+  res <- handleApplication ctx func evalArgs `catch` \(e :: Exception) -> throwIO (attachSpan span e)
   case res of
-    VIO io -> io
+    VIO io -> io `catch` \(e :: Exception) -> throwIO (attachSpan span e)
     _ -> return res
   where
     evalArg (B.ExpLevel e) = Just <$> eval ctx e
@@ -284,8 +302,9 @@ eval _ (E.Channel _ _) = do
   -- obtain channel ends for a fresh channel
   (chanL, chanR) <- chan
   return $ VCons "(,)" [VChan chanL, VChan chanR]
-eval _ (E.Select _ (B.Identifier _ iden)) = do
-  let (Just (VBuiltin selectBuiltin)) = Data.Map.lookup "select" builtins
+eval _ (E.Select _ m (B.Identifier _ iden)) = do
+  let (Just (VBuiltin selectBuiltin)) =
+        Data.Map.lookup (if K.isUn m then "select_" else "select") builtins
   return $ selectBuiltin (VLabel iden)
   {- return $ VSelect iden -}
 eval _ (E.SendType _ _) =
@@ -294,6 +313,13 @@ eval _ (E.SendType _ _) =
 eval _ (E.ReceiveType _) =
   return $ fromJust $ Data.Map.lookup "receiveType" builtins
   {- return VRecvType -}
+eval ctx (E.SectionL s e op) =
+  eval ctx (E.App s (either (E.Var s) (E.DCons s) op) [B.ExpLevel e])
+eval ctx (E.SectionR s x op e) =
+  return $ mkClosure ctx
+    [ ( [Just (E.VarPat s x)]
+      , E.UnguardedRHS (E.App s (either (E.Var s) (E.DCons s) op)
+                          [B.ExpLevel (E.Var s x), B.ExpLevel e]) Nothing ) ]
 
 -- OLD DEFINITIONS
 

@@ -43,8 +43,7 @@ type FTPThread = *?(Dual FTPSession)
 -- |pass the client to the thread
 ftpd : Dual FTP -> Dual FTPThread -> Void @*T
 ftpd pid b = 
-  send_ (accept pid) b;
-  ftpd pid b
+  b |> send_ (accept pid) |> ftpd pid
 
 mutual
   -- |An FTP thread: receive a request from the demon;

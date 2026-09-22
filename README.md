@@ -45,6 +45,22 @@ If you have the executable installed, you can skip `stack` and run the following
 freest PATH
 ```
 
+## Command-line options
+Running `freest PATH` type-checks and then runs the module. The following options change that behaviour:
+
+| Option | Effect |
+|---|---|
+| `-t`, `--typecheck` | Type-check the module but do not run it. Prints nothing on success and exits with status 0; on a type error it reports the error and exits non-zero. |
+| `-i`, `--interactive` | Start the interactive REPL. |
+| `--no-implicit-prelude` | Turn off the implicit import of the Prelude. |
+| `--version` | Print the compiler version. |
+| `-h`, `--help` | Show the usage message. |
+
+Use `--typecheck` to check a program without executing it — handy in CI, editor save hooks, or when a program's side effects (forking threads, channel I/O) make a full run undesirable:
+```
+freest --typecheck freest/test/prog/Valid/Functional/Fact/Fact.fst
+```
+
 # Test
 We have several test suites. The general command is
 ```

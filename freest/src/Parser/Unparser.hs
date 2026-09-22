@@ -11,13 +11,14 @@ declarations.
 -}
 module Parser.Unparser
   ( Unparse(..)
+  , unparseArg
   , unparseDataDef
   , unparseCons
   , unparseTypeDef
   )
   where
 
-import Syntax.Base ( Variable, Identifier, solvable )
+import Syntax.Base ( Variable, Identifier, Polarity(..), solvable )
 import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
 import Syntax.Type.Internal qualified as T
@@ -86,7 +87,7 @@ instance Unparse K.Multiplicity where
 
 instance Unparse K.Kind where
   fragment = \case
-    K.Proper _ m pk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ show pk)
+    K.Proper _ m bk -> (maxRator, bracket (fragment m) NonAssoc maxRator  ++ show bk)
     K.Arrow _ k1 k2 -> (arrowRator, l ++ " -> " ++ r)
       where
         l = bracket (fragment k1) LeftAssoc arrowRator
@@ -111,11 +112,11 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
     T.Float _ _ -> (maxRator, "Float")
     T.Char _ _ -> (maxRator, "Char")
     T.Arrow _ _ m -> (maxRator, "(" ++ multArrow m ++ ")")
-    T.Quant _ _ p pk m -> (maxRator, "(" ++ quant True p pk m ++ ")")
-    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ concatMap (('#':) . show) φs ++ " -" ++ show m ++ "-> " ++ unparse t)
+    T.Quant _ _ p bk m -> (maxRator, "(" ++ quant True p bk m ++ ")")
+    T.ForallM _ _ m φs t -> (dotRator, "forall " ++ unwords (map (('#':) . show) φs) ++ " " ++ multArrow m ++ " " ++ unparse t)
     T.Skip _ _ -> (maxRator, "Skip")
-    T.End _ _ p -> (maxRator, case p of T.Out -> "Close"
-                                        T.In  -> "Wait")
+    T.End _ _ p -> (maxRator, case p of Pos -> "Close"
+                                        Neg -> "Wait")
     T.Message _ _ m p -> (maxRator, "(" ++ msgMultiplicity m ++ polarity p ++ ")")
     T.Choice _ _ m p is -> 
       (maxRator, msgMultiplicity m ++ view p ++ "{" ++ fields ++ "}")
@@ -135,8 +136,10 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
       where
         l = bracket (fragment t) LeftAssoc arrowRator
         r = bracket (fragment u) RightAssoc arrowRator
-    T.AppQuant _ _ _ _ p pk m aks t -> 
-      (dotRator, quant False p pk m ++ bindings aks ++ quantSep p pk m ++ unparse t)
+    T.AppQuant _ _ _ _ Pos K.Top _ aks t ->
+      (maxRator, "(exists " ++ List.intercalate ", " (map unparse aks) ++ ", " ++ unparse t ++ ")")
+    T.AppQuant _ _ _ _ p bk m aks t -> 
+      (dotRator, quant False p bk m ++ bindings aks ++ quantSep p bk m ++ unparse t)
     T.Tuple _ _ _ ts -> 
       (maxRator, "(" ++ List.intercalate ", " (map unparse ts) ++ ")")
     T.List _ _ _ t -> 
@@ -160,23 +163,25 @@ instance Unparse (Variable, T.XBndKind x) => Unparse (T.Type x) where
         r = bracket (fragment (last ts)) RightAssoc appRator
     where
       quant prefix = \cases
-        T.In  K.Top     m -> "forall" ++ if prefix then "#" ++ show m else " "
-        T.Out K.Top     m -> "exists" ++ if prefix then "" else " "
-        p     K.Session m -> polarity p ++ "type "
+        Neg K.Top     m -> "forall" ++ if prefix then "#" ++ show m else " "
+        Pos K.Top     m -> "exists" ++ if prefix then "" else " "
+        p   K.Session m -> polarity p ++ "type "
       quantSep = \cases
-        T.In K.Top m -> " -" ++ show m ++ "-> "
+        Neg  K.Top m -> " " ++ multArrow m ++ " "
         _    _     _ -> ". "
-      multArrow m = "-" ++ filter (/= ' ') (unparse m) ++ "->"
+      multArrow m
+        | K.isUn m  = "->"
+        | otherwise = "-" ++ filter (/= ' ') (unparse m) ++ "->"
       msgMultiplicity = \case
-        K.Lin{}    -> ""
-        K.Un{}     -> "*"
+        K.Lin{} -> ""
+        K.Un{}  -> "*"
       polarity = \case
-        T.In  -> "?"
-        T.Out -> "!"
+        Neg -> "?"
+        Pos -> "!"
       bindings = unwords . map unparse
       view = \case
-        T.In  -> "&"
-        T.Out -> "+"
+        Neg -> "&"
+        Pos -> "+"
 
 -- | Unparse a datatype declaration, e.g. @data Tree a = Leaf | Node (Tree a) a (Tree a)@.
 unparseDataDef :: D.KindedDataDecls -> Identifier -> String
@@ -212,6 +217,11 @@ unparseTypeDef i hasParams t = case (hasParams, t) of
   (True, TK.Abs _ aks body) ->
     "type " ++ show i ++ paramStr aks ++ " = " ++ unparse body
   _ -> "type " ++ show i ++ " = " ++ unparse t
+
+-- | Unparse at the position of an @\@t@ argument, parenthesising when the
+-- argument binds more loosely than application.
+unparseArg :: Unparse t => t -> String
+unparseArg t = bracket (fragment t) RightAssoc appRator
 
 -- | @paramStr [(a₁,k₁), …, (aₙ,kₙ)]@ produces @" a₁ … aₙ"@ (with a leading
 -- space) or @""@ for the empty list.

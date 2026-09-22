@@ -1,4 +1,4 @@
-type Stream a = +{Done: Close, More: !a ; Stream a}
+type Stream a = +{More: !a ; Stream a, Done: Close}
 
 marshall : forall a -> [a] -> Stream a -> ()
 marshall []        c = c |> select Done |> close

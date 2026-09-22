@@ -9,7 +9,8 @@ the tokens output by the lexer.
 -}
 module Parser.Token where 
 
-import Syntax.Base  
+import Syntax.Base
+import Compiler.Bug ( internalError )  
 import Data.List ( intercalate )
 
 data Token
@@ -30,7 +31,8 @@ data Token
   | TkLet Span | TkIn Span | TkMutual Span
   | TkCase Span | TkOf Span
   | TkIf Span | TkThen Span | TkElse Span 
-  | TkSelect Span | TkChannel Span | TkSendType Span | TkReceiveType Span
+  | TkSelect Span | TkSelectUn Span
+  | TkChannel Span | TkSendType Span | TkReceiveType Span
   | TkForall Span | TkExists Span | TkRec Span
   -- Punctuation
   | TkOpen Span | TkPipe Span | TkClose Span
@@ -50,17 +52,41 @@ data Token
   | TkCmp Span String
   | TkAmpAmp Span | TkPipePipe Span
   -- Layout punctuation
-  | TkVOpen Span | TkVPipe Span | TkVClose Span
+  -- a virtual close remembers how the block it closes came to an end
+  | TkVOpen Span | TkVPipe Span | TkVClose Span (Maybe BlockEnd)
   | TkEOF Span
   -- Types
   | TkIntType Span | TkFloatType Span | TkCharType Span
   | TkBang Span | TkQuestion Span | TkAmp Span
   | TkSkipType Span | TkDualType Span | TkCloseType Span | TkWaitType Span
   | TkVoidType Span
-  -- Prekinds 
-  | TkTopPrekind Span | TkSessionPrekind Span | TkChannelPrekind Span
+  -- BaseKinds 
+  | TkTopBaseKind Span | TkSessionBaseKind Span | TkChannelBaseKind Span
   deriving (Eq, Show)
 
+-- | A layout block: the keyword that opened it, absent for the top-level block,
+-- and the position of its first token, on whose column the block is aligned.
+data Block = Block (Maybe String) Pos
+  deriving (Eq, Show)
+
+blockColumn :: Block -> Int
+blockColumn (Block _ p) = snd p
+
+-- | How a layout block came to an end.
+data BlockEnd
+  = Outdented Block -- ^ a line is indented less than the block
+  | FileEnded Block -- ^ the file ended with the block still open
+  deriving (Eq, Show)
+
+-- | What the offside rule made of a line, when a parse error on that line is
+-- better explained by its indentation than by the token it stopped at.
+data LayoutNote
+  = Continues Block
+    -- ^ indented past this block, so it continues the item before it
+  | EmptyBlock Block Block
+    -- ^ the first block was opened and got no items, the line not being
+    -- indented past the second, which encloses it
+  deriving (Eq, Show)
 
 -- Identifiers
 getText = \case
@@ -77,7 +103,7 @@ getText = \case
   TkStringLit _ t -> t
   TkCmp _ t -> t
   -- Keywords
-  t -> error $ "Parser.Token.getText: no text for token `" ++ show t ++ "`"
+  t -> internalError ("no text for token `" ++ show t ++ "`")
 
 instance Located Token where
   getSpan :: Token -> Span
@@ -108,6 +134,7 @@ instance Located Token where
     TkThen s -> s
     TkElse s -> s
     TkSelect s -> s
+    TkSelectUn s -> s
     TkSendType s -> s
     TkReceiveType s -> s
     TkForall s -> s
@@ -158,7 +185,7 @@ instance Located Token where
     -- Layout punctuation
     TkVOpen s -> s
     TkVPipe s -> s
-    TkVClose s -> s
+    TkVClose s _ -> s
     TkEOF s -> s
     -- Types
     TkIntType s -> s
@@ -173,9 +200,9 @@ instance Located Token where
     TkDualType s -> s
     TkVoidType s -> s
     -- Kinds
-    TkTopPrekind s -> s
-    TkSessionPrekind s -> s
-    TkChannelPrekind s -> s
+    TkTopBaseKind s -> s
+    TkSessionBaseKind s -> s
+    TkChannelBaseKind s -> s
 
   setSpan :: Span -> Token -> Token
   -- Identifiers
@@ -205,6 +232,7 @@ instance Located Token where
     TkThen _ -> TkThen s
     TkElse _ -> TkElse s
     TkSelect _ -> TkSelect s
+    TkSelectUn _ -> TkSelectUn s
     TkSendType _ -> TkSendType s
     TkReceiveType _ -> TkReceiveType s
     TkForall _ -> TkForall s
@@ -254,7 +282,7 @@ instance Located Token where
     -- Layout punctuation
     TkVOpen _ -> TkVOpen s
     TkVPipe _ -> TkVPipe s
-    TkVClose _ -> TkVClose s
+    TkVClose _ p -> TkVClose s p
     TkEOF _ -> TkEOF s
     -- Types
     TkIntType _ -> TkIntType s
@@ -269,7 +297,7 @@ instance Located Token where
     TkWaitType _ -> TkWaitType s
     TkVoidType _ -> TkVoidType s
     -- Kinds
-    TkTopPrekind _ -> TkTopPrekind s
-    TkSessionPrekind _ -> TkSessionPrekind s
-    TkChannelPrekind _ -> TkChannelPrekind s
+    TkTopBaseKind _ -> TkTopBaseKind s
+    TkSessionBaseKind _ -> TkSessionBaseKind s
+    TkChannelBaseKind _ -> TkChannelBaseKind s
 

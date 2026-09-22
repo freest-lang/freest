@@ -1,8 +1,4 @@
--- writeFive : !Int ; Close -> ()
--- writeFive c =
---   let c' = send 5 c in () -- KO
-
-writeFive : !Int ; Close -> ()
+writeFive : (!Int ; Close) -> ()
 writeFive c =
   let c' = send 5 c in close c'
 
@@ -15,7 +11,10 @@ writeFive'' c =
   c |> send 5 |> close
 
 writeFive''' : !Int ; Close -> ()
-writeFive''' = sendAndClose 5
+writeFive''' = close . send 5
+
+writeFive'''' : !Int ; Close -> ()
+writeFive'''' = sendAndClose 5
 
 readInt : ?Int ; Wait -> ()
 readInt c =
@@ -28,13 +27,18 @@ readInt' c =
 readInt'' : ?Int ; Wait -> Int
 readInt'' = receiveAndWait
 
-_ =
-  let x = forkWith writeFive
-  in print $ readInt' x
+_ = forkWith writeFive |> readInt' |> print
 
+_ = print $ readInt' $ forkWith writeFive
 
+_ = forkWith writeFive |> readInt
+
+-- The same, using pattern matching
 readInt : ?Int ; Wait -> ()
 readInt (?x ; Wait) = print x
 
+-- A more complex protocol
 sumThree : ?Int ; ?Int ; ?Int ; Wait -> ()
 sumThree (?x ; ?y ; ?z ; Wait) = print $ x + y + z
+
+-- _ = forkWith readInt |> writeFive

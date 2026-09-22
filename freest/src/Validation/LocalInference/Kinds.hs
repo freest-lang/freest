@@ -2,8 +2,8 @@
 --
 -- Decomposes a subkinding goal @K1 <: K2@ by unifying the arrow structure and
 -- whole-kind variables, binding the latter, and reducing the proper leaves to
--- multiplicity and prekind constraints solved by the sibling modules
--- (Multiplicities, Prekinds). Subkinding is the primitive: arrows are
+-- multiplicity and baseKind constraints solved by the sibling modules
+-- (Multiplicities, BaseKinds). Subkinding is the primitive: arrows are
 -- contravariant in the domain and covariant in the codomain.
 module Validation.LocalInference.Kinds
   ( KindUnifier(..)
@@ -13,28 +13,28 @@ module Validation.LocalInference.Kinds
   ) where
 
 import Syntax.Base
-import Syntax.Kind (Kind(..), Multiplicity(..), Prekind(..), pattern VarM)
+import Syntax.Kind (Kind(..), Multiplicity(..), BaseKind(..), pattern VarM)
 import Syntax.Kind qualified as K
 import Syntax.Provenance (Origin)
 import Validation.LocalInference.Multiplicities (MultConstraints, MultEquation, multEq)
-import Validation.LocalInference.Prekinds (PrekindConstraints, PrekindConstraint(..))
+import Validation.LocalInference.BaseKinds (BaseKindConstraints, BaseKindConstraint(..))
 
 import Control.Monad.State (StateT, runStateT, gets, modify, when)
 import Control.Monad.Trans.Class (lift)
 import Data.Map.Strict qualified as Map
 
 -- | The result of unifying two kinds: the whole-kind variable bindings, and the
--- leaf constraints to hand to the multiplicity and prekind solvers.
+-- leaf constraints to hand to the multiplicity and baseKind solvers.
 data KindUnifier = KindUnifier
   { kindSubst          :: Map.Map Variable Kind
   , multConstraints    :: MultConstraints
-  , prekindConstraints :: PrekindConstraints
+  , baseKindConstraints :: BaseKindConstraints
   }
 
 -- | Why unification failed. Each carries the 'Origin' of the constraint being
 -- solved, so the error can be reported at the right source location.
 data UnifyError
-  = Mismatch Origin Kind Kind    -- ^ incompatible kind structure (e.g. proper vs. arrow)
+  = Mismatch Origin Kind Kind    -- ^ incompatible kind structure (e.g. proper vs. arrow), the kind given before the one required
   | Occurs Origin Variable Kind  -- ^ a variable would be bound to a kind that mentions it
 
 -- The solver threads a fresh-variable counter (decreasing negative internal IDs,
@@ -43,13 +43,13 @@ data Acc = Acc
   { counter :: !Int
   , kSub    :: Map.Map Variable Kind
   , mCs     :: MultConstraints
-  , pCs     :: PrekindConstraints
+  , pCs     :: BaseKindConstraints
   }
 
 type U = StateT Acc (Either UnifyError)
 
 -- | Unify two kinds related by @<:@, producing the whole-kind bindings and the
--- residual multiplicity/prekind leaf constraints, or a 'UnifyError'.
+-- residual multiplicity/baseKind leaf constraints, or a 'UnifyError'.
 unifyKindSub :: Origin -> Kind -> Kind -> Either UnifyError KindUnifier
 unifyKindSub o k1 k2 = unifyKindSubs Map.empty [(o, k1, k2)]
 
@@ -59,12 +59,12 @@ unifyKindSub o k1 k2 = unifyKindSubs Map.empty [(o, k1, k2)]
 -- elsewhere during kinding).
 unifyKindSubs :: Map.Map Variable Kind -> [(Origin, Kind, Kind)] -> Either UnifyError KindUnifier
 unifyKindSubs binds cs =
-  case runStateT (mapM_ (\(o, k1, k2) -> go o k1 k2) cs) (Acc (-2) binds [] []) of
+  case runStateT (mapM_ (\(o, k1, k2) -> go o Pos k1 k2) cs) (Acc (-2) binds [] []) of
     Left e         -> Left e
     Right (_, acc) -> Right (KindUnifier (kSub acc) (mCs acc) (pCs acc))
 
-go :: Origin -> Kind -> Kind -> U ()
-go o k1 k2 = do
+go :: Origin -> Polarity -> Kind -> Kind -> U ()
+go o pol k1 k2 = do
   k1' <- chase k1
   k2' <- chase k2
   case (k1', k2') of
@@ -72,21 +72,26 @@ go o k1 k2 = do
       | a == b      -> pure ()
       | solvable l1 -> bind o a k2'
       | solvable l2 -> bind o b k1'
-      | otherwise   -> lift (Left (Mismatch o k1' k2'))
-    (Var s l a, _) | solvable l -> do occursCheck o a k2'; k <- instLike s k2'; bind o a k; go o k k2'
-    (_, Var s l a) | solvable l -> do occursCheck o a k1'; k <- instLike s k1'; bind o a k; go o k1' k
-    (Arrow _ d1 c1, Arrow _ d2 c2) -> go o d2 d1 >> go o c1 c2  -- contravariant / covariant
+      | otherwise   -> mismatch k1' k2'
+    (Var s l a, _) | solvable l -> do occursCheck o a k2'; k <- instLike s k2'; bind o a k; go o pol k k2'
+    (_, Var s l a) | solvable l -> do occursCheck o a k1'; k <- instLike s k1'; bind o a k; go o pol k1' k
+    (Arrow _ d1 c1, Arrow _ d2 c2) ->  -- contravariant / covariant
+      go o (dual pol) d2 d1 >> go o pol c1 c2
     (Proper _ m1 p1, Proper _ m2 p2) -> do
       emitMult (multEq (K.join m1 m2) m2)  -- m1 <: m2, as the ACUI encoding
-      emitPre  (SubPrekind o p1 p2)
-    _ -> lift (Left (Mismatch o k1' k2'))
+      emitPre  (SubBaseKind o p1 p2)
+    _ -> mismatch k1' k2'
+  where
+    mismatch k1' k2' = lift (Left (uncurry (Mismatch o) (oriented k1' k2')))
+    oriented :: a -> a -> (a, a)
+    oriented = case pol of Pos -> (,); Neg -> flip (,)
 
 -- | A fresh kind of the same structure as the argument, with fresh leaf/whole-
 -- kind variables — so a whole-kind variable resolves to a /shape/, keeping its
 -- leaves solvable rather than freezing them to the matched kind's scalars.
 instLike :: Span -> Kind -> U Kind
 instLike s = \case
-  Proper{} -> Proper s <$> freshMult s <*> freshPrekind s
+  Proper{} -> Proper s <$> freshMult s <*> freshBaseKind s
   Arrow{}  -> Arrow s <$> freshKind s <*> freshKind s
   Var{}    -> freshKind s
 
@@ -99,8 +104,8 @@ freshKind s = fresh >>= \i -> pure (Var s UnifLv (Variable s ("κ" ++ show i) i)
 freshMult :: Span -> U Multiplicity
 freshMult s = fresh >>= \i -> pure (VarM s UnifLv (Variable s ("φ" ++ show i) i))
 
-freshPrekind :: Span -> U Prekind
-freshPrekind s = fresh >>= \i -> pure (VarPK UnifLv (Variable s ("ψ" ++ show i) i))
+freshBaseKind :: Span -> U BaseKind
+freshBaseKind s = fresh >>= \i -> pure (VarBK UnifLv (Variable s ("ψ" ++ show i) i))
 
 -- | Resolve a whole-kind variable through the current bindings.
 chase :: Kind -> U Kind
@@ -134,5 +139,5 @@ occursCheck o a k = do
 emitMult :: MultEquation -> U ()
 emitMult c = modify \acc -> acc { mCs = c : mCs acc }
 
-emitPre :: PrekindConstraint -> U ()
+emitPre :: BaseKindConstraint -> U ()
 emitPre c = modify \acc -> acc { pCs = c : pCs acc }

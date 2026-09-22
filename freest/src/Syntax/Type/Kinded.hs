@@ -35,8 +35,6 @@ module Syntax.Type.Kinded
   , pattern Bool
   , pattern AppDName
   , pattern AppVar
-  , T.Polarity(..)
-  , T.Dual(..)
   , T.fromVariable
   , T.isConstant
   , T.isSkip
@@ -66,7 +64,6 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Names
 import Syntax.Type.Internal qualified as T
-import Compiler.Bug (internalError)
 
 import Data.List (intercalate)
 
@@ -105,23 +102,23 @@ pattern Skip :: Span -> KindedType
 pattern Skip s <- T.Skip s _
   where Skip s = T.Skip s (K.us s)
 
-pattern End :: Span -> T.Polarity -> KindedType
+pattern End :: Span -> Polarity -> KindedType
 pattern End s p <- T.End s _ p
   where End s p = T.End s (K.lc s) p
 
-pattern Message :: Span -> K.Multiplicity -> T.Polarity -> KindedType
+pattern Message :: Span -> K.Multiplicity -> Polarity -> KindedType
 pattern Message s m p <- T.Message s _ m p
   where Message s m p = T.Message s k m p
           where k = K.Arrow s (K.lt s) (case m of K.Lin{} -> K.ls s; _ -> K.uc s)
 
-pattern QuantS :: Span -> K.Kind -> T.Polarity -> KindedType
+pattern QuantS :: Span -> K.Kind -> Polarity -> KindedType
 pattern QuantS s k p <- T.Quant s k p K.Session K.Lin{}
 
 pattern ForallM :: Span -> K.Multiplicity -> [Variable] -> KindedType -> KindedType
 pattern ForallM s m φs t <- T.ForallM s _ m φs t
   where ForallM s m φs t =  T.ForallM s (K.Proper s m K.Top) m φs t
 
-pattern Choice :: Span -> K.Multiplicity -> T.Polarity -> [Identifier] -> KindedType
+pattern Choice :: Span -> K.Multiplicity -> Polarity -> [Identifier] -> KindedType
 pattern Choice s m p is <- T.Choice s _ m p is
 --   where Choice s m p is = T.Choice s k m p is
 
@@ -156,7 +153,7 @@ pattern App s t ts <- T.App s _ t ts
   where App s t ts = -- TODO: this is not the most efficient way to kind these special cases, but it seems the most maintainable for now
           case T.App s (foldr (\_ (K.Arrow _ _ k) -> k) (kindOf t) ts) t ts of
             AppQuantS s p a k t -> AppQuantS s p a k t
-            AppQuant s p pk m aks t -> AppQuant s p pk m aks t
+            AppQuant s p bk m aks t -> AppQuant s p bk m aks t
             AppLinChoice s p lts -> AppLinChoice s p lts
             AppSemi s t1 t2 -> AppSemi s t1 t2
             AppDual s t -> AppDual s t
@@ -164,32 +161,32 @@ pattern App s t ts <- T.App s _ t ts
             List s t -> List s t
             t -> t
 
-pattern AppQuantS :: Span -> T.Polarity -> Variable -> K.Kind -> KindedType -> KindedType
+pattern AppQuantS :: Span -> Polarity -> Variable -> K.Kind -> KindedType -> KindedType
 pattern AppQuantS s p a k t <- T.AppQuantS s _ _ _ p a k t
   where AppQuantS s p a k t  = T.AppQuantS s k' (K.Arrow s abs k') abs p a k t
-          where kt@(K.Proper s' _ pk) = kindOf t
+          where kt@(K.Proper s' _ bk) = kindOf t
                 abs = K.Arrow s k kt
-                k' = K.Proper s' (K.Lin s') pk
+                k' = K.Proper s' (K.Lin s') bk
 
-pattern AppQuant :: Span -> T.Polarity -> K.Prekind -> K.Multiplicity -> [(Variable, K.Kind)] -> KindedType -> KindedType
-pattern AppQuant s p pk m aks t <- T.AppQuant s _ _ _ p pk m aks t
-  where AppQuant s p pk m aks t  = T.AppQuant s k quant abs p pk m aks t
-          where k'@(K.Proper _ m' pk') = kindOf t
-                -- a functional quantifier (∀/∃, supplied prekind Top) is itself
+pattern AppQuant :: Span -> Polarity -> K.BaseKind -> K.Multiplicity -> [(Variable, K.Kind)] -> KindedType -> KindedType
+pattern AppQuant s p bk m aks t <- T.AppQuant s _ _ _ p bk m aks t
+  where AppQuant s p bk m aks t  = T.AppQuant s k quant abs p bk m aks t
+          where k'@(K.Proper _ m' bk') = kindOf t
+                -- a functional quantifier (∀/∃, supplied baseKind Top) is itself
                 -- functional (Top); a session quantifier (!/?type, supplied Session)
-                -- follows its body's prekind (channel iff the body is)
-                rpk = case pk of K.Top -> K.Top; _ -> pk'
-                k = K.Proper s (case p of T.In -> m; T.Out -> m') rpk
+                -- follows its body's baseKind (channel iff the body is)
+                rpk = case bk of K.Top -> K.Top; _ -> bk'
+                k = K.Proper s (case p of Neg -> m; Pos -> m') rpk
                 quant = K.Arrow s abs k
                 abs = foldr (K.Arrow s . snd) k' aks
 
 pattern AppForall :: Span -> K.Multiplicity -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppForall s m aks t <- T.AppForall s _ _ _ m aks t
-  where AppForall s m aks t =  AppQuant s T.In K.Top m aks t
+  where AppForall s m aks t =  AppQuant s Neg K.Top m aks t
 
 pattern AppExists :: Span -> [(Variable, K.Kind)] -> KindedType -> KindedType
 pattern AppExists s aks t <- T.AppExists s _ _ _ aks t
-  where AppExists s aks t =  AppQuant s T.Out K.Top T.existsMult aks t
+  where AppExists s aks t =  AppQuant s Pos K.Top T.existsMult aks t
 
 pattern AppArrow :: Span -> K.Multiplicity -> KindedType -> KindedType -> KindedType
 pattern AppArrow s m t u <- T.AppArrow s _ _ m t u
@@ -197,31 +194,31 @@ pattern AppArrow s m t u <- T.AppArrow s _ _ m t u
           -- kind of t -> u -> 1T?
           where arrow = K.Arrow s (K.lt s) (K.Arrow s (K.lt s) (K.Proper s m K.Top)) 
 
-pattern AppMessage :: Span -> K.Multiplicity -> T.Polarity -> KindedType -> KindedType
+pattern AppMessage :: Span -> K.Multiplicity -> Polarity -> KindedType -> KindedType
 pattern AppMessage s m p t <- T.AppMessage s _ _ m p t
   where AppMessage s m p t  = T.AppMessage s msg (K.Arrow s (K.lt s) msg) m p t
           where msg = K.Proper s m K.Session
 
-pattern AppLinChoice :: Span -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
+pattern AppLinChoice :: Span -> Polarity -> [(Identifier, KindedType)] -> KindedType
 pattern AppLinChoice s p lts <- T.AppLinChoice s _ _ p lts
-  where AppLinChoice s p lts  = T.AppLinChoice s (K.Proper s (K.Lin s) pk) app p lts
-          where pk = foldr (\(_, kindOf -> K.Proper _ _ pk) -> K.join pk) K.Channel lts
-                app = foldr (const $ K.Arrow s (K.ls s)) (K.Proper s (K.Lin s) pk) lts
+  where AppLinChoice s p lts  = T.AppLinChoice s (K.Proper s (K.Lin s) bk) app p lts
+          where bk = foldr (\(_, kindOf -> K.Proper _ _ bk) -> K.join bk) K.Channel lts
+                app = foldr (const $ K.Arrow s (K.ls s)) (K.Proper s (K.Lin s) bk) lts
 
-pattern UnMessage :: Span -> T.Polarity -> KindedType
+pattern UnMessage :: Span -> Polarity -> KindedType
 pattern UnMessage s p <- T.UnMessage s _ p
   where UnMessage s p  = T.UnMessage s (K.uc s) p
 
-pattern UnChoice :: Span -> T.Polarity -> [Identifier] -> KindedType
+pattern UnChoice :: Span -> Polarity -> [Identifier] -> KindedType
 pattern UnChoice s p ls <- T.UnChoice s _ p ls
   where UnChoice s p ls  = T.UnChoice s (K.uc s) p ls
 
 pattern AppSemi :: Span -> KindedType -> KindedType -> KindedType
 pattern AppSemi s t u <- T.AppSemi s _ _ t u
   where AppSemi s t u  = T.AppSemi s app semi t u
-          where app = K.Proper s (if pk1 == K.Channel then m1 else K.join m1 m2) (K.meet pk1 pk2)
-                (K.Proper _ m1 pk1) = kindOf t
-                (K.Proper _ m2 pk2) = kindOf u
+          where app = K.Proper s (if bk1 == K.Channel then m1 else K.join m1 m2) (K.meet bk1 bk2)
+                (K.Proper _ m1 bk1) = kindOf t
+                (K.Proper _ m2 bk2) = kindOf u
                 semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
 
 -- | Build a @;@ node with an explicitly-given result kind. 
@@ -231,8 +228,8 @@ appSemiWithKind s app = T.AppSemi s app semi
   where semi = K.Arrow s (K.ls s) (K.Arrow s (K.ls s) app)
 
 -- | Build a linear-choice node with an explicitly-given result kind (see
--- 'appSemiWithKind'). Used by kind inference to defer the result prekind.
-appLinChoiceWithKind :: Span -> K.Kind -> T.Polarity -> [(Identifier, KindedType)] -> KindedType
+-- 'appSemiWithKind'). Used by kind inference to defer the result baseKind.
+appLinChoiceWithKind :: Span -> K.Kind -> Polarity -> [(Identifier, KindedType)] -> KindedType
 appLinChoiceWithKind s app p lts = T.AppLinChoice s app choice p lts
   where choice = foldr (const $ K.Arrow s (K.ls s)) app lts
 
@@ -314,8 +311,8 @@ smartApp s t            us = App s t us
 --     T.Skip _ k          -> "(Skip : " ++ show k ++ ")"
 --     T.Semi _ k          -> "((;) : " ++ show k ++ ")"
 --     T.Dual _ k          -> "(Dual : " ++ show k ++ ")"
---     T.End _ k T.In          -> "(Wait : " ++ show k ++ ")"
---     T.End _ k T.Out         -> "(Close : " ++ show k ++ ")"
+--     T.End _ k Neg          -> "(Wait : " ++ show k ++ ")"
+--     T.End _ k Pos         -> "(Close : " ++ show k ++ ")"
 --     T.Message _ k m p  -> "((" ++ showMsgMult m ++ show p ++ ") : " ++ show k ++ ")"
 --     T.QuantS _ k p       -> "((" ++ show p ++ show p ++ ") : " ++ show k ++ ")"
 --     T.Choice _ k m p ls   ->
@@ -332,7 +329,7 @@ smartApp s t            us = App s t us
 --     T.Void _ k' k -> "(Void @" ++ show k ++ " : " ++ show k' ++ ")"
 --     where
 --       showMsgMult = \case K.Lin -> ""; m -> show m
---       showView = \case T.In -> "&"; T.Out -> "+"
---       showQuant = \case T.In -> "forall"; T.Out -> "exists"
+--       showView = \case Neg -> "&"; Pos -> "+"
+--       showQuant = \case Neg -> "forall"; Pos -> "exists"
 --       showAbs aks sep t =
 --         unwords (map (\(a,k) -> "(" ++ show a ++ " : " ++ show k ++ ")") aks) ++ sep ++ show t

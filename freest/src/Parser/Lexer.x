@@ -65,6 +65,7 @@ $upper = [ A-Z ]
 <0> "exists" { token TkExists }
 <0> "rec"    { token TkRec }
 <0> "channel"{ token TkChannel }
+<0> "select_" { token TkSelectUn }
 <0> "select" { token TkSelect }
 <0> "sendType"    { token TkSendType }
 <0> "receiveType" { token TkReceiveType }
@@ -195,9 +196,9 @@ doEOF s = do
     Nothing -> do
       popStartCode
       token TkEOF s
-    (Just (LayoutColumn _)) -> do
+    (Just (LayoutColumn p)) -> do
       popLayout
-      token TkVClose s
+      token (\sp -> TkVClose sp (Just (FileEnded p))) s
     -- (Just ExplicitLayout) -> do -- removed from Liao's version
 
 
@@ -220,6 +221,7 @@ scan = do
       action (take tokl string)
 
 layoutKw t x = do
+  setBlockKw x
   pushStartCode layoutSC
   token t x
 
@@ -231,35 +233,37 @@ openBrace s = do
 startLayout s = do
   popStartCode
 
-  reference <- layout
-  col       <- gets (inpColumn . lexerInput)
-  if Just (LayoutColumn col) <= reference
-    then pushStartCode emptyLayoutSC
-    else pushLayout (LayoutColumn col)
-    
+  Input{inpLine=lin, inpColumn=col} <- gets lexerInput
+  block <- Block <$> takeBlockKw <*> pure (lin, col)
+  layout >>= \case
+    Just (LayoutColumn enclosing) | col <= blockColumn enclosing ->
+      setLayoutNote lin (EmptyBlock block enclosing) *> pushStartCode emptyLayoutSC
+    _ -> pushLayout (LayoutColumn block)
+
   token TkVOpen s
 
 emptyLayout s = do
   popStartCode
   pushStartCode newlineSC
-  token TkVClose s
+  token (\sp -> TkVClose sp Nothing) s
 
 offsideRule s = do
   context <- layout
-  col <- gets (inpColumn . lexerInput)
+  Input{inpLine=lin, inpColumn=col} <- gets lexerInput
 
   let continue = popStartCode *> scan
 
   case context of
-    Just (LayoutColumn col') -> do
-      case col `compare` col' of
+    Just (LayoutColumn p) -> do
+      case col `compare` blockColumn p of
         EQ -> do
           popStartCode
-          token TkVPipe s 
-        GT -> continue
+          token TkVPipe s
+        GT -> setLayoutNote lin (Continues p) *> continue
         LT -> do
           popLayout
-          token TkVClose s
+          end <- blockEndAt p
+          token (\sp -> TkVClose sp (Just end)) s
     _ -> continue
 
 }

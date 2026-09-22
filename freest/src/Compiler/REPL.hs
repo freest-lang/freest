@@ -11,7 +11,7 @@ module Compiler.REPL
   , repl
   ) where
 
-import Syntax.Base ( getSpan, Variable, external )
+import Syntax.Base ( getSpan, Variable, external, Located(..), Span(..), Identifier )
 import Syntax.Module qualified as M
 import Syntax.Declarations qualified as D
 import Syntax.Type.Kinded qualified as TK
@@ -23,15 +23,16 @@ import Parser.Parser ( parseType, parseExp, parseTwoTypes, parseTypes, parseDecl
 import Parser.Scoping qualified as Scoping
 import Parser.Unparser ( Unparse, unparse, unparseDataDef, unparseTypeDef )
 import Validation.Base ( Validation, ValidationState(..), emptyValidationState, runValidation )
-import Validation.Normalisation ( normalise )
+import Validation.Normalisation ( normalise, isWhnf, reduce )
 import Validation.TypeEquivalence ( equivalent, showGrammar, fromTypes )
 import Validation.Kinding qualified as Kinding
 import Validation.Typing qualified as Typing
 import Compiler.Pipeline qualified as Pipeline
+import Compiler.Bug ( reportBug )
 import Interpreter.Value ( ValueCtx, emptyValueCtx )
 import Interpreter.Eval ( evalModule )
-import UI.Error ( printErrors, Error, Source )
-import Interpreter.Exception ( printException )
+import UI.Error ( printErrors, Error, Source, prettySpan )
+import Interpreter.Exception ( printException, reportThreadFailure )
 import UI.CLI ( version, freeSTiPrompt, comeAgain, interactivePath, optPrefix )
 
 import Data.List qualified as List
@@ -56,7 +57,9 @@ import System.Console.Repline
   )
 import System.Exit ( exitSuccess )
 import Control.Monad.Except (runExceptT)
-import Control.Exception (try)
+import Control.Exception (SomeException)
+import GHC.Conc (setUncaughtExceptionHandler)
+import Control.Monad.Catch (catch, try)
 
 -- The state of the REPL
 
@@ -114,12 +117,12 @@ repl =
   evalStateT
     (evalRepl
       (pure . (++ " ") . (freeSTiPrompt ++) . \case SingleLine -> ">"; MultiLine -> "|")
-      cmd
-      replOpts
+      (surviving . cmd)
+      (map (fmap (surviving .)) replOpts)
       (Just optPrefix)
       (Just "m")
       (Prefix (wordCompleter byWord) defaultMatcher)
-      ini
+      (surviving ini)
       fin
     )
   where
@@ -144,11 +147,20 @@ repl =
       , ("type"      , handleType)
       , ("equivalent", handleEquivalent)
       , ("normalise" , handleNormalise)
+      , ("whnf"      , handleWhnf)
+      , ("reduce"    , handleReduce)
       , ("grammar"   , handleGrammar)
       , ("quit"      , const $ liftIO exitSuccess)
       ]
 
 type Repl a = HaskelineT (StateT ReplState IO) a
+
+-- | Run a command, reporting a compiler bug rather than taking the session down
+-- with it. The state reverts to what it was before the command.
+surviving :: Repl () -> Repl ()
+surviving act = catch act \e -> do
+  path <- gets filePath
+  liftIO (reportBug path (e :: SomeException))
 
 ini :: Repl ()
 ini = do
@@ -167,6 +179,7 @@ runLoader loader =
   liftIO loader >>= \case
     Nothing -> pure ()
     Just (src, vs, sctx, kctx, tctx, kmodl) -> do
+      liftIO (setUncaughtExceptionHandler (reportThreadFailure Nothing src))
       vctx <- liftIO (try (evalModule emptyValueCtx kmodl)) >>= \case
         Right v -> pure v
         Left e  -> liftIO (printException src e) >> pure emptyValueCtx   -- e.g. main failed at load
@@ -207,41 +220,54 @@ cmd src = do
 -- Handling the various options
 
 -- TODO: handle relative paths
-handleLoad :: FilePath -> Repl () -- freesti> :l <path>
+handleLoad :: FilePath -> Repl () -- freest> :l <path>
 handleLoad path = do
   modify (\s -> s{filePath = Just path})
   ip <- gets implicitPrelude
   let loader = if ip then Pipeline.loadPreludeAndModule else Pipeline.loadModule
   runLoader (loader path)
 
-handleReload :: String -> Repl () -- freesti> :r
+handleReload :: String -> Repl () -- freest> :r
 handleReload "" =
   gets filePath >>= maybe (liftIO Pipeline.loadNoModule) handleLoad
 handleReload _  =
   putLines ["'reload' takes no arguments, just type ':r' to reload the current module"]
 
-handleKind :: String -> Repl () -- freesti> :k <type>
+handleKind :: String -> Repl () -- freest> :k <type>
 handleKind src = runPipeline src parseType validateType (printAs src . TK.kindOf)
 
-handleType :: String -> Repl () -- freesti> :t <exp>
+handleType :: String -> Repl () -- freest> :t <exp>
 handleType src = runPipeline src parseExp validateExp (printAs src)
 
-handleEquivalent :: String -> Repl () -- freesti> :e <type1> <type2>
+handleEquivalent :: String -> Repl () -- freest> :e <type1> <type2>
 handleEquivalent src = runPipeline src parseTwoTypes
     (\s (t, u) -> validateTypes s [t, u])
     (\[t', u'] -> get >>= \s -> putLines [show (equivalent (tdecls s) t' u')])
 
-handleNormalise :: String -> Repl () -- freesti> :n <type>
+handleNormalise :: String -> Repl () -- freest> :n <type>
 handleNormalise src = runPipeline src parseType
   (\s t -> validateTypes s [t])
   (\[t'] -> get >>= \s -> putLines [unparse (normalise (tdecls s) t')])
 
-handleGrammar :: String -> Repl () -- freesti> :g <type1> .., <typen>
+handleWhnf :: String -> Repl () -- freest> :w <type>
+handleWhnf src = runPipeline src parseType
+  (\s t -> validateTypes s [t])
+  (\[t'] -> putLines [show (isWhnf t')])
+
+handleReduce :: String -> Repl () -- freest> :red <type>
+handleReduce src = runPipeline src parseType
+  (\s t -> validateTypes s [t])
+  (\[t'] -> get >>= \s -> putLines
+    [ if isWhnf t'
+        then unparse t' ++ " is a weak head normal form (weak head normal forms do not reduce)"
+        else unparse (reduce (tdecls s) t') ])
+
+handleGrammar :: String -> Repl () -- freest> :g <type1> .., <typen>
 handleGrammar src = runPipeline src parseTypes
   validateTypes
   (\ts' -> get >>= \s -> putLines [showGrammar (fromTypes (tdecls s) ts')])
 
-handleInfo :: String -> Repl () -- freesti> :i <id>
+handleInfo :: String -> Repl () -- freest> :i <id>
 handleInfo src = do
   path <- currentInteractivePath
   s <- get
@@ -250,7 +276,7 @@ handleInfo src = do
       let sp = getSpan v in
       case runValidation (validationState s) (validateExp s (E.Var sp v)) of
         Right t -> do -- bound at the expression level: print its type
-          putLines [src ++ " is an expression variable"]
+          putLines [src ++ " is an expression variable, " ++ definedAt t]
           printAs src t
         Left _  -> case runValidation (validationState s) (validateType s (TU.Var sp v)) of
           Right t -> do -- bound at the type level: print its kind
@@ -261,20 +287,22 @@ handleInfo src = do
       Right i -> -- input is an uppercase name; look it up in the declarations
         case Map.lookup i (D.ddCons (ddecls s)) of
           Just (parent, _) -> do -- it's a data constructor: print its parent and its type
-            putLines [src ++ " is a constructor of datatype " ++ show parent]
+            putLines [src ++ " is a constructor of datatype " ++ show parent
+                      ++ maybe "" ((", " ++) . definedAt) (constructorSpan (ddecls s) parent i)]
             case Map.lookup (Right i) (typeCtx s) of
               Just t  -> printAs src t -- type known: print it
               Nothing -> pure ()       -- type absent from the context: skip
           Nothing
             | Map.member i (D.ddTypes (ddecls s)) -> putLines -- it's a datatype: print kind sig and definition
                 [ src ++ " is a datatype"
+                  ++ maybe "" ((", " ++) . definedAt) (datatypeSpan (ddecls s) i)
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
                            (Map.lookup (Right i) (kindCtx s))
                 , unparseDataDef (ddecls s) i
                 ]
             | otherwise -> case Map.lookup i (tdecls s) of
               Just (hasParams, t) -> putLines -- it's a type name: print kind sig and definition
-                [ src ++ " is a type"
+                [ src ++ " is a type, " ++ definedAt t
                 , maybe "" (\k -> "type " ++ show i ++ " : " ++ unparse k)
                            (Map.lookup (Right i) (kindCtx s))
                 , unparseTypeDef i hasParams t
@@ -285,7 +313,27 @@ handleInfo src = do
     notInScope :: Repl ()
     notInScope = putLines [src ++ " is not in scope"]
 
-handleHelp :: String -> Repl () -- freesti> :h
+    -- | @"defined at " ++@ the pretty-printed span of a declaration, for use
+    -- in ':i' sentences such as @"x is a y, " ++ definedAt t@.
+    definedAt :: Located a => a -> String
+    definedAt x = "defined at " ++ prettySpan (getSpan x)
+
+    -- | The span of a single constructor's own declaration, e.g. @True@ in
+    -- @data Bool = True | False@ — recovered from the constructor identifier
+    -- list stored under its parent datatype, which still carries its
+    -- original span (unlike a fresh 'Map.lookup' on the user's input).
+    constructorSpan :: D.KindedDataDecls -> Identifier -> Identifier -> Maybe Identifier
+    constructorSpan ddecls' parent con =
+      List.find (== con) . snd =<< Map.lookup parent (D.ddTypes ddecls')
+
+    -- | The span of a datatype's own declaration, approximated as the span
+    -- from its first to its last constructor.
+    datatypeSpan :: D.KindedDataDecls -> Identifier -> Maybe Span
+    datatypeSpan ddecls' i = case snd <$> Map.lookup i (D.ddTypes ddecls') of
+      Just (c : cs) -> Just (spanFromTo c (last (c : cs)))
+      _             -> Nothing
+
+handleHelp :: String -> Repl () -- freest> :h
 handleHelp args = putLines
   [ "Commands available from the prompt:"
   , ind "<type>                        show the normal form and kind of <type>"
@@ -294,7 +342,9 @@ handleHelp args = putLines
   , ind ":reload                       reload the current module"
   , ind ":kind <type>                  show the kind of <type>"
   , ind ":info                         display not sure what"
-  , ind ":normalise <type>             show the normal form of <type>"
+  , ind ":whnf <type>                  check if <type> is in weak head normal form"
+  , ind ":reduce <type>                reduce <type> one step (unless already a weak head normal form)"
+  , ind ":normalise <type>             show the weak head normal form of <type>"
   , ind ":equivalent <type1> <type2>   check if <type1> is equivalent to <type2>"
   , ind ":grammar <type1> ... <typen>  show the grammar for types <type1> through <typen>"
   , ind ":m                            enter multi-line mode"
@@ -313,7 +363,7 @@ handleHelp args = putLines
   ]
   where ind = ("  " ++)
 
-handleState :: String -> Repl () -- freesti> :s
+handleState :: String -> Repl () -- freest> :s
 handleState _ = get >>= liftIO . print
 
 -- Running pipelines

@@ -1,7 +1,7 @@
 module KindSolutionSpec (spec) where
 
 import Syntax.Base
-import Syntax.Kind (Kind(..), Multiplicity(..), pattern Un, pattern VarM, Prekind(..))
+import Syntax.Kind (Kind(..), Multiplicity(..), pattern Un, pattern VarM, BaseKind(..))
 import Syntax.Type.Kinded qualified as TK
 import Validation.LocalInference.Solution
 
@@ -10,7 +10,7 @@ import Test.Hspec
 
 spec :: Spec
 spec = describe "Kind solution" $ do
-  it "resolves the multiplicity and prekind of a proper kind" $
+  it "resolves the multiplicity and baseKind of a proper kind" $
     resolveKind sol (Proper nullSpan (mvar 1) (pvar 1))
       `shouldBe` Proper nullSpan (Un nullSpan) Session
 
@@ -38,12 +38,12 @@ spec = describe "Kind solution" $ do
     v pre n = Variable nullSpan (pre ++ show n) n
     kvar n  = Var nullSpan UnifLv (v "κ" n)
     mvar n  = VarM nullSpan UnifLv (v "φ" n)
-    pvar n  = VarPK UnifLv (v "ψ" n)
+    pvar n  = VarBK UnifLv (v "ψ" n)
     lt      = Proper nullSpan (Lin nullSpan) Top
 
     sol = KindSolution
       { kindVars = Map.fromList [(v "κ" 1, lt)]
-      , prekinds = Map.fromList [(v "ψ" 1, Session)]
+      , baseKinds = Map.fromList [(v "ψ" 1, Session)]
       , mults    = Map.fromList [(v "φ" 1, Un nullSpan)]
       }
     solChain = sol { kindVars = Map.fromList [(v "κ" 2, kvar 1), (v "κ" 1, lt)] }

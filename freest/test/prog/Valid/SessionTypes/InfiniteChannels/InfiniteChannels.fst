@@ -8,8 +8,7 @@ write c n =
   write r (n + 1);
   close c
 
-main : ()
-main =
+_ =
   let (r, w) = channel @(!Int; Close) in
   fork (\(_ : ()) -1-> receiveAndWait w);
   write r 0

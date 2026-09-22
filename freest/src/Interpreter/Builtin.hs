@@ -18,14 +18,45 @@ module Interpreter.Builtin
   , send
   ) where
 
+import Control.Concurrent ( forkIO )
 import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
+import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, IOException, SomeException, bracket_, catch, finally, fromException, throwIO)
 import Data.Char ( chr, ord )
-import Data.Functor ( ($>) )
+import Data.Functor ( ($>), void )
 import qualified Data.Map as Map
 import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
 
+import Interpreter.Exception (Exception(..))
 import Interpreter.Value ( Value(..), ChannelEnd )
+import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
+import Syntax.Base ( nullSpan )
+import System.Environment ( getArgs, getEnvironment, getProgName, lookupEnv )
+import System.Exit ( ExitCode(..) )
+import System.IO ( BufferMode(NoBuffering), Handle, IOMode(..), hClose, hFlush, hGetBuffering, hGetChar, hGetLine, hIsEOF, hIsTerminalDevice, hPutStr, hSetBuffering, isEOF, openFile, stderr, stdin, stdout )
+
+-- | Read a single character with 'stdin' in character-at-a-time mode.
+--
+-- A terminal collects a whole line before releasing it, so under the default
+-- settings a character read only returns once the user has typed a newline, and
+-- then yields the first character of that line. Selecting 'NoBuffering' takes
+-- the terminal out of canonical mode, so the read returns as soon as the
+-- character is available, which is what @getChar@ is meant to do.
+--
+-- The mode is restored once the character has been read, because canonical mode
+-- is what provides the rest of the line discipline: with it disabled the
+-- terminal stops treating @Ctrl-D@ as end of input and stops honouring erase, so
+-- leaving it off for the whole program would break 'getLine' and 'isEOF'.
+--
+-- Only terminals are adjusted. A pipe or a file has no line discipline to
+-- disable, so switching modes would not change what a read returns, and
+-- changing the buffering of a handle mid-read risks discarding what it has
+-- already buffered.
+charMode :: IO a -> IO a
+charMode act = hIsTerminalDevice stdin >>= \tty ->
+  if not tty then act else do
+    mode <- hGetBuffering stdin
+    bracket_ (hSetBuffering stdin NoBuffering) (hSetBuffering stdin mode) act
 
 -- | Convert Haskell's True and False into FreeST's value representation
 hsToFstBool :: Bool -> Value
@@ -41,25 +72,41 @@ fstToHsBool (VCons "False" []) = False
 hsToFstString :: String -> Value
 hsToFstString = foldr (\c acc -> VCons "(::)" [VChar c, acc]) (VCons "[]" [])
 
+-- | Build a FreeST list, from a conversion for its elements.
+hsToFstList :: (a -> Value) -> [a] -> Value
+hsToFstList f = foldr (\x acc -> VCons "(::)" [f x, acc]) (VCons "[]" [])
+
+hsToFstMaybe :: Maybe String -> Value
+hsToFstMaybe = maybe (VCons "Nothing" []) (\v -> VCons "Just" [hsToFstString v])
+
+hsToFstPair :: (String, String) -> Value
+hsToFstPair (a, b) = VCons "(,)" [hsToFstString a, hsToFstString b]
+
+-- | An exit code as GHC wants it: 0 alone reports success. A negative code
+-- would signal the process rather than set a status.
+exitCode :: Int -> ExitCode
+exitCode 0 = ExitSuccess
+exitCode n = ExitFailure (if r == 0 then 255 else r)
+  where r = n `mod` 256
+
 -- | Extract a Haskell 'String' from a FreeST string value.
 fstToHsString :: Value -> String
 fstToHsString = \case
   VCons "[]"   []              -> ""
   VCons "(::)" [VChar c, rest] -> c : fstToHsString rest
-  v                            -> error ("fstToHsString: not a string: " ++ show v)
+  v                            -> internalError ("not a string: " ++ show v)
 
--- | A FreeST string value as a Haskell 'String', if it is one (used for
--- pattern matching; an empty list stays a list, since "" and [] are
--- indistinguishable).
+-- | Write a FreeST string on a handle, flushing it so that output written
+-- through different handles keeps its order.
+putStrOn :: Handle -> Value -> Value
+putStrOn h s = VIO $ VCons "()" [] <$ (hPutStr h (fstToHsString s) >> hFlush h)
+
+-- | A FreeST string value as a Haskell 'String', if it is one.
 asString :: Value -> Maybe String
 asString = \case
-  VCons "(::)" [VChar c, rest] -> (c :) <$> go rest
+  VCons "[]"   []              -> Just ""
+  VCons "(::)" [VChar c, rest] -> (c :) <$> asString rest
   _                            -> Nothing
-  where
-    go = \case
-      VCons "[]"   []              -> Just ""
-      VCons "(::)" [VChar d, more] -> (d :) <$> go more
-      _                            -> Nothing
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do
@@ -67,8 +114,19 @@ chan = do
   c2 <- C.newChan
   return ((c1, c2), (c2, c1))
 
+handleBlockedRead :: IO a -> IO a
+handleBlockedRead action =
+  action `catch` \(e :: SomeException) ->
+    case fromException e of
+      Just (_ :: BlockedIndefinitelyOnMVar) ->
+        throwIO (BlockedIndefinitely nullSpan "Thread blocked indefinitely while waiting to read from a channel endpoint")
+      _ -> case fromException e of
+        Just (_ :: BlockedIndefinitelyOnSTM) ->
+          throwIO (BlockedIndefinitely nullSpan "Thread blocked indefinitely while waiting to read from a channel endpoint")
+        Nothing -> throwIO e
+
 receive :: ChannelEnd -> IO (Value, ChannelEnd)
-receive c = do
+receive c = handleBlockedRead $ do
   v <- C.readChan (fst c)
   return (v, c)
 
@@ -89,12 +147,49 @@ sendLabel s c = do
 
 wait :: Value -> Value
 wait (VChan c) =
-  VIO $ C.readChan (fst c)
+  VIO $ handleBlockedRead (C.readChan (fst c))
 
 close :: Value -> IO Value
 close (VChan c) = do
-  C.writeChan (snd c) VUnit
-  return VUnit
+  C.writeChan (snd c) (VCons "()" [])
+  return (VCons "()" [])
+
+-- | Report a failed file operation as the program's error, not the compiler's.
+asUserError :: IO a -> IO a
+asUserError act = act `catch` \(e :: IOException) -> throwIO (UserError nullSpan (show e))
+
+-- | Open a file and serve it as a session endpoint, so that the handle is
+-- reachable only through the protocol and is closed when the client stops.
+--
+-- TODO: a client that fails before stopping leaves the server parked, and the
+-- backstop below only runs once the collector notices. Cancelling the endpoints
+-- of a failing thread would close the file at the failure instead.
+openStream :: IOMode -> (Handle -> ChannelEnd -> IO ()) -> Value -> Value
+openStream mode serve path = VIO $ do
+  h <- asUserError (openFile (fstToHsString path) mode)
+  (client, server) <- chan
+  _ <- forkIO (asUserError (serve h server) `finally` hClose h)
+  return (VChan client)
+
+-- TODO: unchecked against Dual InStream/OutStream, unlike the Prelude's own
+-- servers. Once more resources need one, add an opaque handle type and write
+-- these in FreeST instead.
+readFileServer :: Handle -> ChannelEnd -> IO ()
+readFileServer h c0 = receiveLabel c0 >>= \(label, c) -> case label of
+  "GetChar" -> hGetChar h >>= \x -> send (VChar x) c >>= readFileServer h
+  "GetLine" -> hGetLine h >>= \x -> send (hsToFstString x) c >>= readFileServer h
+  "IsEOF"   -> hIsEOF h >>= \x -> send (hsToFstBool x) c >>= readFileServer h
+  "Stop"    -> hClose h >> void (close (VChan c))
+  _         -> internalError ("readFileServer: unexpected label " ++ label)
+
+writeFileServer :: Handle -> ChannelEnd -> IO ()
+writeFileServer h c0 = receiveLabel c0 >>= \(label, c) -> case label of
+  "PutStr"   -> put c id
+  "PutStrLn" -> put c (++ "\n")
+  "Stop"     -> hClose h >> void (close (VChan c))
+  _          -> internalError ("writeFileServer: unexpected label " ++ label)
+  where
+    put c f = receive c >>= \(v, c') -> hPutStr h (f (fstToHsString v)) >> writeFileServer h c'
 
 builtins :: Map.Map String Value
 builtins = Map.fromList
@@ -102,7 +197,7 @@ builtins = Map.fromList
   -- * Undefined
     ("undefined",     VBuiltin undefined)
   -- * Error
-  , ("error",         VBuiltin (errorWithoutStackTrace . fstToHsString))
+  , ("error",         VBuiltin (VIO . throwIO . UserError nullSpan . fstToHsString))
 
   -- * Standard types, classes and related functions
   -- ** Basic datatypes
@@ -187,20 +282,38 @@ builtins = Map.fromList
   , ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
   , ("wait",          VBuiltin wait)
   , ("close",         VBuiltin (VIO . close))
-  , ("send_",         VBuiltin (\val -> VBuiltin (\(VChan c) -> VIO $ VUnit <$ send val c)))
+  , ("send_",         VBuiltin (\val -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ send val c)))
   , ("receive_",      VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return val))
   -- * I/O
   -- ** Standard I/O
   -- *** stdin
   -- **** Internal stdin functions
-  , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> getChar))
+  , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> charMode getChar))
   , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
-  , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
-  , ("internalPutStrOut",     VBuiltin (\s -> VIO $ VUnit <$ putStr (fstToHsString s)))
+  , ("internalIsEOF",         VBuiltin (const $ VIO $ hsToFstBool <$> isEOF))
+  -- getContents makes sense in a lazy setting; FreeST is eager.
+  -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
+  -- *** stdout and stderr
+  -- **** Internal output functions
+  , ("internalPutStrOut",     VBuiltin (putStrOn stdout))
+  , ("internalPutStrErr",     VBuiltin (putStrOn stderr))
+  -- ** Files
+  , ("openReadFile",          VBuiltin (openStream ReadMode   readFileServer))
+  , ("openWriteFile",         VBuiltin (openStream WriteMode  writeFileServer))
+  , ("openAppendFile",        VBuiltin (openStream AppendMode writeFileServer))
+  -- ** Command line
+  , ("getArgs",               VBuiltin (const $ VIO $ hsToFstList hsToFstString <$> getArgs))
+  , ("getProgName",           VBuiltin (const $ VIO $ hsToFstString <$> getProgName))
+  -- ** Environment
+  , ("lookupEnv",             VBuiltin (\s -> VIO $ hsToFstMaybe <$> lookupEnv (fstToHsString s)))
+  , ("getEnvironment",        VBuiltin (const $ VIO $ hsToFstList hsToFstPair <$> getEnvironment))
+  -- ** Exiting
+  , ("exitWith",              VBuiltin (\(VInt n) -> VIO $ throwIO $ exitCode n))
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
-  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send VUnit c))
+  , ("select_",       VBuiltin (\(VLabel label) -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ sendLabel label c)))
+  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send (VCons "()" []) c))
   -- The received type is erased at runtime; the returned 'VPack' exists so
   -- that an explicit @let (\@a, c) = receiveType c@ pattern can decompose it.
   , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VPack [] (VChan c)))

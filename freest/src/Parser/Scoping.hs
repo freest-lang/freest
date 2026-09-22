@@ -457,10 +457,18 @@ scopeExp ctx = \case
   E.List s es -> E.List s <$> mapM (scopeExp ctx) es
   E.Channel s t ->
     E.Channel s <$> scopeType ctx t
-  E.Select s i -> pure $ E.Select s i
+  E.Select s m i -> pure $ E.Select s m i
   E.SendType s t ->
     E.SendType s <$> scopeType ctx t
   E.ReceiveType s -> pure $ E.ReceiveType s
+  E.SectionL s e op ->
+    E.SectionL s <$> scopeExp ctx e <*> pure (scopeOp op)
+  E.SectionR s x op e -> do
+    x' <- freshInternal x
+    E.SectionR s x' (scopeOp op) <$> scopeExp ctx e
+  where
+    scopeOp (Left x)  = Left $ maybe x (\x' -> x{internal = internal x'}) (lookupEVar x ctx)
+    scopeOp (Right i) = Right i
 
 -- | Scope a pattern. This function takes two contexts: the first being the main
 -- lexical context, and the second being an auxilliary context for 'let' definitions,
@@ -491,17 +499,17 @@ scopePat ctx ictx = \case
         return (ictx''', ps''++[p']))
       (emptyScopingCtx, []) ps
     return (ictx', E.DConsPat s c ps')
-  E.InPat s p1 p2 -> do
+  E.InPat s m p1 p2 -> do
     (ictx', p1') <- scopePat ctx ictx p1
     (ictx'', p2') <- scopePat ctx ictx' p2
-    return (ictx'', E.InPat s p1' p2')
+    return (ictx'', E.InPat s m p1' p2')
   E.TypeInPat s (a, k) p -> do
     a' <- freshInternal a
     k' <- traverse (scopeKind ctx) k
     (ictx', p') <- scopePat (insertTVar a' ctx) ictx p
     return (ictx', E.TypeInPat s (a', k') p')
-  E.ChoicePat s c p -> do
-    second (E.ChoicePat s c) <$> scopePat ctx ictx p
+  E.ChoicePat s m c p -> do
+    second (E.ChoicePat s m c) <$> scopePat ctx ictx p
   E.AsPat s x p -> case lookupEVar x ictx of
     Nothing -> do
       x' <- freshInternal x
@@ -527,7 +535,7 @@ checkConflictingDefs (partitionLevels -> (ps, as, φs)) = do
     patVarOccurs = \case
       E.VarPat s x      -> Map.singleton (ExpLevel $ external x) [getSpan x]
       E.DConsPat _ _ ps -> Map.unionsWith (++) (map patVarOccurs ps)
-      E.ChoicePat _ _ p -> patVarOccurs p
+      E.ChoicePat _ _ _ p -> patVarOccurs p
       E.AsPat _ x p     -> Map.insertWith (++) (ExpLevel $ external x) 
                              [getSpan x] (patVarOccurs p)
       _                 -> Map.empty
@@ -545,9 +553,9 @@ insertPatVars p ctx =
       E.VarPat _ x      -> Set.singleton (ExpLevel x)
       E.PackPat _ aks p -> Set.fromList (map (TypeLevel . fst) aks) `Set.union` patVars p
       E.DConsPat _ _ ps -> Set.unions (map patVars ps)
-      E.InPat _ p1 p2   -> patVars p1 `Set.union` patVars p2
+      E.InPat _ _ p1 p2 -> patVars p1 `Set.union` patVars p2
       E.TypeInPat _ (a, _) p'-> Set.insert (TypeLevel a) (patVars p')
-      E.ChoicePat _ _ p -> patVars p
+      E.ChoicePat _ _ _ p -> patVars p
       E.AsPat _ x p     -> Set.insert (ExpLevel x) (patVars p)
       _                 -> Set.empty
 
@@ -558,7 +566,7 @@ scopeType ctx = \case
   T.Float s -> pure $ T.Float s
   T.Char s -> pure $ T.Char s
   T.Arrow s m -> T.Arrow s <$> scopeMultiplicity ctx m
-  T.Quant s p pk m -> pure $ T.Quant s p pk m
+  T.Quant s p bk m -> pure $ T.Quant s p bk m
   T.ForallM s m φs t -> do
     φs' <- mapM freshInternal φs
     T.ForallM s <$> scopeMultiplicity ctx m
@@ -595,13 +603,13 @@ scopeType ctx = \case
 scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
 scopeKind ctx = \case
     K.Arrow s k1 k2 -> K.Arrow s  <$> scopeKind ctx k1 <*> scopeKind ctx k2
-    K.Proper s m pk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopePrekind pk
+    K.Proper s m bk -> K.Proper s <$> scopeMultiplicity ctx m  <*> scopeBaseKind bk
     K.Var s lv τ    -> K.Var s lv <$> scopeKVar τ
   where
-    scopePrekind (K.VarPK lv ψ) = do
+    scopeBaseKind (K.VarBK lv ψ) = do
       ψ' <- freshInternal ψ
-      return $ K.VarPK lv ψ'{external = "ψ" ++ show (internal ψ')}
-    scopePrekind pk = pure pk
+      return $ K.VarBK lv ψ'{external = "ψ" ++ show (internal ψ')}
+    scopeBaseKind bk = pure bk
     scopeKVar τ = do
       τ' <- freshInternal τ
       return $ τ'{external = "τ" ++ show (internal τ')}

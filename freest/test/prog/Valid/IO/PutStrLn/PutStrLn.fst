@@ -1,0 +1,1 @@
+_ = putStrLn "FreeST 5.0"

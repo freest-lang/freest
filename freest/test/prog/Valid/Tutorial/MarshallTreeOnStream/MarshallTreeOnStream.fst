@@ -2,6 +2,7 @@ type Stream a = +{Done: Close, More: !a ; Stream a}
 
 data Tree a = Leaf | Node (Tree a) a (Tree a)
 
+-- The preorder visit to the tree
 marshall : forall a -> Tree a -> Stream (Maybe a) -> ()
 marshall t c = marsh t c |> select Done |> close
     where
@@ -23,7 +24,7 @@ unmarshall c = case unmarsh c of
     (t, &Done c) -> wait c ; t
     (t, &More c) ->
         discard c ;
-        error "Leftover tokens: the tree is complete yet the stream still offers More"
+        error "Leftover tokens: the tree is complete yet the stream still contains tokens"
   where
         unmarsh : forall a -> Dual (Stream (Maybe a)) -> (Tree a, Dual (Stream (Maybe a)))
         unmarsh @a (&Done c) =

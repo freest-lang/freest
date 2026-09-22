@@ -1,0 +1,56 @@
+{-
+Based on the 'Ami and Boe' example from
+'Towards Races in Linear Logic', Wen Kokke, J. Garret Morris,
+and Philip Waddler. LMCS 2020.
+-}
+
+{-
+-- A linear channel, running a session between a client and the store
+type CakeService = &{Cake: Close, Disappointment: Close}
+
+-- A shared channel, shared by all clients (and the store)
+type CakeStore   = *?CakeService
+
+runCakeStore : Bool -> Dual CakeStore -> ()
+runCakeStore False cakeStore  =
+    accept cakeStore |> select Disappointment |> wait
+runCakeStore True cakeStore  =
+    accept cakeStore |> select Cake |> wait ;
+    runCakeStore False cakeStore 
+
+storeClient : String -> CakeStore -> ()
+storeClient name cakeStore = client (receive_ cakeStore)
+    where
+        client : CakeService -> ()
+        client (&Cake c)           = putStrLn (name ++ " got cake!brew upgrade"         ) ; close c
+        client (&Disappointment c) = putStrLn (name ++ " got disappointment") ; close c
+
+_ = let (c, s) = channel @CakeStore in
+    fork (\_ -1-> storeClient "Ami" c);
+    fork (\_ -1-> storeClient "Boé" c);
+    runCakeStore True s
+-}
+
+-- A shared channel, shared by all clients (and the store)
+type CakeStore = *+{Cake, Disappointment}
+
+cakeStore : CakeStore -> CakeStore
+cakeStore  c = c |> select_ Cake
+                 |> select_ Disappointment
+
+cakeLover : String -> Dual CakeStore -> ()
+cakeLover name (*&Cake)           = putStrLn (name ++ " got cake!")
+cakeLover name (*&Disappointment) = putStrLn (name ++ " got disappointment")
+
+_ = let (s, c) = channel @CakeStore in
+    fork (\_ -1-> cakeStore s);
+    fork (\_ -1-> cakeLover "Ami" c);
+    cakeLover "Boé" c
+
+-- Nested patterns
+-- cake : Dual CakeStore -> ()
+-- cake (*&Cake (*&Disappointment c)) = print c -- putStrLn "Got one of each!"
+
+-- _ = let (s, c) = channel @CakeStore in
+--     fork (\_ -1-> cakeStore s) ;
+--     cake c

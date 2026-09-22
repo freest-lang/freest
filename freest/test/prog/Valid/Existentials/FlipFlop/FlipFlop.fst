@@ -3,33 +3,33 @@ Benjamin C. Pierce:
 Types and programming languages. MIT Press 2002
 -}
 type Counter : *T
-type Counter = (exists a, (a, a -> Int, a -> a))
+type Counter = (exists (a:*T), (a, a -> Int, a -> a))
 
-counterADT : Counter
-counterADT = 
-  ( @Int
-  , ( 1                    -- new
-    , \i -> i      -- get
-    , \i -> succ i -- inc
-    )
-  ) 
-  : Counter
+counter : Counter
+counter = ( @Int, ( 0       -- new
+                  , id      -- get
+                  , succ    -- inc
+                  )
+          )
 
 type FlipFlop : *T
-type FlipFlop = (exists a, (a, a -> Bool, a -> a, a -> a))
+type FlipFlop = (exists (a:*T), ( a          -- new
+                           , a -> Bool -- read
+                           , a -> a    -- toggle
+                           , a -> a    -- reset
+                           )
+                )
 
-flipFlopADT : FlipFlop
-flipFlopADT = 
-  ( @c 
-  , ( new                      -- new
-    , \c -> even (get c) -- read
-    , \c -> inc c        -- toggle
-    , \c -> new          -- reset
-    )
-  ) 
-  : FlipFlop
-  where (@(c : *T), (new, get, inc)) = counterADT
+flipFlop : FlipFlop
+flipFlop =
+  let (@(a:*T), (new, get, inc)) = counter
+  in (@a, ( new        -- new
+          , even . get -- read
+          , inc        -- toggle
+          , \_ -> new  -- reset
+          )
+     )
 
-main : ()
-main = print (read (toggle (reset (toggle new))))
-  where (@f, (new, read, toggle, reset)) = flipFlopADT
+_ =
+  let (@_, (new, read, toggle, reset)) = flipFlop
+  in new |> toggle |> reset |> toggle |> read |> print

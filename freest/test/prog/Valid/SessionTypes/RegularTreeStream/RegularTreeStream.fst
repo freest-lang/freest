@@ -88,4 +88,4 @@ main =
   -- fork (\(_ : ()) -1-> writeRootTreeOnly w); -- "Error: Empty stack on right subtree"
   -- fork (\(_ : ()) -1-> writeLeftTreeOnly w); -- "Error: Empty stack on left subtree",
   receiveTree r
-  -- let t = receiveTree r in repeat 10000 (\(_ : ()) -> ()) ; t
+  -- let t = receiveTree r in times 10000 (\(_ : ()) -> ()) ; t

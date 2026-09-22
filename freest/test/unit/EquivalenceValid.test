@@ -285,6 +285,8 @@ where
 
 case *&{A, B} ; !Int == *&{B, A} : *S
 
+case *+{A, B} ; !Int == *+{B, A} : *S
+
 case ?Char ; *&{A, B, C} ; !Int == ?Char ; *&{C, A, B} : 1S
 
 case (?Char ; *&{A, B} ; !Int) -1-> Char == (?Char ; *&{A, B}) -1-> Char : 1T
@@ -744,7 +746,7 @@ case Dual (!Int ; Close) == Dual !Int ; Wait : 1S
 
 -- Example from a paper
 
--- needs prekind bounded polymorhism?
+-- needs base kind bounded polymorhism?
 case
   IFRepeat
   ==

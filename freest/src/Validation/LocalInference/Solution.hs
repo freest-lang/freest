@@ -1,6 +1,6 @@
 -- The unified kind-inference solution and its application to the kinded AST
 -- (the analogue of GHC zonking): one map per sort of solvable variable
--- (whole-kind, prekind, multiplicity), applied uniformly to every kind
+-- (whole-kind, baseKind, multiplicity), applied uniformly to every kind
 -- annotation. Only solvable (UnifLv/InstLv) variables are touched; object-level
 -- variables are left alone.
 module Validation.LocalInference.Solution
@@ -11,7 +11,7 @@ module Validation.LocalInference.Solution
   ) where
 
 import Syntax.Base
-import Syntax.Kind (Kind(..), Multiplicity(..), Prekind(..))
+import Syntax.Kind (Kind(..), Multiplicity(..), BaseKind(..))
 import Syntax.Kind qualified as K
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Expression qualified as E
@@ -27,7 +27,7 @@ import Data.Set qualified as Set
 -- variable, gathered from the three solvers.
 data KindSolution = KindSolution
   { kindVars :: Map.Map Variable Kind          -- ^ whole-kind variables (@K.Var@)
-  , prekinds :: Map.Map Variable Prekind        -- ^ prekind variables (@VarPK@)
+  , baseKinds :: Map.Map Variable BaseKind        -- ^ baseKind variables (@VarBK@)
   , mults    :: Map.Map Variable Multiplicity   -- ^ multiplicity variables
   }
 
@@ -38,7 +38,7 @@ resolveKind :: KindSolution -> Kind -> Kind
 resolveKind sol = go Set.empty
   where
     go seen = \case
-      Proper s m pk -> Proper s (resolveMult sol m) (resolvePrekind sol pk)
+      Proper s m bk -> Proper s (resolveMult sol m) (resolveBaseKind sol bk)
       Arrow s k1 k2 -> Arrow s (go seen k1) (go seen k2)
       k@(Var s lv ψ)
         | not (solvable lv)                      -> k
@@ -46,23 +46,25 @@ resolveKind sol = go Set.empty
         | Just k' <- Map.lookup ψ (kindVars sol) -> go (Set.insert ψ seen) k'
         | otherwise                              -> Proper s (Lin s) Top -- unconstrained → top (1T)
 
--- | Resolve a prekind, defaulting an unconstrained solvable variable to the top.
-resolvePrekind :: KindSolution -> Prekind -> Prekind
-resolvePrekind sol = \case
-  VarPK lv ψ | solvable lv -> Map.findWithDefault Top ψ (prekinds sol)
-  pk                       -> pk
+-- | Resolve a baseKind, defaulting an unconstrained solvable variable to the top.
+resolveBaseKind :: KindSolution -> BaseKind -> BaseKind
+resolveBaseKind sol = \case
+  VarBK lv ψ | solvable lv -> Map.findWithDefault Top ψ (baseKinds sol)
+  bk                       -> bk
 
 -- | Apply the solution to a multiplicity: replace each solved solvable atom by
 -- its value and join with the remaining (rigid or unsolved) atoms.
 resolveMult :: KindSolution -> Multiplicity -> Multiplicity
-resolveMult sol = \case
-  m@Lin{}     -> m
-  Sup s atoms ->
+resolveMult sol = go Set.empty
+  where
+   go _ m@Lin{} = m
+   go seen (Sup s atoms) =
     let (subst, keep) = partitionEithers (map resolve atoms)
         resolve (lv, φ)
-          | not (solvable lv)                  = Right (lv, φ)   -- rigid: keep
-          | Just m <- Map.lookup φ (mults sol) = Left m          -- solved
-          | otherwise                          = Left (Lin s)    -- unconstrained → top (1)
+          | not (solvable lv)     = Right (lv, φ)                    -- rigid: keep
+          | φ `Set.member` seen   = Left (Lin s)                     -- cycle → top
+          | Just m <- Map.lookup φ (mults sol) = Left (go (Set.insert φ seen) m)  -- solved: recurse
+          | otherwise             = Left (Lin s)                     -- unconstrained → top (1)
     in foldr K.join (Sup s keep) subst
 
 -- | Apply the solution to every kind annotation in a type, reconstructing each
@@ -108,8 +110,8 @@ resolvePat sol = \case
   E.PackPat s aks p   -> E.PackPat s (map (second (resolveKind sol)) aks) (resolvePat sol p)
   E.TypeInPat s ak p  -> E.TypeInPat s (second (resolveKind sol) ak) (resolvePat sol p)
   E.DConsPat s i ps   -> E.DConsPat s i (map (resolvePat sol) ps)
-  E.InPat s p1 p2     -> E.InPat s (resolvePat sol p1) (resolvePat sol p2)
-  E.ChoicePat s i p   -> E.ChoicePat s i (resolvePat sol p)
+  E.InPat s m p1 p2   -> E.InPat s m (resolvePat sol p1) (resolvePat sol p2)
+  E.ChoicePat s m i p -> E.ChoicePat s m i (resolvePat sol p)
   E.AsPat s x p       -> E.AsPat s x (resolvePat sol p)
   p                   -> p
 
@@ -139,4 +141,6 @@ resolveExp sol = \case
   E.List s es     -> E.List s (map (resolveExp sol) es)
   E.Channel s t   -> E.Channel s (resolveType sol t)
   E.SendType s t  -> E.SendType s (resolveType sol t)
+  E.SectionL s e op   -> E.SectionL s (resolveExp sol e) op
+  E.SectionR s x op e -> E.SectionR s x op (resolveExp sol e)
   e               -> e

@@ -686,6 +686,10 @@ case *&{One} ; !Char : 1C
 
 case *&{One, Two} ; !Char : 1C
 
+case *+{One} ; !Char : 1C
+
+case *+{One, Two} ; !Char : 1C
+
 case *!Int ; !Char : 1C
 
 case *!Int ; !Char : 1C

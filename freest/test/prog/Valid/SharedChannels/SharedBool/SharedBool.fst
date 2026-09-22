@@ -2,16 +2,16 @@ type Bool' : *C
 type Bool' = *+{False', True'}
 
 true' : Bool' -> Void @*T
-true' c = true' $ select True' c
+true' c = true' $ select_ True' c
 
 false' : Bool' -> Void @*T
-false' c = false' $ select False' c
+false' c = false' $ select_ False' c
 
 cond : forall a -> Dual Bool' -> a -> a -> a
 cond @a c v1 v2 = 
   case c of 
-    &True'  _ -> v1
-    &False' _ -> v2
+    *&True'  -> v1
+    *&False' -> v2
 
 main : ()
 main =

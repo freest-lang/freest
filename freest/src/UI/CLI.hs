@@ -56,6 +56,8 @@ data RunOpts = RunOpts
   { filePath :: Maybe FilePath
   , implicitPrelude :: Bool
   , interactive :: Bool
+  , typecheckOnly :: Bool
+  , progArgs :: [String]
   }
 
 defaultRunOpts :: RunOpts
@@ -63,6 +65,8 @@ defaultRunOpts = RunOpts
   { filePath = Nothing
   , implicitPrelude = True
   , interactive = False
+  , typecheckOnly = False
+  , progArgs = []
   }
 
 -- | The parser for the command line options.
@@ -78,10 +82,17 @@ freestOpts = RunOpts
         ( short 'i'
        <> long "interactive"
        <> help "Start the interactive REPL")
+  <*> switch
+        ( short 't'
+       <> long "typecheck"
+       <> help "Type-check the module but do not run it")
+  <*> many (strArgument
+        ( help "Arguments passed to the FreeST program, after a `--' separator"
+       <> metavar "-- ARG..."))
 
 opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper <**> simpleVersioner version)
      ( fullDesc
      <> progDesc version
-     <> header "Nothing here yet!"
+    --  <> header "Nothing here yet!" -- Inserts text above "Usage", usually something like "FreeST compiler, version 0.1.0", but we are already doing that with version.
      )
