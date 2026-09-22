@@ -23,6 +23,7 @@ import Syntax.Type.Internal qualified as T
 import Syntax.Type.Kinded qualified as TK
 import Syntax.Kind qualified as K
 import Validation.LocalInference.Solution ( KindSubst, chaseShapeTypeWith )
+import Compiler.Bug ( internalError )
 
 import Data.Bifunctor (second)
 import Data.List qualified as List
@@ -71,11 +72,14 @@ subs' a u = \case
   -- 
   TK.ForallM s m [] t' -> TK.ForallM  s m [] (subs' a u t')
   TK.ForallM s m (φ : φs) t'
-    | φ `Set.member` fmvu ->
-      let s = getSpan φ
-          φ' = mkFreshVar s (Set.insert φ fmvu `Set.union` allMultVarsType t')
-          TK.ForallM _ _ φs' t'' = subs' a u (subsMultType ObjLv φ (K.VarM s ObjLv φ') (TK.ForallM s m φs t'))
-      in TK.ForallM s m (φ' : φs) t''
+    -- Cannot happen: scoping names every binder uniquely, so u never carries
+    -- one bound here. The renaming this replaced, if it ever can:
+    --
+    -- > let φ' = mkFreshVar (getSpan φ) (Set.insert φ fmvu `Set.union` allMultVarsType t')
+    -- >     TK.ForallM _ _ φs' t'' =
+    -- >       subs' a u (subsMultType ObjLv φ (K.VarM (getSpan φ) ObjLv φ') (TK.ForallM s m φs t'))
+    -- > in TK.ForallM s m (φ' : φs') t''
+    | φ `Set.member` fmvu -> internalError ("captured multiplicity binder " ++ show φ)
     | otherwise ->
       let TK.ForallM _ _ φs' t'' = subs' a u (TK.ForallM s m φs t')
       in TK.ForallM s m (φ : φs') t''
