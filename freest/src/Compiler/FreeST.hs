@@ -10,7 +10,7 @@ module Compiler.FreeST ( freest, runFreeST ) where
 import Interpreter.Eval (evalModule)
 import Interpreter.Value (emptyValueCtx)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
-import Compiler.REPL ( ReplState(..), emptyReplState, repl )
+import Compiler.REPL qualified as REPL
 import Compiler.Pipeline ( loadSilent )
 import Compiler.Bug ( handleBug )
 import Interpreter.Exception ( printException, reportThreadFailure )
@@ -29,7 +29,7 @@ freest = execParser opts >>= runFreeST
 -- | Dispatch on the parsed command line options.
 runFreeST :: RunOpts -> IO ()
 runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip, progArgs = args} =
-  handleBug mPath (withArgs args (repl emptyReplState{filePath = mPath, implicitPrelude = ip}))
+  handleBug mPath (withArgs args (REPL.repl REPL.emptyReplState{REPL.filePath = mPath, REPL.implicitPrelude = ip}))
 runFreeST RunOpts{filePath = Nothing} =
   putStrLn (version ++ "\n" ++ noModuleLoaded) >>
   exitSuccess
