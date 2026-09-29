@@ -143,7 +143,7 @@ synth tdecls ddecls kctx tctx = \case
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s f@(E.SendType s' t) as ->                                            -- TODO: is there a better way to deal with SendType and ReceiveType?
     case as of
-      [] -> throwE (CannotSynthesiseSendType s)
+      [] -> throwE (CannotSynthesiseSendType s t)
       (ExpLevel e : as') -> do
         (e', u, tctx') <- synth tdecls ddecls kctx tctx e
         (a, _, u') <- Expose.typeOutput tdecls e u
@@ -243,7 +243,7 @@ synth tdecls ddecls kctx tctx = \case
   E.Select s m i -> do
     throwE (CannotSynthesiseSelect s m i)
   E.SendType s t -> do
-    throwE (CannotSynthesiseSendType s)
+    throwE (CannotSynthesiseSendType s t)
   E.ReceiveType s -> do
     throwE (CannotSynthesiseReceiveType s)
 
@@ -336,7 +336,7 @@ check tdecls ddecls kctx tctx e t = case e of
         throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
   E.App s h@(E.SendType s' u) args ->
     case args of
-      [] -> throwE (CannotSynthesiseSendType s')
+      [] -> throwE (CannotSynthesiseSendType s' u)
       (ExpLevel e' : args') -> do
         (e'', v, tctx') <- synth tdecls ddecls kctx tctx e'
         (a, _, v') <- Expose.typeOutput tdecls e' v
@@ -993,9 +993,9 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 LTI.match e tdecls t1 t3
               (arg : _) -> 
                 throwE (UnexpectedArg (getSpan arg) 1 (ExpLevel Nothing) arg)
-            e@(E.App s h@(E.SendType s' t0) args) t1 -> 
+            e@(E.App s h@(E.SendType s' t0) args) t1 ->
               case args of
-                [] -> throwE (CannotSynthesiseSendType s')
+                [] -> throwE (CannotSynthesiseSendType s' t0)
                 (ExpLevel e : args') -> do
                   (_, u1, tctx') <- synth tdecls ddecls kctx tctx e
                   (a, _, t2) <- Expose.typeOutput tdecls e u1

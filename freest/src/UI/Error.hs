@@ -52,7 +52,7 @@ data Error
   | CannotSynthesisePat Span E.KindedPat
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span K.Multiplicity Identifier
-  | CannotSynthesiseSendType Span
+  | CannotSynthesiseSendType Span TK.KindedType
   | CannotSynthesiseSection Span (Either Variable Identifier)
   | ConflictingDefs Span (Level String String String) [Span]
   | ConsOutOfScope Span Identifier
@@ -145,7 +145,7 @@ instance Located Error where
     CannotSynthesisePat s _ -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ _ -> s
-    CannotSynthesiseSendType s -> s
+    CannotSynthesiseSendType s _ -> s
     CannotSynthesiseSection s _ -> s
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
@@ -336,10 +336,13 @@ toMessage src = \case
     ++ "Consider giving it a type annotation: " ++ bt ("(" ++ getFromSpan src p ++ " : T)")
   CannotSynthesiseReceiveType s -> makeError src s
     "Could not infer a type for this `receiveType` expression"
+    ++ synthHint "receiveType" "(?type (a : k). U) -> (exists (a : k), U)"
   CannotSynthesiseSelect s m id -> makeError src s
-    ("Could not infer a type for this " ++ bt (selectOp m) ++ " expression")
-  CannotSynthesiseSendType s -> makeError src s
-    "Could not infer a type for this `sendType` expression"
+    ("Could not infer a type for this " ++ bt (selectOp m ++ " " ++ show id) ++ " expression")
+    ++ synthHint (selectOp m ++ " " ++ show id) ("+{" ++ show id ++ ": U, ...} -> U")
+  CannotSynthesiseSendType s t -> makeError src s
+    ("Could not infer a type for this " ++ bt ("sendType @" ++ unparse t) ++ " expression")
+    ++ synthHint ("sendType @" ++ unparse t) ("!type a. W -> W[" ++ unparse t ++ "/a]")
   CannotSynthesiseSection s op -> makeError src s
     ("Could not infer a type for this section over " ++ bt (either show show op))
     ++ "Its operator is polymorphic, so the omitted operand's type is ambiguous here.\n"
@@ -863,6 +866,20 @@ atMult m op = if K.isUn m then op ++ "_" else op
 
 selectOp :: K.Multiplicity -> String
 selectOp = flip atMult "select"
+
+-- | Two hints for a value that only has a type once applied to a channel:
+-- 'select', 'sendType' and 'receiveType' are not ordinary curried functions,
+-- so the type-checker cannot synthesise a type for them on their own (see
+-- channels-and-session-types.md, "A summary of the basic elements of
+-- interaction"). @expr@ is the concrete expression at fault (e.g.
+-- @select Done@) and @scheme@ is the illustrative type scheme it ranges over
+-- (e.g. @+{Done: U, ...} -> U@).
+synthHint :: String -> String -> String
+synthHint expr scheme =
+     "(" ++ bt expr ++ " has all types of the form " ++ bt scheme
+  ++ ", so it needs a type to check against)"
+  ++ "\n  hint: give it one via ascription, e.g. " ++ bt (expr ++ " : " ++ scheme)
+  ++ "\n  hint: or apply it to a channel, e.g. " ++ bt (expr ++ " c")
 
 -- | Wrap a string in backtick characters
 bt :: String -> String
