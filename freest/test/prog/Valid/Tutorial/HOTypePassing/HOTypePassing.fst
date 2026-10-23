@@ -1,6 +1,6 @@
--- This is clearly a buggy program.
--- It may end with items in the buffer.
--- To get it right fork the sending side instead.
+-- The client, which closes the channel, is forked; the server, which waits,
+-- runs in the main thread, so that the program ends with every channel buffer
+-- empty.
 
 -- Sending and receiving higher-order types
 
@@ -57,4 +57,4 @@ decodeUnBinQuad c = c
     |> select Done
     |> close
 
-_ = forkWith decodeService |> decodeUnBinQuad
+_ = forkWith decodeUnBinQuad |> decodeService
