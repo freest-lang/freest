@@ -1,56 +1,38 @@
 {-
 Based on the 'Ami and Boe' example from
 'Towards Races in Linear Logic', Wen Kokke, J. Garret Morris,
-and Philip Waddler. LMCS 2020.
--}
+and Philip Wadler. LMCS 2020.
 
-{-
--- A linear channel, running a session between a client and the store
-type CakeService = &{Cake: Close, Disappointment: Close}
-
--- A shared channel, shared by all clients (and the store)
-type CakeStore   = *!(Dual CakeService)
-
-runCakeStore : Bool -> Dual CakeStore -> ()
-runCakeStore False cakeStore  =
-    accept cakeStore |> select Disappointment |> wait
-runCakeStore True cakeStore  =
-    accept cakeStore |> select Cake |> wait ;
-    runCakeStore False cakeStore 
-
-storeClient : String -> CakeStore -> ()
-storeClient name cakeStore = client (request cakeStore)
-    where
-        client : CakeService -> ()
-        client (&Cake c)           = putStrLn (name ++ " got cake!brew upgrade"         ) ; close c
-        client (&Disappointment c) = putStrLn (name ++ " got disappointment") ; close c
-
-_ = let (c, s) = channel @CakeStore in
-    fork (\_ -1-> storeClient "Ami" c);
-    fork (\_ -1-> storeClient "Boé" c);
-    runCakeStore True s
+The store has one slice of cake left; after that, all it can deliver is
+disappointment. Two cake lovers order at the same store. Which of them gets
+the cake depends on scheduling, but exactly one of them does.
 -}
 
 -- A shared channel, shared by all clients (and the store)
 type CakeStore = *+{Cake, Disappointment}
 
-cakeStore : CakeStore -> CakeStore
-cakeStore  c = c |> select_ Cake
-                 |> select_ Disappointment
+cakeStore : CakeStore -> ()
+cakeStore c = c |> select_ Cake |> select_ Disappointment ; ()
 
-cakeLover : String -> Dual CakeStore -> ()
-cakeLover name (*&Cake)           = putStrLn (name ++ " got cake!")
-cakeLover name (*&Disappointment) = putStrLn (name ++ " got disappointment")
+-- | Did the cake lover get cake?
+cakeLover : Dual CakeStore -> Bool
+cakeLover (*&Cake)           = True
+cakeLover (*&Disappointment) = False
 
-_ = let (s, c) = channel @CakeStore in
-    fork (\_ -1-> cakeStore s);
-    fork (\_ -1-> cakeLover "Ami" c);
-    cakeLover "Boé" c
+-- | Exactly one of the two holds
+xor : Bool -> Bool -> Bool
+xor True  b = not b
+xor False b = b
 
--- Nested patterns
--- cake : Dual CakeStore -> ()
--- cake (*&Cake (*&Disappointment c)) = print c -- putStrLn "Got one of each!"
-
--- _ = let (s, c) = channel @CakeStore in
---     fork (\_ -1-> cakeStore s) ;
---     cake c
+-- The cake lovers report on a shared channel, which also tells the main thread
+-- that they are done
+main : ()
+main =
+  let (s, c) = channel @CakeStore
+      (r, w) = channel @(*?Bool) in
+  fork (\_ -> cakeStore s);
+  fork (\_ -> send_ (cakeLover c) w; ());
+  fork (\_ -> send_ (cakeLover c) w; ());
+  if xor (receive_ r) (receive_ r)
+  then putStrLn "One got cake, the other got disappointment"
+  else putStrLn "Something went wrong"

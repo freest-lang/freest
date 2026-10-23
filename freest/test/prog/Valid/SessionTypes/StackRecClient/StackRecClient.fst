@@ -63,17 +63,17 @@ reverseNE @a n c
   | otherwise = pushNE n c |> reverseNE (n - 1) |> pop
 
 -- A generic client working on an empty stack
-reverseE : Int -> Dual EStack; Close -> ()
+reverseE : Int -> Dual EStack; Wait -> ()
 reverseE n c =
   pushE n c
   |> reverseNE (n-1)
   |> pop
   |> select Stop
-  |> close
+  |> wait
 
 main : ()
 main =
-  let (r, w) = channel @(EStack;Wait) in
-  fork (\_ -1-> eStack r |> wait);
+  let (r, w) = channel @(EStack;Close) in
+  fork (\_ -1-> eStack r |> close);
   reverseE 10 w
   -- reverseThree w
