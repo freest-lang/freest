@@ -1,3 +1,7 @@
+-- This is clearly a buggy program.
+-- It may end with items in the buffer.
+-- To get it right fork the sending side instead.
+
 -- Sending and receiving higher-order types
 
 type Decode (f : *T -> *T) =
