@@ -35,20 +35,20 @@ emptyBagServer = bagServer (channel @*?Int)
 
 -- | Put an integer on a shared bag
 put : Int -> SharedBag -> ()
-put n q = request q |> select Put |> send n |> close
+put n q = q |> request |> select Put |> send n |> close
 
 -- | Get an integer from a shared bag
 get : SharedBag -> Int
-get q = request q |> select Get |> receiveAndClose
+get q = q |> request |> select Get |> receiveAndClose
 
 -- An application
 
--- | Put three numbers and get two; return the sum
-main : Int
+-- | Put three numbers, get them all back, and print their sum
+main : ()
 main =
   let (clientSide, serverSide) = channel @SharedBag in
   fork (\_ -1-> emptyBagServer serverSide);
   fork (\_ -1-> put 7 clientSide);
   fork (\_ -1-> put 5 clientSide);
   fork (\_ -1-> put 1 clientSide);
-  get clientSide + get clientSide
+  print (get clientSide + get clientSide + get clientSide)
