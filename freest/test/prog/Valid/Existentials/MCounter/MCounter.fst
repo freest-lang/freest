@@ -4,7 +4,7 @@ Types and programming languages. MIT Press 2002
 -}
 
 type IntRef : *C
-type IntRef = *?IntRefSession
+type IntRef = *!(Dual IntRefSession)
 
 type IntRefSession : 1C
 type IntRefSession = +{Read: ?Int, Write: !Int} ; Close
@@ -20,10 +20,10 @@ mCounterADT = (@IntRef, ( \_ -> intRef 0                -- new
               ) 
   where
   write : Int -> IntRef -> ()
-  write x r = r |> receive_ |> select Write |> sendAndClose x
+  write x r = r |> request |> select Write |> sendAndClose x
 
   read : IntRef -> Int
-  read r = r |> receive_ |> select Read |> receiveAndClose
+  read r = r |> request |> select Read |> receiveAndClose
 
   intRef : Int -> IntRef
   intRef x = forkWith (handle x)

@@ -1,5 +1,5 @@
 type MathServer : *C
-type MathServer  = *?MathService
+type MathServer  = *!(Dual MathService)
 
 type MathService : 1C
 type MathService = +{ Plus: !Int; !Int; ?Int; MathService
@@ -35,7 +35,7 @@ runMathServer n ch =
 
 client1 : MathServer -> ()
 client1 ch =
-  let c = receive_ ch in
+  let c = request ch in
   let (n, c) = c |> select Plus |> send 1 |> send 2 |> receive in
   let (m, c) = c |> select Neg  |> send n |> receive in
   print m;
@@ -43,7 +43,7 @@ client1 ch =
 
 client2 : MathServer -> ()
 client2 ch =
-  let c = receive_ ch in
+  let c = request ch in
   let (b, c) = c |> select Gt |> send 2 |> send 1 |> receive in
   print b;
   c|> select Done |> close

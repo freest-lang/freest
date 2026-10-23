@@ -1,44 +1,38 @@
+-- A barrier: clients request a linear sync session on a shared channel; the
+-- server releases them only after all of them have arrived, telling each
+-- client how many clients reached the barrier.
+
 type SyncServer : *C
-type SyncServer  = *?SyncService
+type SyncServer  = *!(Dual SyncService)
 
 type SyncService : 1C
 type SyncService = ?Int; Wait
 
-syncServerOnce : Int -> Dual SyncServer -> ()
-syncServerOnce limit ch = 
-    if limit == 0
-    then ()
-    else 
-        -- create endpoints for syncing
-        let (c, s) = channel @SyncService in
-        -- send client's endpoint; recursive call
-        ch |> send_ c |> syncServerOnce (limit - 1);
-        -- sync client
-        send 0 s |> close
+-- | Accept k clients, then release all of them, sending each the total n.
+syncServer : Int -> Dual SyncServer -> Int -> ()
+syncServer _ _  0 = ()
+syncServer n ch k =
+    -- accept a client; recursive call
+    let s = accept ch in
+    syncServer n ch (k - 1);
+    -- sync client
+    s |> send n |> close
 
-syncServer : Int -> Dual SyncServer -> ()
-syncServer limit ch =
-    syncServerOnce limit ch;
-    syncServer limit ch
-
--- receive linear sync channel and wait for sync
+-- | Request a linear sync session and wait for sync
 sync : SyncServer -> Int
-sync ch = receive_ ch |> receiveAndWait
+sync ch = request ch |> receiveAndWait
 
-client : Int -> SyncServer -> ()
-client id ch = print (- id); sync ch; print id
+client : SyncServer -> ForkJoin -> ()
+client ch j = print (sync ch); join j
 
-forkNClients : Int -> SyncServer -> ()
-forkNClients i ch
-  | i == 0    = ()
-  | otherwise = fork (\(_ : ()) -1-> client i ch); 
-                forkNClients (i - 1) ch
+nClients : Int
+nClients = 10
 
-nServers : Int
-nServers = 20
-
+-- Every client prints the number of clients at the barrier, i.e., `nClients`
 main : ()
-main = 
-    let (c, s) = channel @SyncServer in
-    forkNClients nServers c;
-    syncServer nServers s
+main =
+    let (c, s) = channel @SyncServer
+        (j, a) = channel @ForkJoin in
+    parallel nClients (\_ -> client c j);
+    syncServer nClients s nClients;
+    await nClients a

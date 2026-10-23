@@ -7,14 +7,14 @@ type CellOp : *T -> 1C
 type CellOp a = +{Read: ?a, Write: !a} ; Close
 
 type CellRef : *T -> *C
-type CellRef a = *?(CellOp a)
+type CellRef a = *!(Dual (CellOp a))
 
 -- clients
 write : forall (a : *T) -> a -> CellRef a -> ()
-write x s = receive_ s |> select Write |> sendAndClose x
+write x s = request s |> select Write |> sendAndClose x
 
 read : forall (a : *T) -> CellRef a -> a
-read s = receive_ s |> select Read |> receiveAndClose
+read s = request s |> select Read |> receiveAndClose
 
 -- servers I _ using accept
 cell : forall (a : *T) -> a -> Dual (CellRef a) -> ()

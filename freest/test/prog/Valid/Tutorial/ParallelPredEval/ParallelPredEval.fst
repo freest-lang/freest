@@ -1,12 +1,12 @@
 type PredEvalService : *C
-type PredEvalService = *?PredEvalSession
+type PredEvalService = *!(Dual PredEvalSession)
 
 type PredEvalSession : 1C
 type PredEvalSession = !Int ; ?Bool ; Close
 
 client : Int -> PredEvalService -> Bool
 client n s =
-    receive_ s |> send n |> receiveAndClose
+    request s |> send n |> receiveAndClose
 
 gz : Dual PredEvalService -> ()
 gz s =

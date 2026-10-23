@@ -9,7 +9,7 @@ and Philip Waddler. LMCS 2020.
 type CakeService = &{Cake: Close, Disappointment: Close}
 
 -- A shared channel, shared by all clients (and the store)
-type CakeStore   = *?CakeService
+type CakeStore   = *!(Dual CakeService)
 
 runCakeStore : Bool -> Dual CakeStore -> ()
 runCakeStore False cakeStore  =
@@ -19,7 +19,7 @@ runCakeStore True cakeStore  =
     runCakeStore False cakeStore 
 
 storeClient : String -> CakeStore -> ()
-storeClient name cakeStore = client (receive_ cakeStore)
+storeClient name cakeStore = client (request cakeStore)
     where
         client : CakeService -> ()
         client (&Cake c)           = putStrLn (name ++ " got cake!brew upgrade"         ) ; close c

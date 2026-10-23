@@ -10,9 +10,9 @@ type CreditCard = String
 type Amount = Int
 type Date = Int
 
--- type PromotionS = *?(String, CreditCard, Int)
+-- type PromotionS = *!(String, CreditCard, Int)
 type PromotionS : *C
-type PromotionS = *?Promotion
+type PromotionS = *!(Dual Promotion)
 
 type Promotion : 1C
 type Promotion = !String ; !CreditCard ; !Amount ; Close 
@@ -23,7 +23,7 @@ type Decision = &{ Accepted: ?PromotionS; Close
                  }
 
 type DonationS : *C
-type DonationS = *!Donation
+type DonationS = *?(Dual Donation)
 type Donation : 1C
 type Donation = +{ SetTitle: !String ; Donation
                  , SetDate : !Date   ; Donation
@@ -34,12 +34,12 @@ type Donation = +{ SetTitle: !String ; Donation
 
 donate : PromotionS -> String -> CreditCard -> Amount -> ()
 donate p donor ccard amount =
-  receive_ p |> send donor |> send ccard |> send amount |> close
+  request p |> send donor |> send ccard |> send amount |> close
 
 helpSavingTheWolf : Dual DonationS -> ()
 helpSavingTheWolf d =
   case
-    d |> receive_ 
+    d |> request
       |> select SetDate  |> send 2012                   -- setup the date
       |> select SetTitle |> send "Help Saving the Wolf" -- setup the title
       |> select SetDate  |> send 2013                   -- fix the 2012 date
@@ -55,7 +55,7 @@ helpSavingTheWolf d =
 wrongYear : Dual DonationS -> ()
 wrongYear d = 
   case
-    d |> receive_ 
+    d |> request
       |> select SetDate  |> send 1999 -- wrong date
       |> select SetTitle |> send "Help Saving the Mink" 
       |> select Commit

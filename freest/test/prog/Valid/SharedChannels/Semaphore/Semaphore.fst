@@ -34,7 +34,7 @@ type Sem : 1C
 type Sem = +{SemWait: WaitAck, SemSignal: Wait}
 
 type Semaphore : *C
-type Semaphore = *?Sem
+type Semaphore = *!(Dual Sem)
 
 -- | A semaphore server with a given number of resources and a list of waiting
 -- clients
@@ -75,12 +75,12 @@ waitFor n fork_ =
 -- | A prototypical client entering and leaving a critical region
 client : Int -> Semaphore -> Join -> () -1-> ()
 client pid sem join _ = 
-  case sem |> receive_ |> select SemWait of
+  case sem |> request |> select SemWait of
     &Go s ->
       putStrLn (show pid ++ " is entering critical region");
       wait s;
       putStrLn (show pid ++ " is leaving critical region");
-      receive_ sem |> select SemSignal |> wait;
+      request sem |> select SemSignal |> wait;
       select_ Join join;
       ()
 

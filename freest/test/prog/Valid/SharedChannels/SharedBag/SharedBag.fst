@@ -4,7 +4,7 @@ type Bag = +{Put: !Int, Get: ?Int}; Close
   
 -- | The client view of a shared interaction with a bag
 type SharedBag : *C
-type SharedBag = *?Bag
+type SharedBag = *!(Dual Bag)
 
 -- | The state of the shared bag: integer messages in transit
 type State : *T
@@ -23,8 +23,7 @@ handleClient state chan =
 -- | A shared bag server with a state
 bagServer : State -> Dual SharedBag -> Void@*T
 bagServer state serverChannel =
-  let (clientSide, serverSide) = channel @Bag in
-  send_ clientSide serverChannel;
+  let serverSide = accept serverChannel in
   fork (\_ -1-> handleClient state serverSide);
   bagServer state serverChannel
 
@@ -36,11 +35,11 @@ emptyBagServer = bagServer (channel @*?Int)
 
 -- | Put an integer on a shared bag
 put : Int -> SharedBag -> ()
-put n q = receive_ q |> select Put |> send n |> close
+put n q = request q |> select Put |> send n |> close
 
 -- | Get an integer from a shared bag
 get : SharedBag -> Int
-get q = receive_ q |> select Get |> receiveAndClose
+get q = request q |> select Get |> receiveAndClose
 
 -- An application
 

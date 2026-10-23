@@ -8,7 +8,7 @@ countLines' inp =
         in (n + 1, inp)
 
 -- _ =
---   let (n, inp) = stdin |> receive_ |> countLines' in
+--   let (n, inp) = stdin |> request |> countLines' in
 --   hCloseIn inp;
 --   putStrLn $ "Number of lines: " ++ show n
 
@@ -20,7 +20,7 @@ countLines n inp =
   else inp |> hGetLine |> snd |> countLines (n + 1)
         
 _ =
-  let (n, inp) = stdin |> receive_ |> countLines 0 in
+  let (n, inp) = stdin |> request |> countLines 0 in
   hCloseIn inp;
   putStrLn $ "Number of lines: " ++ show n
 

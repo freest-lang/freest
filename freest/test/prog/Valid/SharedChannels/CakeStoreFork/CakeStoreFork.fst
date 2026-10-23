@@ -6,7 +6,7 @@ Based on the 'Ami and Boe' example from
 -}
 
 type CakeStore : *C
-type CakeStore   = *?CakeService
+type CakeStore   = *!(Dual CakeService)
 
 type CakeService : 1C
 type CakeService = &{Cake: Close, Disappointment: Close}
@@ -38,7 +38,7 @@ runCakeStore gotCake k n cakeStore fj =
 
 storeClient : String -> CakeStore -> ()
 storeClient name cakeStore =
-  case receive_ cakeStore of
+  case request cakeStore of
     &Cake           c -> putStrLn (name ++ " got cake!"         ); close c
     &Disappointment c -> putStrLn (name ++ " got disappointment"); close c
 
