@@ -2,3 +2,17 @@ foo : &{A: ?type a. ?Bool; ?a, B: Skip} -> ()
 foo (&A (?type a. ?True ; ?x; _)) = ()
 foo (&A (?type a. ?False; ?x; _)) = ()
 foo (&B _)             = ()
+
+{-
+Type-threading pattern forcing (item 2, face c).
+
+The forceable binder is the `?type a` (a `TypeInPat`; `?type ≅ ∀`, defaults `1T`);
+`a` needs `*T` because the received `x:a` is discarded. To learn that, kinding
+must walk the pattern against its session type (`Expose`, as `checkPat` does) —
+the kinding/typing duplication the fused kinding+typing pass removes (design doc
+§13, item 2). The purely structural parameter-component case is already handled;
+only this type-threading walk is deferred.
+
+Literal fully-stripped duplicate of
+Valid/SessionTypes/NegativePats/NegativePats.fst; the annotated original passes.
+-}

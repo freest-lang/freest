@@ -58,8 +58,23 @@ toBit b = b  @Int 1 0
 ifInt : Bool' -> Int -> Int -> Int
 ifInt = cond  @Int
 
--- main : Int
--- main = ifInt (not' true) 1 2
+_ =
+    print $ ifInt (not' true) 1 2
 
-main : ()
-main = print $ toBool $ and' (or' false true) (not' false)
+_ =
+    print $ toBool $ and' (or' false true) (not' false)
+
+{-
+ValDef kinded without its signature.
+
+Awaiting: a ValDef<->FnDef unification. `true = \@a -> \t -> \f -> t` discards
+`f`, so the type-abstraction binder `a` needs `*T`; but `f = \x -> e` parses as a
+ValDef, kinded via kindRHS/kindExp without consulting its signature, so `\@a`
+gets a fresh kind var defaulting to `1T`. The clause form `true @a t f = t` is an
+FnDef, kinded by kindFun against the signature, and already infers `*T`. The fix
+routes signed single-variable ValDefs through the signature-aware path so both
+spellings kind identically.
+
+Literal fully-stripped duplicate of
+Valid/SystemF/SystemFBooleans/SystemFBooleans.fst; the annotated original passes.
+-}
