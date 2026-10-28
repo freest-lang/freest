@@ -1,3 +1,5 @@
 <pending>
 
-How do we test prgrams that read from stdin?
+Nondeterministic output: expect `xab` or `abx`, but never `axb`.
+The output is written to stdout itself, so it cannot be reported back to
+main and checked; it needs an order-insensitive comparison in the harness.

@@ -16,11 +16,13 @@ import UI.CLI
 import ProgSpecUtils
 
 import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
-import Control.Monad ( void )
+import Control.Exception ( IOException, try )
+import Control.Monad ( forM_, void )
 import Data.List ( intercalate, isPrefixOf, dropWhileEnd )
 import System.Environment ( getExecutablePath )
 import System.Exit ( ExitCode(..) )
-import System.IO ( Handle, hIsEOF, hGetChar )
+import System.FilePath ( (-<.>) )
+import System.IO ( Handle, hClose, hIsEOF, hGetChar, hPutStr )
 import System.Process
 import System.Timeout
 import Test.Hspec
@@ -59,14 +61,23 @@ doExpectationsMatch out exp =
 -- the whole suite. The child is killed if it exceeds the timeout. Returns the
 -- captured stdout (for comparison against the @.expected@ file) on success, or a
 -- failure report including the child's stderr on a non-zero exit.
+--
+-- If the test has an @.input@ file next to its @.fst@ file, its contents are
+-- the program's stdin (followed by EOF); otherwise the program has no stdin.
 testOne :: FilePath -> IO (String, TestResult)
 testOne file = do
-  self <- getExecutablePath
-  res  <- timeout timeInMicro $
+  self  <- getExecutablePath
+  input <- safeRead (file -<.> "input")
+  res   <- timeout timeInMicro $
     withCreateProcess
       (proc self ["--run-one", file])
-        { std_in = NoStream, std_out = CreatePipe, std_err = CreatePipe }
-      $ \_ (Just hout) (Just herr) ph -> do
+        { std_in  = maybe NoStream (const CreatePipe) input
+        , std_out = CreatePipe, std_err = CreatePipe }
+      $ \hin (Just hout) (Just herr) ph -> do
+          -- feed stdin on its own thread, so a program that does not read all
+          -- of its input cannot block us (nor the broken pipe make us fail)
+          forM_ ((,) <$> hin <*> input) \(h, s) ->
+            forkIO $ void (try (hPutStr h s >> hClose h) :: IO (Either IOException ()))
           -- capture each pipe on its own thread so the child never blocks on a
           -- full pipe; 'capture' bounds memory even if the program loops printing
           ovar <- newEmptyMVar
