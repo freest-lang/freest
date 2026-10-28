@@ -40,6 +40,8 @@ import Control.Monad.Trans.Except ( runExceptT, throwE )
 import Data.Bifunctor ( first, second, bimap )
 import Data.Bitraversable ( bisequence, bimapM )
 import Data.Foldable ( foldrM )
+import Data.Function ( on )
+import Data.Maybe ( isJust )
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -368,7 +370,7 @@ scopeDefs ctx ds = do
             x' <- freshInternal x
             return (insertEVar x' ictx'', xs'' ++ [x'])) 
           (ictx, []) xs
-        t' <- scopeType ctx t
+        t' <- scopeType ctx (quantifyFreeTVars ctx t)
         let ctx' | isMutual  = foldr insertEVar ctx xs'
                  | otherwise = ctx
         second (E.TypeSig xs' t':) <$> scopeDefs' isMutual ctx' ictx' ds
@@ -598,6 +600,25 @@ scopeType ctx = \case
     T.Abs s (zip as' ks') <$> scopeType (fromTVarList as' `union` ctx) t
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
+
+-- | Implicit quantification of a signature: the type variables that are not in
+-- scope are bound by a leading 'forall', in order of first occurrence, as if the
+-- programmer had written @forall a b ->@ in front of the signature. For
+-- example, @id : a -> a@ stands for @id : forall a -> a -> a@.
+quantifyFreeTVars :: ScopingCtx -> T.ParsedType -> T.ParsedType
+quantifyFreeTVars ctx t =
+  case List.nubBy ((==) `on` external) (freeTVars Set.empty t) of
+    [] -> t
+    as -> let s = getSpan t in T.AppForall s (K.Un s) [(a, Nothing) | a <- as] t
+  where
+    freeTVars bound = \case
+      T.Var _ a
+        | external a `Set.member` bound || isJust (lookupTVar a ctx) -> []
+        | otherwise -> [a]
+      T.Abs _ aks u -> freeTVars (foldr (Set.insert . external . fst) bound aks) u
+      T.ForallM _ _ _ u -> freeTVars bound u
+      T.App _ u us -> concatMap (freeTVars bound) (u : us)
+      _ -> []
 
 -- | Scope a kind.
 scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
