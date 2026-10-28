@@ -1,12 +1,1 @@
-<pending>
-
-Multiplicity subtyping and/or multiplicity polymorphism #20
-
-Once solved expect a permutation of
-
-1 is entering critical region 
-2 is entering critical region 
-1 is leaving critical region 
-3 is entering critical region 
-2 is leaving critical region 
-3 is leaving critical region 
+nondeterministic test passed

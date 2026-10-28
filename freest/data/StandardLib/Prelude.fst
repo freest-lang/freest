@@ -244,6 +244,10 @@ sum : [Int] -> Int
 sum []        = 0
 sum (x :: xs) = x + sum xs
 
+all : forall (a : *T) -> (a -> Bool) -> [a] -> Bool
+all _ []        = True
+all p (x :: xs) = p x && all p xs
+
 foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
 foldl #m @a @b f = go
   where

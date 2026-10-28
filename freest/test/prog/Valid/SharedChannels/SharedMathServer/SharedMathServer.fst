@@ -33,24 +33,43 @@ runMathServer n ch =
     runMathService (accept ch) ;
     runMathServer (n - 1) ch
 
-client1 : MathServer -> ()
+-- | Compute -(1 + 2)
+client1 : MathServer -> Int
 client1 ch =
   let c = request ch in
   let (n, c) = c |> select Plus |> send 1 |> send 2 |> receive in
   let (m, c) = c |> select Neg  |> send n |> receive in
-  print m;
-  c |> select Done |> close
+  c |> select Done |> close ;
+  m
 
-client2 : MathServer -> ()
+-- | Compute 2 > 1
+client2 : MathServer -> Bool
 client2 ch =
   let c = request ch in
   let (b, c) = c |> select Gt |> send 2 |> send 1 |> receive in
-  print b;
-  c|> select Done |> close
+  c |> select Done |> close ;
+  b
 
+-- | Collect the answers of the two clients (on channels ci and cb) and check
+-- that they make sense.
+test : *?Int -> *?Bool -> ()
+test ci cb =
+  if check (receive_ ci) (receive_ cb)
+  then putStrLn "nondeterministic test passed"
+  else putStrLn "nondeterministic test failed"
+  where
+    -- | -(1 + 2) is -3 and 2 > 1 is True
+    check : Int -> Bool -> Bool
+    check m b = m == -3 && b
+
+-- Clients report their answers on shared channels, one per type of answer
+-- (receiving both answers tells main that the clients are done).
 main : ()
 main =
-  let (c, s) = channel @MathServer in
-  fork (\_ -1-> client1 c);
-  fork (\_ -1-> client2 c);
-  runMathServer 2 s
+  let (clientEnd, serverEnd)          = channel @MathServer
+      (collectIntEnd, reportIntEnd)   = channel @(*?Int)
+      (collectBoolEnd, reportBoolEnd) = channel @(*?Bool) in
+  fork (\_ -> send_ (client1 clientEnd) reportIntEnd  ; ()) ;
+  fork (\_ -> send_ (client2 clientEnd) reportBoolEnd ; ()) ;
+  runMathServer 2 serverEnd ;
+  test collectIntEnd collectBoolEnd

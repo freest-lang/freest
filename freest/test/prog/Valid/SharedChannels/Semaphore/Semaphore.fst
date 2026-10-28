@@ -72,24 +72,64 @@ waitFor n fork_ =
 
 -- End of module ForkJoin. An application from here on
 
--- | A prototypical client entering and leaving a critical region
-client : Int -> Semaphore -> Join -> () -1-> ()
-client pid sem join _ = 
+-- | A prototypical client entering and leaving a critical region. Rather than
+-- printing, the client reports pid when entering and -pid when leaving.
+client : Int -> Semaphore -> Join -> *!Int -> () -1-> ()
+client pid sem join report _ =
   case sem |> request |> select SemWait of
     &Go s ->
-      putStrLn (show pid ++ " is entering critical region");
+      send_ pid report;
       wait s;
-      putStrLn (show pid ++ " is leaving critical region");
+      send_ (-pid) report;
       request sem |> select SemSignal |> wait;
       select_ Join join;
       ()
 
--- | Launch a semaphore server and a few clients
+-- | Collect the six events of the three clients (on channel c) and check that
+-- they make sense.
+test : *?Int -> ()
+test c =
+  if replay 0 0 0 (receiveN 6)
+  then putStrLn "nondeterministic test passed"
+  else putStrLn "nondeterministic test failed"
+  where
+    -- | Receive n events, in order of arrival
+    receiveN : Int -> [Int]
+    receiveN n
+      | n == 0    = []
+      | otherwise = receive_ c :: receiveN (n - 1)
+    -- | The state of client pid after event e: 0 before entering, 1 inside the
+    -- critical region, 2 after leaving, 3 after an impossible event
+    step : Int -> Int -> Int -> Int
+    step pid e s
+      | e ==  pid && s == 0   = 1
+      | e == -pid && s == 1   = 2
+      | e == pid || e == -pid = 3
+      | otherwise             = s
+    -- | One for a client inside the critical region, zero otherwise
+    inside : Int -> Int
+    inside s = if s == 1 then 1 else 0
+    -- | Replay the events: each client enters and then leaves, and there are
+    -- never more than two clients (the semaphore's resources) inside. A client
+    -- reports entering after it enters and leaving before it leaves, so the
+    -- replay never counts more clients inside than there actually are.
+    replay : Int -> Int -> Int -> [Int] -> Bool
+    replay s1 s2 s3 [] = s1 == 2 && s2 == 2 && s3 == 2
+    replay s1 s2 s3 (e :: es) =
+      let t1 = step 1 e s1
+          t2 = step 2 e s2
+          t3 = step 3 e s3 in
+      inside t1 + inside t2 + inside t3 <= 2 && replay t1 t2 t3 es
+
+-- | Launch a semaphore server and a few clients. Clients report their events on
+-- a shared channel and signal completion on a fork-join channel.
 main : ()
 main =
-  let semClient = launchSemServer 2 in
-  let (fork_, join) = channel @(Dual Join) in
-  fork (client 1 semClient join);
-  fork (client 2 semClient join);
-  fork (client 3 semClient join);
-  waitFor 3 fork_
+  let semClient               = launchSemServer 2
+      (awaitEnd, joinEnd)     = channel @(Dual Join)
+      (collectEnd, reportEnd) = channel @(*?Int) in
+  fork (client 1 semClient joinEnd reportEnd);
+  fork (client 2 semClient joinEnd reportEnd);
+  fork (client 3 semClient joinEnd reportEnd);
+  waitFor 3 awaitEnd;
+  test collectEnd

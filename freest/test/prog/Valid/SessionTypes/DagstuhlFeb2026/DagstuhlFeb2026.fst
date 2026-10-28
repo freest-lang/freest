@@ -65,4 +65,12 @@ main : ()
 main =
   forkWith fold |>
   showStream |>
-  print -- expect "5True"
+  putStrLn
+
+{-
+Should type application narrow down the kind of a type? #19
+
+Once solved expect
+
+5True
+-}

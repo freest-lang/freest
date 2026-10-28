@@ -1,4 +1,1 @@
-<pending>
-Nondeterministic output: this program forks threads that print concurrently,
-so stdout order varies between runs and cannot be matched exactly. Re-enable
-once the harness supports order-insensitive comparison.
+nondeterministic test passed
