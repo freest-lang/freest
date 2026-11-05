@@ -45,6 +45,7 @@ dependencies:
   - optparse-applicative >= 0.16.1.0
   - repline
   - sgbisim
+  - stm >= 2.5
   - transformers >= 0.5.6.2
 
 library:

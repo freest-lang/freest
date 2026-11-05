@@ -19,7 +19,7 @@ module Interpreter.Builtin
   ) where
 
 import Control.Concurrent ( forkIO )
-import qualified Control.Concurrent.Chan as C ( newChan, readChan, writeChan )
+import Control.Concurrent.STM ( atomically, newTQueueIO, readTQueue, writeTQueue )
 import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, IOException, SomeException, bracket_, catch, finally, fromException, throwIO)
 import Data.Char ( chr, ord )
 import Data.Functor ( ($>), void )
@@ -110,8 +110,8 @@ asString = \case
 
 chan :: IO (ChannelEnd, ChannelEnd)
 chan = do
-  c1 <- C.newChan
-  c2 <- C.newChan
+  c1 <- newTQueueIO
+  c2 <- newTQueueIO
   return ((c1, c2), (c2, c1))
 
 handleBlockedRead :: IO a -> IO a
@@ -127,7 +127,7 @@ handleBlockedRead action =
 
 receive :: ChannelEnd -> IO (Value, ChannelEnd)
 receive c = handleBlockedRead $ do
-  v <- C.readChan (fst c)
+  v <- atomically (readTQueue (fst c))
   return (v, c)
 
 receiveLabel :: ChannelEnd -> IO (String, ChannelEnd)
@@ -137,7 +137,7 @@ receiveLabel c = do
 
 send :: Value -> ChannelEnd -> IO ChannelEnd
 send v c = do
-  C.writeChan (snd c) v
+  atomically (writeTQueue (snd c) v)
   return c
 
 sendLabel :: String -> ChannelEnd -> IO ChannelEnd
@@ -147,11 +147,11 @@ sendLabel s c = do
 
 wait :: Value -> Value
 wait (VChan c) =
-  VIO $ handleBlockedRead (C.readChan (fst c))
+  VIO $ handleBlockedRead (atomically (readTQueue (fst c)))
 
 close :: Value -> IO Value
 close (VChan c) = do
-  C.writeChan (snd c) (VCons "()" [])
+  atomically (writeTQueue (snd c) (VCons "()" []))
   return (VCons "()" [])
 
 -- | Report a failed file operation as the program's error, not the compiler's.
