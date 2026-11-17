@@ -58,6 +58,7 @@ data RunOpts = RunOpts
   , interactive :: Bool
   , typecheckOnly :: Bool
   , progArgs :: [String]
+  , languageServer :: Bool
   }
 
 defaultRunOpts :: RunOpts
@@ -67,6 +68,7 @@ defaultRunOpts = RunOpts
   , interactive = False
   , typecheckOnly = False
   , progArgs = []
+  , languageServer = False
   }
 
 -- | The parser for the command line options.
@@ -89,6 +91,9 @@ freestOpts = RunOpts
   <*> many (strArgument
         ( help "Arguments passed to the FreeST program, after a `--' separator"
        <> metavar "-- ARG..."))
+  <*> switch
+        ( long "lsp"
+       <> help "Start the Language Server")
 
 opts :: ParserInfo RunOpts
 opts = info (freestOpts <**> helper <**> simpleVersioner version)
