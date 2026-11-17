@@ -12,8 +12,10 @@ module Compiler.Pipeline
   , loadPrelude
   , loadModule
   , loadPreludeAndModule
+  , loadPreludeAndModuleWithErrors
   , loadSilent
   , loadNoModule
+  , LoadState
   ) where
 
 import Syntax.Module qualified as M
@@ -98,30 +100,34 @@ loadSilent withPrelude programPath = do
              else pure [programPath]
   loadM (pure ()) files
 
+-- | Load the Prelude joined with a program module without printing anything,
+-- returning the failure for the caller to render (used by the language server).
+loadPreludeAndModuleWithErrors :: FilePath -> IO (Either IncludeError LoadState)
+loadPreludeAndModuleWithErrors programPath = do
+  preludeFile <- getDataFileName preludePath
+  loadME [preludeFile, programPath]
+
 -- | Expand the given roots along their 'INCLUDE' pragmas, parse each resulting
 -- file, merge into a single 'ParsedModule', then scope, kind and type-check it.
--- The 'post' action runs on successful load (pass 'pure ()' to remain silent).
--- On failure (any unreadable file, include cycle, parse error, or validation
--- error), prints errors against all sources and returns 'Nothing'.
-loadM :: IO () -> [FilePath] -> IO (Maybe LoadState)
-loadM post roots =
-  resolveIncludes roots >>= \case
-    Left (InvalidRoot p)      -> abort (hPutStrLn stderr (notASourceFile p))
-    Left (GraphErrors src es) -> abort (printErrors src es)
-    Right inputs              -> validate inputs
+loadME :: [FilePath] -> IO (Either IncludeError LoadState)
+loadME roots = (>>= validate) <$> resolveIncludes roots
   where
-    abort report = report *> hPutStrLn stderr failedToLoadModule *> pure Nothing
     validate inputs =
       let srcs = Map.fromList [(p, lines s) | (p, s) <- inputs] in
-      case do modules <- mapM (uncurry runParseModule) inputs
-              runValidation emptyValidationState do
-                (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx Map.empty D.emptyDataDecls (M.insertBuiltinLists (mconcat modules))
-                vs                        <- get
-                pure (srcs, vs, sctx, kctx, tctx, kmodl)
-      of Left es -> do
-          printErrors srcs es
-          hPutStrLn stderr failedToLoadModule
-          pure Nothing
-         Right result -> do
-          post
-          pure (Just result)
+      either (Left . GraphErrors srcs) Right do
+        modules <- mapM (uncurry runParseModule) inputs
+        runValidation emptyValidationState do
+          (sctx, kctx, tctx, kmodl) <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx Map.empty D.emptyDataDecls (M.insertBuiltinLists (mconcat modules))
+          vs                        <- get
+          pure (srcs, vs, sctx, kctx, tctx, kmodl)
+
+-- | 'loadME', printing errors against all sources on failure. The 'post'
+-- action runs on successful load (pass 'pure ()' to remain silent).
+loadM :: IO () -> [FilePath] -> IO (Maybe LoadState)
+loadM post roots =
+  loadME roots >>= \case
+    Left (InvalidRoot p)      -> abort (hPutStrLn stderr (notASourceFile p))
+    Left (GraphErrors src es) -> abort (printErrors src es)
+    Right result              -> post *> pure (Just result)
+  where
+    abort report = report *> hPutStrLn stderr failedToLoadModule *> pure Nothing

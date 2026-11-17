@@ -11,11 +11,20 @@ import Interpreter.Eval (evalModule)
 import Interpreter.Value (emptyValueCtx)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL qualified as REPL
-import Compiler.Pipeline ( loadSilent )
+import Compiler.Pipeline ( loadSilent, LoadState )
 import Compiler.Bug ( handleBug )
 import Interpreter.Exception ( printException, reportThreadFailure )
 
+import LSP.FreestLspM ( FreestLspM )
+import LSP.Handler ( handlers )
+import Language.LSP.Server
+
+import Control.Concurrent.MVar
 import Control.Exception ( catch )
+import Control.Monad ( void )
+import Control.Monad.IO.Class ( liftIO )
+import Control.Monad.State ( runStateT )
+import System.IO ( hPutStrLn, stderr )
 import GHC.Conc ( setUncaughtExceptionHandler )
 import Options.Applicative ( execParser )
 import System.Environment ( withArgs, withProgName )
@@ -28,6 +37,20 @@ freest = execParser opts >>= runFreeST
 
 -- | Dispatch on the parsed command line options.
 runFreeST :: RunOpts -> IO ()
+runFreeST RunOpts{languageServer = True} = do
+  hPutStrLn stderr "FreeST LSP server connected."
+  state <- newMVar Nothing
+  void $ runServer ServerDefinition
+    { onConfigurationChange = const $ pure $ Right ()
+    , doInitialize = \env _req -> pure $ Right env
+    , staticHandlers = handlers
+    , interpretHandler = \env -> Iso (forward env state) liftIO
+    , options = defaultOptions
+    }
+  where
+    forward :: LanguageContextEnv config -> MVar (Maybe LoadState) -> FreestLspM config a -> IO a
+    forward env state m =
+      modifyMVar state \old -> runLspT env $ (\(a, new) -> (new, a)) <$> runStateT m old
 runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip, progArgs = args} =
   handleBug mPath (withArgs args (REPL.repl REPL.emptyReplState{REPL.filePath = mPath, REPL.implicitPrelude = ip}))
 runFreeST RunOpts{filePath = Nothing} =
