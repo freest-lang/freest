@@ -128,7 +128,8 @@ data Error
   | MixedSessionVarPats Span E.KindedPat E.KindedPat
   | UnexpectedEOF Span
     -- ^ Alex ran past the end of the file with no more input to inspect —
-    -- typically an unterminated string literal or block comment.
+    -- typically an unterminated string literal.
+  | UnterminatedComment Span
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -198,6 +199,7 @@ instance Located Error where
     HigherOrderTypeRHS s _ -> s
     MixedSessionVarPats s _ _ -> s
     UnexpectedEOF s -> s
+    UnterminatedComment s -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -397,7 +399,9 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   UnexpectedEOF s -> makeError src s
-    "Unexpected end of input (an unterminated string literal or comment?)"
+    "Unexpected end of input (an unterminated string literal?)"
+  UnterminatedComment s -> makeError src s
+    ("Unterminated block comment: this " ++ bt "{-" ++ " has no matching " ++ bt "-}")
   IncludeCycle s files -> makeError src s
     ("Include cycle: " ++ intercalate " -> " files)
   IncludeNotFound s path -> makeError src s

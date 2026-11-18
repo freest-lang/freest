@@ -42,7 +42,7 @@ $upper = [ A-Z ]
 :-
 -- Whitespace and comments
     [\ \t]+ ;
-    "{-" (\-[^\}]|[^\-]|\n)* "-}" ;
+    "{-" { nestedComment }
 <0> "--" .* \n { \_ -> pushStartCode newlineSC *> scan }
 <0> \n         { \_ -> pushStartCode newlineSC *> scan }
 <0> "--" .* ; -- when files end in a comment and no newline. TODO: check this
@@ -219,6 +219,12 @@ scan = do
     AlexToken input' tokl action -> do
       modify' $ \s -> s { lexerInput = input' }
       action (take tokl string)
+
+nestedComment _ = do
+  input@Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
+  case skipNestedComment input of
+    Just input' -> modify' (\s -> s { lexerInput = input' }) *> scan
+    Nothing -> throwError [UnterminatedComment Span{startPos=(l, c - 2), endPos=(l, c), filepath=f}]
 
 layoutKw t x = do
   setBlockKw x

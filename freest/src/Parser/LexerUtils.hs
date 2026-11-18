@@ -57,6 +57,19 @@ alexGetByte inp@Input{inpStream = str, inpFile = f} = advance <$> uncons str whe
             }
     )
 
+-- | The byte 'alexGetByte' returns truncates characters outside Latin-1.
+alexGetChar :: AlexInput -> Maybe (Char, AlexInput)
+alexGetChar inp = (\(_, inp') -> (inpLast inp', inp')) <$> alexGetByte inp
+
+-- | As in GHC, only @{-@ and @-}@ are significant inside a block comment.
+skipNestedComment :: AlexInput -> Maybe AlexInput
+skipNestedComment = go (1 :: Int) where
+  go 0 inp = Just inp
+  go n inp = alexGetChar inp >>= \case
+    ('-', inp') | Just ('}', inp'') <- alexGetChar inp' -> go (n - 1) inp''
+    ('{', inp') | Just ('-', inp'') <- alexGetChar inp' -> go (n + 1) inp''
+    (_, inp') -> go n inp'
+
 newtype Lexer a = Lexer { _getLexer :: StateT LexerState (Either [Error]) a }
   deriving (Functor, Applicative, Monad, MonadState LexerState, MonadError [Error])
 
