@@ -1,5 +1,6 @@
 module LSP.Handler
   ( handleInitialized,
+    handleSetTrace,
     handleWorkspaceDidChangeWatchedFiles,
     handlers,
   )
@@ -13,7 +14,7 @@ import LSP.FreestLspM (FreestLspM)
 import Language.LSP.Diagnostics (partitionBySource)
 import Language.LSP.Protocol.Lens (HasVersion (version))
 import Language.LSP.Protocol.Lens qualified as Lens
-import Language.LSP.Protocol.Message (NotificationMessage (..), SMethod (SMethod_Initialized, SMethod_WorkspaceDidChangeWatchedFiles), TNotificationMessage (TNotificationMessage))
+import Language.LSP.Protocol.Message (NotificationMessage (..), SMethod (SMethod_Initialized, SMethod_SetTrace, SMethod_WorkspaceDidChangeWatchedFiles), TNotificationMessage (TNotificationMessage))
 import Language.LSP.Protocol.Types
 import Language.LSP.Server
 import Language.LSP.VFS
@@ -22,6 +23,7 @@ handlers :: Handlers (FreestLspM ())
 handlers =
   mconcat
     [ handleInitialized,
+      handleSetTrace,
       handleWorkspaceDidChangeWatchedFiles
     ]
 
@@ -31,6 +33,11 @@ liftLSP = lift
 handleInitialized :: Handlers (FreestLspM ())
 handleInitialized =
   notificationHandler SMethod_Initialized $ \_not -> do
+    pure ()
+
+handleSetTrace :: Handlers (FreestLspM ())
+handleSetTrace =
+  notificationHandler SMethod_SetTrace $ \_not -> do
     pure ()
 
 handleWorkspaceDidChangeWatchedFiles :: Handlers (FreestLspM ())
