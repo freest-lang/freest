@@ -191,7 +191,7 @@ fin = putLines [comeAgain] >> pure Exit
 cmd :: String -> Repl ()
 cmd src = do
   path <- nextInteractivePath
-  modify (\s -> s{source = Map.insert path (lines src) (source s)})
+  modify (\s -> s{source = Map.insert path src (source s)})
   -- First try a bare expression, bound to 'it'
   case runLexer parseItDecl path (src ++ "\n") of
     Right m1 -> handleModule m1 printIt
@@ -377,7 +377,7 @@ runPipeline :: String                           -- source code
            -> Repl ()
 runPipeline src parse validate continuation = do
   n <- gets interactiveNo
-  modify (\s -> s{source = Map.insert (interactivePath n) (lines src) (source s), interactiveNo = n + 1})
+  modify (\s -> s{source = Map.insert (interactivePath n) src (source s), interactiveNo = n + 1})
   case runLexer parse (interactivePath n) src of
     Left es -> printREPLErrors es -- Lexer/parser errors
     Right x -> runValidate src validate x printREPLErrors continuation

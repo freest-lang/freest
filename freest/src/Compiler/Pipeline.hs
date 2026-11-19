@@ -34,6 +34,7 @@ import Paths_freest ( getDataFileName )
 
 import Control.Monad.State ( get )
 import Data.Map qualified as Map
+import Data.Functor ( ($>) )
 import System.IO ( stderr, hPutStrLn )
 
 -- | Scope a parsed module against an existing scoping context, then kind
@@ -102,18 +103,19 @@ loadSilent withPrelude programPath = do
 
 -- | Load the Prelude joined with a program module without printing anything,
 -- returning the failure for the caller to render (used by the language server).
-loadPreludeAndModuleWithErrors :: FilePath -> IO (Either IncludeError LoadState)
-loadPreludeAndModuleWithErrors programPath = do
+-- Files in @virtualFiles@ are read from there, as in 'resolveIncludes'.
+loadPreludeAndModuleWithErrors :: Source -> FilePath -> IO (Either IncludeError LoadState)
+loadPreludeAndModuleWithErrors virtualFiles programPath = do
   preludeFile <- getDataFileName preludePath
-  loadME [preludeFile, programPath]
+  loadME virtualFiles [preludeFile, programPath]
 
 -- | Expand the given roots along their 'INCLUDE' pragmas, parse each resulting
 -- file, merge into a single 'ParsedModule', then scope, kind and type-check it.
-loadME :: [FilePath] -> IO (Either IncludeError LoadState)
-loadME roots = (>>= validate) <$> resolveIncludes roots
+loadME :: Source -> [FilePath] -> IO (Either IncludeError LoadState)
+loadME virtualFiles roots = (>>= validate) <$> resolveIncludes virtualFiles roots
   where
     validate inputs =
-      let srcs = Map.fromList [(p, lines s) | (p, s) <- inputs] in
+      let srcs = Map.fromList inputs in
       either (Left . GraphErrors srcs) Right do
         modules <- mapM (uncurry runParseModule) inputs
         runValidation emptyValidationState do
@@ -125,9 +127,9 @@ loadME roots = (>>= validate) <$> resolveIncludes roots
 -- action runs on successful load (pass 'pure ()' to remain silent).
 loadM :: IO () -> [FilePath] -> IO (Maybe LoadState)
 loadM post roots =
-  loadME roots >>= \case
+  loadME Map.empty roots >>= \case
     Left (InvalidRoot p)      -> abort (hPutStrLn stderr (notASourceFile p))
     Left (GraphErrors src es) -> abort (printErrors src es)
-    Right result              -> post *> pure (Just result)
+    Right result              -> post $> Just result
   where
-    abort report = report *> hPutStrLn stderr failedToLoadModule *> pure Nothing
+    abort report = (report *> hPutStrLn stderr failedToLoadModule) $> Nothing

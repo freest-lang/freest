@@ -1,5 +1,6 @@
 module LSP.Util
   ( buildDiagnostic,
+    diagnosticSource,
     originRange,
     originPosition,
     isPositionInsideRange,
@@ -29,6 +30,9 @@ isRangeInsideRange
   (Range (Position l1' c1') (Position l2' c2')) =
     l1' <= l1 && l2 <= l2' && c1' <= c1 && c2 <= c2'
 
+diagnosticSource :: Text
+diagnosticSource = pack "freest"
+
 buildDiagnostic :: String -> Range -> Diagnostic
 buildDiagnostic msg range =
   Diagnostic
@@ -36,7 +40,7 @@ buildDiagnostic msg range =
     (Just DiagnosticSeverity_Error)
     Nothing
     Nothing
-    (Just (pack "freest-lsp"))
+    (Just diagnosticSource)
     (pack msg)
     Nothing
     Nothing

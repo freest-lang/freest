@@ -11,12 +11,13 @@ import Interpreter.Eval (evalModule)
 import Interpreter.Value (emptyValueCtx)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL qualified as REPL
-import Compiler.Pipeline ( loadSilent, LoadState )
+import Compiler.Pipeline ( loadSilent )
 import Compiler.Bug ( handleBug )
 import Interpreter.Exception ( printException, reportThreadFailure )
 
-import LSP.FreestLspM ( FreestLspM )
-import LSP.Handler ( handlers )
+import LSP.FreestLspM ( DiagnosticReport, FreestLspM )
+import LSP.Handler ( handlers, textDocumentSync )
+import Language.LSP.Protocol.Types ( NormalizedUri )
 import Language.LSP.Server
 
 import Control.Concurrent.MVar
@@ -24,6 +25,8 @@ import Control.Exception ( catch )
 import Control.Monad ( void )
 import Control.Monad.IO.Class ( liftIO )
 import Control.Monad.State ( runStateT )
+import Data.Map.Strict ( Map )
+import Data.Map.Strict qualified as Map
 import System.IO ( hPutStrLn, stderr )
 import GHC.Conc ( setUncaughtExceptionHandler )
 import Options.Applicative ( execParser )
@@ -39,16 +42,17 @@ freest = execParser opts >>= runFreeST
 runFreeST :: RunOpts -> IO ()
 runFreeST RunOpts{languageServer = True} = do
   hPutStrLn stderr "FreeST LSP server connected."
-  state <- newMVar Nothing
+  state <- newMVar Map.empty
   void $ runServer ServerDefinition
-    { onConfigurationChange = const $ pure $ Right ()
+    { defaultConfig = ()
+    , onConfigurationChange = const $ pure $ Right ()
     , doInitialize = \env _req -> pure $ Right env
     , staticHandlers = handlers
     , interpretHandler = \env -> Iso (forward env state) liftIO
-    , options = defaultOptions
+    , options = defaultOptions { optTextDocumentSync = Just textDocumentSync }
     }
   where
-    forward :: LanguageContextEnv config -> MVar (Maybe LoadState) -> FreestLspM config a -> IO a
+    forward :: LanguageContextEnv config -> MVar (Map NormalizedUri DiagnosticReport) -> FreestLspM config a -> IO a
     forward env state m =
       modifyMVar state \old -> runLspT env $ (\(a, new) -> (new, a)) <$> runStateT m old
 runFreeST RunOpts{interactive = True, filePath = mPath, implicitPrelude = ip, progArgs = args} =

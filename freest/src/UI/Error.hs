@@ -214,10 +214,10 @@ instance Located Error where
   setSpan = internalError "span not settable for Error type."
 
 -- | The source code of a FreeST program, represented as a mapping from file paths
--- to the lines of code in those files. This is used to extract snippets of code
+-- to the contents of those files. This is used to extract snippets of code
 -- to display in error messages.
--- The list of lines of code may be empty, when parsing from an interactive prompt.
-type Source = Map.Map FilePath [String]
+-- The contents may be empty, when parsing from an interactive prompt.
+type Source = Map.Map FilePath String
 
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
@@ -228,7 +228,7 @@ getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
 -- | The source lines of a file, or @[]@ if it is not in the map (e.g. a
 -- synthetic or inferred span), so error rendering degrades instead of crashing.
 lookupSrc :: Source -> FilePath -> [String]
-lookupSrc src fp = Map.findWithDefault [] fp src
+lookupSrc src fp = maybe [] lines (Map.lookup fp src)
 
 -- | Collapse the standard-library install path to a stable, readable suffix,
 -- e.g. ".../share/.../StandardLib/Prelude.fst" becomes "StandardLib/Prelude.fst".

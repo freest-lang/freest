@@ -40,11 +40,12 @@ data IncludeError
 -- error spans) with its contents (read once here; the pragma text is left in
 -- place, being a comment to the parser). Roots are expanded left to right into
 -- one shared graph, so a file included from several roots — e.g. the Prelude —
--- appears once.
-resolveIncludes :: [FilePath] -> IO (Either IncludeError [(FilePath, String)])
-resolveIncludes roots = do
+-- appears once. A file whose canonical path is in @virtualFiles@ is read from
+-- there instead of from disk, and exists even if the disk has no such file.
+resolveIncludes :: Source -> [FilePath] -> IO (Either IncludeError [(FilePath, String)])
+resolveIncludes virtualFiles roots = do
   items <- traverse withKey roots
-  fmap (reverse . snd) <$> visitList [] (Set.empty, []) items
+  fmap (reverse . snd) <$> visitList virtualFiles [] (Set.empty, []) items
   where withKey display = (display,) <$> canonicalizePath display
 
 -- | A file to visit, as its as-written path and its canonical path (the
@@ -58,17 +59,18 @@ type St = (Set FilePath, [(FilePath, String)])
 
 -- | Visit each item in turn, threading the state and stopping at the first
 -- error.
-visitList :: [IncludedPath] -> St -> [IncludedPath] -> IO (Either IncludeError St)
-visitList _ st [] = pure (Right st)
-visitList stack st (i : is) =
-  visit stack st i >>= either (pure . Left) (\st' -> visitList stack st' is)
+visitList :: Source -> [IncludedPath] -> St -> [IncludedPath] -> IO (Either IncludeError St)
+visitList _ _ st [] = pure (Right st)
+visitList virtualFiles stack st (i : is) =
+  visit virtualFiles stack st i >>= either (pure . Left) (\st' -> visitList virtualFiles stack st' is)
 
 -- | Visit one file: skip if already emitted, otherwise read it, resolve its
 -- includes (children first), then emit it. @stack@ is the chain of ancestors
 -- currently being visited, newest first, against which cycles are detected.
-visit :: [IncludedPath] -> St -> IncludedPath -> IO (Either IncludeError St)
-visit stack (vis, acc) (display, key)
+visit :: Source -> [IncludedPath] -> St -> IncludedPath -> IO (Either IncludeError St)
+visit virtualFiles stack (vis, acc) (display, key)
   | key `Set.member` vis = pure (Right (vis, acc))
+  | Just contents <- Map.lookup key virtualFiles = process contents
   | otherwise = try (readFile display) >>= \case
       Left (_ :: IOException) -> pure (Left (InvalidRoot display))
       Right contents          -> process contents
@@ -79,9 +81,9 @@ visit stack (vis, acc) (display, key)
       resolved <- traverse classify (scan contents)
       case partitionEithers resolved of
         (es@(_ : _), _) -> pure (Left (GraphErrors source es))
-        ([], children)  -> fmap emit <$> visitList path (vis, acc) children
+        ([], children)  -> fmap emit <$> visitList virtualFiles path (vis, acc) children
       where
-        source = Map.singleton display (lines contents)
+        source = Map.singleton display contents
         emit (vis', acc') = (Set.insert key vis', (display, contents) : acc')
 
         -- Every INCLUDE pragma in this file, as either a malformed-pragma
@@ -108,7 +110,7 @@ visit stack (vis, acc) (display, key)
     classify (Right (sp, raw)) = do
       let child = if isAbsolute raw then raw else takeDirectory display </> raw
       childKey <- canonicalizePath child
-      exists   <- doesFileExist child
+      exists   <- (Map.member childKey virtualFiles ||) <$> doesFileExist child
       pure $ if | not exists                  -> Left (IncludeNotFound sp raw)
                 | childKey `elem` map snd path -> Left (IncludeCycle sp (cycleOf childKey))
                 | otherwise                    -> Right (child, childKey)
