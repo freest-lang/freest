@@ -29,6 +29,7 @@ import Syntax.Type.Kinded qualified as TK
 import Validation.Substitution ( betaRule )
 import Compiler.Bug ( internalError )
 
+import Data.Char ( isDigit )
 import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
@@ -65,6 +66,9 @@ data Error
   | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
+  | ControlCharInLiteral Span Char
+  | InvalidCharLit Span
+  | InvalidEscape Span String
   | KindMismatch Span K.Kind TK.KindedType
   | KSigLacksBinding Span Identifier
   | LacksTypeSig Span Variable
@@ -127,9 +131,9 @@ data Error
   | HigherOrderTypeRHS Span Identifier
   | MixedSessionVarPats Span E.KindedPat E.KindedPat
   | UnexpectedEOF Span
-    -- ^ Alex ran past the end of the file with no more input to inspect —
-    -- typically an unterminated string literal.
+    -- ^ Alex ran past the end of the file with no more input to inspect.
   | UnterminatedComment Span
+  | UnterminatedString Span
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -200,6 +204,10 @@ instance Located Error where
     MixedSessionVarPats s _ _ -> s
     UnexpectedEOF s -> s
     UnterminatedComment s -> s
+    ControlCharInLiteral s _ -> s
+    InvalidCharLit s -> s
+    InvalidEscape s _ -> s
+    UnterminatedString s -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -399,9 +407,22 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   UnexpectedEOF s -> makeError src s
-    "Unexpected end of input (an unterminated string literal?)"
+    "Unexpected end of input"
   UnterminatedComment s -> makeError src s
     ("Unterminated block comment: this " ++ bt "{-" ++ " has no matching " ++ bt "-}")
+  ControlCharInLiteral s c -> makeError src s "Raw control character in a literal"
+    ++ "(Write it as the escape " ++ bt (init (tail (show c))) ++ ")"
+  InvalidCharLit s -> makeError src s "Invalid character literal"
+    ++ "(A character literal is one character or escape between single quotes, such as "
+    ++ bt "'a'" ++ ", " ++ bt "'\\n'" ++ " or " ++ bt "'\\''" ++ ")"
+  InvalidEscape s esc -> makeError src s ("Invalid escape " ++ bt esc)
+    ++ case esc of
+         '\\' : c : ds | isDigit c || c `elem` "xo" && not (null ds) ->
+           "(The largest character code is " ++ bt "\\1114111" ++ ")"
+         _ -> "(Valid escapes include " ++ bt "\\n" ++ ", " ++ bt "\\t" ++ ", " ++ bt "\\\\" ++ ", "
+              ++ bt "\\\"" ++ ", " ++ bt "\\'" ++ " and " ++ bt "\\65" ++ ")"
+  UnterminatedString s -> makeError src s "Unterminated string literal"
+    ++ "(To continue a string on the next line, end the line with " ++ bt "\\" ++ " and start the next with " ++ bt "\\" ++ ")"
   IncludeCycle s files -> makeError src s
     ("Include cycle: " ++ intercalate " -> " files)
   IncludeNotFound s path -> makeError src s

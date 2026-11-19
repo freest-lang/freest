@@ -18,11 +18,12 @@ import UI.Error
 
 
 import Data.Word ( Word8 )
-import Data.List ( uncons )
 import Data.List.NonEmpty qualified as NE
-import Data.Char ( ord )
+import Data.Bifunctor ( first )
+import Data.Char ( chr, ord, digitToInt, isControl, isDigit, isHexDigit, isOctDigit, isSpace )
+import Data.List ( find, isPrefixOf, uncons )
 import Control.Monad.State ( gets, modify', MonadState, StateT(..) )
-import Control.Monad.Except ( MonadError )
+import Control.Monad.Except ( MonadError, throwError )
 
 data AlexInput
   = Input { inpLine   :: {-# UNPACK #-} !Int
@@ -168,6 +169,93 @@ token :: (Span -> Token) -> String -> Lexer Token
 token t s = do 
   Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
   return (t Span{startPos=(l,c - length s), endPos=(l,c), filepath=f})
+
+-- | As in GHC, a literal is lexed by hand from its opening quote, so that an
+-- invalid escape is reported where it occurs.
+stringLit :: String -> Lexer Token
+stringLit _ = do
+  open <- gets lexerInput
+  let start = quoteAt open
+      body inp = case alexGetChar inp of
+        Just ('"', inp') -> return ("", inp')
+        Just ('\\', inp') -> case inpStream inp' of
+          '&' : _ -> body (skip 1 inp')
+          c : _ | isSpace c -> case alexGetChar (skipSpace inp') of
+            Just ('\\', inp'') -> body inp''
+            _ -> invalidEscape inp
+          s | Just (c, n) <- escape s -> first (c :) <$> body (skip n inp')
+            | otherwise -> invalidEscape inp
+        Just (c, inp') | not (isControl c) -> first (c :) <$> body inp'
+        Just (c, _) | c /= '\n' -> controlChar inp c
+        _ -> throwError [UnterminatedString (spanFrom start open)]
+  (s, inp) <- body open
+  modify' $ \st -> st { lexerInput = inp }
+  return (TkStringLit (spanFrom start inp) s)
+
+charLit :: String -> Lexer Token
+charLit _ = do
+  open <- gets lexerInput
+  let invalid :: AlexInput -> Lexer a
+      invalid inp = throwError [InvalidCharLit (spanFrom (quoteAt open) inp)]
+  (c, inp) <- case alexGetChar open of
+    Just ('\\', inp)
+      | Just (c, n) <- escape (inpStream inp) -> return (c, skip n inp)
+      | otherwise -> invalidEscape open
+    Just (c, inp) | c /= '\'' && not (isControl c) -> return (c, inp)
+    Just (c, _) | c /= '\n' -> controlChar open c
+    _ -> invalid open
+  case alexGetChar inp of
+    Just ('\'', inp') -> do
+      modify' $ \st -> st { lexerInput = inp' }
+      return (TkCharLit (spanFrom (quoteAt open) inp') c)
+    _ -> invalid inp
+
+-- | The escape after a backslash, as in the Haskell Report, and its length.
+escape :: String -> Maybe (Char, Int)
+escape s = case s of
+  c : _ | Just e <- lookup c (zip "abfnrtv\\\"'" "\a\b\f\n\r\t\v\\\"'") -> Just (e, 1)
+  '^' : c : _ | c >= '@' && c <= '_' -> Just (chr (ord c - ord '@'), 2)
+  'x' : ds -> number 16 isHexDigit ds 1
+  'o' : ds -> number 8 isOctDigit ds 1
+  _ | Just (name, e) <- find ((`isPrefixOf` s) . fst) asciiEscapes -> Just (e, length name)
+    | otherwise -> number 10 isDigit s 0
+  where
+    asciiEscapes = zip (words "NUL SOH STX ETX EOT ENQ ACK BEL BS HT LF VT FF CR SO SI DLE DC1 DC2 DC3 DC4 NAK SYN ETB CAN EM SUB ESC FS GS RS US SP") ['\NUL' ..]
+      ++ [("DEL", '\DEL')]
+    number base isD ds k = case takeWhile isD ds of
+      [] -> Nothing
+      n | v <= toInteger (ord maxBound) -> Just (chr (fromInteger v), k + length n)
+        | otherwise -> Nothing
+        where v = foldl (\a d -> a * base + toInteger (digitToInt d)) 0 n
+
+invalidEscape :: AlexInput -> Lexer a
+invalidEscape Input{inpLine=l, inpColumn=c, inpStream=s, inpFile=f} =
+  throwError [InvalidEscape Span{startPos=(l, c), endPos=(l, c + length e), filepath=f} e]
+  where
+    e = '\\' : case drop 1 s of
+      d : ds | isDigit d -> d : takeWhile isDigit ds
+      'x' : ds -> 'x' : takeWhile isHexDigit ds
+      'o' : ds -> 'o' : takeWhile isOctDigit ds
+      d : _ | not (isSpace d) -> [d]
+      _ -> ""
+
+controlChar :: AlexInput -> Char -> Lexer a
+controlChar Input{inpLine=l, inpColumn=c, inpFile=f} ch =
+  throwError [ControlCharInLiteral Span{startPos=(l, c), endPos=(l, c + 1), filepath=f} ch]
+
+quoteAt :: AlexInput -> Pos
+quoteAt Input{inpLine=l, inpColumn=c} = (l, c - 1)
+
+spanFrom :: Pos -> AlexInput -> Span
+spanFrom p Input{inpLine=l, inpColumn=c, inpFile=f} = Span{startPos=p, endPos=(l, c), filepath=f}
+
+skip :: Int -> AlexInput -> AlexInput
+skip n inp = iterate (\i -> maybe i snd (alexGetChar i)) inp !! n
+
+skipSpace :: AlexInput -> AlexInput
+skipSpace inp = case alexGetChar inp of
+  Just (c, inp') | isSpace c -> skipSpace inp'
+  _ -> inp
 
 runLexer :: Lexer a -> FilePath -> String -> Either [Error] a
 runLexer act f s = fst <$> runStateT (_getLexer act) (initState f s)

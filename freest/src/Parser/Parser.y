@@ -452,8 +452,8 @@ OptKindedVar :: { (Variable, Maybe K.Kind) }
 ExpPrimary :: { E.ParsedExp }
   : INT_LIT     { E.Int    (getSpan $1) (read $ getText $1) }
   | FLOAT_LIT   { E.Float  (getSpan $1) (read $ getText $1) }
-  | CHAR_LIT    { E.Char   (getSpan $1) (read $ getText $1) }
-  | STRING_LIT  { E.String (getSpan $1) (read (getText $1)) }
+  | CHAR_LIT    { let TkCharLit s c = $1 in E.Char s c }
+  | STRING_LIT  { let TkStringLit s str = $1 in E.String s str }
   | ExpVar      { E.Var    (getSpan $1) $1 }
   | Identifier    { E.DCons  (getSpan $1) $1 }
   | 'receiveType' { E.ReceiveType (getSpan $1) }
@@ -593,8 +593,8 @@ Case :: { (E.ParsedPat, E.ParsedRHS) }
 PatPrimary :: { E.ParsedPat }
   : INT_LIT          { E.IntPat    (getSpan $1) (read (getText $1)) }
   | FLOAT_LIT        { E.FloatPat  (getSpan $1) (read (getText $1)) }
-  | CHAR_LIT         { E.CharPat   (getSpan $1) (read (getText $1)) }
-  | STRING_LIT       { E.StringPat (getSpan $1) (read (getText $1)) }
+  | CHAR_LIT         { let TkCharLit s c = $1 in E.CharPat s c }
+  | STRING_LIT       { let TkStringLit s str = $1 in E.StringPat s str }
   | WILDCARD         { E.WildPat   (getSpan $1) (mkVarTk $1)}
   | ExpVar           { E.VarPat    (getSpan $1) $1 }
   | 'Wait'           { E.WaitPat   (getSpan $1) }

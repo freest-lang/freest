@@ -27,8 +27,6 @@ $digit = [ 0-9 ]
 @exponent = @numspc [eE] [\-\+]? @decimal
 @intLit = @decimal 
 @floatLit = @numspc @decimal \. @decimal @exponent? | @numspc @decimal @exponent
-@charLit = \'(\\n|[\\.]|.) \'
-@stringLit = \"(\\.|[^\"]|\n)*\"
 
 -- Identifiers
 $lower = [ a-z ]
@@ -137,8 +135,8 @@ $upper = [ A-Z ]
 -- Literals
 <0> @intLit    { emit TkIntLit }
 <0> @floatLit  { emit TkFloatLit }
-<0> @charLit   { emit TkCharLit }
-<0> @stringLit { emit TkStringLit }
+<0> \'        { charLit }
+<0> \"        { stringLit }
 
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }
