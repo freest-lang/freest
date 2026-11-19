@@ -51,7 +51,7 @@ alexGetByte inp@Input{inpStream = str, inpFile = f} = advance <$> uncons str whe
   advance (c, rest) =
     ( fromIntegral (ord c)
     , Input { inpLine = inpLine inp
-            , inpColumn = inpColumn inp + 1
+            , inpColumn = if c == '\t' then nextTabStop (inpColumn inp) else inpColumn inp + 1
             , inpLast = c
             , inpStream = rest 
             , inpFile = f 
@@ -186,7 +186,7 @@ stringLit _ = do
           s | Just (c, n) <- escape s -> first (c :) <$> body (skip n inp')
             | otherwise -> invalidEscape inp
         Just (c, inp') | not (isControl c) -> first (c :) <$> body inp'
-        Just (c, _) | c /= '\n' -> controlChar inp c
+        Just (c, inp') | c /= '\n' -> controlChar inp inp' c
         _ -> throwError [UnterminatedString (spanFrom start open)]
   (s, inp) <- body open
   modify' $ \st -> st { lexerInput = inp }
@@ -202,7 +202,7 @@ charLit _ = do
       | Just (c, n) <- escape (inpStream inp) -> return (c, skip n inp)
       | otherwise -> invalidEscape open
     Just (c, inp) | c /= '\'' && not (isControl c) -> return (c, inp)
-    Just (c, _) | c /= '\n' -> controlChar open c
+    Just (c, inp) | c /= '\n' -> controlChar open inp c
     _ -> invalid open
   case alexGetChar inp of
     Just ('\'', inp') -> do
@@ -239,9 +239,9 @@ invalidEscape Input{inpLine=l, inpColumn=c, inpStream=s, inpFile=f} =
       d : _ | not (isSpace d) -> [d]
       _ -> ""
 
-controlChar :: AlexInput -> Char -> Lexer a
-controlChar Input{inpLine=l, inpColumn=c, inpFile=f} ch =
-  throwError [ControlCharInLiteral Span{startPos=(l, c), endPos=(l, c + 1), filepath=f} ch]
+controlChar :: AlexInput -> AlexInput -> Char -> Lexer a
+controlChar inp inp' ch =
+  throwError [ControlCharInLiteral (spanFrom (inpLine inp, inpColumn inp) inp') ch]
 
 quoteAt :: AlexInput -> Pos
 quoteAt Input{inpLine=l, inpColumn=c} = (l, c - 1)

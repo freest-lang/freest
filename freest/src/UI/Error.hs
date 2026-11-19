@@ -9,6 +9,7 @@ Errors. A work in progress -- Life is a work in progress
 module UI.Error
   ( Error(..)
   , Source
+  , lookupSrc
   , toMessage
   , header
   , snippet
@@ -221,7 +222,7 @@ type Source = Map.Map FilePath [String]
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
   case drop (sl - 1) (lookupSrc src fp) of
-    (l : _) -> take (ec - sc) (drop (sc - 1) l)
+    (l : _) -> take (ec - sc) (drop (sc - 1) (expandTabs l))
     []      -> ""
 
 -- | The source lines of a file, or @[]@ if it is not in the map (e.g. a
@@ -251,7 +252,7 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
     sep = " | "
     n = length (show el)
     line = case drop (sl - 1) (lookupSrc src fp) of
-      (l : _) -> Just l
+      (l : _) -> Just (expandTabs l)
       []      -> Nothing
     withCarets l =
       [ spaces n ++ sep
@@ -262,6 +263,13 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
       ]
     spaces x = replicate x ' '
     carets x = replicate x '^'
+
+expandTabs :: String -> String
+expandTabs = go 1
+  where
+    go c ('\t' : s) = let c' = nextTabStop c in replicate (c' - c) ' ' ++ go c' s
+    go c (x : s) = x : go (c + 1) s
+    go _ [] = []
 
 -- | How a layout block is referred to in a parse error.
 nameBlock :: Block -> String
