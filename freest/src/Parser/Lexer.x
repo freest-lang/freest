@@ -137,6 +137,7 @@ $upper = [ A-Z ]
 <0> @floatLit  { emit TkFloatLit }
 <0> \'        { charLit }
 <0> \"        { stringLit }
+<0> \"\"\"    { multilineStringLit }
 
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }

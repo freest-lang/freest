@@ -134,7 +134,7 @@ data Error
   | UnexpectedEOF Span
     -- ^ Alex ran past the end of the file with no more input to inspect.
   | UnterminatedComment Span
-  | UnterminatedString Span
+  | UnterminatedString Span String
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -208,7 +208,7 @@ instance Located Error where
     ControlCharInLiteral s _ -> s
     InvalidCharLit s -> s
     InvalidEscape s _ -> s
-    UnterminatedString s -> s
+    UnterminatedString s _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
@@ -429,8 +429,10 @@ toMessage src = \case
            "(The largest character code is " ++ bt "\\1114111" ++ ")"
          _ -> "(Valid escapes include " ++ bt "\\n" ++ ", " ++ bt "\\t" ++ ", " ++ bt "\\\\" ++ ", "
               ++ bt "\\\"" ++ ", " ++ bt "\\'" ++ " and " ++ bt "\\65" ++ ")"
-  UnterminatedString s -> makeError src s "Unterminated string literal"
-    ++ "(To continue a string on the next line, end the line with " ++ bt "\\" ++ " and start the next with " ++ bt "\\" ++ ")"
+  UnterminatedString s q -> makeError src s
+    ("Unterminated string literal: this " ++ bt q ++ " has no matching " ++ bt q
+      ++ if q == "\"" then " on its line" else "")
+    ++ if q == "\"" then "(For a string over several lines, use " ++ bt "\"\"\"" ++ ")" else ""
   IncludeCycle s files -> makeError src s
     ("Include cycle: " ++ intercalate " -> " files)
   IncludeNotFound s path -> makeError src s

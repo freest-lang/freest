@@ -16,7 +16,8 @@ errorTypeToDiagnostic s runOpts err =
     (toMessage s err)
     (spanToRange s $ getSpan err)
 
--- | LSP counts characters where FreeST counts columns to tab stops.
+-- | The LSP position, in characters from 0, of a position in lines and
+-- tab-stop columns, given the lines of its file.
 posToPosition :: [String] -> Pos -> Position
 posToPosition ls (line, column) =
   Position

@@ -61,7 +61,7 @@ void = internalError "attempt to evaluate void"
 -- | A position in the source code is a pair of line and column numbers.
 type Pos = (Int, Int)
 
--- | As in the Haskell Report, tab stops are 8 columns apart.
+-- | The column a tab moves to from a given column; tab stops are 8 apart.
 nextTabStop :: Int -> Int
 nextTabStop c = (c - 1) `div` 8 * 8 + 9
 

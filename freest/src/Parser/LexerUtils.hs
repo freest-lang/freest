@@ -21,7 +21,7 @@ import Data.Word ( Word8 )
 import Data.List.NonEmpty qualified as NE
 import Data.Bifunctor ( first )
 import Data.Char ( chr, ord, digitToInt, isControl, isDigit, isHexDigit, isOctDigit, isSpace )
-import Data.List ( find, isPrefixOf, uncons )
+import Data.List ( find, intercalate, isPrefixOf, uncons )
 import Control.Monad.State ( gets, modify', MonadState, StateT(..) )
 import Control.Monad.Except ( MonadError, throwError )
 
@@ -170,27 +170,57 @@ token t s = do
   Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
   return (t Span{startPos=(l,c - length s), endPos=(l,c), filepath=f})
 
--- | As in GHC, a literal is lexed by hand from its opening quote, so that an
--- invalid escape is reported where it occurs.
+-- | Lexes a string literal from just after its opening quote.
 stringLit :: String -> Lexer Token
-stringLit _ = do
+stringLit _ = stringBody 1 (concatMap (either id pure))
+
+-- | Lexes a multi-line string literal from just after its opening @"""@,
+-- expands the tabs that start its lines, and removes its indentation.
+multilineStringLit :: String -> Lexer Token
+multilineStringLit _ = stringBody 3 (concatMap (either id pure) . dedent)
+
+-- | Lexes the body of a string literal closed by the given number of quotes,
+-- as raw characters (Right) and resolved escapes (Left), and makes a token of
+-- the string the given function builds from them.
+stringBody :: Int -> ([Either String Char] -> String) -> Lexer Token
+stringBody quotes finish = do
   open <- gets lexerInput
-  let start = quoteAt open
-      body inp = case alexGetChar inp of
-        Just ('"', inp') -> return ("", inp')
+  let start = (inpLine open, inpColumn open - quotes)
+      body lead inp = case alexGetChar inp of
+        Just ('"', inp')
+          | quotes == 1 -> return ([], inp')
+          | take 2 (inpStream inp') == "\"\"" -> return ([], skip 2 inp')
         Just ('\\', inp') -> case inpStream inp' of
-          '&' : _ -> body (skip 1 inp')
+          '&' : _ -> first (Left "" :) <$> body Nothing (skip 1 inp')
           c : _ | isSpace c -> case alexGetChar (skipSpace inp') of
-            Just ('\\', inp'') -> body inp''
+            Just ('\\', inp'') -> first (Left "" :) <$> body Nothing inp''
             _ -> invalidEscape inp
-          s | Just (c, n) <- escape s -> first (c :) <$> body (skip n inp')
+          s | Just (c, n) <- escape s -> first (Left [c] :) <$> body Nothing (skip n inp')
             | otherwise -> invalidEscape inp
-        Just (c, inp') | not (isControl c) -> first (c :) <$> body inp'
+        Just ('\n', inp') | quotes == 3 -> first (Right '\n' :) <$> body (Just 0) inp'
+        Just ('\t', inp') | Just col <- lead ->
+          let n = nextTabStop (col + 1) - col - 1
+          in first (replicate n (Right ' ') ++) <$> body (Just (col + n)) inp'
+        Just (c, inp') | not (isControl c) ->
+          first (Right c :) <$> body (if isSpace c then (+ 1) <$> lead else Nothing) inp'
         Just (c, inp') | c /= '\n' -> controlChar inp inp' c
-        _ -> throwError [UnterminatedString (spanFrom start open)]
-  (s, inp) <- body open
+        _ -> throwError [UnterminatedString (spanFrom start open) (replicate quotes '"')]
+  (ps, inp) <- body (if quotes == 3 then Just 0 else Nothing) open
   modify' $ \st -> st { lexerInput = inp }
-  return (TkStringLit (spanFrom start inp) s)
+  return (TkStringLit (spanFrom start inp) (finish ps))
+
+-- | Removes the indentation common to all lines but the first, empties lines
+-- of whitespace, and drops a newline right after the opening and right before
+-- the closing delimiter.
+dedent :: [Either String Char] -> [Either String Char]
+dedent ps = reverse (dropNewline (reverse (dropNewline (intercalate [Right '\n'] (strip l : map (drop n . strip) ls)))))
+  where
+    l : ls = foldr (\p acc@(x : xs) -> if p == Right '\n' then [] : acc else (p : x) : xs) [[]] ps
+    white = either (const False) isSpace
+    strip x = if all white x then [] else x
+    n = minimum (maxBound : [length (takeWhile white x) | x <- ls, not (all white x)])
+    dropNewline (Right '\n' : xs) = xs
+    dropNewline xs = xs
 
 charLit :: String -> Lexer Token
 charLit _ = do
@@ -210,7 +240,8 @@ charLit _ = do
       return (TkCharLit (spanFrom (quoteAt open) inp') c)
     _ -> invalid inp
 
--- | The escape after a backslash, as in the Haskell Report, and its length.
+-- | The character an escape denotes, given the text after its backslash, and
+-- the number of characters it takes.
 escape :: String -> Maybe (Char, Int)
 escape s = case s of
   c : _ | Just e <- lookup c (zip "abfnrtv\\\"'" "\a\b\f\n\r\t\v\\\"'") -> Just (e, 1)
