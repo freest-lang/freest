@@ -175,7 +175,8 @@ stringLit :: String -> Lexer Token
 stringLit _ = stringBody 1 (concatMap (either id pure))
 
 -- | Lexes a multi-line string literal from just after its opening @"""@,
--- expands the tabs that start its lines, and removes its indentation.
+-- turns its line breaks into @\\n@, expands the tabs that start its lines, and
+-- removes its indentation.
 multilineStringLit :: String -> Lexer Token
 multilineStringLit _ = stringBody 3 (concatMap (either id pure) . dedent)
 
@@ -197,7 +198,10 @@ stringBody quotes finish = do
             _ -> invalidEscape inp
           s | Just (c, n) <- escape s -> first (Left [c] :) <$> body Nothing (skip n inp')
             | otherwise -> invalidEscape inp
-        Just ('\n', inp') | quotes == 3 -> first (Right '\n' :) <$> body (Just 0) inp'
+        Just (c, inp') | quotes == 3, c `elem` "\n\r\f" ->
+          first (Right '\n' :) <$> body (Just 0) (case inpStream inp' of
+            '\n' : _ | c == '\r' -> skip 1 inp'
+            _ -> inp')
         Just ('\t', inp') | Just col <- lead ->
           let n = nextTabStop (col + 1) - col - 1
           in first (replicate n (Right ' ') ++) <$> body (Just (col + n)) inp'

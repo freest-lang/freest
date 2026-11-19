@@ -39,7 +39,7 @@ $upper = [ A-Z ]
 
 :-
 -- Whitespace and comments
-    [\ \t]+ ;
+    [\ \t\r\f\v]+ ;
     "{-" { nestedComment }
 <0> "--" .* \n { \_ -> pushStartCode newlineSC *> scan }
 <0> \n         { \_ -> pushStartCode newlineSC *> scan }
