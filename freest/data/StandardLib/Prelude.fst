@@ -568,6 +568,10 @@ hGetChar_ = hGenericGet_ hGetChar
 hGetLine_ : *!(Dual InStream) -> String
 hGetLine_ = hGenericGet_ hGetLine
 
+-- | `hIsEOF` on an `*!(Dual InStream)` (e.g. `stdin`)
+hIsEOF_ : *!(Dual InStream) -> Bool
+hIsEOF_ = hGenericGet_ hIsEOF
+
 -- | `hGetContent` on an `*!(Dual InStream)` (e.g. `stdin`)
 hGetContent_ : *!(Dual InStream) -> String
 hGetContent_ = hGenericGet_ hGetContent
@@ -669,6 +673,10 @@ getChar _ = hGetChar_ stdin
 -- | Reads a single line from `stdin`.
 getLine : () -> String
 getLine _ = hGetLine_ stdin
+
+-- | Checks if `stdin` reached the EOF mark.
+isEOF : () -> Bool
+isEOF _ = hIsEOF_ stdin
 
 -- | Reads `stdin` up to EOF, separating lines with the newline character `\n`.
 getContent : () -> String
