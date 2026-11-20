@@ -17,6 +17,7 @@ where
 import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Declarations qualified as D
+import Syntax.Type.Internal qualified as TI
 import Syntax.Type.Kinded qualified as T
 import Validation.Normalisation ( normalise, reduce, tNameRedex )
 import Validation.Kinding ( runSynth, KindCtx )
@@ -60,6 +61,17 @@ word t = wasVisited t >>= \case
 operandLabels :: String -> [String]
 operandLabels hd = map (\i -> hd ++ '_' : show (i :: Int)) [1..]
 
+-- | Distinct variables may share an external name, so a label carries the
+-- internal one.
+varLabel :: Variable -> String
+varLabel v = show v ++ '_' : show (internal v)
+
+multLabel :: K.Multiplicity -> String
+multLabel = \case
+  K.Lin{} -> "1"
+  K.Un{} -> "*"
+  K.Sup _ lvφs -> List.intercalate "+" (map (varLabel . snd) lvφs)
+
 word' :: T.KindedType -> TransState Word
 word' = \case
   -- W-Skip
@@ -76,7 +88,7 @@ word' = \case
   T.AppMessage _ m p t -> do
     w <- word t
     -- linear multiplicity is implicit, as in the surface syntax (`!Int`, `*!Int`)
-    let hd = (case m of K.Lin{} -> ""; _ -> show m) ++ show p
+    let hd = (case m of K.Lin{} -> ""; _ -> multLabel m) ++ show p
     getNonterminal $ Map.fromList
       [ (hd, [bottom | K.isUn m])
       , (hd ++ "_1", w ++ [bottom])
@@ -88,22 +100,29 @@ word' = \case
   T.AppDual s (T.AppVar _ a _ _ ts) -> do
     words <- mapM word ts
     getNonterminal $ Map.fromList $
-      ("dual " ++ show a, []) :
-      zip (operandLabels ("dual " ++ show a)) (map (++ [bottom]) words)
+      ("dual " ++ varLabel a, []) :
+      zip (operandLabels ("dual " ++ varLabel a)) (map (++ [bottom]) words)
   -- *+{} and *&{}
   t@(T.Choice _ K.Un{} _ _) -> getNonterminal $ Map.singleton (show t) [bottom]
   -- W-Const, ι T1···Tm with ι being ->, ∀, ∃, variants and choices and with m >= 0 and ∆ ⊢ t : *
   t@(T.App _ u vs) | isProperType t && (T.isAppArrow t || T.isAppDName t || T.isAppLinChoice t || T.isAppQuant t)-> do
     words <- mapM word vs
     getNonterminal $ Map.fromList $
-      (show u, [bottom]) :
-      zip (operandLabels (show u)) words
+      (hd, [bottom]) :
+      zip (operandLabels hd) words
+    where
+      hd = case u of
+        T.Arrow _ m -> "-" ++ multLabel m ++ "->"
+        TI.Quant _ _ p bk m -> (case p of Neg -> "∀"; Pos -> "∃")
+          ++ (case (p, bk) of (Pos, K.Top) -> ""; _ -> multLabel m)
+          ++ case bk of K.VarBK _ ψ -> varLabel ψ; _ -> show bk
+        _ -> show u
   T.ForallM _ _ [] _ -> internalError "ForallM with empty quantifier list"
   t@(T.ForallM s m (φ : φs) u) -> do
     let φ1 = Variable s "φ1" (-2)
         φ2 = Variable s "φ2" (-3)
         t' = if null φs then u else T.ForallM s m φs u
-        sm = case m of K.Lin{} -> "1"; K.Un{} -> "*"; K.Sup _ lvφs -> show $ List.sort lvφs
+        sm = multLabel case m of K.Sup s' lvφs -> K.Sup s' (List.sort lvφs); _ -> m
     wtm1 <- word $ subsMultType ObjLv φ (K.VarM s ObjLv φ1) t'
     wtm2 <- word $ subsMultType ObjLv φ (K.VarM s ObjLv φ2) t'
     getNonterminal $ Map.fromList
@@ -112,8 +131,8 @@ word' = \case
   t@(T.AppVar _ a _ _ us) | isProperType t -> do
     words <- mapM word us
     getNonterminal $ Map.fromList $
-      (show a, []) :
-      zip (operandLabels (show a)) (map (++ [bottom]) words)
+      (varLabel a, []) :
+      zip (operandLabels (varLabel a)) (map (++ [bottom]) words)
   -- W-μSkip and W-μNSkip
   t | isJust (tNameRedex t) -> do
     tdecls <- gets typeDecls

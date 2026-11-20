@@ -788,6 +788,14 @@ case forall #m #n -*-> Int -m+n-> Int  == forall #m #n -*-> Int -n+m-> Int : *T
 
 case forall #m #n -*-> Int -m+n-> Int  == forall #n #m -*-> Int -m+n-> Int : *T
 
+case forall #m -*-> forall #n -*-> Int -m-> Int -n-> Int
+  == forall #p -*-> forall #q -*-> Int -p-> Int -q-> Int
+   : *T
+
+case forall #m -*-> forall (a : *T) -> a -m-> a
+  == forall #z -*-> forall (b : *T) -> b -z-> b
+   : *T
+
 -- Kind preservation under the context-free session algebra (channel-conditional
 -- `;` and CK-Rec). The declared kind is the tight one, so an over-linearising
 -- regression on either side fails the `<: k` check.
