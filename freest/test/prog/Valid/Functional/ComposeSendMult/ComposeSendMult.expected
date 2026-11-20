@@ -1,0 +1,8 @@
+<pending>
+
+ComposeSend at a polymorphic multiplicity. `(close .) . send` fails with
+"Could not infer consistent multiplicities": the binder's `m` cannot be matched
+with `send`'s. At a fixed multiplicity (ComposeSend), or eta-expanded to
+`close (send x c)`, it is accepted. When solved expect:
+
+5
