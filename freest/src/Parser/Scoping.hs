@@ -604,10 +604,14 @@ scopeType ctx = \case
 -- | Implicit quantification of a signature: the type variables that are not in
 -- scope are bound by a leading 'forall', in order of first occurrence, as if the
 -- programmer had written @forall a b ->@ in front of the signature. For
--- example, @id : a -> a@ stands for @id : forall a -> a -> a@.
+-- example, @id : a -> a@ stands for @id : forall a -> a -> a@. A signature
+-- that starts with a 'forall' of its own, of types or multiplicities, is left
+-- alone: it must bind every variable not in scope (GHC's forall-or-nothing).
 quantifyFreeTVars :: ScopingCtx -> T.ParsedType -> T.ParsedType
-quantifyFreeTVars ctx t =
-  case List.nubBy ((==) `on` external) (freeTVars Set.empty t) of
+quantifyFreeTVars ctx t = case t of
+  T.AppForall{} -> t
+  T.ForallM{} -> t
+  _ -> case List.nubBy ((==) `on` external) (freeTVars Set.empty t) of
     [] -> t
     as -> let s = getSpan t in T.AppForall s (K.Un s) [(a, Nothing) | a <- as] t
   where
