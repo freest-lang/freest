@@ -8,6 +8,9 @@ import Syntax.Type.Kinded qualified as T
 import Validation.Base
 import Compiler.Bug (internalError)
 
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+
 -- | Instantiation-level substitution of types; multiplicities are left to the
 -- global solve.
 newtype Substitution = Θ [(Variable, T.KindedType)]
@@ -29,14 +32,18 @@ emptySubs = Θ []
 subsType :: Variable -> T.KindedType -> Substitution
 subsType iv t = Θ [(iv, t)]
 
--- | Apply a substitution.
+-- | Apply a substitution. A binding may mention variables bound elsewhere in
+-- it, so the type a variable is bound to is resolved in turn; one already being
+-- resolved is left alone, so that a cyclic binding cannot loop.
 applySubs :: Substitution -> T.KindedType -> T.KindedType
-applySubs (Θ ivts) t = foldr (uncurry subst) t ivts
+applySubs (Θ ivts) = go Set.empty
   where
-    subst iv t = \case
-      T.Var _ _ InstLv iv' | iv == iv' -> t
-      T.Abs s aks u -> T.Abs s aks (subst iv t u)
-      T.App s u us -> T.App s (subst iv t u) (map (subst iv t) us)
+    bound = Map.fromList ivts
+    go seen = \case
+      T.Var _ _ InstLv iv
+        | iv `Set.notMember` seen, Just t <- Map.lookup iv bound -> go (Set.insert iv seen) t
+      T.Abs s aks u -> T.Abs s aks (go seen u)
+      T.App s u us -> T.App s (go seen u) (map (go seen) us)
       t -> t
 
 -- | Make a fresh type instantiation variable. Its kind carries a fresh,
