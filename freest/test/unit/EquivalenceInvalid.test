@@ -48,6 +48,10 @@ case forall #m #n -*-> Int -m-> Int -n-> Int
   == forall #n #m -*-> Int -m-> Int -n-> Int
    : *T
 
+case forall #m -*-> forall #n -*-> Int -m-> Int -n-> Int
+  == forall #p -*-> forall #q -*-> Int -q-> Int -p-> Int
+   : *T
+
 case forall #m -*-> Int -m-> Int
   == forall #m -*-> Int -*-> Int
    : *T
