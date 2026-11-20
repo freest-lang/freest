@@ -41,7 +41,7 @@ import Data.Bifunctor ( first, second, bimap )
 import Data.Bitraversable ( bisequence, bimapM )
 import Data.Foldable ( foldrM )
 import Data.Function ( on )
-import Data.Maybe ( isJust )
+import Data.Maybe ( isJust, isNothing )
 import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
@@ -370,7 +370,7 @@ scopeDefs ctx ds = do
             x' <- freshInternal x
             return (insertEVar x' ictx'', xs'' ++ [x'])) 
           (ictx, []) xs
-        t' <- scopeType ctx (quantifyFreeTVars ctx t)
+        t' <- scopeType ctx (quantifyFreeVars ctx t)
         let ctx' | isMutual  = foldr insertEVar ctx xs'
                  | otherwise = ctx
         second (E.TypeSig xs' t':) <$> scopeDefs' isMutual ctx' ictx' ds
@@ -601,20 +601,26 @@ scopeType ctx = \case
   T.App s t ts ->
     T.App s <$> scopeType ctx t <*> mapM (scopeType ctx) ts
 
--- | Implicit quantification of a signature: the type variables that are not in
--- scope are bound by a leading 'forall', in order of first occurrence, as if the
--- programmer had written @forall a b ->@ in front of the signature. For
--- example, @id : a -> a@ stands for @id : forall a -> a -> a@. A signature
--- that starts with a 'forall' of its own, of types or multiplicities, is left
+-- | Implicit quantification of a signature: the multiplicity and type
+-- variables that are not in scope are bound by leading foralls, multiplicities
+-- first and each in order of first occurrence, as if the programmer had written
+-- @forall #m -> forall a ->@ in front of the signature. For example,
+-- @app : (a -m-> a) -> a -m-> a@ stands for
+-- @app : forall #m -> forall a -> (a -m-> a) -> a -m-> a@. A signature that
+-- starts with a 'forall' of its own, of types or multiplicities, is left
 -- alone: it must bind every variable not in scope (GHC's forall-or-nothing).
-quantifyFreeTVars :: ScopingCtx -> T.ParsedType -> T.ParsedType
-quantifyFreeTVars ctx t = case t of
+quantifyFreeVars :: ScopingCtx -> T.ParsedType -> T.ParsedType
+quantifyFreeVars ctx t = case t of
   T.AppForall{} -> t
   T.ForallM{} -> t
-  _ -> case List.nubBy ((==) `on` external) (freeTVars Set.empty t) of
-    [] -> t
-    as -> let s = getSpan t in T.AppForall s (K.Un s) [(a, Nothing) | a <- as] t
+  _ -> quantify (T.ForallM s (K.Un s)) φs
+     $ quantify (\as' -> T.AppForall s (K.Un s) [(a, Nothing) | a <- as']) as t
   where
+    s = getSpan t
+    as = List.nubBy ((==) `on` external) (freeTVars Set.empty t)
+    φs = List.nubBy ((==) `on` external) (freeMVars Set.empty t)
+    quantify _ [] = id
+    quantify q vs = q vs
     freeTVars bound = \case
       T.Var _ a
         | external a `Set.member` bound || isJust (lookupTVar a ctx) -> []
@@ -623,6 +629,23 @@ quantifyFreeTVars ctx t = case t of
       T.ForallM _ _ _ u -> freeTVars bound u
       T.App _ u us -> concatMap (freeTVars bound) (u : us)
       _ -> []
+    freeMVars bound = \case
+      T.Arrow _ m -> multVars bound m
+      T.Quant _ Neg K.Top m -> multVars bound m
+      T.ForallM _ m φs' u -> multVars bound m ++ freeMVars (foldr (Set.insert . external) bound φs') u
+      T.Void _ k -> kindVars bound k
+      T.Message _ m _ -> multVars bound m
+      T.Choice _ m _ _ -> multVars bound m
+      T.Abs _ aks u -> concatMap (maybe [] (kindVars bound) . snd) aks ++ freeMVars bound u
+      T.App _ u us -> concatMap (freeMVars bound) (u : us)
+      _ -> []
+    multVars bound = \case
+      K.Sup _ lvφs -> [φ | (_, φ) <- lvφs, not (external φ `Set.member` bound), isNothing (lookupMVar φ ctx)]
+      K.Lin{} -> []
+    kindVars bound = \case
+      K.Proper _ m _ -> multVars bound m
+      K.Arrow _ k1 k2 -> kindVars bound k1 ++ kindVars bound k2
+      K.Var{} -> []
 
 -- | Scope a kind.
 scopeKind :: ScopingCtx -> K.Kind -> Validation K.Kind
