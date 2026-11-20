@@ -58,8 +58,8 @@ toBit b = b  @Int 1 0
 ifInt : Bool' -> Int -> Int -> Int
 ifInt = cond  @Int
 
--- main : Int
--- main = ifInt (not' true) 1 2
+_ =
+    print $ ifInt (not' true) 1 2
 
-main : ()
-main = print $ toBool $ and' (or' false true) (not' false)
+_ =
+    print $ toBool $ and' (or' false true) (not' false)

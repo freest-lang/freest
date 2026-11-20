@@ -276,7 +276,7 @@ synth tdecls ddecls kctx tctx e0 = currentKindSubst >>= \sub -> case e0 of
       (as'', t, tctx'') <- checkArgsQL 1 s tdecls ddecls kctx tctx' ui as2
       return (E.App s (E.Select s' m i) (ExpLevel e' : as''), t, tctx'')
   E.App s (E.SendType s' u) as ->
-    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s) as \e e' v tctx' as' -> do
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s u) as \e e' v tctx' as' -> do
       u' <- Kinding.synth kctx u
       (a, _, v') <- Expose.typeOutput tdecls (siteOf e) v
       as2 <- elabArgs kctx as'
@@ -347,7 +347,7 @@ synth tdecls ddecls kctx tctx e0 = currentKindSubst >>= \sub -> case e0 of
   E.Select s m i -> do
     throwE (CannotSynthesiseSelect s m i)
   E.SendType s t -> do
-    throwE (CannotSynthesiseSendType s)
+    throwE (CannotSynthesiseSendType s t)
   E.ReceiveType s -> do
     throwE (CannotSynthesiseReceiveType s)
 
@@ -477,7 +477,7 @@ check tdecls ddecls kctx tctx e t = currentKindSubst >>= \sub -> case e of
       checkEquivTypes tdecls ddecls (siteOf e) t t'
       return (E.App s (E.Select s' m i) (ExpLevel e'' : args''), tctx'')
   E.App s (E.SendType s' u) args ->
-    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s') args \e' e'' v tctx' args' -> do
+    withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s' u) args \e' e'' v tctx' args' -> do
       (a, k, v') <- Expose.typeOutput tdecls (siteOf e') v
       u' <- Kinding.synth kctx u
       Kinding.checkK u' k
@@ -1232,7 +1232,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args2
                 advise e t3
             e@(E.App s (E.SendType s' t0) args) _ ->
-              withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s') args \e _ u1 tctx' args' -> do
+              withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s' t0) args \e _ u1 tctx' args' -> do
                 (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
                 t0' <- Kinding.synth kctx t0
                 args2 <- elabArgs kctx args'

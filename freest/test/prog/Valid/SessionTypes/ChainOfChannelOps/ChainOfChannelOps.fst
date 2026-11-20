@@ -4,7 +4,7 @@ type T = +{More: !Int;T, Stop: Close}
 g : Dual T -> Int
 g r =
   case r of
-   	&More r ->
+    &More r ->
       let (v, r) = receive r in
       v + g r
     &Stop r -> wait r; 0

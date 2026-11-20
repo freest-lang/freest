@@ -23,7 +23,7 @@ data Token
   -- Literals 
   | TkIntLit Span String 
   | TkFloatLit Span String 
-  | TkCharLit Span String 
+  | TkCharLit Span Char
   | TkStringLit Span String
   -- Keywords
   | TkModule Span | TkWhere Span | TkImport Span
@@ -99,8 +99,6 @@ getText = \case
   -- Literals 
   TkIntLit _ t -> t
   TkFloatLit _ t -> t
-  TkCharLit _ t -> t
-  TkStringLit _ t -> t
   TkCmp _ t -> t
   -- Keywords
   t -> internalError ("no text for token `" ++ show t ++ "`")

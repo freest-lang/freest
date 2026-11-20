@@ -244,6 +244,10 @@ sum : [Int] -> Int
 sum []        = 0
 sum (x :: xs) = x + sum xs
 
+all : forall (a : *T) -> (a -> Bool) -> [a] -> Bool
+all _ []        = True
+all p (x :: xs) = p x && all p xs
+
 foldl : forall #m #n (a : m T) (b : *T) -> (a -> b -n-> a) -> a -> [b] -m-> a
 foldl #m @a @b f = go
   where
@@ -308,6 +312,12 @@ dropWhile p (x :: xs) | p x       = dropWhile p xs
 
 span : forall (a : *T) -> (a -> Bool) -> [a] -> ([a], [a])
 span p xs = (takeWhile p xs, dropWhile p xs)
+
+-- | Join a list of lists with a separator, e.g. @intercalate ", " ["a","b"] == "a, b"@.
+intercalate : forall (a : *T) -> [a] -> [[a]] -> [a]
+intercalate _   []        = []
+intercalate _   [x]       = x
+intercalate sep (x :: xs) = x ++ sep ++ intercalate sep xs
 
 -- ** Strings
 
@@ -381,14 +391,36 @@ send_ @a = undefined
 receive_ : forall (a : 1T) -> *?a -> a
 receive_ @a = undefined
 
--- | Session initiation. Accepts a request for a linear session on a shared
--- channel. The requester uses a `receive_` operation to obtain the channel
--- end.
-accept : forall (a : 1C) -> *!a -> Dual a
-accept @a c =
+-- | Session initiation, client side. Requests a new linear session on a
+-- shared channel and returns the client's end of the session. The server
+-- obtains the other end with `accept`.
+--
+-- The client holds the `*!` end of the shared channel; the type `a` is the
+-- server's view of the session. The request does not block: the new session
+-- is created on demand and handed to the server through the shared channel.
+-- ```
+-- type Counter = +{Inc: Close, Get: ?Int ; Close}
+-- type CounterService = *!(Dual Counter)
+--
+-- get : CounterService -> Int
+-- get s = s |> request |> select Get |> receiveAndClose
+-- ```
+--
+-- Based on Kohei Honda, Vasco Thudichum Vasconcelos, Makoto Kubo:
+-- Language Primitives and Type Discipline for Structured
+-- Communication-Based Programming. ESOP 1998: 122-138
+request : forall (a : 1C) -> *!a -> Dual a
+request @a c =
   let (x, y) = channel @a in
   send_ x c;
   y
+
+-- | Session initiation, server side. Accepts a request for a linear session
+-- on a shared channel and returns the server's end of the session. Clients
+-- use `request` to initiate the session. Blocks until some client requests a
+-- session.
+accept : forall (a : 1C) -> *?a -> a
+accept @a c = receive_ @a c
 
 -- | Creates a new child process and a channel through which it can
 -- communicate with its parent process. Returns the channel endpoint.
@@ -411,24 +443,25 @@ forkWith @a f =
 -- newly accepted session, while continuously updating the state.
 --   
 -- Note: this only works with session types that use session initiation.
+-- Clients obtain a session with `request`.
 -- ```
--- type SharedCounter : *S = *?Counter
+-- type SharedCounter : *C = *!(Dual Counter)
 -- type Counter : 1S = +{ Inc: Close
 --                      , Dec: Close
 --                      , Get: ?Int ; Close
 --                      }
 -- 
 -- -- | Handler for a counter
--- counterService : Int -> dualof Counter -1-> Int
+-- counterService : Int -> Dual Counter -1-> Int
 -- counterService i (Inc c) = wait c ; i + 1 
 -- counterService i (Dec c) = wait c ; i - 1
 -- counterService i (Get c) = c |> send i |> wait ; i
 --
 -- -- | Counter server
--- runCounterServer : dualof SharedCounter -> Void @*T
+-- runCounterServer : Dual SharedCounter -> Void @*T
 -- runCounterServer = runServer @Int @Counter counterService 0
 -- ```
-runServer : forall (a : *T) (b : 1C) -> (a -> Dual b -> a) -> a -> *!b -> Void @*T
+runServer : forall (a : *T) (b : 1C) -> (a -> Dual b -> a) -> a -> *?(Dual b) -> Void @*T
 runServer handle state c =
   runServer handle (handle state (accept c)) c
 
@@ -518,25 +551,29 @@ hGetContent c =
 hCloseIn : InStream -> ()
 hCloseIn c = c |> select Stop |> wait
 
--- | The unrestricted version of an `InStream` getter: receives the `InStream`
--- channel endpoint (via session initiation), runs the getter, closes the
--- endpoint with `hCloseIn`, and returns the value.
-hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> *?InStream -> a
+-- | The unrestricted version of an `InStream` getter: obtains an `InStream`
+-- channel endpoint (via session initiation, `request`), runs the getter,
+-- closes the endpoint with `hCloseIn`, and returns the value.
+hGenericGet_ : forall (a : *T) -> (InStream -> (a, InStream)) -> *!(Dual InStream) -> a
 hGenericGet_ get inp = 
-  let (x, c) = get $ receive_ inp in
+  let (x, c) = get $ request inp in
   hCloseIn c; 
   x
 
--- | `hGetChar` on an `*?InStream`
-hGetChar_ : *?InStream -> Char
+-- | `hGetChar` on an `*!(Dual InStream)` (e.g. `stdin`)
+hGetChar_ : *!(Dual InStream) -> Char
 hGetChar_ = hGenericGet_ hGetChar
 
--- | `hGetLine` on an `*?InStream`
-hGetLine_ : *?InStream -> String
+-- | `hGetLine` on an `*!(Dual InStream)` (e.g. `stdin`)
+hGetLine_ : *!(Dual InStream) -> String
 hGetLine_ = hGenericGet_ hGetLine
 
--- | `hGetContent` on an `*?InStream`
-hGetContent_ : *?InStream -> String
+-- | `hIsEOF` on an `*!(Dual InStream)` (e.g. `stdin`)
+hIsEOF_ : *!(Dual InStream) -> Bool
+hIsEOF_ = hGenericGet_ hIsEOF
+
+-- | `hGetContent` on an `*!(Dual InStream)` (e.g. `stdin`)
+hGetContent_ : *!(Dual InStream) -> String
 hGetContent_ = hGenericGet_ hGetContent
 
 -- *** Output Stream
@@ -577,35 +614,35 @@ hPrint @a = hPutStrLn . show
 hCloseOut : OutStream -> ()
 hCloseOut c = c |> select Stop |> wait
 
--- | The unrestricted version of an `OutStream` putter: receives the
--- `OutStream` channel endpoint (via session initiation), runs the putter, and
+-- | The unrestricted version of an `OutStream` putter: obtains the
+-- `OutStream` channel endpoint (via session initiation, `request`), runs the putter, and
 -- closes the endpoint with `hCloseOut`.
-hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> *?OutStream -> ()
+hGenericPut_ : forall (a : *T) -> (a -> OutStream -> OutStream) -> a -> *!(Dual OutStream) -> ()
 hGenericPut_ sendF x outStream = 
-  outStream |> receive_  |> sendF x |> hCloseOut
+  outStream |> request |> sendF x |> hCloseOut
 
 -- | Unrestricted version of `hPutChar`. Behaves the same, except it first
--- receives an `OutStream` channel endpoint (via session initiation), executes
+-- obtains an `OutStream` channel endpoint (via session initiation, `request`), executes
 -- an `hPutChar` and then closes the enpoint with `hCloseOut`.
-hPutChar_ : Char -> *?OutStream -> ()
+hPutChar_ : Char -> *!(Dual OutStream) -> ()
 hPutChar_ = hGenericPut_ hPutChar
 
 -- | Unrestricted version of `hPutStr`. Behaves similarly, except that it first
--- receives an `OutStream` channel endpoint (via session initiation), executes
+-- obtains an `OutStream` channel endpoint (via session initiation, `request`), executes
 -- an `hPutStr` and then closes the enpoint with `hCloseOut`.
-hPutStr_ : String -> *?OutStream -> ()
+hPutStr_ : String -> *!(Dual OutStream) -> ()
 hPutStr_ = hGenericPut_ hPutStr
 
 -- | Unrestricted version of `hPutStrLn`. Behaves similarly, except that it
--- first receives an `OutStream` channel endpoint (via session initiation),
+-- first obtains an `OutStream` channel endpoint (via session initiation, `request`),
 -- executes an `hPutStrLn` and then closes the enpoint with `hCloseOut`.
-hPutStrLn_ : String -> *?OutStream -> ()
+hPutStrLn_ : String -> *!(Dual OutStream) -> ()
 hPutStrLn_ = hGenericPut_ hPutStrLn
 
 -- | Unrestricted version of `hPrint`. Behaves similarly, except that it first
--- receives an `OutStream` channel endpoint (via session initiation), executes
+-- obtains an `OutStream` channel endpoint (via session initiation, `request`), executes
 -- an `hPrint` and then closes the enpoint with `hCloseOut`.
-hPrint_ : forall (a : *T) -> a -> *?OutStream -> ()
+hPrint_ : forall (a : *T) -> a -> *!(Dual OutStream) -> ()
 hPrint_ @a x c = hGenericPut_ (hPrint @a) x c
 
 -- ** Standard I/O
@@ -620,7 +657,7 @@ internalGetLine = undefined
 internalIsEOF : () -> Bool
 internalIsEOF = undefined
 
-stdin : *?InStream
+stdin : *!(Dual InStream)
 stdin = forkWith (runServer (\_ -> reader) ())
   where
     reader : Dual InStream -> ()
@@ -637,6 +674,10 @@ getChar _ = hGetChar_ stdin
 getLine : () -> String
 getLine _ = hGetLine_ stdin
 
+-- | Checks if `stdin` reached the EOF mark.
+isEOF : () -> Bool
+isEOF _ = hIsEOF_ stdin
+
 -- | Reads `stdin` up to EOF, separating lines with the newline character `\n`.
 getContent : () -> String
 getContent _ = hGetContent_ stdin
@@ -648,7 +689,7 @@ internalPutStrOut, internalPutStrErr : String -> ()
 internalPutStrOut = undefined
 internalPutStrErr = undefined
 
-stdout, stderr : *?OutStream
+stdout, stderr : *!(Dual OutStream)
 (stdout, stderr) = (outStream internalPutStrOut, outStream internalPutStrErr)
   where
     readApply : forall (a : *T) (b : 1S) (c : *T) -> (a -> c) -> ?a ; b -1-> b
@@ -663,7 +704,7 @@ stdout, stderr : *?OutStream
     printer _ (&Stop p) =
       p |> close
 
-    outStream : (String -> ()) -> *?OutStream
+    outStream : (String -> ()) -> *!(Dual OutStream)
     outStream put = forkWith (runServer (\_ -> printer put) ())
 
 -- | Prints a character to `stdout`.

@@ -57,13 +57,28 @@ initCounter =
 maxSize : Int
 maxSize = 3
 
-main : ()
-main =
+-- | Dequeue three values and check that they make sense.
+test : Queue -> ()
+test queue =
+  if check (dequeue queue) (dequeue queue) (dequeue queue)
+  then putStrLn "nondeterministic test passed"
+  else putStrLn "nondeterministic test failed"
+  where
+    -- | The counter hands out 0, 1 and 2, one to each writer
+    valid : Int -> Bool
+    valid n = 0 <= n && n < maxSize
+    -- | Each value enqueued is dequeued exactly once, in any order (the writers
+    -- run concurrently)
+    check : Int -> Int -> Int -> Bool
+    check x y z =
+      valid x && valid y && valid z && x /= y && y /= z && x /= z
+
+_ =
     let queue   = initQueue in
     let counter = initCounter in
     -- writer-reader concurrency, no writter-writer nor reader-reader concurrency
     parallel maxSize (\_ -> enqueue (receive_ counter) queue);
-    times maxSize $ (\_ -> print (dequeue queue))
+    test queue
     -- writer-reader, writter-writer and reader-reader concurrency
     -- parallel @() 10 $ (\(_ : ()) -> enqueue (receiveUn @Int counter) queue);
     -- parallel @() 10 $ (\(_ : ()) -> printIntLn (dequeue queue))

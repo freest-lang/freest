@@ -16,7 +16,7 @@ import System.Exit ( ExitCode )
 import System.IO ( BufferMode(BlockBuffering), hFlush, hPutStrLn, hSetBuffering, stderr )
 
 import Compiler.Bug ( reportBug )
-import Syntax.Base ( Span, Located(..) )
+import Syntax.Base ( Span, Located(..), nullSpan )
 import UI.Error ( Source, header, snippet )
 
 -- | A runtime error raised by the interpreter.
@@ -48,8 +48,9 @@ message = \case
   UserError _ msg -> msg
 
 makeException :: Located a => Source -> a -> String -> String
-makeException src (getSpan -> s) msg =
-  header "exception" s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
+makeException src (getSpan -> s) msg
+  | s == nullSpan = "exception:\n" ++ msg ++ "\n"
+  | otherwise     = header "exception" s ++ "\n" ++ msg ++ "\n" ++ snippet src s False
 
 -- | Report a failure at the top of a forked thread. Blocking indefinitely is the
 -- deadlock detector's view of a program winding down, not a diagnostic of its own.

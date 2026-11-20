@@ -10,6 +10,7 @@ module UI.Error
   ( Error(..)
   , ErrorSite(..)
   , Source
+  , lookupSrc
   , toMessage
   , header
   , snippet
@@ -26,9 +27,11 @@ import Syntax.Base
 import Syntax.Kind qualified as K
 import Syntax.Provenance ( Origin(..), Reason(..) )
 import Syntax.Type.Kinded qualified as TK
+import Syntax.Type.Unkinded qualified as TU
 import Validation.Substitution ( betaRule )
 import Compiler.Bug ( internalError )
 
+import Data.Char ( isDigit )
 import Data.List ( intercalate, nub )
 import Data.Map.Strict qualified as Map
 import Data.List qualified as List
@@ -79,7 +82,7 @@ data Error
   | CannotSynthesisePat Span
   | CannotSynthesiseReceiveType Span
   | CannotSynthesiseSelect Span K.Multiplicity Identifier
-  | CannotSynthesiseSendType Span
+  | CannotSynthesiseSendType Span TU.ScopedType
   | CannotSynthesiseSection Span (Either Variable Identifier)
   | ConflictingDefs Span (Level String String String) [Span]
   | ConsOutOfScope Span Identifier
@@ -92,6 +95,9 @@ data Error
   | GivenTooManyArgs Span TK.KindedType Int Int
   | GivenTooManyArgsK Span TK.KindedType K.Kind Int Int
   | IllegalChoice Span Identifier TK.KindedType
+  | ControlCharInLiteral Span Char
+  | InvalidCharLit Span
+  | InvalidEscape Span String
   | KindMismatch Span K.Kind TK.KindedType
   | KSigLacksBinding Span Identifier
   | LacksTypeSig Span Variable
@@ -157,8 +163,9 @@ data Error
   | HigherOrderTypeRHS Span Identifier
   | MixedSessionVarPats Span Span Span
   | UnexpectedEOF Span
-    -- ^ Alex ran past the end of the file with no more input to inspect —
-    -- typically an unterminated string literal or block comment.
+    -- ^ Alex ran past the end of the file with no more input to inspect.
+  | UnterminatedComment Span
+  | UnterminatedString Span String
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -177,7 +184,7 @@ instance Located Error where
     CannotSynthesisePat s -> s
     CannotSynthesiseReceiveType s -> s
     CannotSynthesiseSelect s _ _ -> s
-    CannotSynthesiseSendType s -> s
+    CannotSynthesiseSendType s _ -> s
     CannotSynthesiseSection s _ -> s
     ConflictingDefs s _ _ -> s
     ConsOutOfScope s _ -> s
@@ -231,26 +238,31 @@ instance Located Error where
     HigherOrderTypeRHS s _ -> s
     MixedSessionVarPats s _ _ -> s
     UnexpectedEOF s -> s
+    UnterminatedComment s -> s
+    ControlCharInLiteral s _ -> s
+    InvalidCharLit s -> s
+    InvalidEscape s _ -> s
+    UnterminatedString s _ -> s
 
   -- There should be no need to relocate an error. (At least for now...)
   setSpan = internalError "span not settable for Error type."
 
 -- | The source code of a FreeST program, represented as a mapping from file paths
--- to the lines of code in those files. This is used to extract snippets of code
+-- to the contents of those files. This is used to extract snippets of code
 -- to display in error messages.
--- The list of lines of code may be empty, when parsing from an interactive prompt.
-type Source = Map.Map FilePath [String]
+-- The contents may be empty, when parsing from an interactive prompt.
+type Source = Map.Map FilePath String
 
 getFromSpan :: Located a => Source -> a -> String
 getFromSpan src (getSpan -> (Span fp (sl, sc) (_, ec))) =
   case drop (sl - 1) (lookupSrc src fp) of
-    (l : _) -> take (ec - sc) (drop (sc - 1) l)
+    (l : _) -> take (ec - sc) (drop (sc - 1) (expandTabs l))
     []      -> ""
 
 -- | The source lines of a file, or @[]@ if it is not in the map (e.g. a
 -- synthetic or inferred span), so error rendering degrades instead of crashing.
 lookupSrc :: Source -> FilePath -> [String]
-lookupSrc src fp = Map.findWithDefault [] fp src
+lookupSrc src fp = maybe [] lines (Map.lookup fp src)
 
 -- | Collapse the standard-library install path to a stable, readable suffix,
 -- e.g. ".../share/.../StandardLib/Prelude.fst" becomes "StandardLib/Prelude.fst".
@@ -274,7 +286,7 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
     sep = " | "
     n = length (show el)
     line = case drop (sl - 1) (lookupSrc src fp) of
-      (l : _) -> Just l
+      (l : _) -> Just (expandTabs l)
       []      -> Nothing
     withCarets l =
       [ spaces n ++ sep
@@ -285,6 +297,13 @@ snippet src (getSpan -> s@(Span fp (sl, sc) (el, ec))) showSpan =
       ]
     spaces x = replicate x ' '
     carets x = replicate x '^'
+
+expandTabs :: String -> String
+expandTabs = go 1
+  where
+    go c ('\t' : s) = let c' = nextTabStop c in replicate (c' - c) ' ' ++ go c' s
+    go c (x : s) = x : go (c + 1) s
+    go _ [] = []
 
 -- | How a layout block is referred to in a parse error.
 nameBlock :: Block -> String
@@ -380,10 +399,13 @@ toMessage src = \case
     ++ "Consider giving it a type annotation: " ++ bt ("(" ++ getFromSpan src s ++ " : T)")
   CannotSynthesiseReceiveType s -> makeError src s
     "Could not infer a type for this `receiveType` expression"
+    ++ synthHint "receiveType" "(?type (a : k). U) -> (exists (a : k), U)"
   CannotSynthesiseSelect s m id -> makeError src s
-    ("Could not infer a type for this " ++ bt (selectOp m) ++ " expression")
-  CannotSynthesiseSendType s -> makeError src s
-    "Could not infer a type for this `sendType` expression"
+    ("Could not infer a type for this " ++ bt (selectOp m ++ " " ++ show id) ++ " expression")
+    ++ synthHint (selectOp m ++ " " ++ show id) ("+{" ++ show id ++ ": U, ...} -> U")
+  CannotSynthesiseSendType s t -> makeError src s
+    ("Could not infer a type for this " ++ bt ("sendType @" ++ unparse t) ++ " expression")
+    ++ synthHint ("sendType @" ++ unparse t) ("!type a. W -> W[" ++ unparse t ++ "/a]")
   CannotSynthesiseSection s op -> makeError src s
     ("Could not infer a type for this section over " ++ bt (either show show op))
     ++ "Its operator is polymorphic, so the omitted operand's type is ambiguous here.\n"
@@ -418,7 +440,7 @@ toMessage src = \case
     ++ (if atPat site
          then "(It matches " ++ msg ++ ")"
                  ++ maybe "" (("\n  hint: this type is matched by " ++) . bt) (patternHint whnf)
-         else maybe "" (("  hint: consume it with " ++) . bt) (sessionHint whnf))
+         else maybe "" (("  hint: consume this channel with " ++) . bt) (sessionHint whnf))
   GivenTooManyArgs s t n m -> makeError src s
     ("Got " ++ prettyModifiedArgs "unexpected" (m - n))
     ++ "(This expression cannot be applied to further arguments: it has type " ++ bt (unparse t)
@@ -438,7 +460,24 @@ toMessage src = \case
   LexicalError span c -> makeError src span
     ("Unsupported character " ++ bt [c])
   UnexpectedEOF s -> makeError src s
-    "Unexpected end of input (an unterminated string literal or comment?)"
+    "Unexpected end of input"
+  UnterminatedComment s -> makeError src s
+    ("Unterminated block comment: this " ++ bt "{-" ++ " has no matching " ++ bt "-}")
+  ControlCharInLiteral s c -> makeError src s "Raw control character in a literal"
+    ++ "(Write it as the escape " ++ bt (init (tail (show c))) ++ ")"
+  InvalidCharLit s -> makeError src s "Invalid character literal"
+    ++ "(A character literal is one character or escape between single quotes, such as "
+    ++ bt "'a'" ++ ", " ++ bt "'\\n'" ++ " or " ++ bt "'\\''" ++ ")"
+  InvalidEscape s esc -> makeError src s ("Invalid escape " ++ bt esc)
+    ++ case esc of
+         '\\' : c : ds | isDigit c || c `elem` "xo" && not (null ds) ->
+           "(The largest character code is " ++ bt "\\1114111" ++ ")"
+         _ -> "(Valid escapes include " ++ bt "\\n" ++ ", " ++ bt "\\t" ++ ", " ++ bt "\\\\" ++ ", "
+              ++ bt "\\\"" ++ ", " ++ bt "\\'" ++ " and " ++ bt "\\65" ++ ")"
+  UnterminatedString s q -> makeError src s
+    ("Unterminated string literal: this " ++ bt q ++ " has no matching " ++ bt q
+      ++ if q == "\"" then " on its line" else "")
+    ++ if q == "\"" then "(For a string over several lines, use " ++ bt "\"\"\"" ++ ")" else ""
   IncludeCycle s files -> makeError src s
     ("Include cycle: " ++ intercalate " -> " files)
   IncludeNotFound s path -> makeError src s
@@ -449,7 +488,7 @@ toMessage src = \case
     makeError src s
       ("Linear " ++ prettyVarCons xi ++ " of type " ++ bt (unparse (unRedex t)) ++ " is not consumed")
     ++ case sessionHint whnf of
-         Just op -> "  hint: consume it with " ++ bt op ++ "\n"
+         Just op -> "  hint: consume this channel with " ++ bt op ++ "\n"
          Nothing -> ""
   LinConsumedTwice s xi t prev -> errorHeader s ++ "\n"
       ++ ((case m' of
@@ -703,7 +742,7 @@ toMessage src = \case
     Just t ->
       "(A " ++ bt op ++ " expression consumes " ++ chan ++ "; here it is given "
       ++ bt (unparse (unRedex t)) ++ ")"
-      ++ maybe "" (("\n  hint: consume it with " ++) . bt) (sessionHint t)
+      ++ maybe "" (("\n  hint: consume this channel with " ++) . bt) (sessionHint t)
 
   -- | Collapse the type-level β-redexes that 'Validation.Normalisation'
   -- leaves behind when computing 'Dual' of a @!type@/@?type@ quantifier (rule
@@ -932,6 +971,20 @@ atMult m op = if K.isUn m then op ++ "_" else op
 
 selectOp :: K.Multiplicity -> String
 selectOp = flip atMult "select"
+
+-- | Two hints for a value that only has a type once applied to a channel:
+-- 'select', 'sendType' and 'receiveType' are not ordinary curried functions,
+-- so the type-checker cannot synthesise a type for them on their own (see
+-- channels-and-session-types.md, "A summary of the basic elements of
+-- interaction"). @expr@ is the concrete expression at fault (e.g.
+-- @select Done@) and @scheme@ is the illustrative type scheme it ranges over
+-- (e.g. @+{Done: U, ...} -> U@).
+synthHint :: String -> String -> String
+synthHint expr scheme =
+     "(" ++ bt expr ++ " has all types of the form " ++ bt scheme
+  ++ ", so it needs a type to check against)"
+  ++ "\n  hint: give it one via ascription, e.g. " ++ bt (expr ++ " : " ++ scheme)
+  ++ "\n  hint: or apply it to a channel, e.g. " ++ bt (expr ++ " c")
 
 -- | Wrap a string in backtick characters
 bt :: String -> String

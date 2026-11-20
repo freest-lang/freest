@@ -25,7 +25,7 @@ mkTypeSpec :: [FilePath]
               -> Spec
 mkTypeSpec testPaths testDesc failHandler testHandler = do
   src <- zip testPaths <$> runIO (mapM readFile testPaths)
-  let src' = lines <$> Map.fromList src
+  let src' = Map.fromList src
   case concatMapM (uncurry $ runLexer parseKindingTests) src of
     Left es  -> runIO $ printErrors src' es >> exitFailure
     Right ts -> describe testDesc $ 
@@ -51,7 +51,7 @@ mkEquivalenceSpec :: [FilePath]
                   -> Spec
 mkEquivalenceSpec testPaths testDesc testFun = do
   src <- zip testPaths <$> runIO (mapM readFile testPaths)
-  let src' = lines <$> Map.fromList src
+  let src' = Map.fromList src
   case concatMapM (uncurry $ runLexer parseEquivalenceTests) src of
     Left es  -> runIO $ printErrors src' es
     Right ts -> describe testDesc $ 

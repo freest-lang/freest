@@ -12,17 +12,18 @@ intCounter = (@Int, ( 0     -- new
                     , id    -- get
                     , succ  -- inc
                     )
-             ) 
+             )
+-- End from
 
-type CounterProviderOneGo = *?CounterADT
+type CounterProvider = !CounterADT ; Close
 
-counterProviderOneGo : Dual CounterProviderOneGo -> ()
-counterProviderOneGo c =
-    c |> send_ intCounter |> counterProviderOneGo
+counterProvider : CounterProvider -> ()
+counterProvider = sendAndClose intCounter
 
-incTwice : CounterProviderOneGo -> ()
+incTwice : Dual CounterProvider -> ()
 incTwice s =
-  let (@_, (new, get, inc)) = receive_ s
+  let (@_, (new, get, inc)) = receiveAndWait s
   in new |> inc |> inc |> get |> print
 
-_ = forkWith counterProviderOneGo |> incTwice
+_ =
+    forkWith counterProvider |> incTwice

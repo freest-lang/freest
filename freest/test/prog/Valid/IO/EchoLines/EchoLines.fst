@@ -6,4 +6,4 @@ echoLines n inp | otherwise =
     echoLines (n - 1) inp
 
 _ =
-  receive_ stdin |> echoLines 3 |> hCloseIn
+  request stdin |> echoLines 3 |> hCloseIn

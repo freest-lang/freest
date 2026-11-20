@@ -27,8 +27,6 @@ $digit = [ 0-9 ]
 @exponent = @numspc [eE] [\-\+]? @decimal
 @intLit = @decimal 
 @floatLit = @numspc @decimal \. @decimal @exponent? | @numspc @decimal @exponent
-@charLit = \'(\\n|[\\.]|.) \'
-@stringLit = \"(\\.|[^\"]|\n)*\"
 
 -- Identifiers
 $lower = [ a-z ]
@@ -41,8 +39,8 @@ $upper = [ A-Z ]
 
 :-
 -- Whitespace and comments
-    [\ \t]+ ;
-    "{-" (\-[^\}]|[^\-]|\n)* "-}" ;
+    [\ \t\r\f\v]+ ;
+    "{-" { nestedComment }
 <0> "--" .* \n { \_ -> pushStartCode newlineSC *> scan }
 <0> \n         { \_ -> pushStartCode newlineSC *> scan }
 <0> "--" .* ; -- when files end in a comment and no newline. TODO: check this
@@ -137,8 +135,9 @@ $upper = [ A-Z ]
 -- Literals
 <0> @intLit    { emit TkIntLit }
 <0> @floatLit  { emit TkFloatLit }
-<0> @charLit   { emit TkCharLit }
-<0> @stringLit { emit TkStringLit }
+<0> \'        { charLit }
+<0> \"        { stringLit }
+<0> \"\"\"    { multilineStringLit }
 
 -- Identifiers
 <0> @wildcard         { emit TkWildcard }
@@ -219,6 +218,12 @@ scan = do
     AlexToken input' tokl action -> do
       modify' $ \s -> s { lexerInput = input' }
       action (take tokl string)
+
+nestedComment _ = do
+  input@Input{inpLine=l, inpColumn=c, inpFile=f} <- gets lexerInput
+  case skipNestedComment input of
+    Just input' -> modify' (\s -> s { lexerInput = input' }) *> scan
+    Nothing -> throwError [UnterminatedComment Span{startPos=(l, c - 2), endPos=(l, c), filepath=f}]
 
 layoutKw t x = do
   setBlockKw x

@@ -16,7 +16,7 @@ module Interpreter.Value
   , mkClosure
   ) where
 
-import qualified Control.Concurrent.Chan as C ( Chan )
+import Control.Concurrent.STM ( TQueue )
 import qualified Data.Map as Map
 import System.IO ( Handle )
 
@@ -34,9 +34,9 @@ emptyValueCtx = Map.empty
 -- (A 'Nothing' in the list represents a type/multiplicity parameter)
 type Clause = ([Maybe KindedPat], KindedRHS)
 
--- | A bidirectional channel end: the channel to read from and the channel to
+-- | A bidirectional channel end: the queue to read from and the queue to
 -- write to.
-type ChannelEnd = (C.Chan Value, C.Chan Value)
+type ChannelEnd = (TQueue Value, TQueue Value)
 
 data Value
   = VInt Int

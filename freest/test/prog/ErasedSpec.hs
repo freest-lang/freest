@@ -73,9 +73,9 @@ gapMessage errs =
 -- Prelude is not equivalent, since 'kindModule' inherits no type declarations.
 accepts :: FilePath -> Maybe FilePath -> FilePath
         -> IO (Either (Source, [Error]) ())
-accepts prelude eraseIn root = resolveIncludes [prelude, root] >>= \case
+accepts prelude eraseIn root = resolveIncludes Map.empty [prelude, root] >>= \case
   Left _       -> pure (Right ())  -- an unreadable root is not this spec's business
-  Right inputs -> pure $ first (src inputs,) do
+  Right inputs -> pure $ first (Map.fromList inputs,) do
     modules <- mapM parseOne inputs
     runValidation emptyValidationState do
       _ <- validateModule emptyScopingCtx emptyKindCtx emptyTypeCtx
@@ -83,7 +83,6 @@ accepts prelude eraseIn root = resolveIncludes [prelude, root] >>= \case
              (M.insertBuiltinLists (mconcat modules))
       pure ()
   where
-    src inputs = Map.fromList [(p, lines t) | (p, t) <- inputs]
     parseOne (p, t) =
       (if Just p == eraseIn then eraseModule else id) <$> runParseModule p t
 

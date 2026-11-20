@@ -1,9 +1,1 @@
-<pending>
-
-Waiting on non-deterministic tests. Expect:
-
-True
-False
-False
-
-in any order
+nondeterministic test passed
