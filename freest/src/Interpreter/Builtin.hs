@@ -154,7 +154,7 @@ close (VChan c) = do
   atomically (writeTQueue (snd c) (VCons "()" []))
   return (VCons "()" [])
 
--- | Report a failed file operation as the program's error, not the compiler's.
+-- | Report a failed I/O operation as the program's error, not the compiler's.
 asUserError :: IO a -> IO a
 asUserError act = act `catch` \(e :: IOException) -> throwIO (UserError nullSpan (show e))
 
@@ -288,9 +288,9 @@ builtins = Map.fromList
   -- ** Standard I/O
   -- *** stdin
   -- **** Internal stdin functions
-  , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> charMode getChar))
-  , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> getLine))
-  , ("internalIsEOF",         VBuiltin (const $ VIO $ hsToFstBool <$> isEOF))
+  , ("internalGetChar",       VBuiltin (const $ VIO $ VChar <$> asUserError (charMode getChar)))
+  , ("internalGetLine",       VBuiltin (const $ VIO $ hsToFstString <$> asUserError getLine))
+  , ("internalIsEOF",         VBuiltin (const $ VIO $ hsToFstBool <$> asUserError isEOF))
   -- getContents makes sense in a lazy setting; FreeST is eager.
   -- , ("internalGetContents",   VBuiltin (const $ VIO $ hsToFstString <$> getContents))
   -- *** stdout and stderr
