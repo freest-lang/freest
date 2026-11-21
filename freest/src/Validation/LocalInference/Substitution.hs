@@ -13,32 +13,41 @@ import Data.Set qualified as Set
 
 -- | Instantiation-level substitution of types; multiplicities are left to the
 -- global solve.
-newtype Substitution = Θ [(Variable, T.KindedType)]
+newtype Substitution = Θ (Map.Map Variable T.KindedType)
   deriving Show
 
--- | Composition for substitutions.
+-- | Composition for substitutions; where both bind a variable, the right one's
+-- binding is kept.
 instance Semigroup Substitution where
-  Θ ivtms1 <> Θ ivtms2 = Θ (ivtms1 ++ ivtms2)
+  Θ ivts1 <> Θ ivts2 = Θ (Map.union ivts2 ivts1)
 
 -- | The empty substitution.
 instance Monoid Substitution where
-  mempty = Θ []
+  mempty = Θ Map.empty
 
 -- | Alias for the empty substitution.
 emptySubs :: Substitution
-emptySubs = Θ []
+emptySubs = Θ Map.empty
 
 -- | Make a type substitution.
 subsType :: Variable -> T.KindedType -> Substitution
-subsType iv t = Θ [(iv, t)]
+subsType iv t = Θ (Map.singleton iv t)
+
+-- | What a type stands for at its head: a bound variable is replaced by its
+-- binding, in turn, until the head is not one. The dual of a variable does not
+-- reduce, so it is a head too, and the variable under it is walked.
+walk :: Substitution -> T.KindedType -> T.KindedType
+walk θ@(Θ ivts) = \case
+  T.Var _ _ InstLv iv | Just t <- Map.lookup iv ivts -> walk θ t
+  T.AppDual s u -> T.AppDual s (walk θ u)
+  t -> t
 
 -- | Apply a substitution. A binding may mention variables bound elsewhere in
 -- it, so the type a variable is bound to is resolved in turn; one already being
 -- resolved is left alone, so that a cyclic binding cannot loop.
 applySubs :: Substitution -> T.KindedType -> T.KindedType
-applySubs (Θ ivts) = go Set.empty
+applySubs (Θ bound) = go Set.empty
   where
-    bound = Map.fromList ivts
     go seen = \case
       T.Var _ _ InstLv iv
         | iv `Set.notMember` seen, Just t <- Map.lookup iv bound -> go (Set.insert iv seen) t
