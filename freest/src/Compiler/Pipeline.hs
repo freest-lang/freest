@@ -16,7 +16,6 @@ module Compiler.Pipeline
   , loadPreludeAndModuleWithErrors
   , loadSilent
   , loadNoModule
-  , LoadState
   ) where
 
 import Syntax.Module qualified as M
