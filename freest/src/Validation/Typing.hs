@@ -625,7 +625,7 @@ checkFun tdecls ddecls kctx tctx fe ps mm rhs t = checkFun' 0 kctx tctx ps t
         -- regular cases
         (TypeLevel (ai, mki) : ps'', T.AppForall s' m ((a, k) : aks) u) -> do
           ki <- case mki of
-            Just ki -> do Kinding.checkK (T.fromVariable ObjLv ai ki) k
+            Just ki -> do Kinding.checkSubkindOf (T.fromVariable ObjLv ai k) k ki
                           return ki
             Nothing -> return k
           case mm of

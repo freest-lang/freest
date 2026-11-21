@@ -7,7 +7,7 @@ Church Encoding _ Boolean Values
 -}
 
 type Bool' : *T
-type Bool' = forall b -> b -> b -> b
+type Bool' = forall (b : *T) -> b -> b -> b
 
 true, false : Bool'
 
