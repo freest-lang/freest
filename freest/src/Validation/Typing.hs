@@ -1208,16 +1208,17 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
         let θ = θ2 <> θ1
         return (ExpLevel e : args'', kivs', θ, LI.applySubs θ t1 : us, t₃)
         where
-          -- a polymorphic argument gives a bare variable no advice, so checking instantiates it
-          advise t e u = currentKindSubst >>= \sub -> case (t, normalise sub tdecls u) of
+          -- a polymorphic argument is not matched against a bare variable; checking
+          -- instantiates it
+          matchArg t e u = currentKindSubst >>= \sub -> case (t, normalise sub tdecls u) of
             (T.Var _ _ InstLv _, T.AppForall{}) -> return mempty
             (T.Var _ _ InstLv _, T.ForallM{})   -> return mempty
             _                                   -> LTI.match (getSpan e) tdecls t u
-          -- synthesise, instantiate at no arguments, advise from the result
-          synthAdvise t e = do
+          -- synthesise, instantiate at no arguments, match against the result
+          synthMatchArg t e = do
             (_, t2, tctx') <- synth tdecls ddecls kctx tctx e
             (_, _, _, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 []
-            advise t e t3
+            matchArg t e t3
           quickLook :: E.ScopedExp -> T.KindedType -> Validation LI.Substitution
           quickLook = \cases
             -- the components are the arguments of a tuple constructor, whose
@@ -1227,41 +1228,41 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
               θ <- fold . reverse <$> zipWithM quickLook es us
               (<> θ) <$> LTI.match (getSpan e) tdecls t1 (LI.applySubs θ (T.Tuple s us))
             -- a synthesis failure is an error for these two; for the two that
-            -- catch below it only means no advice
-            e@E.List{}  t1 -> synthAdvise t1 e
-            e@E.Var{}   t1 -> synthAdvise t1 e
+            -- catch below it only means nothing is learnt
+            e@E.List{}  t1 -> synthMatchArg t1 e
+            e@E.Var{}   t1 -> synthMatchArg t1 e
             e@(E.App s (E.Select s' m i) args) t1 ->
               withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSelect s' m i) args \e _ u1 tctx' args' -> do
                 t2 <- Expose.internalChoice tdecls m (siteOf e) u1 i
                 args2 <- elabArgs kctx args'
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args2
-                advise t1 e t3
+                matchArg t1 e t3
             e@(E.App s (E.SendType s' t0) args) t1 ->
               withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseSendType s' t0) args \e _ u1 tctx' args' -> do
                 (a, _, t2) <- Expose.typeOutput tdecls (siteOf e) u1
                 t0' <- Kinding.synth kctx t0
                 args2 <- elabArgs kctx args'
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' (subs sub a t0' t2) args2
-                advise t1 e t3
+                matchArg t1 e t3
             e@(E.App s f@(E.ReceiveType s') args) t1 ->
               withChannelArg tdecls ddecls kctx tctx (CannotSynthesiseReceiveType s) args \e _ u1 tctx' args' -> do
                 (a, k, u1') <- Expose.typeInput tdecls (siteOf e) u1
                 let t2 = T.AppExists (spanFromTo f e) [(a, k)] u1'
                 args2 <- elabArgs kctx args'
                 (_, _, _, t3) <- instantiate s 1 tdecls ddecls kctx tctx' t2 args2
-                advise t1 e t3
+                matchArg t1 e t3
             e@(E.App _ h args) t1 -> do
               (_, t2, tctx') <- synth tdecls ddecls kctx tctx h
               args2 <- elabArgs kctx args
               (_, _, us, t3) <- instantiate (getSpan e) 0 tdecls ddecls kctx tctx' t2 args2
-              advise t1 e t3
+              matchArg t1 e t3
             e t1@(T.Var _ _ InstLv _) -> do
               (_, t2, _) <- synth tdecls ddecls kctx tctx e
-              advise t1 e t2
+              matchArg t1 e t2
             -- A lambda that cannot be synthesised still declares its multiplicity:
             -- the expected arrows must carry it, and the rest is left to checkValArgs.
             e@(E.Abs _ ps m _) t1 ->
-              synthAdvise t1 e
+              synthMatchArg t1 e
               `catchE` \_ -> currentKindSubst >>= \sub ->
                 mempty <$ mapM_ (\m' -> addMultEquation (Origin AtLambda (getSpan m')) m' m)
                                 (arrowMults sub ps (normalise sub tdecls t1))
@@ -1273,7 +1274,7 @@ instantiateWith instResult useSpan i tdecls ddecls kctx tctx t1 args = do
                   (MultLevel{} : ps') (T.ForallM s m' (_:φs) v) ->
                     m' : arrowMults sub ps' (if null φs then v else T.ForallM s m' φs v)
                   _ _ -> []
-            e t1 -> synthAdvise t1 e `catchE` \_ -> return mempty
+            e t1 -> synthMatchArg t1 e `catchE` \_ -> return mempty
       (T.AppArrow _ _ t1 _, arg : _) ->
         throwE (UnexpectedArg (getSpan arg) 0 (ExpLevel (Just t1)) (voidLevel arg))
       (t, as) -> 
