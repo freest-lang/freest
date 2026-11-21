@@ -815,7 +815,7 @@ checkFun tdecls ddecls kctx tctx site ps mm rhs t = checkFun' 0 kctx tctx ps t
           -- the binder kind is the signature's unless one is written, which is
           -- where an omitted @\\@a@ gets a kind instead of a metavariable
           bki <- case mki of
-            Just ki -> E.Written ki <$ Kinding.checkK (T.fromVariable ObjLv ai ki) k
+            Just ki -> E.Written ki <$ Kinding.checkSubkindOf (T.fromVariable ObjLv ai k) k ki
             Nothing -> pure (E.Inferred k)
           let ki = E.bndKind bki
           forM_ mm (matchArrowMult (spanFromTo ai site) i m)
