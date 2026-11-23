@@ -9,6 +9,8 @@ module Compiler.FreeST ( freest, runFreeST ) where
 
 import Interpreter.Eval (evalModule)
 import Interpreter.Value (emptyValueCtx)
+import Interpreter.Channel (leftOverErrors)
+import UI.Error (printRunErrors)
 import UI.CLI ( RunOpts(..), opts, version, noModuleLoaded )
 import Compiler.REPL qualified as REPL
 import Compiler.Pipeline ( loadSilent )
@@ -42,6 +44,11 @@ runFreeST RunOpts{filePath = Just programPath, implicitPrelude = ip, typecheckOn
       -- the program sees its own arguments and name, not the compiler's
       | otherwise -> do
           setUncaughtExceptionHandler (reportThreadFailure (Just programPath) src)
-          catch (asProgram (evalModule emptyValueCtx modl) >> exitSuccess)
+          -- a run that terminates without errors must also leave every channel
+          -- buffer without messages that should have been received
+          catch (asProgram (evalModule emptyValueCtx modl)
+                   >> leftOverErrors >>= \case
+                        [] -> exitSuccess
+                        es -> printRunErrors src es >> exitFailure)
                 (\e -> printException src e >> exitFailure)
       where asProgram = withProgName programPath . withArgs args

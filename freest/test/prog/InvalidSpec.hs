@@ -8,6 +8,12 @@ Hspec driver for the negative test suite. Runs each program under
 the test passes when the compiler reports an error (or exits non-zero).
 A sibling @.expected@ file starting with @\<pending\>@ marks the test as
 pending.
+
+Programs under @LeftOverBuffers/@ type check and run to the end, but leave
+messages that should have been received in some channel buffer, which makes
+the run fail. They are run in a child process (see 'runInChild'), so that the
+end-of-run check of channel buffers sees the channels of the program alone; the
+test passes when the run fails for that reason.
 -}
 module InvalidSpec where
 
@@ -38,7 +44,27 @@ testDir baseDir invalidTest = do
   let dir = baseDir ++ baseTestDir ++ invalidTest
   sourceFiles <- runIO $ listDirectory dir
   let source = getSource sourceFiles
-  testInvalid (dir ++ "/" ++ source) source
+  if leftOverBuffersGroup `isPrefixOf` invalidTest
+    then testLeftOverBuffers (dir ++ "/" ++ source) source
+    else testInvalid (dir ++ "/" ++ source) source
+
+-- | The group of programs that leave messages in linear channel buffers.
+leftOverBuffersGroup :: String
+leftOverBuffersGroup = "LeftOverBuffers/"
+
+-- | Run a program that should leave messages in some channel buffer.
+testLeftOverBuffers :: FilePath -> FilePath -> Spec
+testLeftOverBuffers test file = it file $ runInChild test >>= \case
+  Nothing -> assertFailure "Timeout: the program did not terminate"
+  Just (ExitSuccess, _, _) ->
+    assertFailure "Every channel buffer was empty at the end of the run"
+  Just (_, _, err)
+    | nonEmptyBufferReport `isInfixOf` err -> pure ()
+    | otherwise -> assertFailure $ "The run failed for another reason:\n" ++ err
+
+-- | Part of the warning the interpreter prints for a non-empty buffer.
+nonEmptyBufferReport :: String
+nonEmptyBufferReport = "Messages never received from a channel buffer"
 
 
 testInvalid :: String -> FilePath -> Spec

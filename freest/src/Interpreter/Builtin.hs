@@ -19,7 +19,6 @@ module Interpreter.Builtin
   ) where
 
 import Control.Concurrent ( forkIO )
-import Control.Concurrent.STM ( atomically, newTQueueIO, readTQueue, writeTQueue )
 import Control.Exception (BlockedIndefinitelyOnMVar, BlockedIndefinitelyOnSTM, IOException, SomeException, bracket_, catch, finally, fromException, throwIO)
 import Data.Char ( chr, ord )
 import Data.Functor ( ($>), void )
@@ -27,7 +26,8 @@ import qualified Data.Map as Map
 import GHC.Float ( Floating(log1mexp, log1p, expm1, log1pexp) )
 
 import Interpreter.Exception (Exception(..))
-import Interpreter.Value ( Value(..), ChannelEnd )
+import Interpreter.Channel ( Origin(..), newChannel, readBuffer, writeBuffer, markShared )
+import Interpreter.Value ( Value(..), ChannelEnd, Message(..) )
 import Compiler.Bug ( internalError )
 import Parser.Unparser ( unparse )
 import Syntax.Base ( nullSpan )
@@ -108,11 +108,9 @@ asString = \case
   VCons "(::)" [VChar c, rest] -> (c :) <$> asString rest
   _                            -> Nothing
 
-chan :: IO (ChannelEnd, ChannelEnd)
-chan = do
-  c1 <- newTQueueIO
-  c2 <- newTQueueIO
-  return ((c1, c2), (c2, c1))
+-- | A fresh channel, registered for the end-of-run check of its buffers.
+chan :: Origin -> IO (ChannelEnd, ChannelEnd)
+chan = newChannel
 
 handleBlockedRead :: IO a -> IO a
 handleBlockedRead action =
@@ -127,8 +125,14 @@ handleBlockedRead action =
 
 receive :: ChannelEnd -> IO (Value, ChannelEnd)
 receive c = handleBlockedRead $ do
-  v <- atomically (readTQueue (fst c))
-  return (v, c)
+  m <- readBuffer (fst c)
+  return (fromMessage m, c)
+  where
+    fromMessage = \case
+      MValue v -> v
+      MLabel l -> VLabel l
+      MType    -> unit  -- types are erased at runtime
+      MClose   -> unit
 
 receiveLabel :: ChannelEnd -> IO (String, ChannelEnd)
 receiveLabel c = do
@@ -136,23 +140,34 @@ receiveLabel c = do
   return (s, c)
 
 send :: Value -> ChannelEnd -> IO ChannelEnd
-send v c = do
-  atomically (writeTQueue (snd c) v)
-  return c
+send v c = c <$ writeBuffer (snd c) (MValue v)
 
 sendLabel :: String -> ChannelEnd -> IO ChannelEnd
-sendLabel s c = do
-  send (VLabel s) c
-  return c
+sendLabel s c = c <$ writeBuffer (snd c) (MLabel s)
+
+sendType :: ChannelEnd -> IO ChannelEnd
+sendType c = c <$ writeBuffer (snd c) MType
+
+-- | The unrestricted versions of the operations above mark the buffer they use
+-- as shared, exempting it from the end-of-run check.
+sendShared :: Value -> ChannelEnd -> IO ChannelEnd
+sendShared v c = markShared (snd c) >> send v c
+
+sendLabelShared :: String -> ChannelEnd -> IO ChannelEnd
+sendLabelShared s c = markShared (snd c) >> sendLabel s c
+
+receiveShared :: ChannelEnd -> IO (Value, ChannelEnd)
+receiveShared c = markShared (fst c) >> receive c
 
 wait :: Value -> Value
 wait (VChan c) =
-  VIO $ handleBlockedRead (atomically (readTQueue (fst c)))
+  VIO $ unit <$ handleBlockedRead (readBuffer (fst c))
 
 close :: Value -> IO Value
-close (VChan c) = do
-  atomically (writeTQueue (snd c) (VCons "()" []))
-  return (VCons "()" [])
+close (VChan c) = unit <$ writeBuffer (snd c) MClose
+
+unit :: Value
+unit = VCons "()" []
 
 -- | Report a failed file operation as the program's error, not the compiler's.
 asUserError :: IO a -> IO a
@@ -167,7 +182,7 @@ asUserError act = act `catch` \(e :: IOException) -> throwIO (UserError nullSpan
 openStream :: IOMode -> (Handle -> ChannelEnd -> IO ()) -> Value -> Value
 openStream mode serve path = VIO $ do
   h <- asUserError (openFile (fstToHsString path) mode)
-  (client, server) <- chan
+  (client, server) <- chan (Runtime ("the file stream for " ++ show (fstToHsString path)))
   _ <- forkIO (asUserError (serve h server) `finally` hClose h)
   return (VChan client)
 
@@ -282,8 +297,8 @@ builtins = Map.fromList
   , ("receive",       VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return $ VCons "(,)" [val, VChan c]))
   , ("wait",          VBuiltin wait)
   , ("close",         VBuiltin (VIO . close))
-  , ("send_",         VBuiltin (\val -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ send val c)))
-  , ("receive_",      VBuiltin (\(VChan c) -> VIO $ receive c >>= \(val, c) -> return val))
+  , ("send_",         VBuiltin (\val -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ sendShared val c)))
+  , ("receive_",      VBuiltin (\(VChan c) -> VIO $ fst <$> receiveShared c))
   -- * I/O
   -- ** Standard I/O
   -- *** stdin
@@ -312,8 +327,8 @@ builtins = Map.fromList
 
   -- * Other Expressions
   , ("select",        VBuiltin (\(VLabel label) -> VBuiltin (\(VChan c) -> VIO $ VChan <$> sendLabel label c)))
-  , ("select_",       VBuiltin (\(VLabel label) -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ sendLabel label c)))
-  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> send (VCons "()" []) c))
+  , ("select_",       VBuiltin (\(VLabel label) -> VBuiltin (\chan@(VChan c) -> VIO $ chan <$ sendLabelShared label c)))
+  , ("sendType",      VBuiltin (\(VChan c) -> VIO $ VChan <$> sendType c))
   -- The received type is erased at runtime; the returned 'VPack' exists so
   -- that an explicit @let (\@a, c) = receiveType c@ pattern can decompose it.
   , ("receiveType",   VBuiltin (\(VChan c) -> VIO $ receive c >>= \(_, c) -> return $ VPack [] (VChan c)))

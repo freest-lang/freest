@@ -13,10 +13,14 @@ module Interpreter.Value
   , Clause
   , Value(..)
   , ChannelEnd
+  , Buffer(..)
+  , Message(..)
   , mkClosure
   ) where
 
-import Control.Concurrent.STM ( TQueue )
+import Control.Concurrent.STM ( TVar )
+import Data.IORef ( IORef )
+import Data.Sequence ( Seq )
 import qualified Data.Map as Map
 import System.IO ( Handle )
 
@@ -34,9 +38,21 @@ emptyValueCtx = Map.empty
 -- (A 'Nothing' in the list represents a type/multiplicity parameter)
 type Clause = ([Maybe KindedPat], KindedRHS)
 
--- | A bidirectional channel end: the queue to read from and the queue to
+-- | A message in a channel buffer. Messages are tagged by the operation that
+-- sent them, so that a buffer left non-empty can be reported meaningfully.
+data Message
+  = MValue Value     -- ^ sent by @send@
+  | MLabel String    -- ^ sent by @select@
+  | MType            -- ^ sent by @sendType@ (types are erased at runtime)
+  | MClose           -- ^ sent by @close@
+
+-- | A FIFO buffer holding the messages in transit in one direction of a
+-- channel, and whether the channel is used as an unrestricted (shared) one.
+data Buffer = Buffer (TVar (Seq Message)) (IORef Bool)
+
+-- | A bidirectional channel end: the buffer to read from and the buffer to
 -- write to.
-type ChannelEnd = (TQueue Value, TQueue Value)
+type ChannelEnd = (Buffer, Buffer)
 
 data Value
   = VInt Int

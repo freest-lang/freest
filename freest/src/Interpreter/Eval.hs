@@ -34,6 +34,7 @@ import Interpreter.Exception (Exception(..))
 import Interpreter.PatternMatching (matchPat, matchClause, forceColumns)
 import Interpreter.Value (ValueCtx, Clause, Value(..), mkClosure)
 import Interpreter.Builtin (chan, send, builtins, fstToHsBool, hsToFstString, receive, receiveLabel)
+import Interpreter.Channel (Origin(..))
 import qualified Syntax.Base as B
 import qualified Syntax.Expression as E
 import qualified Syntax.Kind as K
@@ -298,9 +299,9 @@ eval ctx (E.If _ ifExp thenExp elseExp) = do
   if fstToHsBool ifVal
   then eval ctx thenExp
   else eval ctx elseExp
-eval _ (E.Channel _ _) = do
-  -- obtain channel ends for a fresh channel
-  (chanL, chanR) <- chan
+eval _ (E.Channel span _) = do
+  -- obtain channel ends for a fresh channel, registered with its creation site
+  (chanL, chanR) <- chan (NewChannel span)
   return $ VCons "(,)" [VChan chanL, VChan chanR]
 eval _ (E.Select _ m (B.Identifier _ iden)) = do
   let (Just (VBuiltin selectBuiltin)) =

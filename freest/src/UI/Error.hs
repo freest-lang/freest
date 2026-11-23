@@ -8,12 +8,15 @@ Errors. A work in progress -- Life is a work in progress
 
 module UI.Error
   ( Error(..)
+  , RunError(..)
   , Source
   , toMessage
   , header
   , snippet
   , showErrors -- for testing
   , printErrors
+  , showRunErrors
+  , printRunErrors
   , bt
   , prettySpan -- for freesti
   )
@@ -129,6 +132,17 @@ data Error
   | UnexpectedEOF Span
     -- ^ Alex ran past the end of the file with no more input to inspect —
     -- typically an unterminated string literal or block comment.
+
+-- | The errors detected at the end of a run of a FreeST program, once the main
+-- thread has terminated. They make the run fail.
+data RunError
+  = NonEmptyBuffer (Either String Span) Int [String]
+    -- ^ A channel buffer left with messages that should have been received
+    -- (see "Interpreter.Channel" for which ones): where the channel
+    -- was created (the span of its @channel@ expression, or a description when
+    -- the runtime created it), the endpoint (1 or 2, in the order @channel@
+    -- returns them) that never received the messages, and the messages, oldest
+    -- first, rendered as the operations that sent them.
 
 -- | Errors can be tracked to the source code.
 instance Located Error where
@@ -884,6 +898,36 @@ synthHint expr scheme =
 -- | Wrap a string in backtick characters
 bt :: String -> String
 bt s = "`" ++ s ++ "`"
+
+-- | The text of a run error, in the same format as the other errors.
+runErrorMessage :: Source -> RunError -> String
+runErrorMessage src = \case
+  NonEmptyBuffer origin end msgs ->
+    head' ++ "\n"
+    ++ "Messages never received from a channel buffer at the end of the program\n"
+    ++ "  " ++ count ++ " sent on the " ++ endpoint (3 - end)
+    ++ " endpoint, never received on the " ++ endpoint end ++ ":\n"
+    ++ unlines (map ("    " ++) (shown ++ more))
+    ++ either (const "") (\s -> snippet src s False) origin
+    where
+      head' = either (\d -> "error: in " ++ d ++ ":") (header "error") origin
+      n = length msgs
+      count | n == 1    = "1 message"
+            | otherwise = show n ++ " messages"
+      endpoint i = if i == 1 then "first" else "second"
+      shown = map (clip 72) (take maxShown msgs)
+      more  = [ "... and " ++ show (n - maxShown) ++ " more" | n > maxShown ]
+      maxShown = 5
+      clip k str
+        | length str <= k = str
+        | otherwise       = take (k - 3) str ++ "..."
+
+showRunErrors :: Source -> [RunError] -> String
+showRunErrors src = intercalate "\n" . map (runErrorMessage src)
+
+printRunErrors :: Source -> [RunError] -> IO ()
+printRunErrors _   [] = return ()
+printRunErrors src es = hPutStrLn stderr $ showRunErrors src es
 
 showErrors :: Source -> [Error] -> String
 showErrors src = intercalate "\n" . map (toMessage src)

@@ -15,16 +15,9 @@ import Compiler.FreeST ( runFreeST )
 import UI.CLI
 import ProgSpecUtils
 
-import Control.Concurrent ( forkIO, newEmptyMVar, putMVar, takeMVar )
-import Control.Exception ( IOException, try )
-import Control.Monad ( forM_, void )
+import Control.Monad ( void )
 import Data.List ( intercalate, isPrefixOf, dropWhileEnd )
-import System.Environment ( getExecutablePath )
 import System.Exit ( ExitCode(..) )
-import System.FilePath ( (-<.>) )
-import System.IO ( Handle, hClose, hIsEOF, hGetChar, hPutStr )
-import System.Process
-import System.Timeout
 import Test.Hspec
 import Test.HUnit ( assertFailure )
 
@@ -55,10 +48,7 @@ doExpectationsMatch :: String -> String -> Expectation
 doExpectationsMatch out exp =
   dropWhileEnd (== '\n') out `shouldBe` dropWhileEnd (== '\n') exp
   
--- | Run a single program in a *throwaway child process* (this same test binary
--- re-executed with @--run-one@), so that the I/O server threads the Prelude
--- forks are reaped by the OS when the child exits, rather than leaking across
--- the whole suite. The child is killed if it exceeds the timeout. Returns the
+-- | Run a single program in a child process (see 'runInChild'). Returns the
 -- captured stdout (for comparison against the @.expected@ file) on success, or a
 -- failure report including the child's stderr on a non-zero exit.
 --
@@ -66,26 +56,7 @@ doExpectationsMatch out exp =
 -- the program's stdin (followed by EOF); otherwise the program has no stdin.
 testOne :: FilePath -> IO (String, TestResult)
 testOne file = do
-  self  <- getExecutablePath
-  input <- safeRead (file -<.> "input")
-  res   <- timeout timeInMicro $
-    withCreateProcess
-      (proc self ["--run-one", file])
-        { std_in  = maybe NoStream (const CreatePipe) input
-        , std_out = CreatePipe, std_err = CreatePipe }
-      $ \hin (Just hout) (Just herr) ph -> do
-          -- feed stdin on its own thread, so a program that does not read all
-          -- of its input cannot block us (nor the broken pipe make us fail)
-          forM_ ((,) <$> hin <*> input) \(h, s) ->
-            forkIO $ void (try (hPutStr h s >> hClose h) :: IO (Either IOException ()))
-          -- capture each pipe on its own thread so the child never blocks on a
-          -- full pipe; 'capture' bounds memory even if the program loops printing
-          ovar <- newEmptyMVar
-          evar <- newEmptyMVar
-          _ <- forkIO (capture hout >>= putMVar ovar)
-          _ <- forkIO (capture herr >>= putMVar evar)
-          code <- waitForProcess ph
-          (,,) code <$> takeMVar ovar <*> takeMVar evar
+  res <- runInChild file
   pure $ case res of
     Nothing                    -> ("<timeout>", Timeout)
     Just (ExitSuccess, out, _) -> (out, Passed)
@@ -99,21 +70,3 @@ testOne file = do
 -- single program and exit with its status, which the parent reads back.
 runOne :: FilePath -> IO ()
 runOne file = runFreeST defaultRunOpts{filePath = Just file}
-
--- | Read a handle to EOF (so the child never blocks on a full pipe), retaining
--- only the first 'outputCap' characters so the parent stays memory-bounded even
--- if the program loops printing.
-capture :: Handle -> IO String
-capture h = go (0 :: Int) []
-  where
-    go n acc = hIsEOF h >>= \case
-      True  -> pure (reverse acc)
-      False -> do c <- hGetChar h
-                  go (n + 1) (if n < outputCap then c : acc else acc)
-
-outputCap :: Int
-outputCap = 64 * 1024
-
--- n microseconds (1/10^6 seconds).
-timeInMicro :: Int
-timeInMicro = 3 * 1000000
