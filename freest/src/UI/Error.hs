@@ -77,15 +77,15 @@ data Error
   | IncludeCycle Span [FilePath]
   | IncludeNotFound Span FilePath
   | MalformedInclude Span
-  | LinConsumedInGuard 
-      Span 
-      (Either Variable Identifier) 
+  | LinConsumedInGuard
+      Span
+      (Either Variable Identifier)
       TK.KindedType
-  | LinConsumedInUnFun 
-      Span 
-      (Either Variable Identifier) 
-      TK.KindedType 
-      Span 
+  | LinConsumedInUnFun
+      Span
+      (Either Variable Identifier)
+      TK.KindedType
+      Span
       K.Multiplicity
   | LinNotConsumedEvenly Span (Either Variable Identifier) TK.KindedType
     (Either (Either Variable E.KindedPat) E.KindedExp)
@@ -116,7 +116,7 @@ data Error
   | TypeMismatchSendType Span TK.KindedType TK.KindedType (Maybe TK.KindedType)
   | TypeMismatchTuple Span Int TK.KindedType (Either E.KindedExp E.KindedPat)
   | TypeVarOutOfScope Span Variable
-  | UnexpectedArg 
+  | UnexpectedArg
       Span
       Int
       (Level (Maybe TK.KindedType) K.Kind ())
@@ -312,11 +312,11 @@ hasSolvableTypeVar = \case
 -- argument or annotation on that value.
 hasForall :: TK.KindedType -> Bool
 hasForall = \case
-  TK.AppForall _ _ _ _ -> True
-  TK.ForallM _ _ _ _   -> True
-  TK.Abs _ _ t         -> hasForall t
-  TK.App _ t ts        -> hasForall t || any hasForall ts
-  _                    -> False
+  TK.AppForall {} -> True
+  TK.ForallM {}   -> True
+  TK.Abs _ _ t    -> hasForall t
+  TK.App _ t ts   -> any hasForall $ t:ts
+  _               -> False
 
 toMessage :: Source -> Error -> String
 toMessage src = \case
@@ -456,20 +456,20 @@ toMessage src = \case
       m' = case TK.kindOf t of
         K.Proper _ m _ -> m
         _ -> internalError "non-proper type for expression variable"
-  LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n" 
-      ++ ((case m' of 
+  LinConsumedInUnFun s xi t fe m -> errorHeader s ++ "\n"
+      ++ ((case m' of
         K.Lin{} -> "Linear " ++ prettyVarCons xi ++ " of "
         _ -> "Potentially linear " ++ prettyVarCons xi ++ " with multiplicity " ++ bt (tidyM m') ++ " and ")
       ++ "type " ++ bt (unparse t) ++ ", bound at\n"
       ++ snippet src xi True
       ++ " is consumed in body of "
-      ++ (case m of 
+      ++ (case m of
         K.Un{} -> "an unrestricted function"
         _      -> "a function with multiplicity " ++ bt (tidyM m))
       ++ "\n" ++ snippet src fe True)
     ++ "(This would allow duplicating or discarding the value. "
     ++ "Consider using a linear function instead.)"
-    where 
+    where
       m' = case TK.kindOf t of
         K.Proper _ m _ -> m
         _ -> internalError "non-proper type for expression variable"
@@ -654,7 +654,7 @@ toMessage src = \case
     ("Variable out of scope: " ++ bt (external x))
   PolymorphicTypeRecursion s i as ekt -> makeError src s
     ("Higher-order recursion detected in the declaration for type " ++ bt (show i))
-    ++ case ekt of 
+    ++ case ekt of
       Left k ->
         "(Expected a proper type on the right-hand side, but found a type of kind "
         ++ bt (unparse k) ++ ". Consider adding " ++ prettyMoreParams (K.depth k)
@@ -770,7 +770,7 @@ toMessage src = \case
     0 -> "no "   ++ q ++ " " ++ w ++ "s"
     1 -> "1 "    ++ q ++ " " ++ w
     n -> show n ++ " " ++ q ++ " " ++ w ++ "s"
-  
+
   prettyModifiedArgs = prettyModifiedPlural "argument"
   prettyArgs         = prettyModifiedArgs ""
   prettyMoreArgs     = prettyModifiedArgs "more"
@@ -932,7 +932,7 @@ ordinal i = show i ++ suffix
   where suffix | i' > 10 && i' < 20 = "th"
                | otherwise = suffix' (i' `mod` 10)
         suffix' = \case 1 ->"st"; 2 ->"nd"; 3 ->"rd"; _ ->"th"
-        i' = abs i 
+        i' = abs i
 
 -- | From MissingH. Removes any whitespace characters that are present at the
 -- start or end of a string.
@@ -942,10 +942,10 @@ strip = lstrip . rstrip
 -- | From MissingH. Same as 'strip', but applies only to the left side of the
 -- string.
 lstrip :: String -> String
-lstrip = \case 
+lstrip = \case
   []                 -> []
-  s@(x:xs) 
-    | elem x " \t\r\n" -> lstrip xs
+  s@(x:xs)
+    | x `elem` " \t\r\n" -> lstrip xs
     | otherwise      -> s
 
 -- | From MissingH. Same as 'strip', but applies only to the right side of the
