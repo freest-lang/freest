@@ -104,12 +104,13 @@ instance Located Span where
   getSpan = id 
   setSpan = const 
 
--- | A span's text representation should be in a format recognized by the 
--- most common IDEs.
-instance Show Span where 
-  show s = filepath s ++ ":" ++ showPos (startPos s) 
-                      ++ "–" ++ showPos (endPos s) -- Not recognized by VS Code. Is there another format for spans?
-    where showPos (l,c) = show l++":"++show c
+-- | A span as a file path with lines and columns, following the GHC format.
+instance Show Span where
+  show (Span fp (sl, sc) (el, ec))
+    | sl == el && ec - sc <= 1 = fp ++ ":" ++ show sl ++ ":" ++ show sc
+    | sl == el = fp ++ ":" ++ show sl ++ ":" ++ show sc ++ "-" ++ show (ec - 1)
+    | otherwise = fp ++ ":(" ++ show sl ++ "," ++ show sc ++ ")-("
+                     ++ show el ++ "," ++ show (ec - 1) ++ ")"
 
 -- | The null span may be used to construct syntactic objects when their 
 -- positions in the source code are irrelevant.
